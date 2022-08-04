@@ -916,3 +916,208 @@ x  y  z  u  v  w
 2  1  5  2  1  5
 2  1  6  2  1  4
 2  1  6  2  1  5
+
+# Test inequality lookup joins.
+# Case with idxCol <= inputCol.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f <= a ORDER BY a, b, c, d, e, f
+----
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  NULL  2  NULL  2  1
+2  NULL  2  1     1  2
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  1     1  2
+2  1     1  2     1  1
+
+# Case with idxCol >= inputCol (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON a >= f ORDER BY a, b, c, d, e, f
+----
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  NULL  2  NULL  2  1
+2  NULL  2  1     1  2
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  1     1  2
+2  1     1  2     1  1
+
+# Case with idxCol < inputCol.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f < a ORDER BY a, b, c, d, e, f
+----
+2  NULL  2  NULL  2  1
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  2     1  1
+
+# Case with idxCol > inputCol (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON a > f ORDER BY a, b, c, d, e, f
+----
+2  NULL  2  NULL  2  1
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  2     1  1
+
+# Case where input column used as bound has null.
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a >= d
+----
+1  1  2  1  1     2
+1  1  2  2  1     1
+1  1  2  2  NULL  2
+2  1  1  2  1     1
+2  1  1  2  NULL  2
+
+# Case where input column used as bound has null (idxCol > inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a > d
+----
+1  1  2  2  1     1
+1  1  2  2  NULL  2
+
+# Case where input column used as bound has null (idxCol >= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a >= d
+----
+1  1  2  1  1     2
+1  1  2  2  1     1
+1  1  2  2  NULL  2
+2  1  1  2  1     1
+2  1  1  2  NULL  2
+
+# Case where input column used as bound has null (idxCol < inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a < d
+----
+2  1  1  1  1  2
+
+# Case where input column used as bound has null (idxCol <= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a <= d
+----
+2  1  1  1  1     2
+2  1  1  2  1     1
+2  1  1  2  NULL  2
+1  1  2  1  1     2
+
+# Case with two inequalities.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f < a AND f >= b ORDER BY a, b, c, d, e, f
+----
+2  1  1  NULL  2  1
+2  1  1  2     1  1
+
+# Case with two inequalities (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON f < a AND f >= b ORDER BY a, b, c, d, e, f
+----
+2  1  1  NULL  2  1
+2  1  1  2     1  1
+
+# Case with two inequalities, one is a constant.
+query IIIIII rowsort
+SELECT * FROM abc INNER LOOKUP JOIN def ON f < 2 AND f >= b
+----
+1  1  2  2     1  1
+2  1  1  2     1  1
+1  1  2  NULL  2  1
+2  1  1  NULL  2  1
+
+# Case with two inequalities, one is a constant.
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a < 2 AND a >= d
+----
+1  1  2  1  1  2
+
+# Case with equality prefix.
+query IIIIII rowsort
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = c AND e >= b
+----
+2  1  1  2     1  1
+2  1  1  NULL  2  1
+1  1  2  1     1  2
+
+# Case with equality prefix.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f = a AND e >= c ORDER BY a, b, c, d, e, f
+----
+1  1  2  NULL  2  1
+2  1  1  1     1  2
+
+# Case with equality prefix (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON f = a AND e >= c ORDER BY a, b, c, d, e, f
+----
+1  1  2  NULL  2  1
+2  1  1  1     1  2
+
+# Case with descending index column (idxCol < inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2 ON def.f = def2.f AND def2.e < def.d
+----
+2  1  1  2  1  1
+
+# Case with descending index column (idxCol <= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2
+ON def.f = def2.f AND def2.e <= def.d ORDER BY def.d, def.e, def.f, def2.d, def2.e, def2.f
+----
+1  1  2  1     1  2
+2  1  1  NULL  2  1
+2  1  1  2     1  1
+
+# Case with descending index column (idxCol > inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2 ON def.f = def2.f AND def2.e > def.d
+----
+
+# Case with descending index column (idxCol >= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2 ON def.f = def2.f AND def2.e >= def.d
+----
+2  1  1  NULL  2  1
+1  1  2  1     1  2
+
+# Case with maximum and minimum integer bounds.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN abc ON a < x
+----
+9223372036854775807   1     1     2
+9223372036854775807   2     1     1
+9223372036854775807   2     NULL  2
+-9223372036854775807  NULL  NULL  NULL
+
+# Case with maximum and minimum integer bounds.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN abc ON a > x
+----
+-9223372036854775807  1     1     2
+-9223372036854775807  2     1     1
+-9223372036854775807  2     NULL  2
+9223372036854775807   NULL  NULL  NULL
+
+# Case with maximum and minimum integer bounds on descending column.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN def_e_desc ON f IN (1, 2) AND e < x
+----
+9223372036854775807   NULL  2     1
+9223372036854775807   2     1     1
+9223372036854775807   1     1     2
+-9223372036854775807  NULL  NULL  NULL
+
+# Case with maximum and minimum integer bounds on descending column.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN def_e_desc ON f IN (1, 2) AND e > x
+----
+-9223372036854775807  NULL  2     1
+-9223372036854775807  2     1     1
+-9223372036854775807  1     1     2
+9223372036854775807   NULL  NULL  NULL

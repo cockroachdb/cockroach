@@ -202,7 +202,8 @@ type Fetcher struct {
 // reallocation of all of those slice fields.
 func (rf *Fetcher) Reset() {
 	*rf = Fetcher{
-		table: rf.table,
+		table:  rf.table,
+		spanID: -1,
 	}
 }
 
@@ -259,6 +260,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	}
 
 	rf.args = args
+	rf.spanID = -1
 
 	if args.MemMonitor != nil {
 		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, args.MemMonitor)
@@ -660,7 +662,9 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, spanID int, _ erro
 	// unchangedPrefix will be set to true if the current KV belongs to the same
 	// row as the previous KV (i.e. the last and current keys have identical
 	// prefix). In this case, we can skip decoding the index key completely.
-	unchangedPrefix := rf.table.spec.MaxKeysPerRow > 1 && rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
+	unchangedPrefix := rf.table.spec.MaxKeysPerRow > 1 &&
+		(rf.spanID == -1 || spanID == rf.spanID) &&
+		rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
 	if unchangedPrefix {
 		// Skip decoding!
 		rf.keyRemainingBytes = rf.kv.Key[len(rf.indexKey):]
