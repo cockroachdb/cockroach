@@ -306,3 +306,128 @@ type FuncReturnType struct {
 	Type  ResolvableTypeReference
 	IsSet bool
 }
+
+// DropFunction represents a DROP FUNCTION statement.
+type DropFunction struct {
+	IfExists     bool
+	Functions    FuncObjs
+	DropBehavior DropBehavior
+}
+
+// Format implements the NodeFormatter interface.
+func (node *DropFunction) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP FUNCTION ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Functions)
+	if node.DropBehavior != DropDefault {
+		ctx.WriteString(" ")
+		ctx.WriteString(node.DropBehavior.String())
+	}
+}
+
+// FuncObjs is a slice of FuncObj.
+type FuncObjs []FuncObj
+
+// Format implements the NodeFormatter interface.
+func (node FuncObjs) Format(ctx *FmtCtx) {
+	for i, f := range node {
+		if i > 0 {
+			ctx.WriteString(" ,")
+		}
+		ctx.FormatNode(f)
+	}
+}
+
+// FuncObj represents a function object DROP FUNCTION tries to drop.
+type FuncObj struct {
+	FuncName FunctionName
+	Args     FuncArgs
+}
+
+// Format implements the NodeFormatter interface.
+func (node FuncObj) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&node.FuncName)
+	if node.Args != nil {
+		ctx.WriteString("(")
+		ctx.FormatNode(node.Args)
+		ctx.WriteString(")")
+	}
+}
+
+// AlterFunctionOptions represents a ALTER FUNCTION...action statement.
+type AlterFunctionOptions struct {
+	Function FuncObj
+	Options  FunctionOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterFunctionOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER FUNCTION ")
+	ctx.FormatNode(node.Function)
+	for _, option := range node.Options {
+		ctx.WriteString(" ")
+		ctx.FormatNode(option)
+	}
+}
+
+// AlterFunctionRename represents a ALTER FUNCTION...RENAME statement.
+type AlterFunctionRename struct {
+	Function FuncObj
+	NewName  Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER FUNCTION ")
+	ctx.FormatNode(node.Function)
+	ctx.WriteString(" RENAME TO ")
+	ctx.WriteString(string(node.NewName))
+}
+
+// AlterFunctionSetSchema represents a ALTER FUNCTION...SET SCHEMA statement.
+type AlterFunctionSetSchema struct {
+	Function      FuncObj
+	NewSchemaName Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER FUNCTION ")
+	ctx.FormatNode(node.Function)
+	ctx.WriteString(" SET SCHEMA ")
+	ctx.WriteString(string(node.NewSchemaName))
+}
+
+// AlterFunctionSetOwner represents the ALTER FUNCTION...OWNER TO statement.
+type AlterFunctionSetOwner struct {
+	Function FuncObj
+	NewOwner RoleSpec
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterFunctionSetOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER FUNCTION ")
+	ctx.FormatNode(node.Function)
+	ctx.WriteString(" OWNER TO ")
+	ctx.FormatNode(&node.NewOwner)
+}
+
+// AlterFunctionDepExtension represents the ALTER FUNCTION...DEPENDS ON statement.
+type AlterFunctionDepExtension struct {
+	Function  FuncObj
+	Remove    bool
+	Extension Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterFunctionDepExtension) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER FUNCTION  ")
+	ctx.FormatNode(node.Function)
+	if node.Remove {
+		ctx.WriteString(" NO")
+	}
+	ctx.WriteString(" DEPENDS ON EXTENSION ")
+	ctx.WriteString(string(node.Extension))
+}

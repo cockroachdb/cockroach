@@ -1,0 +1,6 @@
+alter_func_stmt ::=
+	alter_func_options_stmt
+	| alter_func_rename_stmt
+	| alter_func_owner_stmt
+	| alter_func_set_schema_stmt
+	| alter_func_dep_extension_stmt

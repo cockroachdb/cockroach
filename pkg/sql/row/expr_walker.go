@@ -139,10 +139,13 @@ func (r *importRand) Int63(c *CellInfoAnnotation) int64 {
 // our own function definition, which produces deterministic results.
 func makeBuiltinOverride(
 	builtin *tree.FunctionDefinition, overloads ...tree.Overload,
-) *tree.FunctionDefinition {
+) *tree.ResolvedFunctionDefinition {
 	props := builtin.FunctionProperties
-	return tree.NewFunctionDefinition(
+	override := tree.NewFunctionDefinition(
 		"import."+builtin.Name, &props, overloads)
+	// Schema name is not really important here since it's already a resolved
+	// function definition, so it won't be actually resolved again.
+	return tree.QualifyBuiltinFunctionDefinition(override, "import")
 }
 
 // SequenceMetadata contains information used when processing columns with
@@ -555,7 +558,7 @@ func importNextValHelper(
 // of unique_rowid occurrences in a row.
 type customFunc struct {
 	visitorSideEffect func(annotations *tree.Annotations, fn *tree.FuncExpr) error
-	override          *tree.FunctionDefinition
+	override          *tree.ResolvedFunctionDefinition
 }
 
 var useDefaultBuiltin *customFunc
@@ -739,7 +742,7 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 		// we can use it as it is.
 		return expr
 	}
-	resolvedFnName := fn.Func.FunctionReference.(*tree.FunctionDefinition).Name
+	resolvedFnName := fn.Func.FunctionReference.(*tree.ResolvedFunctionDefinition).Name
 	custom, isSafe := supportedImportFuncOverrides[resolvedFnName]
 	if !isSafe {
 		v.err = errors.Newf(`function %s unsupported by IMPORT INTO`, resolvedFnName)

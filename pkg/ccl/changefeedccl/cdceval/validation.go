@@ -269,7 +269,7 @@ func normalizeSelectClause(
 	// Setup sema ctx to handle cdc expressions. We want to make sure we only
 	// override some properties, while keeping other properties (type resolver)
 	// intact.
-	semaCtx.SearchPath = &cdcCustomFunctionResolver{SearchPath: semaCtx.SearchPath}
+	semaCtx.FunctionResolver = &CDCFunctionResolver{}
 	semaCtx.Properties.Require("cdc", rejectInvalidCDCExprs)
 
 	resolveType := func(ref tree.ResolvableTypeReference) (tree.ResolvableTypeReference, bool, error) {
@@ -353,12 +353,13 @@ func normalizeSelectClause(
 
 type checkForPrevVisitor struct {
 	semaCtx   tree.SemaContext
+	ctx       context.Context
 	foundPrev bool
 }
 
 // VisitPre implements the Visitor interface.
 func (v *checkForPrevVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
-	if exprRequiresPreviousValue(v.semaCtx, expr) {
+	if exprRequiresPreviousValue(v.ctx, v.semaCtx, expr) {
 		v.foundPrev = true
 		// no need to keep recursing
 		return false, expr
@@ -373,30 +374,23 @@ func (v *checkForPrevVisitor) VisitPost(e tree.Expr) tree.Expr {
 
 // exprRequiresPreviousValue returns true if the top-level expression
 // is a function call that cdc implements using the diff from a rangefeed.
-func exprRequiresPreviousValue(semaCtx tree.SemaContext, e tree.Expr) bool {
+func exprRequiresPreviousValue(ctx context.Context, semaCtx tree.SemaContext, e tree.Expr) bool {
 	if f, ok := e.(*tree.FuncExpr); ok {
-		var name string
-		switch fn := f.Func.FunctionReference.(type) {
-		case *tree.UnresolvedName:
-			funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
-			if err != nil {
-				return false
-			}
-			name = funDef.Name
-		case *tree.FunctionDefinition:
-			name = fn.Name
-		default:
-			name = f.String()
+		funcDef, err := f.Func.Resolve(ctx, semaCtx.SearchPath, semaCtx.FunctionResolver)
+		if err != nil {
+			return false
 		}
-		return name == "cdc_prev"
+		return funcDef.Name == "cdc_prev"
 	}
 	return false
 }
 
 // SelectClauseRequiresPrev checks whether a changefeed expression will need a row's previous values
 // to be fetched in order to evaluate it.
-func SelectClauseRequiresPrev(semaCtx tree.SemaContext, sc NormalizedSelectClause) (bool, error) {
-	c := checkForPrevVisitor{semaCtx: semaCtx}
+func SelectClauseRequiresPrev(
+	ctx context.Context, semaCtx tree.SemaContext, sc NormalizedSelectClause,
+) (bool, error) {
+	c := checkForPrevVisitor{semaCtx: semaCtx, ctx: ctx}
 	_, err := tree.SimpleStmtVisit(sc.Clause(), func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		recurse, newExpr = c.VisitPre(expr)
 		return recurse, newExpr, nil

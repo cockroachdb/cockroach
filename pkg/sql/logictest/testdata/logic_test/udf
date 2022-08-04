@@ -251,3 +251,21 @@ WHERE id = $max_desc_id;
         "volatility": "IMMUTABLE"
     }
 }
+
+statement error pq: unimplemented: drop function not supported.*
+DROP FUNCTION f
+
+statement error pq: unimplemented: alter function not supported.*
+ALTER FUNCTION f() IMMUTABLE
+
+statement error pq: unimplemented: alter function rename to not supported.*
+ALTER FUNCTION f() RENAME TO g
+
+statement error pq: unimplemented: alter function owner to not supported.*
+ALTER FUNCTION f() OWNER TO CURRENT_USER
+
+statement error pq: unimplemented: alter function set schema not supported.*
+ALTER FUNCTION f() SET SCHEMA test_sc
+
+statement error pq: unimplemented: alter function depends on extension not supported.*
+ALTER FUNCTION f() DEPENDS ON EXTENSION postgis

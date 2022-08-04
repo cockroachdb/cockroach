@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -427,6 +430,43 @@ func (desc *immutable) ContainsUserDefinedTypes() bool {
 		}
 	}
 	return false
+}
+
+// GetResolvedFuncDefinition implements the SchemaDescriptor interface.
+func (desc *immutable) GetResolvedFuncDefinition(
+	name string,
+) (*tree.ResolvedFunctionDefinition, bool) {
+	funcDescPb, found := desc.GetFunction(name)
+	if !found {
+		return nil, false
+	}
+	funcDef := &tree.ResolvedFunctionDefinition{
+		Name:      name,
+		Overloads: make([]tree.QualifiedOverload, 0, len(funcDescPb.Overloads)),
+	}
+	for i := range funcDescPb.Overloads {
+		retType := funcDescPb.Overloads[i].ReturnType
+		overload := &tree.Overload{
+			Oid: catid.FuncIDToOID(funcDescPb.Overloads[i].ID),
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				return retType
+			},
+			IsUDF:                    true,
+			UDFContainsOnlySignature: true,
+		}
+		argTypes := make(tree.ArgTypes, 0, len(funcDescPb.Overloads[i].ArgTypes))
+		for _, argType := range funcDescPb.Overloads[i].ArgTypes {
+			argTypes = append(
+				argTypes,
+				tree.ArgType{Typ: argType},
+			)
+		}
+		overload.Types = argTypes
+		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
+		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
+	}
+
+	return funcDef, true
 }
 
 // IsSchemaNameValid returns whether the input name is valid for a user defined

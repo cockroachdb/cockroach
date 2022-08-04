@@ -1324,20 +1324,16 @@ func TestRangeKeyBatching(t *testing.T) {
 		return k
 	}
 
-	mkKvs := func(start, end string, tss ...int) []storage.MVCCRangeKeyValue {
-		var result []storage.MVCCRangeKeyValue
+	mkKvs := func(start, end string, tss ...int) storage.MVCCRangeKeyStack {
+		rangeKeys := storage.MVCCRangeKeyStack{
+			Bounds: roachpb.Span{Key: mkKey(start), EndKey: mkKey(end)},
+		}
 		for _, ts := range tss {
-			result = append(result, storage.MVCCRangeKeyValue{
-				RangeKey: storage.MVCCRangeKey{
-					StartKey: mkKey(start),
-					EndKey:   mkKey(end),
-					Timestamp: hlc.Timestamp{
-						WallTime: int64(ts) * time.Second.Nanoseconds(),
-					},
-				},
+			rangeKeys.Versions = append(rangeKeys.Versions, storage.MVCCRangeKeyVersion{
+				Timestamp: hlc.Timestamp{WallTime: int64(ts) * time.Second.Nanoseconds()},
 			})
 		}
-		return result
+		return rangeKeys
 	}
 
 	mkGCr := func(start, end string, ts int) roachpb.GCRequest_GCRangeKey {
@@ -1352,13 +1348,13 @@ func TestRangeKeyBatching(t *testing.T) {
 
 	for _, data := range []struct {
 		name      string
-		data      [][]storage.MVCCRangeKeyValue
+		data      []storage.MVCCRangeKeyStack
 		batchSize int64
 		expect    []roachpb.GCRequest_GCRangeKey
 	}{
 		{
 			name: "single batch",
-			data: [][]storage.MVCCRangeKeyValue{
+			data: []storage.MVCCRangeKeyStack{
 				mkKvs("a", "b", 5, 3, 1),
 				mkKvs("c", "d", 5, 2, 1),
 			},
@@ -1370,7 +1366,7 @@ func TestRangeKeyBatching(t *testing.T) {
 		},
 		{
 			name: "merge adjacent",
-			data: [][]storage.MVCCRangeKeyValue{
+			data: []storage.MVCCRangeKeyStack{
 				mkKvs("a", "b", 5, 3, 1),
 				mkKvs("b", "c", 5, 2),
 				mkKvs("c", "d", 3, 2),
@@ -1383,7 +1379,7 @@ func TestRangeKeyBatching(t *testing.T) {
 		},
 		{
 			name: "batch split stack",
-			data: [][]storage.MVCCRangeKeyValue{
+			data: []storage.MVCCRangeKeyStack{
 				mkKvs("a", "b", 5, 3, 1),
 				mkKvs("b", "c", 5, 2),
 				mkKvs("c", "d", 3, 2),
@@ -1400,7 +1396,7 @@ func TestRangeKeyBatching(t *testing.T) {
 		},
 		{
 			name: "batch split keys",
-			data: [][]storage.MVCCRangeKeyValue{
+			data: []storage.MVCCRangeKeyStack{
 				mkKvs("a", "b", 5, 3, 1),
 				mkKvs("b", "c", 5, 2, 1),
 				mkKvs("c", "d", 3, 2),
@@ -1414,7 +1410,7 @@ func TestRangeKeyBatching(t *testing.T) {
 		},
 		{
 			name: "batch split and merge",
-			data: [][]storage.MVCCRangeKeyValue{
+			data: []storage.MVCCRangeKeyStack{
 				mkKvs("a", "b", 5, 3),
 				mkKvs("b", "c", 5, 2),
 				mkKvs("c", "d", 5, 1),
@@ -1434,7 +1430,7 @@ func TestRangeKeyBatching(t *testing.T) {
 				batchSize: data.batchSize,
 			}
 			for _, d := range data.data {
-				require.NoError(t, b.addAndMaybeFlushRangeFragment(ctx, d), "failed to gc ranges")
+				require.NoError(t, b.addAndMaybeFlushRangeKeys(ctx, d), "failed to gc ranges")
 			}
 			require.NoError(t, b.flushPendingFragments(ctx), "failed to gc ranges")
 			require.EqualValues(t, data.expect, gcer.rangeKeys())

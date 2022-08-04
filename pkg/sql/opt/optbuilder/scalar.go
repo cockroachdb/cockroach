@@ -530,7 +530,7 @@ func (b *Builder) buildFunction(
 		}
 	}
 
-	def, err := f.Func.Resolve(b.semaCtx.SearchPath, b.semaCtx.FunctionResolver)
+	def, err := f.Func.Resolve(b.ctx, b.semaCtx.SearchPath, b.semaCtx.FunctionResolver)
 	if err != nil {
 		panic(err)
 	}
@@ -597,7 +597,10 @@ func (b *Builder) buildFunction(
 // invocation.
 // TODO(mgartner): Support UDFs with arguments.
 func (b *Builder) buildUDF(
-	f *tree.FuncExpr, def *tree.FunctionDefinition, inScope, outScope *scope, outCol *scopeColumn,
+	f *tree.FuncExpr,
+	def *tree.ResolvedFunctionDefinition,
+	inScope, outScope *scope,
+	outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
 	stmts, err := parser.Parse(o.Body)

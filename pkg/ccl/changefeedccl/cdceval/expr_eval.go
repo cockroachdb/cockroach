@@ -53,7 +53,7 @@ func NewEvaluator(evalCtx *eval.Context, sc *tree.SelectClause) (*Evaluator, err
 		e.from = sc.From.Tables[0]
 	}
 
-	if err := e.initSelectClause(sc); err != nil {
+	if err := e.initSelectClause(evalCtx.Ctx(), sc); err != nil {
 		return nil, err
 	}
 
@@ -99,7 +99,7 @@ func (e *Evaluator) Projection(
 }
 
 // initSelectClause configures this evaluator to evaluate specified select clause.
-func (e *Evaluator) initSelectClause(sc *tree.SelectClause) error {
+func (e *Evaluator) initSelectClause(ctx context.Context, sc *tree.SelectClause) error {
 	if len(sc.Exprs) == 0 { // Shouldn't happen, but be defensive.
 		return pgerror.New(pgcode.InvalidParameterValue,
 			"expected at least 1 projection")
@@ -108,7 +108,7 @@ func (e *Evaluator) initSelectClause(sc *tree.SelectClause) error {
 	semaCtx := newSemaCtx()
 	e.selectors = sc.Exprs
 	for _, se := range e.selectors {
-		expr, err := validateExpressionForCDC(se.Expr, semaCtx)
+		expr, err := validateExpressionForCDC(ctx, se.Expr, semaCtx)
 		if err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func (e *Evaluator) initSelectClause(sc *tree.SelectClause) error {
 	}
 
 	if sc.Where != nil {
-		expr, err := validateExpressionForCDC(sc.Where.Expr, semaCtx)
+		expr, err := validateExpressionForCDC(ctx, sc.Where.Expr, semaCtx)
 		if err != nil {
 			return err
 		}
@@ -154,7 +154,7 @@ func (e *Evaluator) initEval(ctx context.Context, d *cdcevent.EventDescriptor) e
 			if err != nil {
 				return err
 			}
-			if err := e.initSelectClause(sc); err != nil {
+			if err := e.initSelectClause(ctx, sc); err != nil {
 				return err
 			}
 			// Fall through to re-create e.evaluator.
@@ -217,7 +217,8 @@ func newExprEval(
 	evalCtx = nil // From this point, only e.evalCtx should be used.
 
 	// Configure semantic context.
-	e.semaCtx.SearchPath = &cdcCustomFunctionResolver{SearchPath: &sessiondata.DefaultSearchPath}
+	e.semaCtx.SearchPath = &sessiondata.DefaultSearchPath
+	e.semaCtx.FunctionResolver = &CDCFunctionResolver{}
 	e.semaCtx.Properties.Require("cdc",
 		tree.RejectAggregates|tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectNestedGenerators,
 	)
@@ -323,7 +324,7 @@ func (e *exprEval) computeRenderColumnName(selector tree.SelectExpr) (string, er
 		// We use ComputeColNameInternal instead of GetRenderName because the latter, if it can't
 		// figure out the name, returns "?column?" as the name; but we want to name things slightly
 		// different in that case.
-		_, s, err := tree.ComputeColNameInternal(e.semaCtx.SearchPath, selector.Expr)
+		_, s, err := tree.ComputeColNameInternal(e.evalCtx.Ctx(), e.semaCtx.SearchPath, selector.Expr, e.semaCtx.FunctionResolver)
 		return s, err
 	}()
 	if err != nil {
@@ -484,6 +485,7 @@ func (e *exprEval) evalExpr(
 // This visitor is used early to sanity check expression.
 type cdcExprVisitor struct {
 	semaCtx *tree.SemaContext
+	ctx     context.Context
 	err     error
 }
 
@@ -492,8 +494,10 @@ var _ tree.Visitor = (*cdcExprVisitor)(nil)
 // validateExpressionForCDC runs quick checks to make sure that expr is valid for
 // CDC use case.  This doesn't catch all the invalid cases, but is a place to pick up
 // obviously wrong expressions.
-func validateExpressionForCDC(expr tree.Expr, semaCtx *tree.SemaContext) (tree.Expr, error) {
-	v := cdcExprVisitor{semaCtx: semaCtx}
+func validateExpressionForCDC(
+	ctx context.Context, expr tree.Expr, semaCtx *tree.SemaContext,
+) (tree.Expr, error) {
+	v := cdcExprVisitor{semaCtx: semaCtx, ctx: ctx}
 	expr, _ = tree.WalkExpr(&v, expr)
 	if v.err != nil {
 		return nil, v.err
@@ -510,7 +514,7 @@ func (v *cdcExprVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 func (v *cdcExprVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	switch t := expr.(type) {
 	case *tree.FuncExpr:
-		fn, err := checkFunctionSupported(t, v.semaCtx)
+		fn, err := checkFunctionSupported(v.ctx, t, v.semaCtx)
 		if err != nil {
 			v.err = err
 			return expr
@@ -585,7 +589,7 @@ func (v *cdcNameResolver) VisitPost(expr tree.Expr) tree.Expr {
 }
 
 func checkFunctionSupported(
-	fnCall *tree.FuncExpr, semaCtx *tree.SemaContext,
+	ctx context.Context, fnCall *tree.FuncExpr, semaCtx *tree.SemaContext,
 ) (*tree.FuncExpr, error) {
 	var fnName string
 	var fnClass tree.FunctionClass
@@ -600,38 +604,30 @@ func checkFunctionSupported(
 		}
 	}
 
-	switch fn := fnCall.Func.FunctionReference.(type) {
-	case *tree.UnresolvedName:
-		funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
-		if err != nil {
-			return nil, unsupportedFunctionErr()
-		}
-		fnCall = &tree.FuncExpr{
-			Func:  tree.ResolvableFunctionReference{FunctionReference: funDef},
-			Type:  fnCall.Type,
-			Exprs: fnCall.Exprs,
-		}
-		if _, isCDCFn := cdcFunctions[funDef.Name]; isCDCFn {
-			return fnCall, nil
-		}
-		return checkFunctionSupported(fnCall, semaCtx)
-	case *tree.FunctionDefinition:
-		fnName, fnClass = fn.Name, fn.Class
-		if fnCall.ResolvedOverload() != nil {
-			if _, isCDC := cdcFunctions[fnName]; isCDC {
-				return fnCall, nil
-			}
-			fnVolatility = fnCall.ResolvedOverload().Volatility
-		} else {
-			// Pick highest volatility overload.
-			for _, overload := range fn.Definition {
-				if overload.Volatility > fnVolatility {
-					fnVolatility = overload.Volatility
-				}
+	funcDef, err := fnCall.Func.Resolve(ctx, semaCtx.SearchPath, semaCtx.FunctionResolver)
+	if err != nil {
+		return nil, unsupportedFunctionErr()
+	}
+
+	if _, isCDCFn := cdcFunctions[funcDef.Name]; isCDCFn {
+		return fnCall, nil
+	}
+
+	fnClass, err = funcDef.GetClass()
+	if err != nil {
+		return nil, err
+	}
+	fnName = funcDef.Name
+	if fnCall.ResolvedOverload() != nil {
+		fnVolatility = fnCall.ResolvedOverload().Volatility
+	} else {
+		// Pick highest volatility overload.
+		for i := range funcDef.Overloads {
+			overload := funcDef.Overloads[i].Overload
+			if overload.Volatility > fnVolatility {
+				fnVolatility = overload.Volatility
 			}
 		}
-	default:
-		return nil, errors.AssertionFailedf("unexpected function expression of type %T", fn)
 	}
 
 	// Aggregates, generators and window functions are not supported.
@@ -711,7 +707,8 @@ const rejectInvalidCDCExprs = (tree.RejectAggregates | tree.RejectGenerators |
 // newSemaCtx returns new tree.SemaCtx configured for cdc without type resolver.
 func newSemaCtx() *tree.SemaContext {
 	sema := tree.MakeSemaContext()
-	sema.SearchPath = &cdcCustomFunctionResolver{SearchPath: &sessiondata.DefaultSearchPath}
+	sema.SearchPath = &sessiondata.DefaultSearchPath
+	sema.FunctionResolver = &CDCFunctionResolver{}
 	sema.Properties.Require("cdc", rejectInvalidCDCExprs)
 	return &sema
 }

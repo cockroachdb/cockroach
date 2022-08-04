@@ -807,6 +807,12 @@ func (u *sqlSymUnion) stmts() tree.Statements {
 func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
     return u.val.(*tree.RoutineBody)
 }
+func (u *sqlSymUnion) functionObj() tree.FuncObj {
+    return u.val.(tree.FuncObj)
+}
+func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
+    return u.val.(tree.FuncObjs)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -845,7 +851,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %token <str> CURRENT_USER CURSOR CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS DEFINER
-%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
@@ -984,6 +990,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> alter_type_stmt
 %type <tree.Statement> alter_schema_stmt
 %type <tree.Statement> alter_unsupported_stmt
+%type <tree.Statement> alter_func_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1048,6 +1055,13 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 // ALTER DEFAULT PRIVILEGES
 %type <tree.Statement> alter_default_privileges_stmt
 
+// ALTER FUNCTION
+%type <tree.Statement> alter_func_options_stmt
+%type <tree.Statement> alter_func_rename_stmt
+%type <tree.Statement> alter_func_set_schema_stmt
+%type <tree.Statement> alter_func_owner_stmt
+%type <tree.Statement> alter_func_dep_extension_stmt
+
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
 
@@ -1105,6 +1119,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.Statement> drop_type_stmt
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
+%type <tree.Statement> drop_func_stmt
 
 %type <tree.Statement> analyze_stmt
 %type <tree.Statement> explain_stmt
@@ -1532,18 +1547,20 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 %type <tree.TenantID> opt_as_tenant_clause
 
 // User defined function relevant components.
-%type <bool> opt_or_replace opt_return_set
+%type <bool> opt_or_replace opt_return_set opt_no
 %type <str> param_name func_as
-%type <tree.FuncArgs> opt_func_arg_with_default_list func_arg_with_default_list
+%type <tree.FuncArgs> opt_func_arg_with_default_list func_arg_with_default_list func_args func_args_list
 %type <tree.FuncArg> func_arg_with_default func_arg
 %type <tree.ResolvableTypeReference> func_return_type func_arg_type
-%type <tree.FunctionOptions> opt_create_func_opt_list create_func_opt_list
+%type <tree.FunctionOptions> opt_create_func_opt_list create_func_opt_list alter_func_opt_list
 %type <tree.FunctionOption> create_func_opt_item common_func_opt_item
 %type <tree.FuncArgClass> func_arg_class
 %type <*tree.UnresolvedObjectName> func_create_name
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
+%type <tree.FuncObj> function_with_argtypes
+%type <tree.FuncObjs> function_with_argtypes_list
 
 %type <*tree.LabelSpec> label_spec
 
@@ -1680,6 +1697,7 @@ alter_ddl_stmt:
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
+| alter_func_stmt
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1844,6 +1862,13 @@ alter_database_stmt:
 | alter_database_drop_super_region
 | alter_database_set_secondary_region_stmt
 | alter_database_drop_secondary_region
+
+alter_func_stmt:
+  alter_func_options_stmt
+| alter_func_rename_stmt
+| alter_func_owner_stmt
+| alter_func_set_schema_stmt
+| alter_func_dep_extension_stmt
 
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -3454,11 +3479,7 @@ import_format:
   }
 
 alter_unsupported_stmt:
-  ALTER FUNCTION error
-  {
-    return unimplementedWithIssueDetail(sqllex, 17511, "alter function")
-  }
-| ALTER DOMAIN error
+  ALTER DOMAIN error
   {
     return unimplemented(sqllex, "alter domain")
   }
@@ -4178,6 +4199,138 @@ opt_routine_body:
     $$.val = (*tree.RoutineBody)(nil)
   }
 
+drop_func_stmt:
+  DROP FUNCTION function_with_argtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropFunction{
+      Functions: $3.functionObjs(),
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+  | DROP FUNCTION IF EXISTS function_with_argtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropFunction{
+      IfExists: true,
+      Functions: $5.functionObjs(),
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+
+function_with_argtypes_list:
+  function_with_argtypes
+  {
+    $$.val = tree.FuncObjs{$1.functionObj()}
+  }
+  | function_with_argtypes_list ',' function_with_argtypes
+  {
+    $$.val = append($1.functionObjs(), $3.functionObj())
+  }
+
+function_with_argtypes:
+  db_object_name func_args
+  {
+    $$.val = tree.FuncObj{
+      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+      Args: $2.functionArgs(),
+    }
+  }
+  | db_object_name
+  {
+    $$.val = tree.FuncObj{
+      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+    }
+  }
+
+func_args:
+  '(' func_args_list ')'
+  {
+    $$.val = $2.functionArgs()
+  }
+  | '(' ')'
+  {
+    $$.val = tree.FuncArgs{}
+  }
+
+func_args_list:
+  func_arg
+  {
+    $$.val = tree.FuncArgs{$1.functionArg()}
+  }
+  | func_args_list ',' func_arg
+  {
+    $$.val = append($1.functionArgs(), $3.functionArg())
+  }
+
+alter_func_options_stmt:
+  ALTER FUNCTION function_with_argtypes alter_func_opt_list opt_restrict
+  {
+    $$.val = &tree.AlterFunctionOptions{
+      Function: $3.functionObj(),
+      Options: $4.functionOptions(),
+    }
+  }
+
+alter_func_opt_list:
+  common_func_opt_item
+  {
+    $$.val = tree.FunctionOptions{$1.functionOption()}
+  }
+| alter_func_opt_list common_func_opt_item
+  {
+    $$.val = append($1.functionOptions(), $2.functionOption())
+  }
+
+opt_restrict:
+  RESTRICT {}
+| /* EMPTY */ {}
+
+alter_func_rename_stmt:
+  ALTER FUNCTION function_with_argtypes RENAME TO name
+  {
+    $$.val = &tree.AlterFunctionRename{
+      Function: $3.functionObj(),
+      NewName: tree.Name($6),
+    }
+  }
+
+alter_func_set_schema_stmt:
+  ALTER FUNCTION function_with_argtypes SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterFunctionSetSchema{
+      Function: $3.functionObj(),
+      NewSchemaName: tree.Name($6),
+    }
+  }
+
+alter_func_owner_stmt:
+  ALTER FUNCTION function_with_argtypes OWNER TO role_spec
+  {
+    $$.val = &tree.AlterFunctionSetOwner{
+      Function: $3.functionObj(),
+      NewOwner: $6.roleSpec(),
+    }
+  }
+
+alter_func_dep_extension_stmt:
+  ALTER FUNCTION function_with_argtypes opt_no DEPENDS ON EXTENSION name
+  {
+    $$.val = &tree.AlterFunctionDepExtension{
+      Function: $3.functionObj(),
+      Remove: $4.bool(),
+      Extension: tree.Name($8),
+    }
+  }
+
+opt_no:
+  NO
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
 | CREATE AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "create aggregate") }
@@ -4487,6 +4640,7 @@ drop_ddl_stmt:
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
+| drop_func_stmt
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -14653,6 +14807,7 @@ unreserved_keyword:
 | DEFERRED
 | DEFINER
 | DELIMITER
+| DEPENDS
 | DESTINATION
 | DETACHED
 | DISCARD
@@ -14999,6 +15154,7 @@ bare_label_keywords:
 | CALLED
 | COST
 | DEFINER
+| DEPENDS
 | EXTERNAL
 | IMMUTABLE
 | INPUT

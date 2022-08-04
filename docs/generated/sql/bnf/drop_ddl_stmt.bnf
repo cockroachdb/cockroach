@@ -6,3 +6,4 @@ drop_ddl_stmt ::=
 	| drop_sequence_stmt
 	| drop_schema_stmt
 	| drop_type_stmt
+	| drop_func_stmt

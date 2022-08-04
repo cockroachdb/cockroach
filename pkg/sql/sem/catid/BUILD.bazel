@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/sql/oidext",
         "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
     ],
 )
