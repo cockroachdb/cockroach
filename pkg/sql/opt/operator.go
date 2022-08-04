@@ -465,6 +465,26 @@ func AggregateIgnoresDuplicates(op Operator) bool {
 	}
 }
 
+// CommuteEqualityOrInequalityOp returns the commuted version of the given
+// operator, e.g. '<' -> '>' and '=' -> '='. It only handles equality and
+// inequality operators. Note that commuting an operator is not the same as
+// negating it.
+func CommuteEqualityOrInequalityOp(op Operator) Operator {
+	switch op {
+	case EqOp:
+		return EqOp
+	case GeOp:
+		return LeOp
+	case GtOp:
+		return LtOp
+	case LeOp:
+		return GeOp
+	case LtOp:
+		return GtOp
+	}
+	panic(errors.AssertionFailedf("attempted to commute operator: %s", redact.Safe(op)))
+}
+
 // OpaqueMetadata is an object stored in OpaqueRelExpr and passed
 // through to the exec factory.
 type OpaqueMetadata interface {
