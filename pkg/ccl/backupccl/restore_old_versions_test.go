@@ -268,17 +268,6 @@ ORDER BY object_type, object_name`, [][]string{
 		}
 	})
 
-	t.Run("public_schema_mixed_version", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(publicSchemaDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restorePublicSchemaMixedVersion(exportDir))
-		}
-	})
-
 	t.Run("missing_public_schema_namespace_entry", func(t *testing.T) {
 		dirs, err := ioutil.ReadDir(publicSchemaDirs)
 		require.NoError(t, err)
@@ -1015,7 +1004,6 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
 						},
 					},
 				}})
@@ -1101,7 +1089,6 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
 						},
 					},
 				}})
@@ -1161,10 +1148,28 @@ func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser", "NULL", "false", "101"},
 			{"testuser2", "NULL", "false", "102"},
 			{"testuser3", "NULL", "false", "103"},
+			{"testuser4", "NULL", "false", "104"},
+		})
+
+		sqlDB.CheckQueryResults(t, `SELECT * FROM system.role_options`, [][]string{
+			{"testrole", "NOLOGIN", "NULL", "100"},
+			{"testuser", "CREATEROLE", "NULL", "101"},
+			{"testuser", "VALID UNTIL", "2021-01-10 00:00:00+00:00", "101"},
+			{"testuser2", "CONTROLCHANGEFEED", "NULL", "102"},
+			{"testuser2", "CONTROLJOB", "NULL", "102"},
+			{"testuser2", "CREATEDB", "NULL", "102"},
+			{"testuser2", "CREATELOGIN", "NULL", "102"},
+			{"testuser2", "NOLOGIN", "NULL", "102"},
+			{"testuser2", "VIEWACTIVITY", "NULL", "102"},
+			{"testuser3", "CANCELQUERY", "NULL", "103"},
+			{"testuser3", "MODIFYCLUSTERSETTING", "NULL", "103"},
+			{"testuser3", "VIEWACTIVITYREDACTED", "NULL", "103"},
+			{"testuser3", "VIEWCLUSTERSETTING", "NULL", "103"},
+			{"testuser4", "NOSQLLOGIN", "NULL", "104"},
 		})
 
 		// Verify that the next user we create uses the next biggest ID.
-		sqlDB.Exec(t, "CREATE USER testuser4")
+		sqlDB.Exec(t, "CREATE USER testuser5")
 
 		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
 			{"admin", "", "true", "2"},
@@ -1174,6 +1179,7 @@ func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser2", "NULL", "false", "102"},
 			{"testuser3", "NULL", "false", "103"},
 			{"testuser4", "NULL", "false", "104"},
+			{"testuser5", "NULL", "false", "105"},
 		})
 	}
 }
@@ -1204,10 +1210,11 @@ func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser", "NULL", "false", "101"},
 			{"testuser2", "NULL", "false", "102"},
 			{"testuser3", "NULL", "false", "103"},
+			{"testuser4", "NULL", "false", "104"},
 		})
 
 		// Verify that the next user we create uses the next biggest ID.
-		sqlDB.Exec(t, "CREATE USER testuser4")
+		sqlDB.Exec(t, "CREATE USER testuser5")
 
 		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
 			{"admin", "", "true", "2"},
@@ -1217,6 +1224,7 @@ func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser2", "NULL", "false", "102"},
 			{"testuser3", "NULL", "false", "103"},
 			{"testuser4", "NULL", "false", "104"},
+			{"testuser5", "NULL", "false", "105"},
 		})
 
 		// Drop some users and try restoring again.
@@ -1227,26 +1235,31 @@ func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
 
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE SYSTEM USERS FROM '%s'", localFoo))
 
-		// testrole, testuser2, testuser3 should be reassigned higher ids.
+		// testrole, testuser2, testuser3, testuser4 should be reassigned higher ids.
 		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
 			{"admin", "", "true", "2"},
 			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "105"},
+			{"testrole", "NULL", "true", "106"},
 			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "106"},
-			{"testuser3", "NULL", "false", "107"},
+			{"testuser2", "NULL", "false", "107"},
+			{"testuser3", "NULL", "false", "108"},
+			{"testuser4", "NULL", "false", "109"},
+			{"testuser5", "NULL", "false", "105"},
 		})
 
 		// Verify that the next user we create uses the next biggest ID.
-		sqlDB.Exec(t, "CREATE USER testuser4")
+		sqlDB.Exec(t, "CREATE USER testuser6")
 		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
 			{"admin", "", "true", "2"},
 			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "105"},
+			{"testrole", "NULL", "true", "106"},
 			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "106"},
-			{"testuser3", "NULL", "false", "107"},
-			{"testuser4", "NULL", "false", "108"},
+			{"testuser2", "NULL", "false", "107"},
+			{"testuser3", "NULL", "false", "108"},
+			{"testuser4", "NULL", "false", "109"},
+			{"testuser5", "NULL", "false", "105"},
+			{"testuser6", "NULL", "false", "110"},
 		})
+
 	}
 }

@@ -343,6 +343,16 @@ const (
 	// SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
 	SchemaChangeSupportsCreateFunction
+	// RoleOptionsTableHasIDColumn is the version where the role options table
+	// has ids.
+	RoleOptionsTableHasIDColumn
+	// RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
+	// table are backfilled.
+	RoleOptionsIDColumnIsBackfilled
+	// SetRoleOptionsUserIDColumnNotNull is the version where the role
+	// options table id column cannot be null. This is the final step
+	// of the system.role_options table migration.
+	SetRoleOptionsUserIDColumnNotNull
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -603,6 +613,18 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SchemaChangeSupportsCreateFunction,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
+	},
+	{
+		Key:     RoleOptionsTableHasIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
+	},
+	{
+		Key:     RoleOptionsIDColumnIsBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
+	},
+	{
+		Key:     SetRoleOptionsUserIDColumnNotNull,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

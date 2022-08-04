@@ -214,51 +214,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts(func(o roleoption.Option) {
-		sqltelemetry.IncIAMOptionCounter(sqltelemetry.AlterRole, strings.ToLower(o.String()))
-	})
+	rowsAffected, err := updateRoleOptions(params, opName, n.roleOptions, n.roleName, sqltelemetry.AlterRole)
 	if err != nil {
 		return err
-	}
-
-	rowsAffected := 0
-	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName}
-
-		if value != nil {
-			isNull, val, err := value()
-			if err != nil {
-				return err
-			}
-			if isNull {
-				// If the value of the role option is NULL, ensure that nil is passed
-				// into the statement placeholder, since val is string type "NULL"
-				// will not be interpreted as NULL by the InternalExecutor.
-				qargs = append(qargs, nil)
-			} else {
-				qargs = append(qargs, val)
-			}
-		}
-
-		affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			stmt,
-			qargs...,
-		)
-		if err != nil {
-			return err
-		}
-
-		rowsAffected += affected
-	}
-
-	optStrs := make([]string, len(n.roleOptions))
-	for i := range optStrs {
-		optStrs[i] = n.roleOptions[i].String()
 	}
 
 	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) && rowsAffected > 0 {
@@ -266,6 +224,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
 		}
+	}
+
+	optStrs := make([]string, len(n.roleOptions))
+	for i := range optStrs {
+		optStrs[i] = n.roleOptions[i].String()
 	}
 
 	return params.p.logEvent(params.ctx,
