@@ -120,8 +120,6 @@ func (c *connector) OpenTenantConnWithToken(
 	// Since this method is only used during connection migration (i.e. proxy
 	// is connecting to the SQL pod), we'll discard all of the messages, and
 	// only return once we've seen a ReadyForQuery message.
-	//
-	// NOTE: This will need to be updated when we implement query cancellation.
 	newBackendKeyData, err := readTokenAuthResult(serverConn)
 	if err != nil {
 		return nil, err
