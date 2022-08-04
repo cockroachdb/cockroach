@@ -173,6 +173,7 @@ func (ex *connExecutor) recordStatementSummary(
 		SessionID:            ex.sessionID,
 		StatementID:          planner.stmt.QueryID,
 		AutoRetryCount:       automaticRetryCount,
+		AutoRetryReason:      ex.state.mu.autoRetryReason,
 		RowsAffected:         rowsAffected,
 		ParseLatency:         parseLat,
 		PlanLatency:          planLat,

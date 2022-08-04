@@ -170,6 +170,11 @@ func (s *Container) RecordStatement(
 		}
 	}
 
+	var autoRetryReason string
+	if value.AutoRetryReason != nil {
+		autoRetryReason = value.AutoRetryReason.Error()
+	}
+
 	s.outliersRegistry.ObserveStatement(value.SessionID, &insights.Statement{
 		ID:               value.StatementID,
 		FingerprintID:    stmtFingerprintID,
@@ -179,13 +184,15 @@ func (s *Container) RecordStatement(
 		StartTime:        value.StartTime,
 		EndTime:          value.EndTime,
 		FullScan:         value.FullScan,
-		User:             value.SessionData.User().SQLIdentifier(),
+		User:             value.SessionData.User().Normalized(),
 		ApplicationName:  value.SessionData.ApplicationName,
 		Database:         value.SessionData.Database,
 		PlanGist:         value.PlanGist,
 		Retries:          int64(value.AutoRetryCount),
+		AutoRetryReason:  autoRetryReason,
 		RowsRead:         value.RowsRead,
 		RowsWritten:      value.RowsWritten,
+		Nodes:            value.Nodes,
 	})
 
 	return stats.ID, nil

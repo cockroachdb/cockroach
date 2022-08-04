@@ -196,6 +196,7 @@ type RecordedStmtStats struct {
 	StatementID          clusterunique.ID
 	TransactionID        uuid.UUID
 	AutoRetryCount       int
+	AutoRetryReason      error
 	RowsAffected         int
 	ParseLatency         float64
 	PlanLatency          float64
