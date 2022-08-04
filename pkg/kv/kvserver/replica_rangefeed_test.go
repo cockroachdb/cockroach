@@ -1285,6 +1285,22 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 		return nil
 	})
 
+	// Run up the clock to upgrade the expiration based lease to an epoch based
+	// one. This test wants to later expire the epoch based lease by pausing
+	// liveness heartbeats.
+	manualClock.Increment(
+		tc.GetFirstStoreFromServer(t, 1).GetStoreConfig().RangeLeaseRenewalDuration().Nanoseconds() +
+			time.Second.Nanoseconds(),
+	)
+	testutils.SucceedsSoon(t, func() error {
+		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(scratchKey))
+		leaseStatus := repl.CurrentLeaseStatus(ctx)
+		if leaseStatus.Lease.Type() != roachpb.LeaseEpoch {
+			return errors.Errorf("lease still an expiration based lease")
+		}
+		return nil
+	})
+
 	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
 	// eligible to acquire a new lease.
 	log.Infof(ctx, "test expiring lease")
