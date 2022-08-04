@@ -661,6 +661,20 @@ func (v MVCCRangeKeyVersions) Covers(ts hlc.Timestamp) bool {
 	return !v.IsEmpty() && ts.LessEq(v[0].Timestamp)
 }
 
+// Equal returns whether versions in the specified MVCCRangeKeyVersions match
+// exactly (in timestamps and values) with those in itself.
+func (v MVCCRangeKeyVersions) Equal(other MVCCRangeKeyVersions) bool {
+	if len(v) != len(other) {
+		return false
+	}
+	for i := range v {
+		if !v[i].Equal(other[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // Excise removes the versions in the given [from, to] span (inclusive, in
 // order) in place, returning true if any versions were removed.
 func (v *MVCCRangeKeyVersions) Excise(from, to hlc.Timestamp) bool {
