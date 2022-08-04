@@ -346,6 +346,9 @@ const (
 	// DeleteRequestReturnKey is the version where the DeleteRequest began
 	// populating the FoundKey value in the response.
 	DeleteRequestReturnKey
+	// ImportRollbacksInRestore allows BACKUP to back up an in progress import incrementally and
+	// RESTORE to roll back an in-progress IMPORT.
+	ImportRollbacksInRestore
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -610,6 +613,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DeleteRequestReturnKey,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
+	},
+	{
+		Key:     ImportRollbacksInRestore,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

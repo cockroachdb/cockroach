@@ -721,6 +721,8 @@ type TableDescriptor interface {
 	// IsRefreshViewRequired indicates if a REFRESH VIEW operation needs to be called
 	// on a materialized view.
 	IsRefreshViewRequired() bool
+	// GetInProgressImportInfo gets the current import start time and type.
+	GetInProgressImportInfo() (int64, descpb.TableDescriptor_ImportType)
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
