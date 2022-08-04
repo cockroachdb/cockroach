@@ -1,0 +1,27 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "multiqueue",
+    srcs = ["multi_queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "multiqueue_test",
+    srcs = ["multi_queue_test.go"],
+    embed = [":multiqueue"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
