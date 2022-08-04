@@ -1627,8 +1627,10 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 
 	// UnsafeRawMVCCKey must match Key.
 	if r, err := DecodeMVCCKey(iter.UnsafeRawMVCCKey()); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode UnsafeRawMVCCKey at %s",
-			key)
+		return errors.NewAssertionErrorWithWrappedErrf(
+			err, "failed to decode UnsafeRawMVCCKey at %s",
+			key,
+		)
 	} else if !r.Equal(key) {
 		return errors.AssertionFailedf("UnsafeRawMVCCKey %s does not match Key %s", r, key)
 	}
@@ -1650,7 +1652,8 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 			return errors.AssertionFailedf("UnsafeRawKey lock table key %s does not match Key %s", k, key)
 		} else if !key.Timestamp.IsEmpty() {
 			return errors.AssertionFailedf(
-				"UnsafeRawKey lock table key %s for Key %s with non-zero timestamp", k, key)
+				"UnsafeRawKey lock table key %s for Key %s with non-zero timestamp", k, key,
+			)
 		}
 	} else {
 		return errors.AssertionFailedf("unknown type for engine key %s", engineKey)
@@ -1672,4 +1675,87 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 	}
 
 	return nil
+}
+
+// ScanConflictingIntents scans intents using only the separated intents lock
+// table. The result set is added to the given `intents` slice. It ignores
+// intents that do not conflict with `txn`. If it encounters intents that were
+// written by `txn` that are either at a higher sequence number than txn's or at
+// a lower sequence number but at a higher timestamp, `needIntentHistory` is set
+// to true. This flag is used to signal to the caller that a subsequent scan
+// over the MVCC key space (for the batch in question) will need to be performed
+// using an intent interleaving iterator in order to be able to read the correct
+// provisional value.
+func ScanConflictingIntents(
+	ctx context.Context,
+	reader Reader,
+	txn *roachpb.Transaction,
+	ts hlc.Timestamp,
+	start, end roachpb.Key,
+	intents *[]roachpb.Intent,
+	maxIntents int64,
+) (needIntentHistory bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	upperBoundUnset := len(end) == 0 // NB: Get requests do not set the end key.
+	if !upperBoundUnset && bytes.Compare(start, end) >= 0 {
+		return true, errors.AssertionFailedf("start key must be less than end key")
+	}
+	ltStart, _ := keys.LockTableSingleKey(start, nil)
+	opts := IterOptions{LowerBound: ltStart}
+	if upperBoundUnset {
+		opts.Prefix = true
+	} else {
+		ltEnd, _ := keys.LockTableSingleKey(end, nil)
+		opts.UpperBound = ltEnd
+	}
+	iter := reader.NewEngineIterator(opts)
+	defer iter.Close()
+
+	var meta enginepb.MVCCMetadata
+	var ok bool
+	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
+		if maxIntents != 0 && int64(len(*intents)) >= maxIntents {
+			break
+		}
+		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			return false, err
+		}
+		if meta.Txn == nil {
+			return false, errors.Errorf("intent without transaction")
+		}
+		ownIntent := txn != nil && txn.ID == meta.Txn.ID
+		if ownIntent {
+			// If we ran into one of our own intents, check whether the intent has a
+			// higher (or equal) sequence number or a higher (or equal) timestamp. If
+			// either of these conditions is true, a corresponding scan over the MVCC
+			// key space will need access to the key's intent history in order to read
+			// the correct provisional value. So we set `needIntentHistory` to true.
+			if txn.Sequence <= meta.Txn.Sequence || ts.LessEq(meta.Timestamp.ToTimestamp()) {
+				needIntentHistory = true
+			}
+			continue
+		}
+		if conflictingIntent := meta.Timestamp.ToTimestamp().LessEq(ts); !conflictingIntent {
+			continue
+		}
+		key, err := iter.EngineKey()
+		if err != nil {
+			return false, err
+		}
+		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		if err != nil {
+			return false, err
+		}
+		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return needIntentHistory, nil /* err */
 }

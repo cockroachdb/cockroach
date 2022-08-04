@@ -674,6 +674,10 @@ func TestEvaluateBatch(t *testing.T) {
 
 			var r resp
 			r.d = d
+			evalPath := readWrite
+			if d.readOnly {
+				evalPath = readOnlyDefault
+			}
 			r.br, r.res, r.pErr = evaluateBatch(
 				ctx,
 				d.idKey,
@@ -681,10 +685,10 @@ func TestEvaluateBatch(t *testing.T) {
 				d.MockEvalCtx.EvalContext(),
 				&d.ms,
 				&d.ba,
-				nil, /* g */
-				nil, /* st */
+				nil,
+				nil,
 				uncertainty.Interval{},
-				d.readOnly,
+				evalPath,
 			)
 
 			tc.check(t, r)

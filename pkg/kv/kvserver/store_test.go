@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1904,7 +1905,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	store, manualClock := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClock(manualClock, time.Nanosecond))
+	cfg.Settings = cluster.MakeTestingClusterSettings()
+	allowDroppingLatchesBeforeEval.Override(ctx, &cfg.Settings.SV, false)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 	// Write three keys at time t0.
 	t0 := timeutil.Unix(1, 0)
@@ -2115,8 +2120,8 @@ func TestStoreScanIntents(t *testing.T) {
 		expFinish  bool  // do we expect the scan to finish?
 		expCount   int32 // how many times do we expect to scan?
 	}{
-		// Consistent which can push will make two loops.
-		{true, true, true, 2},
+		// Consistent which can push will detect conflicts and resolve them.
+		{true, true, true, 1},
 		// Consistent but can't push will backoff and retry and not finish.
 		{true, false, false, -1},
 		// Inconsistent and can push will make one loop, with async resolves.
@@ -2202,6 +2207,111 @@ func TestStoreScanIntents(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestStoreScanIntentsRespectsLimit verifies that when reads are allowed to
+// resolve their conflicts before eval (i.e. when they are allowed to drop their
+// latches early), the scan for conflicting intents respects the max intent
+// limits.
+//
+// The test proceeds as follows: a writer lays down more than
+// `MaxIntentsPerWriteIntentErrorDefault` intents, and a reader is expected to
+// encounter these intents and raise a `WriteIntentError` with exactly
+// `MaxIntentsPerWriteIntentErrorDefault` intents in the error.
+func TestStoreScanIntentsRespectsLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	skip.UnderRace(
+		t, "this test writes a ton of intents and tries to clean them up, too slow under race",
+	)
+
+	var interceptWriteIntentErrors atomic.Value
+	// `commitCh` is used to block the writer from committing until the reader has
+	// encountered the intents laid down by the writer.
+	commitCh := make(chan struct{})
+	// intentsLaidDownCh is signalled when the writer is done laying down intents.
+	intentsLaidDownCh := make(chan struct{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &StoreTestingKnobs{
+					TestingConcurrencyRetryFilter: func(
+						ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
+					) {
+						if errors.HasType(pErr.GoError(), (*roachpb.WriteIntentError)(nil)) {
+							// Assert that the WriteIntentError has MaxIntentsPerWriteIntentErrorIntents.
+							if trap := interceptWriteIntentErrors.Load(); trap != nil && trap.(bool) {
+								require.Equal(
+									t, storage.MaxIntentsPerWriteIntentErrorDefault,
+									len(pErr.GetDetail().(*roachpb.WriteIntentError).Intents),
+								)
+								interceptWriteIntentErrors.Store(false)
+								// Allow the writer to commit.
+								t.Logf("allowing writer to commit")
+								close(commitCh)
+							}
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	var intentKeys []roachpb.Key
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Lay down more than `MaxIntentsPerWriteIntentErrorDefault` intents.
+	go func() {
+		defer wg.Done()
+		txn := newTransaction(
+			"test", roachpb.Key("test-key"), roachpb.NormalUserPriority, tc.Server(0).Clock(),
+		)
+		for j := 0; j < storage.MaxIntentsPerWriteIntentErrorDefault+10; j++ {
+			var key roachpb.Key
+			key = append(key, keys.ScratchRangeMin...)
+			key = append(key, []byte(fmt.Sprintf("%d", j))...)
+			intentKeys = append(intentKeys, key)
+			args := putArgs(key, []byte(fmt.Sprintf("value%07d", j)))
+			_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn}, &args)
+			require.Nil(t, pErr)
+		}
+		intentsLaidDownCh <- struct{}{}
+		<-commitCh // Wait for the test to tell us to commit the txn.
+		args, header := endTxnArgs(txn, true /* commit */)
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), header, &args)
+		require.Nil(t, pErr)
+	}()
+
+	select {
+	case <-intentsLaidDownCh:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("timed out waiting for intents to be laid down")
+	}
+
+	// Now, expect a conflicting reader to encounter the intents and raise a
+	// WriteIntentError with exactly `MaxIntentsPerWriteIntentErrorDefault`
+	// intents. See the TestingConcurrencyRetryFilter above.
+	var ba kv.Batch
+	for i := 0; i < storage.MaxIntentsPerWriteIntentErrorDefault+10; i += 10 {
+		for _, key := range intentKeys[i : i+10] {
+			args := getArgs(key)
+			ba.AddRawRequest(&args)
+		}
+	}
+	t.Logf("issuing gets while intercepting WriteIntentErrors")
+	interceptWriteIntentErrors.Store(true)
+	go func() {
+		defer wg.Done()
+		err := store.DB().Run(ctx, &ba)
+		require.NoError(t, err)
+	}()
+
+	wg.Wait()
 }
 
 // TestStoreScanInconsistentResolvesIntents lays down 10 intents,
