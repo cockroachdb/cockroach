@@ -238,6 +238,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		params.p.EvalContext(),
 		params.extendedEvalCtx.Codec.ForSystemTenant(),
 		params.p.logEvent,
+		params.p.descCollection.ReleaseLeases,
 	)
 	if err != nil {
 		return err
@@ -317,6 +318,7 @@ func writeSettingInternal(
 	evalCtx *eval.Context,
 	forSystemTenant bool,
 	logFn func(context.Context, descpb.ID, eventpb.EventPayload) error,
+	releaseLeases func(context.Context),
 ) (expectedEncodedValue string, err error) {
 	err = execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var reportedValue string
@@ -336,6 +338,7 @@ func writeSettingInternal(
 			reportedValue, expectedEncodedValue, err = writeNonDefaultSettingValue(
 				ctx, execCfg, setting, name, txn,
 				user, st, value, forSystemTenant,
+				releaseLeases,
 			)
 			if err != nil {
 				return err
@@ -384,6 +387,7 @@ func writeNonDefaultSettingValue(
 	st *cluster.Settings,
 	value tree.Datum,
 	forSystemTenant bool,
+	releaseLeases func(context.Context),
 ) (reportedValue string, expectedEncodedValue string, err error) {
 	// Stringify the value set by the statement for reporting in errors, logs etc.
 	reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
@@ -398,7 +402,9 @@ func writeNonDefaultSettingValue(
 	verSetting, isSetVersion := setting.(*settings.VersionSetting)
 	if isSetVersion {
 		if err := setVersionSetting(
-			ctx, execCfg, verSetting, name, txn, user, st, value, encoded, forSystemTenant); err != nil {
+			ctx, execCfg, verSetting, name, txn, user, st, value, encoded,
+			forSystemTenant, releaseLeases,
+		); err != nil {
 			return reportedValue, expectedEncodedValue, err
 		}
 	} else {
@@ -438,6 +444,7 @@ func setVersionSetting(
 	value tree.Datum,
 	encoded string,
 	forSystemTenant bool,
+	releaseLeases func(context.Context),
 ) error {
 	// In the special case of the 'version' cluster setting,
 	// we must first read the previous value to validate that the
@@ -534,6 +541,12 @@ func setVersionSetting(
 		})
 	}
 
+	// If we're here, we know we aren't in a transaction because we don't
+	// allow setting cluster settings in a transaction. We need to release
+	// our leases because the underlying migrations may affect descriptors
+	// we currently have a lease for. We don't need to hold on to any leases
+	// because the code isn't relying on them.
+	releaseLeases(ctx)
 	return runMigrationsAndUpgradeVersion(
 		ctx, execCfg, user, prev, value, updateVersionSystemSetting,
 	)
