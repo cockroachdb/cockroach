@@ -2317,11 +2317,13 @@ SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>n
 ----
 left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
- ├── key columns: [1] = [6]
+ ├── lookup expression
+ │    └── filters
+ │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  ├── scan small
  │    └── columns: m:1 n:2
- └── filters
-      └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ └── filters (true)
 
 # Non-covering case.
 opt expect=GenerateLookupJoins
@@ -2369,12 +2371,14 @@ inner-join (lookup abcd)
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2!null a:6!null b:7!null abcd.rowid:9!null
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
- │    └── filters
- │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    └── filters (true)
  └── filters (true)
 
 # Non-covering case, extra filter bound by index, left join.
@@ -2387,12 +2391,14 @@ left-join (lookup abcd)
  ├── lookup columns are key
  ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    ├── fd: (9)-->(6,7)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
- │    └── filters
- │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    └── filters (true)
  └── filters (true)
 
 # Non-covering case, extra filter not bound by index.
@@ -3118,8 +3124,6 @@ DROP INDEX idx_vrw
 
 # The OR filter gets converted to an IN expression in the lookup expression
 # filters.
-# TODO(rytaft): The OR filter shouldn't get re-applied as an additional filter
-# in the ON expression.
 opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(w, v) LEFT LOOKUP JOIN lookup_expr t
 ON (t.u = 1 OR t.u = 2) AND q.v = t.v
@@ -3278,6 +3282,49 @@ project
  └── projections
       └── count:10 [as=count:11, outer=(10)]
 
+# Don't plan a lookup join with no equalities unless the input has only one row
+# or the join has a lookup hint.
+opt expect-not=(GenerateLookupJoins,GenerateLookupJoinsWithFilter)
+SELECT a,b,n,m FROM small JOIN abcd ON a>=m
+----
+inner-join (cross)
+ ├── columns: a:6!null b:7 n:2 m:1!null
+ ├── scan abcd@abcd_a_b_idx
+ │    └── columns: a:6 b:7
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      └── a:6 >= m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+opt expect=GenerateLookupJoins
+SELECT a,b,n,m FROM (SELECT * FROM small LIMIT 1) JOIN abcd ON a>=m
+----
+inner-join (lookup abcd@abcd_a_b_idx)
+ ├── columns: a:6!null b:7 n:2 m:1!null
+ ├── lookup expression
+ │    └── filters
+ │         └── a:6 >= m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ ├── fd: ()-->(1,2)
+ ├── scan small
+ │    ├── columns: m:1 n:2
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
+ └── filters (true)
+
+opt expect=GenerateLookupJoins
+SELECT a,b,n,m FROM small INNER LOOKUP JOIN abcd ON a>=m
+----
+inner-join (lookup abcd@abcd_a_b_idx)
+ ├── columns: a:6!null b:7 n:2 m:1!null
+ ├── flags: force lookup join (into right side)
+ ├── lookup expression
+ │    └── filters
+ │         └── a:6 >= m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters (true)
+
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter
 # --------------------------------------------------
@@ -3370,12 +3417,12 @@ inner-join (lookup abcd)
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  └── filters (true)
 
 # Non-covering case, extra filter bound by index, left join.
@@ -3391,12 +3438,12 @@ left-join (lookup abcd)
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    ├── fd: (9)-->(6,7)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  └── filters (true)
 
 # Non-covering case, extra filter not bound by index.

@@ -15,6 +15,25 @@ CREATE TABLE def_e_decimal (d INT, e DECIMAL, f INT, PRIMARY KEY (f, e));
 INSERT INTO def_e_decimal VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
 
 statement ok
+CREATE TABLE float_xy (x FLOAT, y INT, INDEX asc_idx (x, y), INDEX desc_idx (x DESC, y));
+INSERT INTO float_xy VALUES (1, 1), (2, 1), (NULL, 2), ('NaN'::FLOAT, 3), ('+Inf'::FLOAT, 4), ('-Inf'::FLOAT, 5);
+
+statement ok
+CREATE TABLE string_xy (x TEXT, y INT, INDEX asc_idx (x, y), INDEX desc_idx (x DESC, y));
+INSERT INTO string_xy VALUES ('abc', 1), ('abcd', 2), ('bcd', 3), ('xyz', 4), ('', 5), (NULL, 6);
+
+statement ok
+CREATE TABLE time_xy (x TIME, y TIMESTAMP, INDEX x_idx (x), INDEX y_idx (y));
+INSERT INTO time_xy
+VALUES
+('00:00:00'::TIME, '2016-06-22 19:10:25'::TIMESTAMP),
+('24:00:00'::TIME, '2042-01-01 00:00:00'::TIMESTAMP),
+('infinity'::TIME, '1970-01-01 00:00:00'::TIMESTAMP),
+('00:52:12.19515'::TIME, NULL),
+(NULL, 'infinity'::TIMESTAMP),
+('-infinity'::TIME, '-infinity'::TIMESTAMP);
+
+statement ok
 CREATE TABLE gh (g INT, h INT, INDEX g_idx (g));
 INSERT INTO gh VALUES (NULL, 1)
 
@@ -916,3 +935,534 @@ x  y  z  u  v  w
 2  1  5  2  1  5
 2  1  6  2  1  4
 2  1  6  2  1  5
+
+# Test inequality lookup joins.
+# Case with idxCol <= inputCol.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f <= a ORDER BY a, b, c, d, e, f
+----
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  NULL  2  NULL  2  1
+2  NULL  2  1     1  2
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  1     1  2
+2  1     1  2     1  1
+
+# Case with idxCol >= inputCol (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON a >= f ORDER BY a, b, c, d, e, f
+----
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  NULL  2  NULL  2  1
+2  NULL  2  1     1  2
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  1     1  2
+2  1     1  2     1  1
+
+# Case with idxCol < inputCol.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f < a ORDER BY a, b, c, d, e, f
+----
+2  NULL  2  NULL  2  1
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  2     1  1
+
+# Case with idxCol > inputCol (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON a > f ORDER BY a, b, c, d, e, f
+----
+2  NULL  2  NULL  2  1
+2  NULL  2  2     1  1
+2  1     1  NULL  2  1
+2  1     1  2     1  1
+
+# Case where input column used as bound has null.
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a >= d
+----
+1  1  2  1  1     2
+1  1  2  2  1     1
+1  1  2  2  NULL  2
+2  1  1  2  1     1
+2  1  1  2  NULL  2
+
+# Case where input column used as bound has null (idxCol > inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a > d
+----
+1  1  2  2  1     1
+1  1  2  2  NULL  2
+
+# Case where input column used as bound has null (idxCol >= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a >= d
+----
+1  1  2  1  1     2
+1  1  2  2  1     1
+1  1  2  2  NULL  2
+2  1  1  2  1     1
+2  1  1  2  NULL  2
+
+# Case where input column used as bound has null (idxCol < inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a < d
+----
+2  1  1  1  1  2
+
+# Case where input column used as bound has null (idxCol <= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a <= d
+----
+2  1  1  1  1     2
+2  1  1  2  1     1
+2  1  1  2  NULL  2
+1  1  2  1  1     2
+
+# Case with two inequalities.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f < a AND f >= b ORDER BY a, b, c, d, e, f
+----
+2  1  1  NULL  2  1
+2  1  1  2     1  1
+
+# Case with two inequalities (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON f < a AND f >= b ORDER BY a, b, c, d, e, f
+----
+2  1  1  NULL  2  1
+2  1  1  2     1  1
+
+# Case with two inequalities, one is a constant.
+query IIIIII rowsort
+SELECT * FROM abc INNER LOOKUP JOIN def ON f < 2 AND f >= b
+----
+1  1  2  2     1  1
+2  1  1  2     1  1
+1  1  2  NULL  2  1
+2  1  1  NULL  2  1
+
+# Case with two inequalities, one is a constant.
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN abc ON a < 2 AND a >= d
+----
+1  1  2  1  1  2
+
+# Case with equality prefix.
+query IIIIII rowsort
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = c AND e >= b
+----
+2  1  1  2     1  1
+2  1  1  NULL  2  1
+1  1  2  1     1  2
+
+# Case with equality prefix.
+query IIIIII
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f = a AND e >= c ORDER BY a, b, c, d, e, f
+----
+1  1  2  NULL  2  1
+2  1  1  1     1  2
+
+# Case with equality prefix (same output as last test).
+query IIIIII
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON f = a AND e >= c ORDER BY a, b, c, d, e, f
+----
+1  1  2  NULL  2  1
+2  1  1  1     1  2
+
+# Case with descending index column (idxCol < inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2 ON def.f = def2.f AND def2.e < def.d
+----
+2  1  1  2  1  1
+
+# Case with descending index column (idxCol <= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2
+ON def.f = def2.f AND def2.e <= def.d ORDER BY def.d, def.e, def.f, def2.d, def2.e, def2.f
+----
+1  1  2  1     1  2
+2  1  1  NULL  2  1
+2  1  1  2     1  1
+
+# Case with descending index column (idxCol > inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2 ON def.f = def2.f AND def2.e > def.d
+----
+
+# Case with descending index column (idxCol >= inputCol).
+query IIIIII rowsort
+SELECT * FROM def INNER LOOKUP JOIN def_e_desc AS def2 ON def.f = def2.f AND def2.e >= def.d
+----
+2  1  1  NULL  2  1
+1  1  2  1     1  2
+
+# Case with maximum and minimum integer bounds.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN abc ON a < x
+----
+9223372036854775807   1     1     2
+9223372036854775807   2     1     1
+9223372036854775807   2     NULL  2
+-9223372036854775807  NULL  NULL  NULL
+
+# Case with maximum and minimum integer bounds.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN abc ON a > x
+----
+-9223372036854775807  1     1     2
+-9223372036854775807  2     1     1
+-9223372036854775807  2     NULL  2
+9223372036854775807   NULL  NULL  NULL
+
+# Case with maximum and minimum integer bounds on descending column.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN def_e_desc ON f IN (1, 2) AND e < x
+----
+9223372036854775807   NULL  2     1
+9223372036854775807   2     1     1
+9223372036854775807   1     1     2
+-9223372036854775807  NULL  NULL  NULL
+
+# Case with maximum and minimum integer bounds on descending column.
+query IIII rowsort
+SELECT * FROM (SELECT * FROM (VALUES (-9223372036854775807::INT), (9223372036854775807::INT))) v(x)
+LEFT LOOKUP JOIN def_e_desc ON f IN (1, 2) AND e > x
+----
+-9223372036854775807  NULL  2     1
+-9223372036854775807  2     1     1
+-9223372036854775807  1     1     2
+9223372036854775807   NULL  NULL  NULL
+
+# Case with idxCol <= inputCol and decimal column type.
+query IIIIRI
+SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e <= a::DECIMAL ORDER BY a, b, c, d, e, f
+----
+1  1  2  2     1  1
+2  1  1  NULL  2  1
+2  1  1  2     1  1
+
+# Case with idxCol >= inputCol and decimal column type.
+query IIIIRI
+SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e >= a::DECIMAL ORDER BY a, b, c, d, e, f
+----
+1  1  2  NULL  2  1
+1  1  2  2     1  1
+2  1  1  NULL  2  1
+
+# Case with idxCol < inputCol and decimal column type.
+query IIIIRI
+SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e < a::DECIMAL ORDER BY a, b, c, d, e, f
+----
+2  1  1  2  1  1
+
+# Case with idxCol > inputCol and decimal column type.
+query IIIIRI
+SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e > a::DECIMAL ORDER BY a, b, c, d, e, f
+----
+1  1  2  NULL  2  1
+
+# Case with idxCol <= inputCol and float column type.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@asc_idx ON x <= a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  NaN   3
+1  1     2  -Inf  5
+1  1     2  1     1
+2  NULL  2  NaN   3
+2  NULL  2  -Inf  5
+2  NULL  2  1     1
+2  NULL  2  2     1
+2  1     1  NaN   3
+2  1     1  -Inf  5
+2  1     1  1     1
+2  1     1  2     1
+
+# Case with idxCol >= inputCol and float column type.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@asc_idx ON x >= a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  1     1
+1  1     2  2     1
+1  1     2  +Inf  4
+2  NULL  2  2     1
+2  NULL  2  +Inf  4
+2  1     1  2     1
+2  1     1  +Inf  4
+
+# Case with idxCol < inputCol and float column type.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@asc_idx ON x < a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  NaN   3
+1  1     2  -Inf  5
+2  NULL  2  NaN   3
+2  NULL  2  -Inf  5
+2  NULL  2  1     1
+2  1     1  NaN   3
+2  1     1  -Inf  5
+2  1     1  1     1
+
+# Case with idxCol > inputCol and float column type.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@asc_idx ON x > a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  2     1
+1  1     2  +Inf  4
+2  NULL  2  +Inf  4
+2  1     1  +Inf  4
+
+# Case with idxCol <= inputCol and float column type. Index is descending.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@desc_idx ON x <= a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  NaN   3
+1  1     2  -Inf  5
+1  1     2  1     1
+2  NULL  2  NaN   3
+2  NULL  2  -Inf  5
+2  NULL  2  1     1
+2  NULL  2  2     1
+2  1     1  NaN   3
+2  1     1  -Inf  5
+2  1     1  1     1
+2  1     1  2     1
+
+# Case with idxCol >= inputCol and float column type. Index is descending.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@desc_idx ON x >= a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  1     1
+1  1     2  2     1
+1  1     2  +Inf  4
+2  NULL  2  2     1
+2  NULL  2  +Inf  4
+2  1     1  2     1
+2  1     1  +Inf  4
+
+# Case with idxCol < inputCol and float column type. Index is descending.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@desc_idx ON x < a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  NaN   3
+1  1     2  -Inf  5
+2  NULL  2  NaN   3
+2  NULL  2  -Inf  5
+2  NULL  2  1     1
+2  1     1  NaN   3
+2  1     1  -Inf  5
+2  1     1  1     1
+
+# Case with idxCol > inputCol and float column type. Index is descending.
+query IIIFI
+SELECT * FROM abc INNER LOOKUP JOIN float_xy@desc_idx ON x > a::FLOAT ORDER BY a, b, c, x, y
+----
+1  1     2  2     1
+1  1     2  +Inf  4
+2  NULL  2  +Inf  4
+2  1     1  +Inf  4
+
+query TITI
+SELECT * FROM string_xy xy1 INNER LOOKUP JOIN string_xy xy2 ON xy2.x < xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+abc   1  ·     5
+abcd  2  ·     5
+abcd  2  abc   1
+bcd   3  ·     5
+bcd   3  abc   1
+bcd   3  abcd  2
+xyz   4  ·     5
+xyz   4  abc   1
+xyz   4  abcd  2
+xyz   4  bcd   3
+
+query TITI
+SELECT * FROM string_xy xy1 INNER LOOKUP JOIN string_xy xy2 ON xy2.x > xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+·     5  abc   1
+·     5  abcd  2
+·     5  bcd   3
+·     5  xyz   4
+abc   1  abcd  2
+abc   1  bcd   3
+abc   1  xyz   4
+abcd  2  bcd   3
+abcd  2  xyz   4
+bcd   3  xyz   4
+
+query TITI
+SELECT * FROM string_xy xy1 INNER LOOKUP JOIN string_xy xy2 ON xy2.x <= xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+·     5  ·     5
+abc   1  ·     5
+abc   1  abc   1
+abcd  2  ·     5
+abcd  2  abc   1
+abcd  2  abcd  2
+bcd   3  ·     5
+bcd   3  abc   1
+bcd   3  abcd  2
+bcd   3  bcd   3
+xyz   4  ·     5
+xyz   4  abc   1
+xyz   4  abcd  2
+xyz   4  bcd   3
+xyz   4  xyz   4
+
+query TITI
+SELECT * FROM string_xy xy1 INNER LOOKUP JOIN string_xy xy2 ON xy2.x >= xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+·     5  ·     5
+·     5  abc   1
+·     5  abcd  2
+·     5  bcd   3
+·     5  xyz   4
+abc   1  abc   1
+abc   1  abcd  2
+abc   1  bcd   3
+abc   1  xyz   4
+abcd  2  abcd  2
+abcd  2  bcd   3
+abcd  2  xyz   4
+bcd   3  bcd   3
+bcd   3  xyz   4
+xyz   4  xyz   4
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.x < xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                             0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                             0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000  0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000  0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000  0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.x > xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.x <= xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000   0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000   0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.x >= xy1.x ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-01 00:52:12.19515 +0000 UTC   NULL
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:52:12.19515 +0000 UTC   NULL                              0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.y < xy1.y ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.y > xy1.y ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000  0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000   0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000   NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.y <= xy1.y ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000          0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+
+query TTTT
+SELECT * FROM time_xy xy1 INNER LOOKUP JOIN time_xy xy2 ON xy2.y >= xy1.y ORDER BY xy1.x, xy1.y, xy2.x, xy2.y
+----
+NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000          NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000          0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000          0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000          0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         -4713-11-24 00:00:00 +0000 +0000          0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000           0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           0000-01-01 00:00:00 +0000 UTC         2016-06-22 19:10:25 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000
+0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
+0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000

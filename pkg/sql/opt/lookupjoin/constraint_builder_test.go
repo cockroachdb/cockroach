@@ -141,12 +141,9 @@ func TestLookupConstraints(t *testing.T) {
 				}
 
 				var cb lookupjoin.ConstraintBuilder
-				ok := cb.Init(&f, md, f.EvalContext(), rightTable, leftCols, rightCols, filters)
-				if !ok {
-					return "lookup join not possible"
-				}
+				cb.Init(&f, md, f.EvalContext(), rightTable, leftCols, rightCols)
 
-				lookupConstraint := cb.Build(index, filters, optionalFilters)
+				lookupConstraint, _ := cb.Build(index, filters, optionalFilters)
 				var b strings.Builder
 				if lookupConstraint.IsUnconstrained() {
 					b.WriteString("lookup join not possible")

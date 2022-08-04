@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -73,6 +74,11 @@ type spanIDHelper struct {
 	//
 	// Index joins already have unique rows that generate unique spans to fetch,
 	// so they don't need this map.
+	//
+	// TODO(drewk): using a map instead of a sort-merge strategy is inefficient
+	//  for inequality spans, which tend to overlap significantly without being
+	//  exactly the same. For now, we can just limit when inequality-only lookup
+	//  joins are planned to avoid regression.
 	spanKeyToSpanID map[string]int
 	// spanIDToInputRowIndices maps a span ID to the input row indices that
 	// desire the lookup of the span corresponding to that span ID.
@@ -99,8 +105,11 @@ func (h *spanIDHelper) reset() {
 // span as well as a boolean indicating whether this span key is seen for the
 // first time are returned.
 func (h *spanIDHelper) addInputRowIdxForSpan(
-	spanKey string, inputRowIdx int,
+	span *roachpb.Span, inputRowIdx int,
 ) (spanID int, newSpanKey bool) {
+	// Derive a unique key for the span. This pattern for constructing the string
+	// is more efficient than using fmt.Sprintf().
+	spanKey := strconv.Itoa(len(span.Key)) + "/" + string(span.Key) + "/" + string(span.EndKey)
 	spanID, ok := h.spanKeyToSpanID[spanKey]
 	if !ok {
 		spanID = len(h.spanKeyToSpanID)
@@ -243,7 +252,7 @@ func (g *defaultSpanGenerator) generateSpans(
 				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull,
 			)
 		} else {
-			spanID, newSpanKey := g.addInputRowIdxForSpan(string(generatedSpan.Key), i)
+			spanID, newSpanKey := g.addInputRowIdxForSpan(&generatedSpan, i)
 			if newSpanKey {
 				numOldSpans := len(g.scratchSpans)
 				g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
@@ -295,15 +304,21 @@ type multiSpanGenerator struct {
 	indexKeyRows  []rowenc.EncDatumRow
 	indexKeySpans roachpb.Spans
 
+	// inequalityInfo holds the information needed to generate spans when the last
+	// lookup column is constrained by an inequality condition.
+	inequalityInfo struct {
+		// colIdx is the index of the lookup column that is constrained to a range.
+		// It is set to -1 if no lookup column is constrained by an inequality.
+		colIdx                       int
+		colTyp                       *types.T
+		startInclusive, endInclusive bool
+		start, end                   tree.TypedExpr
+	}
+
 	spanIDHelper
 
 	// spansCount is the number of spans generated for each input row.
 	spansCount int
-
-	// indexOrds contains the ordinals (i.e., the positions in the index) of the
-	// index columns that are constrained by the spans produced by this
-	// multiSpanGenerator. indexOrds must be a prefix of the index columns.
-	indexOrds util.FastIntSet
 
 	// fetchedOrdToIndexKeyOrd maps the ordinals of fetched (right-hand side)
 	// columns to ordinals in the index key columns.
@@ -311,10 +326,6 @@ type multiSpanGenerator struct {
 
 	// numInputCols is the number of columns in the input to the joinReader.
 	numInputCols int
-
-	// inequalityColIdx is the index of inequality colinfo (there can be only one),
-	// -1 otherwise.
-	inequalityColIdx int
 
 	scratchSpans roachpb.Spans
 
@@ -356,38 +367,15 @@ func (i multiSpanGeneratorIndexVarColInfo) String() string {
 	return fmt.Sprintf("[inputRowIdx: %d]", i.inputRowIdx)
 }
 
-// multiSpanGeneratorInequalityColInfo represents a column that is bound by a
-// range expression. If there are <,>, >= or <= inequalities we distill them
-// into a start and end datum.
-type multiSpanGeneratorInequalityColInfo struct {
-	start          tree.Datum
-	startInclusive bool
-	end            tree.Datum
-	endInclusive   bool
-}
-
-func (i multiSpanGeneratorInequalityColInfo) String() string {
-	var startBoundary byte
-	if i.startInclusive {
-		startBoundary = '['
-	} else {
-		startBoundary = '('
-	}
-	var endBoundary rune
-	if i.endInclusive {
-		endBoundary = ']'
-	} else {
-		endBoundary = ')'
-	}
-	return fmt.Sprintf("%c%v - %v%c", startBoundary, i.start, i.end, endBoundary)
-}
-
 var _ multiSpanGeneratorColInfo = &multiSpanGeneratorValuesColInfo{}
 var _ multiSpanGeneratorColInfo = &multiSpanGeneratorIndexVarColInfo{}
-var _ multiSpanGeneratorColInfo = &multiSpanGeneratorInequalityColInfo{}
 
 // init must be called before the multiSpanGenerator can be used to generate
 // spans.
+// - spansCanOverlap indicates whether it is possible for the same spans to be
+// used more than once for a given input batch. This is only the case when an
+// inequality on an input column is used, since in that case we don't fully
+// de-duplicate.
 func (g *multiSpanGenerator) init(
 	evalCtx *eval.Context,
 	codec keys.SQLCodec,
@@ -397,13 +385,13 @@ func (g *multiSpanGenerator) init(
 	exprHelper *execinfrapb.ExprHelper,
 	fetchedOrdToIndexKeyOrd util.FastIntMap,
 	memAcc *mon.BoundAccount,
-) error {
+) (spansCanOverlap bool, _ error) {
 	g.spanBuilder.InitWithFetchSpec(evalCtx, codec, fetchSpec)
 	g.spanSplitter = span.MakeSplitterWithFamilyIDs(len(fetchSpec.KeyFullColumns()), splitFamilyIDs)
 	g.numInputCols = numInputCols
 	g.spanKeyToSpanID = make(map[string]int)
 	g.fetchedOrdToIndexKeyOrd = fetchedOrdToIndexKeyOrd
-	g.inequalityColIdx = -1
+	g.inequalityInfo.colIdx = -1
 	g.memAcc = memAcc
 
 	// Initialize the spansCount to 1, since we'll always have at least one span.
@@ -414,20 +402,19 @@ func (g *multiSpanGenerator) init(
 	// join conditions. This info will be used later to generate the spans.
 	g.indexColInfos = make([]multiSpanGeneratorColInfo, 0, len(fetchSpec.KeyAndSuffixColumns))
 	if err := g.fillInIndexColInfos(exprHelper.Expr); err != nil {
-		return err
+		return false, err
 	}
 
 	// Check that the results of fillInIndexColInfos can be used to generate valid
 	// spans.
 	lookupColsCount := len(g.indexColInfos)
-	if lookupColsCount != g.indexOrds.Len() {
-		return errors.AssertionFailedf(
-			"columns in the join condition do not form a prefix on the index",
-		)
+	if g.inequalityInfo.colIdx != -1 {
+		lookupColsCount++
 	}
 	if lookupColsCount > len(fetchSpec.KeyAndSuffixColumns) {
-		return errors.AssertionFailedf(
-			"%d lookup columns specified, expecting at most %d", lookupColsCount, len(fetchSpec.KeyAndSuffixColumns),
+		return false, errors.AssertionFailedf(
+			"%d lookup columns specified, expecting at most %d",
+			lookupColsCount, len(fetchSpec.KeyAndSuffixColumns),
 		)
 	}
 
@@ -448,37 +435,50 @@ func (g *multiSpanGenerator) init(
 	// tenant and id to be filled in later:
 	//
 	//   [ 'east'  -  1  - ]
-	//   [ 'west'  -  1  - ]
 	//   [ 'east'  -  2  - ]
+	//   [ 'west'  -  1  - ]
 	//   [ 'west'  -  2  - ]
 	//
 
-	// Make first pass flushing out the structure with const values.
-	g.indexKeyRows = make([]rowenc.EncDatumRow, 1, g.spansCount)
-	g.indexKeyRows[0] = make(rowenc.EncDatumRow, 0, lookupColsCount)
-	for _, info := range g.indexColInfos {
+	// First fill the structure with empty EncDatum values.
+	g.indexKeyRows = make([]rowenc.EncDatumRow, g.spansCount)
+	for rowIdx := range g.indexKeyRows {
+		g.indexKeyRows[rowIdx] = make(rowenc.EncDatumRow, lookupColsCount)
+	}
+
+	// Next replace the constant values according to the cartesian product, as in
+	// the example above.
+	productSize := len(g.indexKeyRows)
+	for colIdx, info := range g.indexColInfos {
 		if valuesInfo, ok := info.(multiSpanGeneratorValuesColInfo); ok {
-			for i, n := 0, len(g.indexKeyRows); i < n; i++ {
-				indexKeyRow := g.indexKeyRows[i]
-				for j := 1; j < len(valuesInfo.constVals); j++ {
-					newIndexKeyRow := make(rowenc.EncDatumRow, len(indexKeyRow), lookupColsCount)
-					copy(newIndexKeyRow, indexKeyRow)
-					newIndexKeyRow = append(newIndexKeyRow, rowenc.EncDatum{Datum: valuesInfo.constVals[j]})
-					g.indexKeyRows = append(g.indexKeyRows, newIndexKeyRow)
-				}
-				g.indexKeyRows[i] = append(indexKeyRow, rowenc.EncDatum{Datum: valuesInfo.constVals[0]})
-			}
-		} else {
-			for i := 0; i < len(g.indexKeyRows); i++ {
-				// Just fill in an empty EncDatum for now -- this will be replaced
-				// inside generateNonNullSpans when we process each row.
-				g.indexKeyRows[i] = append(g.indexKeyRows[i], rowenc.EncDatum{})
+			productSize /= len(valuesInfo.constVals)
+			for rowIdx := range g.indexKeyRows {
+				valueIdx := (rowIdx / productSize) % len(valuesInfo.constVals)
+				g.indexKeyRows[rowIdx][colIdx] = rowenc.EncDatum{Datum: valuesInfo.constVals[valueIdx]}
 			}
 		}
 	}
 
 	g.indexKeySpans = make(roachpb.Spans, 0, g.spansCount)
-	return nil
+	return lookupExprHasVarInequality(exprHelper.Expr), nil
+}
+
+// lookupExprHasVarInequality returns true if the given lookup expression
+// contains an inequality that references an input column.
+func lookupExprHasVarInequality(lookupExpr tree.TypedExpr) bool {
+	switch t := lookupExpr.(type) {
+	case *tree.AndExpr:
+		return lookupExprHasVarInequality(t.Left.(tree.TypedExpr)) ||
+			lookupExprHasVarInequality(t.Right.(tree.TypedExpr))
+	case *tree.ComparisonExpr:
+		switch t.Operator.Symbol {
+		case treecmp.LT, treecmp.LE, treecmp.GT, treecmp.GE:
+			_, leftIsVar := t.Left.(*tree.IndexedVar)
+			_, rightIsVar := t.Right.(*tree.IndexedVar)
+			return leftIsVar && rightIsVar
+		}
+	}
+	return false
 }
 
 // fillInIndexColInfos recursively walks the expression tree to collect join
@@ -503,11 +503,10 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 		return g.fillInIndexColInfos(t.Right.(tree.TypedExpr))
 
 	case *tree.ComparisonExpr:
-		setOfVals := false
-		inequality := false
+		var inequality bool
 		switch t.Operator.Symbol {
 		case treecmp.EQ, treecmp.In:
-			setOfVals = true
+			inequality = false
 		case treecmp.GE, treecmp.LE, treecmp.GT, treecmp.LT:
 			inequality = true
 		default:
@@ -520,38 +519,42 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 		var info multiSpanGeneratorColInfo
 
 		// For EQ and In, we just need to check the types of the arguments in order
-		// to extract the info. For inequalities we return the const datums that
+		// to extract the info. For inequalities we return the expressions that
 		// will form the span boundaries.
-		getInfo := func(typedExpr tree.TypedExpr) (tree.Datum, error) {
+		getInfo := func(typedExpr tree.TypedExpr) (tree.TypedExpr, error) {
 			switch t := typedExpr.(type) {
 			case *tree.IndexedVar:
-				// IndexedVars can either be from the input or the index. If the
-				// IndexedVar is from the index, shift it over by numInputCols to
-				// find the corresponding ordinal in the base table.
 				if t.Idx >= g.numInputCols {
+					// The IndexedVar is from the index. shift it over to find the
+					// corresponding ordinal in the base table.
 					tabOrd = t.Idx - g.numInputCols
-				} else {
-					info = multiSpanGeneratorIndexVarColInfo{inputRowIdx: t.Idx}
+					return nil, nil
 				}
-
-			case tree.Datum:
-				if setOfVals {
-					var values tree.Datums
-					switch t.ResolvedType().Family() {
-					case types.TupleFamily:
-						values = t.(*tree.DTuple).D
-					default:
-						values = tree.Datums{t}
-					}
-					// Every time there are multiple possible values, we multiply the
-					// spansCount by the number of possibilities. We will need to create
-					// spans representing the cartesian product of possible values for
-					// each column.
-					info = multiSpanGeneratorValuesColInfo{constVals: values}
-					g.spansCount *= len(values)
-				} else {
+				// The IndexedVar is from the input. It will be used to generate spans.
+				if inequality {
+					// We will use the IndexVar expression as an inequality bound.
 					return t, nil
 				}
+				info = multiSpanGeneratorIndexVarColInfo{inputRowIdx: t.Idx}
+
+			case tree.Datum:
+				if inequality {
+					// We will use the Datum as an inequality bound.
+					return t, nil
+				}
+				var values tree.Datums
+				switch t.ResolvedType().Family() {
+				case types.TupleFamily:
+					values = t.(*tree.DTuple).D
+				default:
+					values = tree.Datums{t}
+				}
+				// Every time there are multiple possible values, we multiply the
+				// spansCount by the number of possibilities. We will need to create
+				// spans representing the cartesian product of possible values for
+				// each column.
+				info = multiSpanGeneratorValuesColInfo{constVals: values}
+				g.spansCount *= len(values)
 
 			default:
 				return nil, errors.AssertionFailedf("unhandled comparison argument type %T", t)
@@ -577,49 +580,42 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 			return errors.AssertionFailedf("table column %d not found in index", tabOrd)
 		}
 
-		// Make sure slice has room for new entry.
-		if len(g.indexColInfos) <= idxOrd {
-			g.indexColInfos = g.indexColInfos[:idxOrd+1]
+		if !inequality {
+			// Make sure slice has room for new entry.
+			if len(g.indexColInfos) <= idxOrd {
+				g.indexColInfos = g.indexColInfos[:idxOrd+1]
+			}
+			g.indexColInfos[idxOrd] = info
+			return nil
 		}
 
-		if inequality {
-			// If we have two inequalities we might already have an info, ie if we
-			// have a < 10 and a > 0 we'll have two invocations of fillInIndexColInfo
-			// for each comparison and they need to update the same info.
-			colInfo := g.indexColInfos[idxOrd]
-			var inequalityInfo multiSpanGeneratorInequalityColInfo
-			if colInfo != nil {
-				inequalityInfo, ok = colInfo.(multiSpanGeneratorInequalityColInfo)
-				if !ok {
-					return errors.AssertionFailedf("unexpected colinfo type (%d): %T", idxOrd, colInfo)
-				}
-			}
+		if g.inequalityInfo.colIdx != -1 && g.inequalityInfo.colIdx != idxOrd {
+			return errors.AssertionFailedf("two inequality columns found: %d and %d",
+				g.inequalityInfo.colIdx, idxOrd)
+		}
+		g.inequalityInfo.colIdx = idxOrd
 
-			if lval != nil {
-				if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
-					inequalityInfo.start = lval
-					inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.LE
-				} else {
-					inequalityInfo.end = lval
-					inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.GE
-				}
+		if lval != nil {
+			g.inequalityInfo.colTyp = lval.ResolvedType()
+			if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
+				g.inequalityInfo.start = lval
+				g.inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.LE
+			} else {
+				g.inequalityInfo.end = lval
+				g.inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.GE
 			}
-
-			if rval != nil {
-				if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
-					inequalityInfo.end = rval
-					inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.LE
-				} else {
-					inequalityInfo.start = rval
-					inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.GE
-				}
-			}
-			info = inequalityInfo
-			g.inequalityColIdx = idxOrd
 		}
 
-		g.indexColInfos[idxOrd] = info
-		g.indexOrds.Add(idxOrd)
+		if rval != nil {
+			g.inequalityInfo.colTyp = rval.ResolvedType()
+			if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
+				g.inequalityInfo.end = rval
+				g.inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.LE
+			} else {
+				g.inequalityInfo.start = rval
+				g.inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.GE
+			}
+		}
 
 	default:
 		return errors.AssertionFailedf("unhandled expression type %T", t)
@@ -647,25 +643,31 @@ func (g *multiSpanGenerator) generateNonNullSpans(row rowenc.EncDatumRow) (roach
 	g.indexKeySpans = g.indexKeySpans[:0]
 
 	// Hoist inequality lookup out of loop if we have one.
-	var inequalityInfo multiSpanGeneratorInequalityColInfo
-	if g.inequalityColIdx != -1 {
-		inequalityInfo = g.indexColInfos[g.inequalityColIdx].(multiSpanGeneratorInequalityColInfo)
+	var startBound, endBound *rowenc.EncDatum
+	if g.inequalityInfo.colIdx != -1 {
+		startBound, endBound = g.getInequalityBounds(row)
 	}
 
 	// Build spans for each row.
 	for _, indexKeyRow := range g.indexKeyRows {
 		var s roachpb.Span
 		var err error
-		var containsNull bool
-		if g.inequalityColIdx == -1 {
+		var containsNull, filterRow bool
+		if g.inequalityInfo.colIdx == -1 {
 			s, containsNull, err = g.spanBuilder.SpanFromEncDatums(indexKeyRow[:len(g.indexColInfos)])
 		} else {
-			s, containsNull, err = g.spanBuilder.SpanFromEncDatumsWithRange(indexKeyRow, len(g.indexColInfos),
-				inequalityInfo.start, inequalityInfo.startInclusive, inequalityInfo.end, inequalityInfo.endInclusive)
+			s, containsNull, filterRow, err = g.spanBuilder.SpanFromEncDatumsWithRange(
+				indexKeyRow, len(g.indexColInfos), startBound, endBound,
+				g.inequalityInfo.startInclusive, g.inequalityInfo.endInclusive, g.inequalityInfo.colTyp)
 		}
 
 		if err != nil {
 			return roachpb.Spans{}, err
+		}
+
+		if filterRow {
+			// The row has been filtered by the range conditions.
+			return roachpb.Spans{}, nil
 		}
 
 		if !containsNull {
@@ -689,13 +691,13 @@ func (g *multiSpanGenerator) generateSpans(
 		}
 		for j := range generatedSpans {
 			generatedSpan := &generatedSpans[j]
-			spanID, newSpanKey := g.spanIDHelper.addInputRowIdxForSpan(string(generatedSpan.Key), i)
+			spanID, newSpanKey := g.spanIDHelper.addInputRowIdxForSpan(generatedSpan, i)
 			if newSpanKey {
 				numOldSpans := len(g.scratchSpans)
 				// MaybeSplitSpanIntoSeparateFamilies is an optimization for doing more
 				// efficient point lookups when the span hits multiple column families.
 				// It doesn't work with inequality ranges because they aren't point lookups.
-				if g.inequalityColIdx != -1 {
+				if g.inequalityInfo.colIdx != -1 {
 					g.scratchSpans = append(g.scratchSpans, *generatedSpan)
 				} else {
 					g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
@@ -717,6 +719,26 @@ func (g *multiSpanGenerator) generateSpans(
 	}
 
 	return g.scratchSpans, g.scratchSpanIDs, nil
+}
+
+// getInequalityBounds returns the start and end bounds for the index column
+// that is constrained by a range expression. If either the start or end is
+// unconstrained, the corresponding bound is nil.
+func (g *multiSpanGenerator) getInequalityBounds(
+	row []rowenc.EncDatum,
+) (start, end *rowenc.EncDatum) {
+	getBound := func(expr tree.TypedExpr) *rowenc.EncDatum {
+		switch t := expr.(type) {
+		case tree.Datum:
+			return &rowenc.EncDatum{Datum: t}
+		case *tree.IndexedVar:
+			return &row[t.Idx]
+		}
+		return nil
+	}
+	start = getBound(g.inequalityInfo.start)
+	end = getBound(g.inequalityInfo.end)
+	return start, end
 }
 
 func (g *multiSpanGenerator) close(ctx context.Context) {
@@ -751,28 +773,29 @@ func (g *localityOptimizedSpanGenerator) init(
 	fetchedOrdToIndexKeyOrd util.FastIntMap,
 	localSpanGenMemAcc *mon.BoundAccount,
 	remoteSpanGenMemAcc *mon.BoundAccount,
-) error {
-	if err := g.localSpanGen.init(
+) (spansCanOverlap bool, err error) {
+	var localSpansCanOverlap, remoteSpansCanOverlap bool
+	if localSpansCanOverlap, err = g.localSpanGen.init(
 		evalCtx, codec, fetchSpec, splitFamilyIDs,
 		numInputCols, localExprHelper, fetchedOrdToIndexKeyOrd, localSpanGenMemAcc,
 	); err != nil {
-		return err
+		return false, err
 	}
-	if err := g.remoteSpanGen.init(
+	if remoteSpansCanOverlap, err = g.remoteSpanGen.init(
 		evalCtx, codec, fetchSpec, splitFamilyIDs,
 		numInputCols, remoteExprHelper, fetchedOrdToIndexKeyOrd, remoteSpanGenMemAcc,
 	); err != nil {
-		return err
+		return false, err
 	}
 	// Check that the resulting span generators have the same lookup columns.
 	localLookupCols := len(g.localSpanGen.indexColInfos)
 	remoteLookupCols := len(g.remoteSpanGen.indexColInfos)
 	if localLookupCols != remoteLookupCols {
-		return errors.AssertionFailedf(
+		return false, errors.AssertionFailedf(
 			"local lookup cols (%d) != remote lookup cols (%d)", localLookupCols, remoteLookupCols,
 		)
 	}
-	return nil
+	return localSpansCanOverlap || remoteSpansCanOverlap, nil
 }
 
 func (g *localityOptimizedSpanGenerator) setResizeMemoryAccountFunc(f resizeMemoryAccountFunc) {
