@@ -2896,44 +2896,57 @@ FROM (SELECT * FROM a WHERE i>0) AS a
 INNER JOIN (SELECT x, y, y+1 AS z FROM b WHERE y>10) AS b
 ON a.f>=b.z::float AND (a.k=b.x) IS True AND a.f>=b.z::float AND (a.i=b.y) IS NOT False
 ----
-inner-join (hash)
+project
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 x:8!null y:9!null z:12!null
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── immutable
  ├── key: (8)
  ├── fd: (1)-->(2-5), (8)-->(9), (9)-->(12), (1)==(8), (8)==(1), (2)==(9), (9)==(2)
- ├── select
- │    ├── columns: k:1!null i:2!null f:3!null s:4 j:5
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    ├── scan a
- │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── filters
- │         └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
- ├── project
- │    ├── columns: z:12!null x:8!null y:9!null
- │    ├── immutable
- │    ├── key: (8)
- │    ├── fd: (8)-->(9), (9)-->(12)
- │    ├── select
- │    │    ├── columns: x:8!null y:9!null
- │    │    ├── key: (8)
- │    │    ├── fd: (8)-->(9)
- │    │    ├── scan b
- │    │    │    ├── columns: x:8!null y:9
- │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(9)
- │    │    └── filters
- │    │         └── y:9 > 10 [outer=(9), constraints=(/9: [/11 - ]; tight)]
- │    └── projections
- │         └── y:9 + 1 [as=z:12, outer=(9), immutable]
- └── filters
-      ├── f:3 >= z:12::FLOAT8 [outer=(3,12), immutable, constraints=(/3: (/NULL - ])]
-      ├── f:3 >= z:12::FLOAT8 [outer=(3,12), immutable, constraints=(/3: (/NULL - ])]
-      ├── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── inner-join (hash)
+      ├── columns: k:1!null i:2!null f:3!null s:4 j:5 x:8!null y:9!null z:12!null column13:13!null column14:14!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── immutable
+      ├── key: (8)
+      ├── fd: (1)-->(2-5), (8)-->(9), (9)-->(12), (12)-->(13,14), (1)==(8), (8)==(1), (2)==(9), (9)==(2)
+      ├── select
+      │    ├── columns: k:1!null i:2!null f:3!null s:4 j:5
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5)
+      │    ├── scan a
+      │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    └── filters
+      │         └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+      ├── project
+      │    ├── columns: column14:14!null column13:13!null x:8!null y:9!null z:12!null
+      │    ├── immutable
+      │    ├── key: (8)
+      │    ├── fd: (8)-->(9), (9)-->(12), (12)-->(13,14)
+      │    ├── project
+      │    │    ├── columns: z:12!null x:8!null y:9!null
+      │    │    ├── immutable
+      │    │    ├── key: (8)
+      │    │    ├── fd: (8)-->(9), (9)-->(12)
+      │    │    ├── select
+      │    │    │    ├── columns: x:8!null y:9!null
+      │    │    │    ├── key: (8)
+      │    │    │    ├── fd: (8)-->(9)
+      │    │    │    ├── scan b
+      │    │    │    │    ├── columns: x:8!null y:9
+      │    │    │    │    ├── key: (8)
+      │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    └── filters
+      │    │    │         └── y:9 > 10 [outer=(9), constraints=(/9: [/11 - ]; tight)]
+      │    │    └── projections
+      │    │         └── y:9 + 1 [as=z:12, outer=(9), immutable]
+      │    └── projections
+      │         ├── z:12::FLOAT8 [as=column14:14, outer=(12), immutable]
+      │         └── z:12::FLOAT8 [as=column13:13, outer=(12), immutable]
+      └── filters
+           ├── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           ├── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+           ├── f:3 >= column13:13 [outer=(3,13), constraints=(/3: (/NULL - ]; /13: (/NULL - ])]
+           └── f:3 >= column14:14 [outer=(3,14), constraints=(/3: (/NULL - ]; /14: (/NULL - ])]
 
 # Don't trigger rule when one of the variables is nullable.
 norm expect-not=SimplifyJoinNotNullEquality
@@ -2956,10 +2969,10 @@ inner-join (cross)
       └── (i:2 = x:8) IS NOT false [outer=(2,8)]
 
 # --------------------------------------------------
-# ExtractJoinEqualities
+# ExtractJoinComparisons
 # --------------------------------------------------
 
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN uv ON x+y=u
 ----
 project
@@ -2991,7 +3004,7 @@ project
       └── filters
            └── column9:9 = u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
 
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN uv ON u=x+y
 ----
 project
@@ -3023,7 +3036,7 @@ project
       └── filters
            └── column9:9 = u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
 
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN uv ON x=u+v
 ----
 project
@@ -3055,7 +3068,7 @@ project
       └── filters
            └── x:1 = column9:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN uv ON u+v=x
 ----
 project
@@ -3087,7 +3100,7 @@ project
       └── filters
            └── x:1 = column9:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN uv ON x+y=u+v
 ----
 project
@@ -3126,7 +3139,7 @@ project
            └── column9:9 = column10:10 [outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
 
 # Multiple extractable equalities.
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x*y+1=u*v+2
 ----
 project
@@ -3170,7 +3183,7 @@ project
            └── column11:11 = column12:12 [outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ]), fd=(11)==(12), (12)==(11)]
 
 # An extractable equality with another expression.
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN uv ON x+y=u AND x+u=v
 ----
 project
@@ -3205,7 +3218,7 @@ project
 
 # Computed columns with matching expressions should be reused as projection
 # columns.
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN comp ON x=i+10 AND y=abs(i)
 ----
 inner-join (hash)
@@ -3237,7 +3250,7 @@ inner-join (hash)
 
 # Computed columns with matching expressions should be reused as projection
 # columns.
-norm expect=ExtractJoinEqualities
+norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN comp ON i+10=x AND abs(i)=y
 ----
 inner-join (hash)
@@ -3268,7 +3281,7 @@ inner-join (hash)
       └── y:2 = v:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Cases with non-extractable equality.
-norm expect-not=ExtractJoinEqualities
+norm expect-not=ExtractJoinComparisons
 SELECT * FROM xy FULL OUTER JOIN uv ON x=u
 ----
 full-join (hash)
@@ -3287,7 +3300,7 @@ full-join (hash)
  └── filters
       └── x:1 = u:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
-norm expect-not=ExtractJoinEqualities
+norm expect-not=ExtractJoinComparisons
 SELECT * FROM xy FULL OUTER JOIN uv ON x+y=1
 ----
 full-join (cross)
@@ -3306,7 +3319,7 @@ full-join (cross)
  └── filters
       └── (x:1 + y:2) = 1 [outer=(1,2), immutable]
 
-norm expect-not=ExtractJoinEqualities
+norm expect-not=ExtractJoinComparisons
 SELECT * FROM xy FULL OUTER JOIN uv ON 1=u+v
 ----
 full-join (cross)
@@ -3325,7 +3338,7 @@ full-join (cross)
  └── filters
       └── (u:5 + v:6) = 1 [outer=(5,6), immutable]
 
-norm expect-not=ExtractJoinEqualities
+norm expect-not=ExtractJoinComparisons
 SELECT * FROM xy INNER JOIN uv ON (SELECT k FROM a WHERE i=x)=u
 ----
 project
@@ -3370,7 +3383,7 @@ project
       └── filters
            └── u:5 = k:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
 
-norm expect-not=ExtractJoinEqualities
+norm expect-not=ExtractJoinComparisons
 SELECT * FROM xy INNER JOIN uv ON x=(SELECT k FROM a WHERE i=u)
 ----
 project
@@ -3418,7 +3431,7 @@ project
 # Don't extract equalities where one side is an expression with no outer cols
 # (#44746). This is a rare case where we can't constant fold because the
 # function call errors out.
-norm expect-not=ExtractJoinEqualities
+norm expect-not=ExtractJoinComparisons
 SELECT * FROM xy FULL JOIN uv ON (substring('', ')') = '') = (u > 0)
 ----
 full-join (cross)
@@ -3436,6 +3449,134 @@ full-join (cross)
  │    └── fd: (5)-->(6)
  └── filters
       └── (substring('', ')') = '') = (u:5 > 0) [outer=(5), immutable]
+
+# Case with < operator.
+norm expect=ExtractJoinComparisons
+SELECT * FROM xy JOIN uv ON x+y<u
+----
+project
+ ├── columns: x:1!null y:2 u:5!null v:6
+ ├── immutable
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ └── inner-join (cross)
+      ├── columns: x:1!null y:2 u:5!null v:6 column9:9!null
+      ├── immutable
+      ├── key: (1,5)
+      ├── fd: (1)-->(2,9), (5)-->(6)
+      ├── project
+      │    ├── columns: column9:9 x:1!null y:2
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,9)
+      │    ├── scan xy
+      │    │    ├── columns: x:1!null y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections
+      │         └── x:1 + y:2 [as=column9:9, outer=(1,2), immutable]
+      ├── scan uv
+      │    ├── columns: u:5!null v:6
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── column9:9 < u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+
+# Case with <= operator.
+norm expect=ExtractJoinComparisons
+SELECT * FROM xy JOIN uv ON x+y<=u
+----
+project
+ ├── columns: x:1!null y:2 u:5!null v:6
+ ├── immutable
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ └── inner-join (cross)
+      ├── columns: x:1!null y:2 u:5!null v:6 column9:9!null
+      ├── immutable
+      ├── key: (1,5)
+      ├── fd: (1)-->(2,9), (5)-->(6)
+      ├── project
+      │    ├── columns: column9:9 x:1!null y:2
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,9)
+      │    ├── scan xy
+      │    │    ├── columns: x:1!null y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections
+      │         └── x:1 + y:2 [as=column9:9, outer=(1,2), immutable]
+      ├── scan uv
+      │    ├── columns: u:5!null v:6
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── column9:9 <= u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+
+# Case with > operator.
+norm expect=ExtractJoinComparisons
+SELECT * FROM xy JOIN uv ON x+y>u
+----
+project
+ ├── columns: x:1!null y:2 u:5!null v:6
+ ├── immutable
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ └── inner-join (cross)
+      ├── columns: x:1!null y:2 u:5!null v:6 column9:9!null
+      ├── immutable
+      ├── key: (1,5)
+      ├── fd: (1)-->(2,9), (5)-->(6)
+      ├── project
+      │    ├── columns: column9:9 x:1!null y:2
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,9)
+      │    ├── scan xy
+      │    │    ├── columns: x:1!null y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections
+      │         └── x:1 + y:2 [as=column9:9, outer=(1,2), immutable]
+      ├── scan uv
+      │    ├── columns: u:5!null v:6
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── column9:9 > u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+
+# Case with >= operator.
+norm expect=ExtractJoinComparisons
+SELECT * FROM xy JOIN uv ON x+y>=u
+----
+project
+ ├── columns: x:1!null y:2 u:5!null v:6
+ ├── immutable
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ └── inner-join (cross)
+      ├── columns: x:1!null y:2 u:5!null v:6 column9:9!null
+      ├── immutable
+      ├── key: (1,5)
+      ├── fd: (1)-->(2,9), (5)-->(6)
+      ├── project
+      │    ├── columns: column9:9 x:1!null y:2
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,9)
+      │    ├── scan xy
+      │    │    ├── columns: x:1!null y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections
+      │         └── x:1 + y:2 [as=column9:9, outer=(1,2), immutable]
+      ├── scan uv
+      │    ├── columns: u:5!null v:6
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── column9:9 >= u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
 
 # --------------------------------------------------
 # LeftAssociateJoinsLeft,  LeftAssociateJoinsRight,
