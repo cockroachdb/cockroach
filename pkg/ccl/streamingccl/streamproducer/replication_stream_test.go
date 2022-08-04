@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 	"time"
 
@@ -33,7 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -562,4 +565,137 @@ func TestCompleteStreamReplication(t *testing.T) {
 			testCompleteStreamReplication(t, tc.successfulIngestion)
 		})
 	}
+}
+
+func sortDelRanges(receivedDelRanges []roachpb.RangeFeedDeleteRange) {
+	sort.Slice(receivedDelRanges, func(i, j int) bool {
+		if !receivedDelRanges[i].Timestamp.Equal(receivedDelRanges[j].Timestamp) {
+			return receivedDelRanges[i].Timestamp.Compare(receivedDelRanges[j].Timestamp) < 0
+		}
+		if !receivedDelRanges[i].Span.Key.Equal(receivedDelRanges[j].Span.Key) {
+			return receivedDelRanges[i].Span.Key.Compare(receivedDelRanges[j].Span.Key) < 0
+		}
+		return receivedDelRanges[i].Span.EndKey.Compare(receivedDelRanges[j].Span.EndKey) < 0
+	})
+}
+
+func TestStreamDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "disabled under stress and race")
+
+	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
+		// Test hangs when run within the default test tenant. Tracked with
+		// #76378.
+		DisableDefaultTestTenant: true,
+	})
+	defer cleanup()
+	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID())
+	defer cleanupTenant()
+
+	srcTenant.SQL.Exec(t, `
+CREATE DATABASE d;
+CREATE TABLE d.t1(i int primary key, a string, b string);
+CREATE TABLE d.t2(i int primary key, a string, b string);
+CREATE TABLE d.t3(i int primary key, a string, b string);
+INSERT INTO d.t1 (i) VALUES (1);
+INSERT INTO d.t2 (i) VALUES (1);
+INSERT INTO d.t3 (i) VALUES (1);
+USE d;
+`)
+
+	ctx := context.Background()
+	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", srcTenant.ID.ToUint64())
+	streamID := rows[0][0]
+
+	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
+	// Only subscribe to table t1 and t2, not t3.
+	source, feed := startReplication(t, h, makePartitionStreamDecoder,
+		streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, h.SysServer.Clock().Now(), "t1", "t2"))
+	defer feed.Close(ctx)
+
+	// TODO(casper): Replace with DROP TABLE once drop table uses the MVCC-compatible DelRange
+	tableSpan := func(table string) roachpb.Span {
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			h.SysServer.DB(), srcTenant.Codec, "d", table)
+		return desc.PrimaryIndexSpan(srcTenant.Codec)
+	}
+
+	t1Span, t2Span, t3Span := tableSpan("t1"), tableSpan("t2"), tableSpan("t3")
+	// Range deleted is outside the subscribed spans
+	require.NoError(t, h.SysServer.DB().DelRangeUsingTombstone(ctx, t2Span.EndKey, t3Span.Key))
+	// Range is t1s - t2e, emitting 2 events, t1s - t1e and t2s - t2e.
+	require.NoError(t, h.SysServer.DB().DelRangeUsingTombstone(ctx, t1Span.Key, t2Span.EndKey))
+	// Range is t1e - t2sn, emitting t2s - t2sn.
+	require.NoError(t, h.SysServer.DB().DelRangeUsingTombstone(ctx, t1Span.EndKey, t2Span.Key.Next()))
+
+	// Expected DelRange spans after sorting.
+	expectedDelRangeSpan1 := roachpb.Span{Key: t1Span.Key, EndKey: t1Span.EndKey}
+	expectedDelRangeSpan2 := roachpb.Span{Key: t2Span.Key, EndKey: t2Span.EndKey}
+	expectedDelRangeSpan3 := roachpb.Span{Key: t2Span.Key, EndKey: t2Span.Key.Next()}
+
+	codec := source.codec.(*partitionStreamDecoder)
+	receivedDelRanges := make([]roachpb.RangeFeedDeleteRange, 0, 3)
+	for {
+		require.True(t, source.rows.Next())
+		source.codec.decode()
+		if codec.e.Batch != nil {
+			receivedDelRanges = append(receivedDelRanges, codec.e.Batch.DelRanges...)
+		}
+		if len(receivedDelRanges) == 3 {
+			break
+		}
+	}
+
+	sortDelRanges(receivedDelRanges)
+	require.Equal(t, expectedDelRangeSpan1, receivedDelRanges[0].Span)
+	require.Equal(t, expectedDelRangeSpan2, receivedDelRanges[1].Span)
+	require.Equal(t, expectedDelRangeSpan3, receivedDelRanges[2].Span)
+
+	// Adding a SSTable that contains DeleteRange
+	batchHLCTime := h.SysServer.Clock().Now()
+	batchHLCTime.Logical = 0
+	ts := int(batchHLCTime.WallTime)
+	data, start, end := storageutils.MakeSST(t, h.SysServer.ClusterSettings(), []interface{}{
+		storageutils.PointKV(string(t2Span.Key), ts, "5"),
+		// Delete range from t1s - t2s, emitting t1s - t1e.
+		storageutils.RangeKV(string(t1Span.Key), string(t2Span.Key), ts, ""),
+		// Delete range from t1e - t2enn, emitting t2s - t2e.
+		storageutils.RangeKV(string(t1Span.EndKey), string(t2Span.EndKey.Next().Next()), ts, ""),
+		// Delete range for t2sn - t2en, which overlaps the range above on t2s - t2e, emitting nothing.
+		storageutils.RangeKV(string(t2Span.Key.Next()), string(t2Span.EndKey.Next()), ts, ""),
+		// Delete range for t3s - t3e, emitting nothing.
+		storageutils.RangeKV(string(t3Span.Key), string(t3Span.EndKey), ts, ""),
+	})
+	expectedDelRange1 := roachpb.RangeFeedDeleteRange{Span: t1Span, Timestamp: batchHLCTime}
+	expectedDelRange2 := roachpb.RangeFeedDeleteRange{Span: t2Span, Timestamp: batchHLCTime}
+	require.Equal(t, t1Span.Key, start)
+	require.Equal(t, t3Span.EndKey, end)
+
+	// Using same batch ts so that this SST can be emitted through rangefeed.
+	_, _, _, err := h.SysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
+		false, hlc.Timestamp{}, nil, false, batchHLCTime)
+	require.NoError(t, err)
+
+	receivedDelRanges = receivedDelRanges[:0]
+	receivedKVs := make([]roachpb.KeyValue, 0)
+	for {
+		require.True(t, source.rows.Next())
+		source.codec.decode()
+		if codec.e.Batch != nil {
+			require.Empty(t, codec.e.Batch.Ssts)
+			receivedKVs = append(receivedKVs, codec.e.Batch.KeyValues...)
+			receivedDelRanges = append(receivedDelRanges, codec.e.Batch.DelRanges...)
+		}
+
+		if len(receivedDelRanges) == 2 && len(receivedKVs) == 1 {
+			break
+		}
+	}
+
+	sortDelRanges(receivedDelRanges)
+	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
+	require.Equal(t, batchHLCTime, receivedKVs[0].Value.Timestamp)
+	require.Equal(t, expectedDelRange1, receivedDelRanges[0])
+	require.Equal(t, expectedDelRange2, receivedDelRanges[1])
 }

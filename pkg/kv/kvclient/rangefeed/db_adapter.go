@@ -73,7 +73,7 @@ func (dbc *dbAdapter) RangeFeed(
 	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
-	eventC chan<- *roachpb.RangeFeedEvent,
+	eventC chan<- kvcoord.RangeFeedMessage,
 ) error {
 	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC)
 }

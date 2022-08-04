@@ -391,7 +391,7 @@ func (f rawEventFeed) run(
 	ctx context.Context,
 	spans []kvcoord.SpanTimePair,
 	withDiff bool,
-	eventC chan<- *roachpb.RangeFeedEvent,
+	eventC chan<- kvcoord.RangeFeedMessage,
 ) error {
 	var startAfter hlc.Timestamp
 	for _, s := range spans {
@@ -414,7 +414,7 @@ func (f rawEventFeed) run(
 	f = f[i:]
 	for i := range f {
 		select {
-		case eventC <- &f[i]:
+		case eventC <- kvcoord.RangeFeedMessage{RangeFeedEvent: &f[i]}:
 		case <-ctx.Done():
 			return ctx.Err()
 		}

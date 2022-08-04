@@ -37,13 +37,13 @@ type rangefeedFactory func(
 	ctx context.Context,
 	spans []kvcoord.SpanTimePair,
 	withDiff bool,
-	eventC chan<- *roachpb.RangeFeedEvent,
+	eventC chan<- kvcoord.RangeFeedMessage,
 ) error
 
 type rangefeed struct {
 	memBuf kvevent.Writer
 	cfg    rangeFeedConfig
-	eventC chan *roachpb.RangeFeedEvent
+	eventC chan kvcoord.RangeFeedMessage
 	knobs  TestingKnobs
 }
 
@@ -68,7 +68,7 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	feed := rangefeed{
 		memBuf: sink,
 		cfg:    cfg,
-		eventC: make(chan *roachpb.RangeFeedEvent, 128),
+		eventC: make(chan kvcoord.RangeFeedMessage, 128),
 		knobs:  cfg.Knobs,
 	}
 	g := ctxgroup.WithContext(ctx)
