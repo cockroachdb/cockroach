@@ -1043,6 +1043,31 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	}
 }
 
+// IncrClockForLeaseUpgrade run up the clock to force a lease renewal (and thus
+// the change in lease types).
+func (tc *TestCluster) IncrClockForLeaseUpgrade(t *testing.T, clock *hlc.HybridManualClock) {
+	clock.Increment(
+		tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().RangeLeaseRenewalDuration().Nanoseconds() +
+			time.Second.Nanoseconds(),
+	)
+}
+
+// WaitForLeaseUpgrade waits until the lease held for the given range descriptor
+// is upgraded to an epoch-based one.
+func (tc *TestCluster) WaitForLeaseUpgrade(
+	ctx context.Context, t *testing.T, desc roachpb.RangeDescriptor,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+		require.NoError(t, err)
+		if li.Current().Type() != roachpb.LeaseEpoch {
+			return errors.Errorf("lease still an expiration based lease")
+		}
+		require.Equal(t, int64(1), li.Current().Epoch)
+		return nil
+	})
+}
+
 // RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
 func (tc *TestCluster) RemoveLeaseHolderOrFatal(
 	t testing.TB,
