@@ -479,6 +479,7 @@ alter_ddl_stmt ::=
 	| alter_default_privileges_stmt
 	| alter_changefeed_stmt
 	| alter_backup_stmt
+	| alter_func_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -598,6 +599,7 @@ drop_ddl_stmt ::=
 	| drop_sequence_stmt
 	| drop_schema_stmt
 	| drop_type_stmt
+	| drop_func_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user role_spec_list
@@ -1028,6 +1030,7 @@ unreserved_keyword ::=
 	| 'DEFERRED'
 	| 'DEFINER'
 	| 'DELIMITER'
+	| 'DEPENDS'
 	| 'DESTINATION'
 	| 'DETACHED'
 	| 'DISCARD'
@@ -1559,6 +1562,13 @@ alter_backup_stmt ::=
 	'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds
 	| 'ALTER' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder alter_backup_cmds
 
+alter_func_stmt ::=
+	alter_func_options_stmt
+	| alter_func_rename_stmt
+	| alter_func_owner_stmt
+	| alter_func_set_schema_stmt
+	| alter_func_dep_extension_stmt
+
 role_or_group_or_user ::=
 	'ROLE'
 	| 'USER'
@@ -1752,6 +1762,10 @@ drop_schema_stmt ::=
 drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list opt_drop_behavior
 	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior
+
+drop_func_stmt ::=
+	'DROP' 'FUNCTION' function_with_argtypes_list opt_drop_behavior
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_argtypes_list opt_drop_behavior
 
 explain_option_name ::=
 	non_reserved_word
@@ -2133,6 +2147,21 @@ alter_changefeed_cmds ::=
 alter_backup_cmds ::=
 	( alter_backup_cmd ) ( ( alter_backup_cmd ) )*
 
+alter_func_options_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes alter_func_opt_list opt_restrict
+
+alter_func_rename_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes 'RENAME' 'TO' name
+
+alter_func_owner_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes 'OWNER' 'TO' role_spec
+
+alter_func_set_schema_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes 'SET' 'SCHEMA' schema_name
+
+alter_func_dep_extension_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2418,6 +2447,9 @@ table_index_name_list ::=
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
 
+function_with_argtypes_list ::=
+	( function_with_argtypes ) ( ( ',' function_with_argtypes ) )*
+
 non_reserved_word ::=
 	'identifier'
 	| unreserved_keyword
@@ -2695,6 +2727,21 @@ alter_changefeed_cmd ::=
 
 alter_backup_cmd ::=
 	'ADD' backup_kms
+
+function_with_argtypes ::=
+	db_object_name func_args
+	| db_object_name
+
+alter_func_opt_list ::=
+	( common_func_opt_item ) ( ( common_func_opt_item ) )*
+
+opt_restrict ::=
+	'RESTRICT'
+	| 
+
+opt_no ::=
+	'NO'
+	| 
 
 role_option ::=
 	'CREATEROLE'
@@ -3120,6 +3167,20 @@ sequence_option_elem ::=
 backup_kms ::=
 	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
 
+func_args ::=
+	'(' func_args_list ')'
+	| '(' ')'
+
+common_func_opt_item ::=
+	'CALLED' 'ON' 'NULL' 'INPUT'
+	| 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT'
+	| 'STRICT'
+	| 'IMMUTABLE'
+	| 'STABLE'
+	| 'VOLATILE'
+	| 'LEAKPROOF'
+	| 'NOT' 'LEAKPROOF'
+
 password_clause ::=
 	'PASSWORD' sconst_or_placeholder
 	| 'PASSWORD' 'NULL'
@@ -3305,6 +3366,7 @@ bare_label_keywords ::=
 	| 'CALLED'
 	| 'COST'
 	| 'DEFINER'
+	| 'DEPENDS'
 	| 'EXTERNAL'
 	| 'IMMUTABLE'
 	| 'INPUT'
@@ -3448,6 +3510,9 @@ storage_parameter_key_list ::=
 
 partition_by_index ::=
 	partition_by
+
+func_args_list ::=
+	( func_arg ) ( ( ',' func_arg ) )*
 
 opt_float ::=
 	'(' 'ICONST' ')'
@@ -3593,16 +3658,6 @@ func_arg ::=
 
 func_as ::=
 	'SCONST'
-
-common_func_opt_item ::=
-	'CALLED' 'ON' 'NULL' 'INPUT'
-	| 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT'
-	| 'STRICT'
-	| 'IMMUTABLE'
-	| 'STABLE'
-	| 'VOLATILE'
-	| 'LEAKPROOF'
-	| 'NOT' 'LEAKPROOF'
 
 group_by_item ::=
 	a_expr

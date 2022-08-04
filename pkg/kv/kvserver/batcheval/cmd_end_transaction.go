@@ -905,8 +905,7 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
-	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(
-		batch, split.LeftDesc, split.RightDesc, ts.WallTime)
+	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(batch, split.LeftDesc, split.RightDesc)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
 			"unable to compute range key stats delta for RHS")
@@ -1195,8 +1194,7 @@ func mergeTrigger(
 	// replicated range ID keys we copy from the RHS are the keys in the abort
 	// span, and we've already accounted for those stats above.
 	ms.Add(merge.RightMVCCStats)
-	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(
-		batch, merge.LeftDesc, merge.RightDesc, ts.WallTime)
+	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(batch, merge.LeftDesc, merge.RightDesc)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -1271,60 +1269,37 @@ func changeReplicasTrigger(
 //
 // RHS = Before - LHS + Delta = RangeKeyCount=1 RangeKeyBytes=16
 //
-// The same calculation can be used for merges, since Pebble will already have
-// merged the range keys into one when appropriate.
+// This is equivalent to the contribution of the range key fragmentation, since
+// the stats computations are commutative. This can also be used to compute the
+// merge contribution, which is the inverse of the fragmentation, since the
+// range keys will already have been merged in Pebble by the time this is
+// called.
 func computeSplitRangeKeyStatsDelta(
-	r storage.Reader, lhs, rhs roachpb.RangeDescriptor, nowNanos int64,
+	r storage.Reader, lhs, rhs roachpb.RangeDescriptor,
 ) (enginepb.MVCCStats, error) {
-	var delta enginepb.MVCCStats
-	delta.AgeTo(nowNanos)
+	var ms enginepb.MVCCStats
 
-	// NB: When called during a merge trigger (for the inverse adjustment), lhs
-	// will contain the descriptor for the full, merged range. We therefore have
-	// to use the rhs start key as the reference split point. We also have to make
-	// sure the bounds fall within the ranges, since Prevish is imprecise.
+	// We construct the tightest possible bounds around the split point, but make
+	// sure to stay within the Raft ranges since Prevish() is imprecise.
 	splitKey := rhs.StartKey.AsRawKey()
-	lowerBound := splitKey.Prevish(roachpb.PrevishKeyLength)
-	if lowerBound.Compare(lhs.StartKey.AsRawKey()) < 0 {
-		lowerBound = lhs.StartKey.AsRawKey()
-	}
-	upperBound := splitKey.Next()
+	leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+		splitKey.Prevish(roachpb.PrevishKeyLength), splitKey.Next(),
+		lhs.StartKey.AsRawKey(), rhs.EndKey.AsRawKey())
 
-	// Check for range keys that straddle the split point.
 	iter := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
-		LowerBound: lowerBound,
-		UpperBound: upperBound,
+		LowerBound: leftPeekBound,
+		UpperBound: rightPeekBound,
 	})
 	defer iter.Close()
 
-	iter.SeekGE(storage.MVCCKey{Key: splitKey})
-	if ok, err := iter.Valid(); err != nil {
+	if cmp, rangeKeys, err := storage.PeekRangeKeysRight(iter, splitKey); err != nil {
 		return enginepb.MVCCStats{}, err
-	} else if !ok {
-		return delta, nil
-	} else if iter.RangeBounds().Key.Equal(splitKey) {
-		return delta, nil
+	} else if cmp < 0 {
+		ms.Add(storage.UpdateStatsOnRangeKeySplit(splitKey, rangeKeys.Versions))
 	}
 
-	// Calculate the RHS adjustment, which turns out to be equivalent to the stats
-	// contribution of the range key fragmentation. The naïve calculation would be
-	// rhs.EncodedSize() - (keyLen(rhs.EndKey) - keyLen(lhs.EndKey))
-	// which simplifies to 2 * keyLen(rhs.StartKey) + tsLen(rhs.Timestamp).
-	for i, v := range iter.RangeKeys().Versions {
-		keyBytes := int64(storage.EncodedMVCCTimestampSuffixLength(v.Timestamp))
-		valBytes := int64(len(v.Value))
-		if i == 0 {
-			delta.RangeKeyCount++
-			keyBytes += 2 * int64(storage.EncodedMVCCKeyPrefixLength(splitKey))
-		}
-		delta.RangeKeyBytes += keyBytes
-		delta.RangeValCount++
-		delta.RangeValBytes += valBytes
-		delta.GCBytesAge += (keyBytes + valBytes) * (nowNanos/1e9 - v.Timestamp.WallTime/1e9)
-	}
-
-	return delta, nil
+	return ms, nil
 }
 
 // txnAutoGC controls whether Transaction entries are automatically gc'ed upon

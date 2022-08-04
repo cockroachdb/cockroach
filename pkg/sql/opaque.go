@@ -106,6 +106,16 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabaseDropSecondaryRegion(ctx, n)
 	case *tree.AlterDefaultPrivileges:
 		return p.alterDefaultPrivileges(ctx, n)
+	case *tree.AlterFunctionOptions:
+		return p.AlterFunctionOptions(ctx, n)
+	case *tree.AlterFunctionRename:
+		return p.AlterFunctionRename(ctx, n)
+	case *tree.AlterFunctionSetOwner:
+		return p.AlterFunctionSetOwner(ctx, n)
+	case *tree.AlterFunctionSetSchema:
+		return p.AlterFunctionSetSchema(ctx, n)
+	case *tree.AlterFunctionDepExtension:
+		return p.AlterFunctionDepExtension(ctx, n)
 	case *tree.AlterIndex:
 		return p.AlterIndex(ctx, n)
 	case *tree.AlterSchema:
@@ -168,6 +178,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Discard(ctx, n)
 	case *tree.DropDatabase:
 		return p.DropDatabase(ctx, n)
+	case *tree.DropFunction:
+		return p.DropFunction(ctx, n)
 	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
 	case *tree.DropOwnedBy:
@@ -275,6 +287,11 @@ func init() {
 		&tree.AlterDatabaseSecondaryRegion{},
 		&tree.AlterDatabaseDropSecondaryRegion{},
 		&tree.AlterDefaultPrivileges{},
+		&tree.AlterFunctionOptions{},
+		&tree.AlterFunctionRename{},
+		&tree.AlterFunctionSetOwner{},
+		&tree.AlterFunctionSetSchema{},
+		&tree.AlterFunctionDepExtension{},
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},
@@ -306,6 +323,7 @@ func init() {
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropExternalConnection{},
+		&tree.DropFunction{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropRole{},

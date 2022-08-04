@@ -1,0 +1,2 @@
+alter_func_options_stmt ::=
+	'ALTER' 'FUNCTION' function_with_argtypes alter_func_opt_list opt_restrict

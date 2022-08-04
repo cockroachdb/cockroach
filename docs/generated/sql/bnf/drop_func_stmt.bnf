@@ -1,0 +1,3 @@
+drop_func_stmt ::=
+	'DROP' 'FUNCTION' function_with_argtypes_list opt_drop_behavior
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_argtypes_list opt_drop_behavior

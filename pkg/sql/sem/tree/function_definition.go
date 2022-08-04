@@ -13,6 +13,9 @@ package tree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -20,7 +23,8 @@ import (
 // overloads for a built-in function.
 // TODO(Chengxiong): Remove this struct entirely. Instead, use overloads from
 // function resolution or use "GetBuiltinProperties" if the need is to only look
-// at builtin functions(there are such existing use cases).
+// at builtin functions(there are such existing use cases). Also change "Name"
+// of ResolvedFunctionDefinition to Name type.
 type FunctionDefinition struct {
 	// Name is the short name of the function.
 	Name string
@@ -30,6 +34,28 @@ type FunctionDefinition struct {
 
 	// FunctionProperties are the properties common to all overloads.
 	FunctionProperties
+}
+
+// ResolvedFunctionDefinition is similar to FunctionDefinition but with all the
+// overloads qualified with schema name.
+type ResolvedFunctionDefinition struct {
+	// Name is the name of the function and not the name of the schema. And, it's
+	// not qualified.
+	Name string
+
+	Overloads []QualifiedOverload
+}
+
+// QualifiedOverload is a wrapper of Overload prefixed with a schema name.
+// It indicates that the overload is defined with the specified schema.
+type QualifiedOverload struct {
+	Schema string
+	*Overload
+}
+
+// MakeQualifiedOverload creates a new QualifiedOverload.
+func MakeQualifiedOverload(schema string, overload *Overload) QualifiedOverload {
+	return QualifiedOverload{Schema: schema, Overload: overload}
 }
 
 // FunctionProperties defines the properties of the built-in
@@ -166,6 +192,10 @@ func NewFunctionDefinition(
 // function definition resolution to interfaces defined in the SemaContext.
 var FunDefs map[string]*FunctionDefinition
 
+// ResolvedBuiltinFuncDefs holds pre-allocated ResolvedFunctionDefinition
+// instances. Keys of the map is schema qualified function names.
+var ResolvedBuiltinFuncDefs map[string]*ResolvedFunctionDefinition
+
 // OidToBuiltinName contains a map from the hashed OID of all builtin functions
 // to their name. We populate this from the pg_catalog.go file in the sql
 // package because of dependency issues: we can't use oidHasher from this file.
@@ -179,20 +209,54 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 // String implements the Stringer interface.
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
-// TODO(Chengxiong): Remove this method after we moved the
-// "UnsupportedWithIssue" check into function resolver implementation.
-func (fd *FunctionDefinition) undefined() bool {
-	return fd.UnsupportedWithIssue != 0
+// Format implements the NodeFormatter interface.
+func (fd *ResolvedFunctionDefinition) Format(ctx *FmtCtx) {
+	ctx.WriteString(fd.Name)
+}
+
+// String implements the Stringer interface.
+func (fd *ResolvedFunctionDefinition) String() string { return AsString(fd) }
+
+// MergeWith is used to merge two UDF definitions with same name.
+func (fd *ResolvedFunctionDefinition) MergeWith(
+	another *ResolvedFunctionDefinition,
+) (*ResolvedFunctionDefinition, error) {
+	if fd == nil {
+		return another, nil
+	}
+	if another == nil {
+		return fd, nil
+	}
+
+	if fd.Name != another.Name {
+		return nil, errors.Newf("cannot merge function definition of %q with %q", fd.Name, another.Name)
+	}
+
+	return &ResolvedFunctionDefinition{
+		Name:      fd.Name,
+		Overloads: combineOverloads(fd.Overloads, another.Overloads),
+	}, nil
+}
+
+func combineOverloads(a, b []QualifiedOverload) []QualifiedOverload {
+	return append(append(make([]QualifiedOverload, 0, len(a)+len(b)), a...), b...)
 }
 
 // GetClass returns function class by checking each overload's Class and returns
 // the homogeneous Class value if all overloads are the same Class. Ambiguous
 // error is returned if there is any overload with different Class.
-func (fd *FunctionDefinition) GetClass() (FunctionClass, error) {
-	if fd.undefined() {
-		return fd.Class, nil
+//
+// TODO(chengxiong,mgartner): make sure that, at places of the use cases of this
+// method, function is resolved to one overload, so that we can get rid of this
+// function and similar methods below.
+func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
+	ret := fd.Overloads[0].Class
+	for i := range fd.Overloads {
+		if fd.Overloads[i].Class != ret {
+			return 0, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function class on %s", fd.Name)
+		}
 	}
-	return getFuncClass(fd.Name, fd.Definition)
+	return ret, nil
 }
 
 // GetReturnLabel returns function ReturnLabel by checking each overload and
@@ -200,49 +264,104 @@ func (fd *FunctionDefinition) GetClass() (FunctionClass, error) {
 // Ambiguous error is returned if there is any overload has ReturnLabel of a
 // different length. This is good enough since we don't create UDF with
 // ReturnLabel.
-func (fd *FunctionDefinition) GetReturnLabel() ([]string, error) {
-	if fd.undefined() {
-		return fd.ReturnLabels, nil
+func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
+	ret := fd.Overloads[0].ReturnLabels
+	for i := range fd.Overloads {
+		if len(ret) != len(fd.Overloads[i].ReturnLabels) {
+			return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function return label on %s", fd.Name)
+		}
 	}
-	return getFuncReturnLabels(fd.Name, fd.Definition)
+	return ret, nil
 }
 
 // GetHasSequenceArguments returns function's HasSequenceArguments flag by
 // checking each overload's HasSequenceArguments flag. Ambiguous error is
 // returned if there is any overload has a different flag.
-func (fd *FunctionDefinition) GetHasSequenceArguments() (bool, error) {
-	if fd.undefined() {
-		return fd.HasSequenceArguments, nil
-	}
-	return getHasSequenceArguments(fd.Name, fd.Definition)
-}
-
-func getFuncClass(fnName string, fns []*Overload) (FunctionClass, error) {
-	ret := fns[0].Class
-	for _, o := range fns {
-		if o.Class != ret {
-			return 0, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function class on %s", fnName)
+func (fd *ResolvedFunctionDefinition) GetHasSequenceArguments() (bool, error) {
+	ret := fd.Overloads[0].HasSequenceArguments
+	for i := range fd.Overloads {
+		if ret != fd.Overloads[i].HasSequenceArguments {
+			return false, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function sequence argument on %s", fd.Name)
 		}
 	}
 	return ret, nil
 }
 
-func getFuncReturnLabels(fnName string, fns []*Overload) ([]string, error) {
-	ret := fns[0].ReturnLabels
-	for _, o := range fns {
-		if len(ret) != len(o.ReturnLabels) {
-			return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function return label on %s", fnName)
-		}
+// QualifyBuiltinFunctionDefinition qualified all overloads in a function
+// definition with a schema name. Note that this function can only be used for
+// builtin function.
+func QualifyBuiltinFunctionDefinition(
+	def *FunctionDefinition, schema string,
+) *ResolvedFunctionDefinition {
+	ret := &ResolvedFunctionDefinition{
+		Name:      def.Name,
+		Overloads: make([]QualifiedOverload, 0, len(def.Definition)),
 	}
-	return ret, nil
+	for _, o := range def.Definition {
+		ret.Overloads = append(
+			ret.Overloads,
+			MakeQualifiedOverload(schema, o),
+		)
+	}
+	return ret
 }
 
-func getHasSequenceArguments(fnName string, fns []*Overload) (bool, error) {
-	ret := fns[0].HasSequenceArguments
-	for _, o := range fns {
-		if ret != o.HasSequenceArguments {
-			return false, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function sequence argument on %s", fnName)
-		}
+// GetBuiltinFuncDefinitionOrFail is similar to GetBuiltinFuncDefinition but
+// returns an error if function is not found.
+func GetBuiltinFuncDefinitionOrFail(
+	fName *FunctionName, searchPath SearchPath,
+) (*ResolvedFunctionDefinition, error) {
+	def, err := GetBuiltinFuncDefinition(fName, searchPath)
+	if err != nil {
+		return nil, err
 	}
-	return ret, nil
+	if def == nil {
+		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s()", ErrString(fName))
+	}
+	return def, nil
+}
+
+// GetBuiltinFuncDefinition search for a builtin function given a function name
+// and a search path. If function name is prefixed, only the builtin functions
+// in the specific schema are searched. Otherwise, all schemas on the given
+// searchPath are searched. A nil is returned if no function is found. It's
+// caller's choice to error out if function not found.
+//
+// In theory, this function returns an error only when the search path iterator
+// errors which won't happen since the iterating function never errors out. But
+// error is still checked and return from the function signature just in case
+// we change the iterating function in the future.
+func GetBuiltinFuncDefinition(
+	fName *FunctionName, searchPath SearchPath,
+) (*ResolvedFunctionDefinition, error) {
+	if fName.ExplicitSchema {
+		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()], nil
+	}
+
+	// First try that if we can get function directly with the function name.
+	// There is a case where the part[0] of the name is a qualified string.
+	// TODO(Chengxiong): figure out why that could be an input.
+	if def, ok := ResolvedBuiltinFuncDefs[fName.Object()]; ok {
+		return def, nil
+	}
+
+	// Then try if it's in pg_catalog.
+	if def, ok := ResolvedBuiltinFuncDefs[catconstants.PgCatalogName+"."+fName.Object()]; ok {
+		return def, nil
+	}
+
+	// If not in pg_catalog, go through search path.
+	var resolvedDef *ResolvedFunctionDefinition
+	if err := searchPath.IterateSearchPath(func(schema string) error {
+		fullName := schema + "." + fName.Object()
+		if def, ok := ResolvedBuiltinFuncDefs[fullName]; ok {
+			resolvedDef = def
+			return iterutil.StopIteration()
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return resolvedDef, nil
 }

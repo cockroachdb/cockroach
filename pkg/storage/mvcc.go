@@ -504,6 +504,139 @@ func updateStatsOnResolve(
 	return ms
 }
 
+// updateStatsOnRangeKeyClear updates MVCCStats for clearing an entire
+// range key stack.
+func updateStatsOnRangeKeyClear(rangeKeys MVCCRangeKeyStack) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+	ms.Subtract(updateStatsOnRangeKeyPut(rangeKeys))
+	return ms
+}
+
+// updateStatsOnRangeKeyClearVersion updates MVCCStats for clearing a single
+// version in a range key stack. The given range key stack must be before the
+// clear.
+func updateStatsOnRangeKeyClearVersion(
+	rangeKeys MVCCRangeKeyStack, version MVCCRangeKeyVersion,
+) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+
+	// If we're removing the newest version, hide it from the slice such that we
+	// can invert the put contribution.
+	if version.Timestamp.Equal(rangeKeys.Newest()) {
+		if rangeKeys.Len() == 1 {
+			ms.Add(updateStatsOnRangeKeyClear(rangeKeys))
+			return ms
+		}
+		rangeKeys.Versions = rangeKeys.Versions[1:]
+	}
+
+	ms.Subtract(updateStatsOnRangeKeyPutVersion(rangeKeys, version))
+	return ms
+}
+
+// updateStatsOnRangeKeyPut updates MVCCStats for writing a new range key stack.
+func updateStatsOnRangeKeyPut(rangeKeys MVCCRangeKeyStack) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+	ms.AgeTo(rangeKeys.Newest().WallTime)
+	ms.RangeKeyCount++
+	ms.RangeKeyBytes += int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key)) +
+		int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
+	for _, v := range rangeKeys.Versions {
+		ms.AgeTo(v.Timestamp.WallTime)
+		ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+		ms.RangeValCount++
+		ms.RangeValBytes += int64(len(v.Value))
+	}
+	return ms
+}
+
+// updateStatsOnRangeKeyPutVersion updates MVCCStats for writing a new range key
+// version in an existing range key stack. The given range key stack must be
+// before the put.
+func updateStatsOnRangeKeyPutVersion(
+	rangeKeys MVCCRangeKeyStack, version MVCCRangeKeyVersion,
+) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+
+	// We currently assume all range keys are MVCC range tombstones. We therefore
+	// have to move the GCBytesAge contribution of the key up from the latest
+	// version to the new version if it's written at the top.
+	if rangeKeys.Newest().Less(version.Timestamp) {
+		keyBytes := int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key)) +
+			int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
+		ms.AgeTo(rangeKeys.Newest().WallTime)
+		ms.RangeKeyBytes -= keyBytes
+		ms.AgeTo(version.Timestamp.WallTime)
+		ms.RangeKeyBytes += keyBytes
+	}
+
+	// Account for the new version.
+	ms.AgeTo(version.Timestamp.WallTime)
+	ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(version.Timestamp))
+	ms.RangeValCount++
+	ms.RangeValBytes += int64(len(version.Value))
+
+	return ms
+}
+
+// updateStatsOnRangeKeyCover updates MVCCStats for when an MVCC range key
+// covers an MVCC point key at the given timestamp.
+func updateStatsOnRangeKeyCover(ts hlc.Timestamp, key MVCCKey, valueRaw []byte) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+	ms.AgeTo(ts.WallTime)
+
+	// Determine whether the point key was a tombstone. If decoding fails, we
+	// assume the point key is live.
+	value, ok, err := tryDecodeSimpleMVCCValue(valueRaw)
+	if !ok && err == nil {
+		value, err = decodeExtendedMVCCValue(valueRaw)
+	}
+	isTombstone := err == nil && value.IsTombstone()
+
+	if !isTombstone {
+		ms.LiveCount--
+		ms.LiveBytes -= int64(key.EncodedSize()) + int64(len(valueRaw))
+	}
+	return ms
+}
+
+// updateStatsOnRangeKeyMerge updates MVCCStats for a merge of two MVCC range
+// key stacks. Both sides of the merge must have identical versions. The merge
+// can happen either to the right or the left, only the merge key (i.e. the key
+// where the stacks abut) is needed. versions can't be empty.
+func updateStatsOnRangeKeyMerge(
+	mergeKey roachpb.Key, versions MVCCRangeKeyVersions,
+) enginepb.MVCCStats {
+	// A merge is simply the inverse of a split.
+	var ms enginepb.MVCCStats
+	ms.Subtract(UpdateStatsOnRangeKeySplit(mergeKey, versions))
+	return ms
+}
+
+// UpdateStatsOnRangeKeySplit updates MVCCStats for the split/fragmentation of a
+// range key stack at a given split key. versions can't be empty.
+func UpdateStatsOnRangeKeySplit(
+	splitKey roachpb.Key, versions MVCCRangeKeyVersions,
+) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+
+	// Account for the creation of one of the range key stacks, and the key
+	// contribution of the end and start keys of the split stacks.
+	ms.AgeTo(versions[0].Timestamp.WallTime)
+	ms.RangeKeyCount++
+	ms.RangeKeyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(splitKey))
+
+	// Account for the creation of all versions in new new stack.
+	for _, v := range versions {
+		ms.AgeTo(v.Timestamp.WallTime)
+		ms.RangeValCount++
+		ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+		ms.RangeValBytes += int64(len(v.Value))
+	}
+
+	return ms
+}
+
 // updateStatsOnClear updates stat counters by subtracting a
 // cleared value's key and value byte sizes. If an earlier version
 // was restored, the restored values are added to live bytes and
@@ -2808,14 +2941,6 @@ func MVCCDeleteRangeUsingTombstone(
 		return &roachpb.WriteIntentError{Intents: intents}
 	}
 
-	// Track isolated stats delta at timestamp. We'll add it to the given ms at
-	// the end, which will correctly account for GCBytesAge relative to the given
-	// ms.LastUpdateNanos.
-	var msDelta enginepb.MVCCStats
-	if ms != nil {
-		msDelta.Forward(timestamp.WallTime)
-	}
-
 	// First, set up an iterator covering only the range key span itself, and scan
 	// it to find conflicts and update MVCC stats within it.
 	//
@@ -2841,10 +2966,10 @@ func MVCCDeleteRangeUsingTombstone(
 			break
 		}
 
+		// Check for conflicts with point/range keys and update MVCC stats.
 		hasPoint, hasRange := iter.HasPointAndRange()
 
 		if hasPoint {
-			// Check for conflict with newer point key.
 			key := iter.UnsafeKey()
 			if timestamp.LessEq(key.Timestamp) {
 				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key.Clone())
@@ -2852,55 +2977,30 @@ func MVCCDeleteRangeUsingTombstone(
 			if key.Timestamp.IsEmpty() {
 				return errors.Errorf("can't write range tombstone across inline key %s", key)
 			}
-
-			// Update stats for the covered point key, if it was a live key.
-			vRaw := iter.UnsafeValue()
-			v, ok, err := tryDecodeSimpleMVCCValue(vRaw)
-			if !ok && err == nil {
-				v, err = decodeExtendedMVCCValue(vRaw)
-			}
-			if err != nil {
-				return err
-			}
-
-			if ms != nil && !v.IsTombstone() {
-				msDelta.LiveCount--
-				msDelta.LiveBytes -= int64(key.EncodedSize()) + int64(len(vRaw))
+			if ms != nil {
+				ms.Add(updateStatsOnRangeKeyCover(timestamp, key, iter.UnsafeValue()))
 			}
 		}
 
 		if hasRange {
-			// Check if we've encountered a new range key stack.
 			if rangeBounds := iter.RangeBounds(); !rangeBounds.EndKey.Equal(prevRangeEnd) {
-				newest := iter.RangeKeys().Versions[0].Timestamp
-
-				// Check for conflict with newer range key.
-				if timestamp.LessEq(newest) {
-					return roachpb.NewWriteTooOldError(timestamp, newest.Next(), rangeBounds.Key.Clone())
+				rangeKeys := iter.RangeKeys()
+				if timestamp.LessEq(rangeKeys.Newest()) {
+					return roachpb.NewWriteTooOldError(
+						timestamp, rangeKeys.Newest().Next(), rangeBounds.Key.Clone())
 				}
 
 				if ms != nil {
 					// If the encountered range key does not abut the previous range key,
-					// we'll write a new range key fragment in the gap between them. It
-					// has no GCBytesAge contribution because it's written at now.
+					// we'll write a new range key fragment in the gap between them.
 					if !rangeBounds.Key.Equal(prevRangeEnd) {
-						msDelta.RangeKeyCount++
-						msDelta.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp) +
-							EncodedMVCCKeyPrefixLength(prevRangeEnd) +
-							EncodedMVCCKeyPrefixLength(rangeBounds.Key))
-						msDelta.RangeValCount++
-						msDelta.RangeValBytes += int64(len(valueRaw))
+						ms.Add(updateStatsOnRangeKeyPut(MVCCRangeKeyStack{
+							Bounds:   roachpb.Span{Key: prevRangeEnd, EndKey: rangeBounds.Key},
+							Versions: MVCCRangeKeyVersions{{Timestamp: timestamp, Value: valueRaw}},
+						}))
 					}
-					// This range key will create a new version in the current fragment
-					// stack. It will also move the GCBytesAge contribution of the key
-					// bounds up from the latest existing range key to this one. It has no
-					// GCBytesAge contribution of its own because it's written at now.
-					msDelta.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp))
-					msDelta.RangeValCount++
-					msDelta.RangeValBytes += int64(len(valueRaw))
-					msDelta.GCBytesAge -= (timestamp.WallTime/1e9 - newest.WallTime/1e9) *
-						int64(EncodedMVCCKeyPrefixLength(rangeBounds.Key)+
-							EncodedMVCCKeyPrefixLength(rangeBounds.EndKey))
+					ms.Add(updateStatsOnRangeKeyPutVersion(rangeKeys,
+						MVCCRangeKeyVersion{Timestamp: timestamp, Value: valueRaw}))
 				}
 
 				prevRangeEnd = append(prevRangeEnd[:0], rangeBounds.EndKey...)
@@ -2908,8 +3008,7 @@ func MVCCDeleteRangeUsingTombstone(
 		}
 
 		// If we hit a bare range key, it's possible that there's a point key on the
-		// same key as its start key. NextKey() would skip over this, so we take a
-		// normal step to look for it.
+		// same key as its start key, so take a normal step to look for it.
 		if hasRange && !hasPoint {
 			iter.Next()
 		} else {
@@ -2922,128 +3021,68 @@ func MVCCDeleteRangeUsingTombstone(
 	// key if any. If no existing fragments were found during iteration above,
 	// this will be the entire new range key.
 	if ms != nil && !prevRangeEnd.Equal(endKey) {
-		msDelta.RangeKeyCount++
-		msDelta.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp) +
-			EncodedMVCCKeyPrefixLength(prevRangeEnd) + EncodedMVCCKeyPrefixLength(endKey))
-		msDelta.RangeValCount++
-		msDelta.RangeValBytes += int64(len(valueRaw))
+		ms.Add(updateStatsOnRangeKeyPut(MVCCRangeKeyStack{
+			Bounds:   roachpb.Span{Key: prevRangeEnd, EndKey: endKey},
+			Versions: MVCCRangeKeyVersions{{Timestamp: timestamp, Value: valueRaw}},
+		}))
 	}
 
 	// Check if the range key will merge with or fragment any existing range keys
 	// at the bounds, and adjust stats accordingly.
-	//
-	// TODO(erikgrinaker): This code is a bit ugly. Also, similar logic will be
-	// needed elsewhere, e.g. in AddSSTable, ClearRange, RevertRange, MVCC garbage
-	// collection, CRDB range splits/merges, etc. This should eventually be
-	// cleaned up and consolidated, but it'll do for now.
-	//
-	// TODO(erikgrinaker): This could be merged into the scan above to avoid the
-	// additional seeks. But we do the simple and correct thing for now and leave
-	// optimizations for later.
 	if ms != nil {
-		// fragmentRangeKeys adjusts ms to fragment an existing range key stack
-		// at the given split point.
-		fragmentRangeKeys := func(rangeKeys MVCCRangeKeyStack, splitKey roachpb.Key) {
-			for i, v := range rangeKeys.Versions {
-				keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
-				valBytes := int64(len(v.Value))
-				if i == 0 {
-					msDelta.RangeKeyCount++
-					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(splitKey))
-				}
-				msDelta.RangeKeyBytes += keyBytes
-				msDelta.RangeValCount++
-				msDelta.RangeValBytes += valBytes
-				msDelta.GCBytesAge += (keyBytes + valBytes) * (timestamp.WallTime/1e9 - v.Timestamp.WallTime/1e9)
-			}
+		if rightPeekBound == nil {
+			rightPeekBound = keys.MaxKey
 		}
-
-		// maybeMergeRangeKeys adjusts ms to merge two abutting range key stacks if
-		// they have the same timestamps and values. It assumes the lhs end key
-		// equals the rhs start key, and that they are in descending order.
-		maybeMergeRangeKeys := func(lhs, rhs MVCCRangeKeyStack) {
-			if !lhs.CanMergeRight(rhs) {
-				return
-			}
-			for i, v := range lhs.Versions {
-				keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
-				valBytes := int64(len(v.Value))
-				if i == 0 {
-					msDelta.RangeKeyCount--
-					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(rhs.Bounds.Key))
-				}
-				msDelta.RangeKeyBytes -= keyBytes
-				msDelta.RangeValCount--
-				msDelta.RangeValBytes -= valBytes
-				msDelta.GCBytesAge -= (keyBytes + valBytes) *
-					(timestamp.WallTime/1e9 - v.Timestamp.WallTime/1e9)
-			}
-		}
+		rkIter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			KeyTypes:   IterKeyTypeRangesOnly,
+			LowerBound: leftPeekBound,
+			UpperBound: rightPeekBound,
+		})
+		defer rkIter.Close()
 
 		// Peek to the left.
-		if !leftPeekBound.Equal(startKey) {
-			iter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-				KeyTypes:   IterKeyTypeRangesOnly,
-				LowerBound: leftPeekBound,
-				UpperBound: startKey.Next(),
-			})
-			defer iter.Close()
-			iter.SeekLT(MVCCKey{Key: startKey})
-			if ok, err := iter.Valid(); err != nil {
+		if cmp, lhs, err := PeekRangeKeysLeft(rkIter, startKey); err != nil {
+			return err
+
+		} else if cmp > 0 {
+			// We're fragmenting an existing range key.
+			ms.Add(UpdateStatsOnRangeKeySplit(startKey, lhs.Versions))
+
+		} else if cmp == 0 {
+			// We may be merging with an existing range key to the left, possibly
+			// along with an existing stack below us.
+			lhs = lhs.Clone()
+			rhs := rangeKey.AsStack(valueRaw)
+			if cmp, below, err := PeekRangeKeysRight(rkIter, startKey); err != nil {
 				return err
-			} else if ok {
-				switch iter.RangeBounds().EndKey.Compare(startKey) {
-				case 1: // fragment
-					fragmentRangeKeys(iter.RangeKeys(), startKey)
-				case 0: // merge
-					lhs := iter.RangeKeys().Clone()
-					rhs := MVCCRangeKeyStack{
-						Bounds:   rangeKey.Bounds(),
-						Versions: MVCCRangeKeyVersions{{Timestamp: rangeKey.Timestamp, Value: valueRaw}},
-					}
-					iter.SeekGE(MVCCKey{Key: startKey})
-					if ok, err := iter.Valid(); err != nil {
-						return err
-					} else if ok {
-						rhs.Versions = append(rhs.Versions, iter.RangeKeys().Versions...)
-					}
-					maybeMergeRangeKeys(lhs, rhs)
-				}
+			} else if cmp == 0 {
+				rhs.Versions = append(rhs.Versions, below.Versions...)
+			}
+			if lhs.CanMergeRight(rhs) {
+				ms.Add(updateStatsOnRangeKeyMerge(startKey, rhs.Versions))
 			}
 		}
 
 		// Peek to the right.
-		if rightPeekBound == nil {
-			rightPeekBound = keys.MaxKey
-		}
-		if !rightPeekBound.Equal(endKey) {
-			iter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-				KeyTypes:   IterKeyTypeRangesOnly,
-				LowerBound: endKey.Prevish(roachpb.PrevishKeyLength),
-				UpperBound: rightPeekBound,
-			})
-			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: endKey})
-			if ok, err := iter.Valid(); err != nil {
+		if cmp, rhs, err := PeekRangeKeysRight(rkIter, endKey); err != nil {
+			return err
+
+		} else if cmp < 0 {
+			// We're fragmenting an existing range key.
+			ms.Add(UpdateStatsOnRangeKeySplit(endKey, rhs.Versions))
+
+		} else if cmp == 0 {
+			// We may be merging with an existing range key to the right, possibly
+			// along with an existing stack below us.
+			lhs := rangeKey.AsStack(valueRaw)
+			rhs = rhs.Clone()
+			if cmp, below, err := PeekRangeKeysLeft(rkIter, endKey); err != nil {
 				return err
-			} else if ok {
-				switch iter.RangeBounds().Key.Compare(endKey) {
-				case -1: // fragment
-					fragmentRangeKeys(iter.RangeKeys(), endKey)
-				case 0: // merge
-					lhs := MVCCRangeKeyStack{
-						Bounds:   rangeKey.Bounds(),
-						Versions: MVCCRangeKeyVersions{{Timestamp: rangeKey.Timestamp, Value: valueRaw}},
-					}
-					rhs := iter.RangeKeys().Clone()
-					iter.SeekLT(MVCCKey{Key: endKey})
-					if ok, err := iter.Valid(); err != nil {
-						return err
-					} else if ok {
-						lhs.Versions = append(lhs.Versions, iter.RangeKeys().Versions...)
-					}
-					maybeMergeRangeKeys(lhs, rhs)
-				}
+			} else if cmp == 0 {
+				lhs.Versions = append(lhs.Versions, below.Versions...)
+			}
+			if lhs.CanMergeRight(rhs) {
+				ms.Add(updateStatsOnRangeKeyMerge(endKey, rhs.Versions))
 			}
 		}
 	}
@@ -3052,11 +3091,6 @@ func MVCCDeleteRangeUsingTombstone(
 		return err
 	}
 
-	if ms != nil {
-		ms.Add(msDelta)
-	}
-
-	// Record the logical operation, for rangefeed emission.
 	rw.LogLogicalOp(MVCCDeleteRangeOpType, MVCCLogicalOpDetails{
 		Safe:      true,
 		Key:       rangeKey.StartKey,
@@ -4676,59 +4710,6 @@ func MVCCGarbageCollect(
 	return nil
 }
 
-// tsVal encapsulate info about previous range key stack with actual keys
-// stripped for efficiency.
-type tsVal struct {
-	ts  hlc.Timestamp
-	val []byte
-}
-
-// rangeKeyMergeTracker is tracking potential merges of range key fragments
-// when some of the versions are removed. Tracker stores minimal information
-// internally that is required to decide if range key fragments will merge.
-type rangeKeyMergeTracker struct {
-	prevEndKey   roachpb.Key
-	prevTsValues []tsVal
-	ms           *enginepb.MVCCStats
-}
-
-// update updates MVCCStats if previous range key fragments are adjacent to
-// current ones and remaining ones in current stack of fragments (indicated by
-// removed flag), match exactly with the previous stack (by their timestamps
-// and values).
-func (t *rangeKeyMergeTracker) update(
-	startKey, endKey roachpb.Key, unsafeRangeKeys []MVCCRangeKeyValue,
-) {
-	if t.ms == nil {
-		return
-	}
-	if keyCount := len(unsafeRangeKeys); keyCount > 0 && keyCount == len(t.prevTsValues) && t.prevEndKey.Equal(startKey) {
-		matching := true
-		for i, pts := range t.prevTsValues {
-			// We compare bytes directly since we are not interested in value
-			// equivalence, but identical values for merging keys. e.g. different
-			// value headers should not merge.
-			if rkv := unsafeRangeKeys[i]; !pts.ts.Equal(rkv.RangeKey.Timestamp) || !bytes.Equal(pts.val, rkv.Value) {
-				matching = false
-				break
-			}
-		}
-		if matching {
-			// All timestamps in range tombstone history matched with remaining
-			// timestamp in current history. Range tombstones would merge.
-			t.ms.Add(updateStatsOnRangeTombstoneMerge(unsafeRangeKeys))
-		}
-	}
-	t.prevTsValues = t.prevTsValues[:0]
-	for _, rk := range unsafeRangeKeys {
-		t.prevTsValues = append(t.prevTsValues, tsVal{
-			ts:  rk.RangeKey.Timestamp,
-			val: append([]byte(nil), rk.Value...),
-		})
-	}
-	t.prevEndKey = endKey.Clone()
-}
-
 // CollectableGCRangeKey is a struct containing range key as well as span
 // boundaries locked for particular range key.
 // Range GC needs a latch span as it needs to expand iteration beyond the
@@ -4780,130 +4761,111 @@ func MVCCGarbageCollectRangeKeys(
 		}
 	}
 
-	var iter MVCCIterator
-	var ptIter *MVCCIncrementalIterator
+	// gcRangeKey garbage collects the given range key, using a closure to manage
+	// iterator lifetimes via defer.
+	gcRangeKey := func(gcKey CollectableGCRangeKey) error {
 
-	defer func() {
-		if iter != nil {
-			iter.Close()
-		}
-		if ptIter != nil {
-			ptIter.Close()
-		}
-	}()
-
-	for _, gcKey := range rks {
-		mergeTracker := rangeKeyMergeTracker{ms: ms}
+		// lhs keeps track of any range key to the left, in case they merge to the
+		// right following GC.
+		//
+		// TODO(erikgrinaker): This cloning could be optimized to reuse reuse the
+		// same allocation, see: https://github.com/cockroachdb/cockroach/issues/85381
+		var lhs MVCCRangeKeyStack
 
 		// Bound the iterator appropriately for the set of keys we'll be garbage
 		// collecting. We are using latch bounds to collect info about adjacent
 		// range fragments for correct MVCCStats updates.
-		iter = rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		iter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 			LowerBound: gcKey.LatchSpan.Key,
 			UpperBound: gcKey.LatchSpan.EndKey,
 			KeyTypes:   IterKeyTypeRangesOnly,
 		})
+		defer iter.Close()
 
-		iter.SeekGE(MVCCKey{Key: gcKey.LatchSpan.Key})
-
-		for ; ; iter.Next() {
+		for iter.SeekGE(MVCCKey{Key: gcKey.LatchSpan.Key}); ; iter.Next() {
 			if ok, err := iter.Valid(); err != nil {
 				return err
 			} else if !ok {
 				break
 			}
 
-			// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
-			bounds := iter.RangeBounds()
-			unsafeRangeKeys := iter.RangeKeys().AsRangeKeyValues()
+			rangeKeys := iter.RangeKeys()
 
 			// Check if preceding range tombstone is adjacent to GC'd one. If we
-			// started iterating too early, just skip to next key. If boundaries
-			// match, then we capture start of the range and timestamps for later.
-			switch bounds.EndKey.Compare(gcKey.StartKey) {
-			case -1:
-				continue
-			case 0:
-				mergeTracker.update(bounds.Key, bounds.EndKey, unsafeRangeKeys)
+			// started iterating too early, just skip to next key.
+			if rangeKeys.Bounds.EndKey.Compare(gcKey.StartKey) <= 0 {
+				lhs = rangeKeys.Clone()
 				continue
 			}
 
 			// Terminate loop once we've reached a range tombstone past the right
-			// GC range key boundary.
-			if cmp := bounds.Key.Compare(gcKey.EndKey); cmp >= 0 {
-				mergeTracker.update(bounds.Key, bounds.EndKey, unsafeRangeKeys)
+			// GC range key boundary, but check if we merge with it.
+			if rangeKeys.Bounds.Key.Compare(gcKey.EndKey) >= 0 {
+				if ms != nil && lhs.CanMergeRight(rangeKeys) {
+					ms.Add(updateStatsOnRangeKeyMerge(rangeKeys.Bounds.Key, rangeKeys.Versions))
+				}
 				break
 			}
 
-			// Check if we have a partial overlap between range tombstone and
-			// requested GCd range. This shouldn't happen in most cases, but we can
-			// have a range merge between GC run and cmd_gc execution or
-			// erroneous GC request and mvcc stats should be updated correctly.
-			// In those cases gcKey boundaries will not match underlying range
-			// tombstone boundaries and need to be adjusted.
-			trimLeft, trimRight := false, false
-			gcedRangeStartKey := bounds.Key
-			if gcKey.StartKey.Compare(gcedRangeStartKey) > 0 {
-				gcedRangeStartKey = gcKey.StartKey
-				trimLeft = true
-			}
-			gcedRangeEndKey := bounds.EndKey
-			if gcKey.EndKey.Compare(gcedRangeEndKey) < 0 {
-				gcedRangeEndKey = gcKey.EndKey
-				trimRight = true
-			}
-
-			gcedRange := MVCCRangeKeyValue{
-				RangeKey: MVCCRangeKey{
-					StartKey: gcedRangeStartKey,
-					EndKey:   gcedRangeEndKey,
-				},
-			}
-			remaining := len(unsafeRangeKeys)
-			for i, rkv := range unsafeRangeKeys {
-				gcedRange.RangeKey.Timestamp = rkv.RangeKey.Timestamp
-				gcedRange.Value = rkv.Value
-				remove := rkv.RangeKey.Timestamp.LessEq(gcKey.Timestamp)
-				if remove {
-					if err := rw.ClearMVCCRangeKey(gcedRange.RangeKey); err != nil {
-						return err
-					}
-					remaining--
-					count++
-				}
-				if ms != nil {
-					topRangeKey := i == 0
-					if remove {
-						ms.Add(updateStatsOnRangeTombstoneGC(gcedRange, topRangeKey))
-					}
-					if trimLeft {
-						ms.Add(updateStatsOnRangeTombstoneSplit(gcedRange, gcedRange.RangeKey.StartKey, topRangeKey))
-					}
-					if trimRight {
-						ms.Add(updateStatsOnRangeTombstoneSplit(gcedRange, gcedRange.RangeKey.EndKey, topRangeKey))
-					}
-				}
-			}
-
-			mergeTracker.update(gcedRangeStartKey, gcedRangeEndKey, unsafeRangeKeys[0:remaining])
-
-			// If we didn't find any removable fragments, shortcut without checking
-			// underlying keys.
-			if remaining == len(unsafeRangeKeys) {
+			// If there's nothing to GC, keep moving.
+			if !rangeKeys.Oldest().LessEq(gcKey.Timestamp) {
+				lhs = rangeKeys.Clone()
 				continue
 			}
 
+			// Account for any range key fragmentation due to the clears. The actual
+			// clears of the inside fragments will be accounted for later. We also
+			// truncate the bounds of the range key stack to the GC bounds, since
+			// this is the part we'll be clearing.
+			if rangeKeys.Bounds.Key.Compare(gcKey.StartKey) < 0 {
+				rangeKeys.Bounds.Key = gcKey.StartKey
+				if ms != nil {
+					ms.Add(UpdateStatsOnRangeKeySplit(gcKey.StartKey, rangeKeys.Versions))
+				}
+			}
+			if rangeKeys.Bounds.EndKey.Compare(gcKey.EndKey) > 0 {
+				rangeKeys.Bounds.EndKey = gcKey.EndKey
+				if ms != nil {
+					ms.Add(UpdateStatsOnRangeKeySplit(gcKey.EndKey, rangeKeys.Versions))
+				}
+			}
+
+			// Clear the range keys, and keep track of any remaining range keys. We
+			// do this in reverse order, so that we can shorten the slice in place
+			// while we're iterating.
+			for i := rangeKeys.Len() - 1; i >= 0; i-- {
+				v := rangeKeys.Versions[i]
+				if !v.Timestamp.LessEq(gcKey.Timestamp) {
+					break
+				}
+				if err := rw.ClearMVCCRangeKey(rangeKeys.AsRangeKey(v)); err != nil {
+					return err
+				}
+				if ms != nil {
+					ms.Add(updateStatsOnRangeKeyClearVersion(rangeKeys, v))
+				}
+				rangeKeys.Versions = rangeKeys.Versions[:i]
+			}
+
+			// Check whether we're merging with the stack to our left, and record
+			// the current stack for the next iteration.
+			if ms != nil && lhs.CanMergeRight(rangeKeys) {
+				ms.Add(updateStatsOnRangeKeyMerge(rangeKeys.Bounds.Key, rangeKeys.Versions))
+			}
+			lhs = rangeKeys.Clone()
+
 			// Verify that there are no remaining data under the deleted range using
 			// time bound iterator.
-			ptIter = NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
+			ptIter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
 				KeyTypes:     IterKeyTypePointsOnly,
-				StartKey:     gcedRangeStartKey,
-				EndKey:       gcedRangeEndKey,
+				StartKey:     rangeKeys.Bounds.Key,
+				EndKey:       rangeKeys.Bounds.EndKey,
 				EndTime:      gcKey.Timestamp,
 				IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
 			})
-			ptIter.SeekGE(MVCCKey{Key: gcedRangeStartKey})
-			for ; ; ptIter.Next() {
+			defer ptIter.Close()
+
+			for ptIter.SeekGE(MVCCKey{Key: rangeKeys.Bounds.Key}); ; ptIter.Next() {
 				if ok, err := ptIter.Valid(); err != nil {
 					return err
 				} else if !ok {
@@ -4916,84 +4878,17 @@ func MVCCGarbageCollectRangeKeys(
 						gcKey, pointKey)
 				}
 			}
-			ptIter.Close()
-			ptIter = nil
 		}
+		return nil
+	}
 
-		iter.Close()
-		iter = nil
+	for _, gcKey := range rks {
+		if err := gcRangeKey(gcKey); err != nil {
+			return err
+		}
 	}
 
 	return nil
-}
-
-// updateStatsOnRangeTombstoneGC updates stats for removed range keys.
-// If all range keys are removed for the interval then this method should be
-// called once with removeKeys == true. This would ensure we account for keys
-// being removed. Then it should be called without removeKeys for all subsequent
-// range keys in stack to account for remaining timestamps and values.
-func updateStatsOnRangeTombstoneGC(
-	removedRange MVCCRangeKeyValue, removeKeys bool,
-) (ms enginepb.MVCCStats) {
-	ms.AgeTo(removedRange.RangeKey.Timestamp.WallTime)
-
-	if removeKeys {
-		leftKeySize := int64(EncodedMVCCKeyPrefixLength(removedRange.RangeKey.StartKey))
-		rightKeySize := int64(EncodedMVCCKeyPrefixLength(removedRange.RangeKey.EndKey))
-		ms.RangeKeyBytes -= leftKeySize + rightKeySize
-		ms.RangeKeyCount--
-	}
-	tsSize := int64(EncodedMVCCTimestampSuffixLength(removedRange.RangeKey.Timestamp))
-	valueSize := int64(len(removedRange.Value))
-	ms.RangeKeyBytes -= tsSize
-	ms.RangeValBytes -= valueSize
-	ms.RangeValCount--
-	return ms
-}
-
-// updateStatsOnRangeTombstoneSplit updates stats for ranges that are being
-// split during GC operation.
-// If splitKeys is true, this method will account for the key sizes added by
-// split. If false then only timestamp and value duplication is added.
-// When splitting range, this method should be called once with splitKeys
-// when processing top range key and then with false for remaining range keys.
-func updateStatsOnRangeTombstoneSplit(
-	rangeKey MVCCRangeKeyValue, splitKey roachpb.Key, splitKeys bool,
-) (ms enginepb.MVCCStats) {
-	ms.AgeTo(rangeKey.RangeKey.Timestamp.WallTime)
-
-	// Mind that we add key contributions twice since they are added as the
-	// end key and start key for ranges. If trimmed range is removed at current
-	// timestamp extra value will be removed above when handling the deletion.
-	if splitKeys {
-		keySize := int64(EncodedMVCCKeyPrefixLength(splitKey))
-		ms.RangeKeyBytes += keySize * 2
-		ms.RangeKeyCount++
-	}
-
-	tsSize := int64(EncodedMVCCTimestampSuffixLength(rangeKey.RangeKey.Timestamp))
-	valueSize := int64(len(rangeKey.Value))
-	ms.RangeKeyBytes += tsSize
-	ms.RangeValBytes += valueSize
-	ms.RangeValCount++
-	return ms
-}
-
-// updateStatsOnRangeTombstoneMerge updates MVCCStats for the case where all
-// range tombstone fragments merge to the left. i.e. start key is eliminated
-// twice at the top of history and all versions are removed as a timestamp and
-// a value.
-func updateStatsOnRangeTombstoneMerge(rangeKeys []MVCCRangeKeyValue) (ms enginepb.MVCCStats) {
-	ms.AgeTo(rangeKeys[0].RangeKey.Timestamp.WallTime)
-	ms.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(rangeKeys[0].RangeKey.StartKey)) * 2
-	ms.RangeKeyCount--
-	for _, rk := range rangeKeys {
-		ms.AgeTo(rk.RangeKey.Timestamp.WallTime)
-		ms.RangeKeyBytes -= int64(EncodedMVCCTimestampSuffixLength(rk.RangeKey.Timestamp))
-		ms.RangeValCount--
-		ms.RangeValBytes -= int64(len(rk.Value))
-	}
-	return ms
 }
 
 // MVCCFindSplitKey finds a key from the given span such that the left side of
@@ -5772,4 +5667,44 @@ type MVCCExportOptions struct {
 	// resources. Export queries limiter in its iteration loop to break out once
 	// resources are exhausted.
 	ResourceLimiter ResourceLimiter
+}
+
+// PeekRangeKeysLeft peeks for any range keys to the left of the given key.
+// It returns the relative position of any range keys to the peek key, along
+// with the (unsafe) range key stack:
+//
+// -1: range key to the left not touching the peek key, or no range key found.
+//  0: range key to the left ends at the peek key.
+// +1: range key to the left overlaps with the peek key, extending to the right.
+func PeekRangeKeysLeft(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKeyStack, error) {
+	iter.SeekLT(MVCCKey{Key: peekKey})
+	if ok, err := iter.Valid(); err != nil {
+		return 0, MVCCRangeKeyStack{}, err
+	} else if !ok {
+		return -1, MVCCRangeKeyStack{}, nil
+	} else if _, hasRange := iter.HasPointAndRange(); !hasRange {
+		return -1, MVCCRangeKeyStack{}, nil
+	}
+	rangeKeys := iter.RangeKeys()
+	return rangeKeys.Bounds.EndKey.Compare(peekKey), rangeKeys, nil
+}
+
+// PeekRangeKeysRight peeks for any range keys to the right of the given key.
+// It returns the relative position of any range keys to the peek key, along
+// with the (unsafe) range key stack:
+//
+// -1: range key to the right overlaps with the peek key, existing to the left.
+//  0: range key to the right starts at the peek key.
+// +1: range key to the right not touching the peek key, or no range key found.
+func PeekRangeKeysRight(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKeyStack, error) {
+	iter.SeekGE(MVCCKey{Key: peekKey})
+	if ok, err := iter.Valid(); err != nil {
+		return 0, MVCCRangeKeyStack{}, err
+	} else if !ok {
+		return 1, MVCCRangeKeyStack{}, nil
+	} else if _, hasRange := iter.HasPointAndRange(); !hasRange {
+		return 1, MVCCRangeKeyStack{}, nil
+	}
+	rangeKeys := iter.RangeKeys()
+	return rangeKeys.Bounds.Key.Compare(peekKey), rangeKeys, nil
 }

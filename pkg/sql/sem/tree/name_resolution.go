@@ -13,12 +13,10 @@ package tree
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // This file contains the two major components to name resolution:
@@ -139,14 +137,6 @@ type SearchPath interface {
 	IterateSearchPath(func(schema string) error) error
 }
 
-// CustomFunctionDefinitionResolver is an interface providing custom
-// function definition resolution functionality.
-type CustomFunctionDefinitionResolver interface {
-	// Resolve resolves function with specified name, and returns
-	// non-nil function definition if resolved successfully.
-	Resolve(name string) *FunctionDefinition
-}
-
 // EmptySearchPath is a SearchPath with no members.
 var EmptySearchPath SearchPath = emptySearchPath{}
 
@@ -154,103 +144,6 @@ type emptySearchPath struct{}
 
 func (emptySearchPath) IterateSearchPath(func(string) error) error {
 	return nil
-}
-
-// getFunctionDefinitionResolver returns a function which
-// is used to resolve function definition.
-func getFunctionDefinitionResolver(sp SearchPath) func(name string) *FunctionDefinition {
-	if custom, ok := sp.(CustomFunctionDefinitionResolver); ok {
-		return custom.Resolve
-	}
-	return func(name string) *FunctionDefinition {
-		fn, ok := FunDefs[name]
-		if ok {
-			return fn
-		}
-		return nil
-	}
-}
-
-// ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
-//
-// Function resolution currently takes a "short path" using the
-// assumption that there are no stored functions in the database. That
-// is, only functions in the (virtual) global namespace and virtual
-// schemas can be used. This in turn implies that the current
-// database does not matter and no resolver is needed.
-//
-// TODO(whoever): this needs to be revisited when there can be stored functions.
-// When that is the case, function names must be first normalized to e.g.
-// TableName (or whatever an object name will be called by then)
-// and then undergo regular name resolution via ResolveExisting(). When
-// that happens, the following function can be removed.
-func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
-	if n.NumParts > 3 || len(n.Parts[0]) == 0 || n.Star {
-		// The Star part of the condition is really an assertion. The
-		// parser should not have let this star propagate to a point where
-		// this method is called.
-		return nil, pgerror.Newf(pgcode.InvalidName,
-			"invalid function name: %s", n)
-	}
-
-	resolveFn := getFunctionDefinitionResolver(searchPath)
-
-	// We ignore the catalog part. Like explained above, we currently
-	// only support functions in virtual schemas, which always exist
-	// independently of the database/catalog prefix.
-	function, prefix := n.Parts[0], n.Parts[1]
-
-	if d := resolveFn(function); d != nil && prefix == "" {
-		// Fast path: return early.
-		return d, nil
-	}
-
-	fullName := function
-
-	if prefix == catconstants.PgCatalogName {
-		// If the user specified e.g. `pg_catalog.max()` we want to find
-		// it in the global namespace.
-		prefix = ""
-	}
-	if prefix == catconstants.PublicSchemaName {
-		// If the user specified public, it may be from a PostgreSQL extension.
-		// Double check the function definition allows resolution on the public
-		// schema, and resolve as such if appropriate.
-		if d := resolveFn(function); d != nil && d.AvailableOnPublicSchema {
-			return d, nil
-		}
-	}
-
-	if prefix != "" {
-		fullName = prefix + "." + function
-	}
-	def := resolveFn(fullName)
-	if def == nil {
-		if prefix == "" {
-			// The function wasn't qualified, so we must search for it via
-			// the search path first.
-			if err := searchPath.IterateSearchPath(func(alt string) error {
-				fullName = alt + "." + function
-				if def = resolveFn(fullName); def != nil {
-					return iterutil.StopIteration()
-				}
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-		}
-		if def == nil {
-			extraMsg := ""
-			// Try a little harder.
-			if rdef := resolveFn(strings.ToLower(function)); rdef != nil {
-				extraMsg = fmt.Sprintf(", but %s() exists", rdef.Name)
-			}
-			return nil, pgerror.Newf(
-				pgcode.UndefinedFunction, "unknown function: %s()%s", ErrString(n), extraMsg)
-		}
-	}
-
-	return def, nil
 }
 
 func newInvColRef(n *UnresolvedName) error {
