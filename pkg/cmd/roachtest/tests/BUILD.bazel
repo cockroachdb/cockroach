@@ -56,7 +56,6 @@ go_library(
         "hotspotsplits.go",
         "import.go",
         "inconsistency.go",
-        "indexbackfiller.go",
         "indexes.go",
         "inverted_index.go",
         "jasyncsql.go",
