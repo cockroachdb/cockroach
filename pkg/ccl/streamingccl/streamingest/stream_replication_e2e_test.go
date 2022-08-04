@@ -846,6 +846,7 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 
 func TestTenantStreamingDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 85630, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// TODO(casper): disabled due to error when setting a cluster setting
