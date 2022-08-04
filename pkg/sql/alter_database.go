@@ -1372,7 +1372,7 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 		)
 	}
 
-	// Check if the primary and secondary regions are members of this super region
+	// Check if the primary and secondary regions are members of this super region.
 	regionConfig, err := SynthesizeRegionConfig(
 		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
 	)
@@ -1380,11 +1380,10 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
-	if regionConfig.SecondaryRegion() != catpb.RegionName(tree.SecondaryRegionNotSpecifiedName) {
+	if regionConfig.HasSecondaryRegion() {
 		primaryRegion := regionConfig.PrimaryRegionString()
-		primaryInSuper := tree.NameList(n.n.Regions).Contains(tree.Name(primaryRegion))
 		regions := nameToRegionName(n.n.Regions)
-		err := validateSecondaryRegion(regionConfig, regionConfig.SecondaryRegion(), regions, primaryInSuper)
+		err := validateSecondaryRegion(catpb.RegionName(primaryRegion), regionConfig.SecondaryRegion(), regions)
 		if err != nil {
 			return err
 		}
@@ -1621,10 +1620,9 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
-	if regionConfig.SecondaryRegion() != catpb.RegionName(tree.SecondaryRegionNotSpecifiedName) {
-		primaryInSuper := tree.NameList(n.n.Regions).Contains(tree.Name(regionConfig.PrimaryRegion()))
+	if regionConfig.HasSecondaryRegion() {
 		regions := nameToRegionName(n.n.Regions)
-		err = validateSecondaryRegion(regionConfig, typeDesc.RegionConfig.SecondaryRegion, regions, primaryInSuper)
+		err = validateSecondaryRegion(regionConfig.PrimaryRegion(), typeDesc.RegionConfig.SecondaryRegion, regions)
 		if err != nil {
 			return err
 		}
@@ -1788,19 +1786,16 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		)
 	}
 
-	regions, err := prevRegionConfig.GetSuperRegionRegionsForRegion(prevRegionConfig.PrimaryRegion())
+	regions, ok := prevRegionConfig.GetSuperRegionRegionsForRegion(prevRegionConfig.PrimaryRegion())
+	if !ok && prevRegionConfig.IsMemberOfExplicitSuperRegion(catpb.RegionName(n.n.SecondaryRegion)) {
+		return pgerror.New(pgcode.InvalidDatabaseDefinition,
+			"the secondary region can not be in a super region, unless the primary is also "+
+				"within a super region",
+		)
+	}
+	err = validateSecondaryRegion(prevRegionConfig.PrimaryRegion(), catpb.RegionName(n.n.SecondaryRegion), regions)
 	if err != nil {
-		if prevRegionConfig.IsMemberOfExplicitSuperRegion(catpb.RegionName(n.n.SecondaryRegion)) {
-			return pgerror.New(pgcode.InvalidDatabaseDefinition,
-				"the secondary region can not be in a super region, unless the primary is also "+
-					"within a super region",
-			)
-		}
-	} else {
-		err = validateSecondaryRegion(prevRegionConfig, catpb.RegionName(n.n.SecondaryRegion), regions, true)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	// Get the type descriptor for the multi-region enum.
@@ -1900,6 +1895,13 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 	}
 
 	if n.desc.RegionConfig.SecondaryRegion == "" {
+		if n.n.IfExists {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("No secondary region is not defined on the database; skipping"),
+			)
+			return nil
+		}
 		return pgerror.Newf(pgcode.UndefinedParameter,
 			"database %s doesn't have a secondary region defined", n.desc.GetName(),
 		)
@@ -1963,20 +1965,19 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 // are both inside or both outside a super region. The primary region and secondary
 // region should also be within the same super region.
 func validateSecondaryRegion(
-	prevRegionConfig multiregion.RegionConfig,
-	secondaryRegion catpb.RegionName,
-	regions catpb.RegionNames,
-	primaryInCurrSuper bool,
+	primaryRegion catpb.RegionName, secondaryRegion catpb.RegionName, regions catpb.RegionNames,
 ) error {
 
-	secondaryInCurrSuper := false
+	secondaryInCurrSuper, primaryInCurrSuper := false, false
 	for _, region := range regions {
 		if region == secondaryRegion {
 			secondaryInCurrSuper = true
 		}
+		if region == primaryRegion {
+			primaryInCurrSuper = true
+		}
 	}
-	// TODO(embrown): Might be helpful to return the name of the super region in the case
-	// of multiple super region
+
 	if primaryInCurrSuper == secondaryInCurrSuper {
 		return nil
 	}
