@@ -273,6 +273,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "//pkg/util/version",
         "//pkg/workload/bank",
         "//pkg/workload/workloadsql",
         "@com_github_aws_aws_sdk_go//aws/credentials",

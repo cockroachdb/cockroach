@@ -122,11 +122,6 @@ type SchemaChanger struct {
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
 	ieFactory            sqlutil.InternalExecutorFactory
-
-	// mvccCompliantAddIndex is set to true early in exec if we
-	// find that the schema change was created under the
-	// mvcc-compliant regime.
-	mvccCompliantAddIndex bool
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -622,20 +617,9 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 		}
 	}
 
-	if tempIndexes > 0 {
-		sc.mvccCompliantAddIndex = true
-
-		if tempIndexes != nonTempAddingIndexes {
-			return errors.Newf("expected %d temporary indexes, but found %d; schema change may have been constructed during cluster version upgrade",
-				tempIndexes,
-				nonTempAddingIndexes)
-		}
-
-		settings := sc.execCfg.Settings
-		mvccCompliantBackfillSupported := tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
-		if !mvccCompliantBackfillSupported {
-			return errors.Newf("schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
-		}
+	if tempIndexes != nonTempAddingIndexes {
+		return errors.Newf("expected %d temporary indexes, but found %d; schema change may have been constructed on a version too old to resume execution",
+			nonTempAddingIndexes, tempIndexes)
 	}
 	return nil
 }
@@ -2178,13 +2162,9 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 }
 
 // validStateForStartingIndex returns the correct starting state for
-// add index mutations based on the whether this schema change is
-// using temporary indexes or not.
+// add index mutations.
 func (sc *SchemaChanger) startingStateForAddIndexMutations() descpb.DescriptorMutation_State {
-	if sc.mvccCompliantAddIndex {
-		return descpb.DescriptorMutation_BACKFILLING
-	}
-	return descpb.DescriptorMutation_DELETE_ONLY
+	return descpb.DescriptorMutation_BACKFILLING
 }
 
 // deleteIndexMutationsWithReversedColumns deletes mutations with a
@@ -3073,10 +3053,7 @@ func (sc *SchemaChanger) shouldSplitAndScatter(
 	}
 
 	if m.Adding() && idx.IsSharded() {
-		if sc.mvccCompliantAddIndex {
-			return m.Backfilling() || (idx.IsTemporaryIndexForBackfill() && m.DeleteOnly())
-		}
-		return m.DeleteOnly()
+		return m.Backfilling() || (idx.IsTemporaryIndexForBackfill() && m.DeleteOnly())
 	}
 	return false
 
