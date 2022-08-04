@@ -163,29 +163,38 @@ func ExtractAggFirstVar(e opt.ScalarExpr) *VariableExpr {
 func ExtractJoinEqualityColumns(
 	leftCols, rightCols opt.ColSet, on FiltersExpr,
 ) (leftEq opt.ColList, rightEq opt.ColList, filterOrds []int) {
+	return ExtractJoinConditionColumns(leftCols, rightCols, on, false /* inequality */)
+}
+
+// ExtractJoinConditionColumns returns pairs of columns (one from the left side,
+// one from the right side) which are constrained by an equality or an
+// inequality in a join (and have equivalent types). The returned filterOrds
+// contains ordinals of the on filters where each column pair was found.
+// The inequality argument indicates whether to look for inequality conditions
+// rather than equalities.
+func ExtractJoinConditionColumns(
+	leftCols, rightCols opt.ColSet, on FiltersExpr, inequality bool,
+) (leftCmp, rightCmp opt.ColList, filterOrds []int) {
+	var seenCols opt.ColSet
 	for i := range on {
 		condition := on[i].Condition
-		ok, left, right := ExtractJoinEquality(leftCols, rightCols, condition)
+		ok, left, right := ExtractJoinCondition(leftCols, rightCols, condition, inequality)
 		if !ok {
 			continue
 		}
-		// Don't allow any column to show up twice.
-		// TODO(radu): need to figure out the right thing to do in cases
-		// like: left.a = right.a AND left.a = right.b
-		duplicate := false
-		for i := range leftEq {
-			if leftEq[i] == left || rightEq[i] == right {
-				duplicate = true
-				break
-			}
+		if seenCols.Contains(left) || seenCols.Contains(right) {
+			// Don't allow any column to show up twice.
+			// TODO(radu): need to figure out the right thing to do in cases
+			//  like: left.a = right.a AND left.a = right.b
+			continue
 		}
-		if !duplicate {
-			leftEq = append(leftEq, left)
-			rightEq = append(rightEq, right)
-			filterOrds = append(filterOrds, i)
-		}
+		seenCols.Add(left)
+		seenCols.Add(right)
+		leftCmp = append(leftCmp, left)
+		rightCmp = append(rightCmp, right)
+		filterOrds = append(filterOrds, i)
 	}
-	return leftEq, rightEq, filterOrds
+	return leftCmp, rightCmp, filterOrds
 }
 
 // ExtractJoinEqualityFilters returns the filters containing pairs of columns
@@ -214,46 +223,42 @@ func ExtractJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) 
 	return on
 }
 
-// ExtractJoinEqualityFilter returns the filter containing the given pair of
-// columns (one from the left side, one from the right side) which are
-// constrained to be equal in a join (and have equivalent types).
-func ExtractJoinEqualityFilter(
-	leftCol, rightCol opt.ColumnID, leftCols, rightCols opt.ColSet, on FiltersExpr,
-) FiltersItem {
-	for i := range on {
-		condition := on[i].Condition
-		ok, left, right := ExtractJoinEquality(leftCols, rightCols, condition)
-		if !ok {
-			continue
+func isVarEqualityOrInequality(
+	condition opt.ScalarExpr, inequality bool,
+) (leftVar, rightVar *VariableExpr, ok bool) {
+	switch condition.Op() {
+	case opt.EqOp:
+		if inequality {
+			return nil, nil, false
 		}
-		if left == leftCol && right == rightCol {
-			return on[i]
+	case opt.LtOp, opt.LeOp, opt.GtOp, opt.GeOp:
+		if !inequality {
+			return nil, nil, false
 		}
+	default:
+		return nil, nil, false
 	}
-	panic(errors.AssertionFailedf("could not find equality between columns %d and %d in filters %s",
-		leftCol, rightCol, on.String(),
-	))
+	leftVar, leftOk := condition.Child(0).(*VariableExpr)
+	rightVar, rightOk := condition.Child(1).(*VariableExpr)
+	return leftVar, rightVar, leftOk && rightOk
 }
 
-func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, ok bool) {
-	if eq, ok := condition.(*EqExpr); ok {
-		if leftVar, ok := eq.Left.(*VariableExpr); ok {
-			if rightVar, ok := eq.Right.(*VariableExpr); ok {
-				return leftVar, rightVar, true
-			}
-		}
-	}
-	return nil, nil, false
-}
-
-// ExtractJoinEquality returns true if the given condition is a simple equality
-// condition with two variables (e.g. a=b), where one of the variables (returned
-// as "left") is in the set of leftCols and the other (returned as "right") is
-// in the set of rightCols.
+// ExtractJoinEquality restricts ExtractJoinCondition to only allow equalities.
 func ExtractJoinEquality(
 	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr,
 ) (ok bool, left, right opt.ColumnID) {
-	lvar, rvar, ok := isVarEquality(condition)
+	return ExtractJoinCondition(leftCols, rightCols, condition, false /* inequality */)
+}
+
+// ExtractJoinCondition returns true if the given condition is a simple equality
+// or inequality condition with two variables (e.g. a=b), where one of the
+// variables (returned as "left") is in the set of leftCols and the other
+// (returned as "right") is in the set of rightCols. inequality is used to
+// indicate whether the condition should be an inequality (e.g. < or >).
+func ExtractJoinCondition(
+	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr, inequality bool,
+) (ok bool, left, right opt.ColumnID) {
+	lvar, rvar, ok := isVarEqualityOrInequality(condition, inequality)
 	if !ok {
 		return false, 0, 0
 	}
@@ -286,7 +291,7 @@ func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) Fi
 	}
 	var newFilters FiltersExpr
 	for i := range on {
-		leftVar, rightVar, ok := isVarEquality(on[i].Condition)
+		leftVar, rightVar, ok := isVarEqualityOrInequality(on[i].Condition, false /* inequality */)
 		if ok {
 			a, b := leftVar.Col, rightVar.Col
 			found := false

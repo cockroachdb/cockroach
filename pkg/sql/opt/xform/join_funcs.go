@@ -320,6 +320,31 @@ func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
 	)
 }
 
+// canGenerateLookupJoins makes a best-effort to filter out cases where no
+// joins can be constructed based on the join's filters and flags. It may miss
+// some cases that will be filtered out later.
+func canGenerateLookupJoins(
+	input memo.RelExpr, joinFlags memo.JoinFlags, leftCols, rightCols opt.ColSet, on memo.FiltersExpr,
+) bool {
+	if joinFlags.Has(memo.DisallowLookupJoinIntoRight) {
+		return false
+	}
+	if leftEq, _, _ := memo.ExtractJoinEqualityColumns(leftCols, rightCols, on); len(leftEq) > 0 {
+		// There is at least one valid equality between left and right columns.
+		return true
+	}
+	// There are no valid equality conditions, but there may be an inequality that
+	// can be used for lookups. Since the current implementation does not
+	// deduplicate the resulting spans, only plan a lookup join with no equalities
+	// when the input has one row, or if a lookup join is forced.
+	if input.Relational().Cardinality.IsZeroOrOne() ||
+		joinFlags.Has(memo.AllowOnlyLookupJoinIntoRight) {
+		cmp, _, _ := memo.ExtractJoinConditionColumns(leftCols, rightCols, on, true /* inequality */)
+		return len(cmp) > 0
+	}
+	return false
+}
+
 // generateLookupJoinsImpl is the general implementation for generating lookup
 // joins. The rightCols argument must be the columns output by the right side of
 // matched join expression. projectedVirtualCols is the set of virtual columns
@@ -337,27 +362,22 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-
-	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
-		return
-	}
 	md := c.e.mem.Metadata()
 	inputProps := input.Relational()
 
+	if !canGenerateLookupJoins(input, joinPrivate.Flags, inputProps.OutputCols, rightCols, on) {
+		return
+	}
+
 	var cb lookupjoin.ConstraintBuilder
-	if ok := cb.Init(
+	cb.Init(
 		c.e.f,
 		c.e.mem.Metadata(),
 		c.e.evalCtx,
 		scanPrivate.Table,
 		inputProps.OutputCols,
 		rightCols,
-		on,
-	); !ok {
-		// No lookup joins can be generated with the given filters and
-		// left/right columns.
-		return
-	}
+	)
 
 	// Generate implicit filters from CHECK constraints and computed columns as
 	// optional filters to help generate lookup join keys.
@@ -381,10 +401,17 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
-		lookupConstraint := cb.Build(index, onFilters, optionalFilters)
+		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
+			return
+		}
+		if !foundEqualityCols && !inputProps.Cardinality.IsZeroOrOne() &&
+			!joinPrivate.Flags.Has(memo.AllowOnlyLookupJoinIntoRight) {
+			// Avoid planning an inequality-only lookup when the input has more than
+			// one row unless the lookup join is forced (see canGenerateLookupJoins
+			// for a brief explanation).
 			return
 		}
 

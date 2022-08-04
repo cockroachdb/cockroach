@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/encoding",
         "@com_github_cockroachdb_errors//:errors",

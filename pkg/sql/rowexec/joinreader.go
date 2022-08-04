@@ -169,6 +169,11 @@ type joinReader struct {
 	lookupExpr       execinfrapb.ExprHelper
 	remoteLookupExpr execinfrapb.ExprHelper
 
+	// spansCanOverlap indicates whether the spans generated for a given input
+	// batch can overlap. It is used in the fetcher when deciding whether a newly
+	// read kv corresponds to a new row.
+	spansCanOverlap bool
+
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSizeBytes    int64
 	curBatchSizeBytes int64
@@ -543,6 +548,7 @@ func newJoinReader(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			SpansCanOverlap:            jr.spansCanOverlap,
 		},
 	); err != nil {
 		return nil, err
@@ -600,9 +606,10 @@ func (jr *joinReader) initJoinReaderStrategy(
 
 		// If jr.remoteLookupExpr is set, this is a locality optimized lookup join
 		// and we need to use localityOptimizedSpanGenerator.
+		var err error
 		if jr.remoteLookupExpr.Expr == nil {
 			multiSpanGen := &multiSpanGenerator{}
-			if err := multiSpanGen.init(
+			if jr.spansCanOverlap, err = multiSpanGen.init(
 				flowCtx.EvalCtx,
 				flowCtx.Codec(),
 				&jr.fetchSpec,
@@ -618,7 +625,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		} else {
 			localityOptSpanGen := &localityOptimizedSpanGenerator{}
 			remoteSpanGenMemAcc := jr.MemMonitor.MakeBoundAccount()
-			if err := localityOptSpanGen.init(
+			if jr.spansCanOverlap, err = localityOptSpanGen.init(
 				flowCtx.EvalCtx,
 				flowCtx.Codec(),
 				&jr.fetchSpec,
