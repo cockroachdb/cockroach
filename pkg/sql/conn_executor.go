@@ -3250,6 +3250,9 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
+	if len(scs.state.Targets) == 0 {
+		return nil
+	}
 	deps := newSchemaChangerTxnRunDependencies(
 		ex.planner.SessionData(),
 		ex.planner.User(),
