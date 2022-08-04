@@ -46,12 +46,12 @@ genrule(
     srcs = _EVENTPB_PROTO_SRCS,
     outs = ["eventlog.md"],
     cmd = """
-    $(location //pkg/util/log/eventpb:gen) eventlog.md \
+    $(location //pkg/util/log/eventpb/eventpbgen:eventpbgen) eventlog.md \
         {} \
         >$(location eventlog.md)
     """.format(_EVENTPB_PROTO_LOCATIONS),
     exec_tools = [
-        "//pkg/util/log/eventpb:gen",
+        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
     ],
     visibility = [
         ":__pkg__",

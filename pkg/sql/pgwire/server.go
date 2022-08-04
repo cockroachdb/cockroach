@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -740,7 +741,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	connStart := timeutil.Now()
 	if s.connLogEnabled() {
 		ev := &eventpb.ClientConnectionStart{
-			CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: connStart.UnixNano()},
+			CommonEventDetails:      logpb.CommonEventDetails{Timestamp: connStart.UnixNano()},
 			CommonConnectionDetails: connDetails,
 		}
 		log.StructuredEvent(ctx, ev)
@@ -753,7 +754,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		if s.connLogEnabled() {
 			endTime := timeutil.Now()
 			ev := &eventpb.ClientConnectionEnd{
-				CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+				CommonEventDetails:      logpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
 				CommonConnectionDetails: connDetails,
 				Duration:                endTime.Sub(connStart).Nanoseconds(),
 			}

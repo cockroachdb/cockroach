@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -77,7 +78,7 @@ func (m *ReplicaInfo) Replica() (roachpb.ReplicaDescriptor, error) {
 // AsStructuredLog creates a structured log entry from the record.
 func (m *ReplicaRecoveryRecord) AsStructuredLog() eventpb.DebugRecoverReplica {
 	return eventpb.DebugRecoverReplica{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			Timestamp: m.Timestamp,
 		},
 		CommonDebugEventDetails: eventpb.CommonDebugEventDetails{

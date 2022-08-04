@@ -14,6 +14,7 @@ option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
+import "util/log/logpb/event.proto";
 
 // Category: Miscellaneous SQL events
 // Channel: DEV

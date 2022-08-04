@@ -2,26 +2,14 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load(
     "//pkg/util/log/eventpb:PROTOS.bzl",
     _EVENTPB_PROTOS = "EVENTPB_PROTOS",
+    _EVENTPB_PROTO_DEPS = "EVENTPB_PROTO_DEPS",
     _EVENTPB_PROTO_LOCATIONS = "EVENTPB_PROTO_LOCATIONS",
 )
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 exports_files(_EVENTPB_PROTOS)
-
-go_binary(
-    name = "gen",
-    srcs = ["gen.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/cli/exit",
-        "//pkg/util/log/logpb",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_gostdlib//go/format",
-    ],
-)
 
 go_library(
     name = "eventpb",
@@ -49,6 +37,7 @@ go_test(
     srcs = ["event_test.go"],
     embed = [":eventpb"],
     deps = [
+        "//pkg/util/log/logpb",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
     ],
@@ -73,7 +62,10 @@ proto_library(
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+    deps = [
+        "//pkg/util/log/logpb:logpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
 )
 
 go_proto_library(
@@ -82,20 +74,23 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
     proto = ":eventpb_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "//pkg/util/log/logpb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
 
 genrule(
     name = "gen-eventlog-channels-generated-go",
-    srcs = _EVENTPB_PROTOS,
+    srcs = _EVENTPB_PROTO_DEPS,
     outs = ["eventlog_channels_generated.go"],
     cmd = """
-    $(location //pkg/util/log/eventpb:gen) eventlog_channels_go \
+    $(location //pkg/util/log/eventpb/eventpbgen:eventpbgen) eventlog_channels_go \
         {} \
         >$(location eventlog_channels_generated.go)
     """.format(_EVENTPB_PROTO_LOCATIONS),
     exec_tools = [
-        "//pkg/util/log/eventpb:gen",
+        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
     ],
     visibility = [
         ":__pkg__",
@@ -105,15 +100,17 @@ genrule(
 
 genrule(
     name = "gen-json-encode-generated-go",
-    srcs = _EVENTPB_PROTOS,
+    srcs = _EVENTPB_PROTO_DEPS,
     outs = ["json_encode_generated.go"],
     cmd = """
-    $(location //pkg/util/log/eventpb:gen) json_encode_go \
+    $(location //pkg/util/log/eventpb/eventpbgen:eventpbgen) \
+        --excluded-events='CommonEventDetails' \
+        json_encode_go \
         {} \
         >$(location json_encode_generated.go)
     """.format(_EVENTPB_PROTO_LOCATIONS),
     exec_tools = [
-        "//pkg/util/log/eventpb:gen",
+        "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
     ],
     visibility = [
         ":__pkg__",

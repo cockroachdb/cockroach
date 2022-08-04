@@ -15,6 +15,7 @@ option go_package = "eventpb";
 import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
 import "util/log/eventpb/sql_audit_events.proto";
+import "util/log/logpb/event.proto";
 
 // Category: Telemetry events
 // Channel: TELEMETRY
