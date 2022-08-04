@@ -626,7 +626,7 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 		}
 
 		settings := sc.execCfg.Settings
-		mvccCompliantBackfillSupported := settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) && tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
+		mvccCompliantBackfillSupported := settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller)
 		if !mvccCompliantBackfillSupported {
 			return errors.Newf("schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
 		}
