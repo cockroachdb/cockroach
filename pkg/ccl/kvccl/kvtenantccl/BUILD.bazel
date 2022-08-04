@@ -40,7 +40,7 @@ go_library(
 
 go_test(
     name = "kvtenantccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "connector_test.go",
         "main_test.go",
