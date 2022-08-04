@@ -6311,7 +6311,9 @@ CREATE TABLE crdb_internal.node_execution_insights (
 	rows_read                  INT8 NOT NULL,
 	rows_written               INT8 NOT NULL,
 	priority                   FLOAT NOT NULL,
-	retries                    INT8 NOT NULL
+	retries                    INT8 NOT NULL,
+	last_retry_reason          STRING,
+	exec_node_ids              INT[] NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		p.extendedEvalCtx.statsProvider.IterateInsights(ctx, func(
@@ -6327,6 +6329,19 @@ CREATE TABLE crdb_internal.node_execution_insights (
 			if errTimestamp != nil {
 				err = errors.CombineErrors(err, errTimestamp)
 				return
+			}
+
+			execNodeIDs := tree.NewDArray(types.Int)
+			for _, nodeID := range insight.Statement.Nodes {
+				if errNodeID := execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); errNodeID != nil {
+					err = errors.CombineErrors(err, errNodeID)
+					return
+				}
+			}
+
+			autoRetryReason := tree.DNull
+			if insight.Statement.AutoRetryReason != "" {
+				autoRetryReason = tree.NewDString(insight.Statement.AutoRetryReason)
 			}
 
 			err = errors.CombineErrors(err, addRow(
@@ -6348,6 +6363,8 @@ CREATE TABLE crdb_internal.node_execution_insights (
 				tree.NewDInt(tree.DInt(insight.Statement.RowsWritten)),
 				tree.NewDFloat(tree.DFloat(insight.Transaction.UserPriority)),
 				tree.NewDInt(tree.DInt(insight.Statement.Retries)),
+				autoRetryReason,
+				execNodeIDs,
 			))
 		})
 		return err
