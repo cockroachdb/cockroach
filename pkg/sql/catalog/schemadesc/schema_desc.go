@@ -469,6 +469,20 @@ func (desc *immutable) GetResolvedFuncDefinition(
 	return funcDef, true
 }
 
+// ForEachFunctionOverload implements the SchemaDescriptor interface.
+func (desc *immutable) ForEachFunctionOverload(
+	fn func(overload descpb.SchemaDescriptor_FunctionOverload) error,
+) error {
+	for _, function := range desc.Functions {
+		for i := range function.Overloads {
+			if err := fn(function.Overloads[i]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // IsSchemaNameValid returns whether the input name is valid for a user defined
 // schema.
 func IsSchemaNameValid(name string) error {

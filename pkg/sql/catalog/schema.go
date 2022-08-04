@@ -41,6 +41,10 @@ type SchemaDescriptor interface {
 	// returns a collection of overloads with the same function name, each
 	// overload is prefixed with the same schema name.
 	GetResolvedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool)
+
+	// ForEachFunctionOverload iterates through all function overloads within the
+	// schema and calls fn on each overload.
+	ForEachFunctionOverload(fn func(overload descpb.SchemaDescriptor_FunctionOverload) error) error
 }
 
 // ResolvedSchemaKind is an enum that represents what kind of schema

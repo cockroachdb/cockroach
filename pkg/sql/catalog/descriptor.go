@@ -875,6 +875,9 @@ type FunctionDescriptor interface {
 	// ToOverload converts the function descriptor to tree.Overload object which
 	// can be used for execution.
 	ToOverload() (ret *tree.Overload, err error)
+
+	// GetLanguage returns the language of this function.
+	GetLanguage() catpb.Function_Language
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an
