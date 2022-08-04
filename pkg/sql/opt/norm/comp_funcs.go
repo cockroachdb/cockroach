@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // CommuteInequality swaps the operands of an inequality comparison expression,
@@ -28,17 +27,8 @@ import (
 func (c *CustomFuncs) CommuteInequality(
 	op opt.Operator, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
-	switch op {
-	case opt.GeOp:
-		return c.f.ConstructLe(right, left)
-	case opt.GtOp:
-		return c.f.ConstructLt(right, left)
-	case opt.LeOp:
-		return c.f.ConstructGe(right, left)
-	case opt.LtOp:
-		return c.f.ConstructGt(right, left)
-	}
-	panic(errors.AssertionFailedf("called commuteInequality with operator %s", redact.Safe(op)))
+	op = opt.CommuteEqualityOrInequalityOp(op)
+	return c.f.DynamicConstruct(op, right, left).(opt.ScalarExpr)
 }
 
 // NormalizeTupleEquality remaps the elements of two tuples compared for

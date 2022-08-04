@@ -425,7 +425,7 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-2  2020-01-01 00:01:01 +0000 UTC  -11   4  2  1     cpu
+2  2020-01-01 00:01:01 +0000 UTC  -11  4  2  1  cpu
 
 # Test NULL values in <= unbounded lookup span.
 query ITIIIIT
@@ -452,8 +452,8 @@ WHERE
   name='cpu'
 ORDER BY value
 ----
-2  2020-01-01 00:01:01 +0000 UTC  -11   4  2  1     cpu
-2  2020-01-01 00:01:02 +0000 UTC  -10   5  2  1     cpu
+2  2020-01-01 00:01:01 +0000 UTC  -11  4  2  1  cpu
+2  2020-01-01 00:01:02 +0000 UTC  -10  5  2  1  cpu
 
 # Test NULL values in WHERE equality conditions.
 query ITIIIIT

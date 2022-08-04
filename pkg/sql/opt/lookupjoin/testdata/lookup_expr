@@ -280,3 +280,187 @@ x IN (10, 20, 30, 40) AND y = b AND x > 10
 ----
 lookup expression:
   (x IN (20, 30, 40)) AND (b = y)
+
+# Test for range filters on input columns.
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x > a
+----
+lookup expression:
+  x > a
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x >= a
+----
+lookup expression:
+  x >= a
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x < a
+----
+lookup expression:
+  x < a
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x <= a
+----
+lookup expression:
+  x <= a
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x = a AND y > b
+----
+lookup expression:
+  (a = x) AND (y > b)
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x = a AND y >= b
+----
+lookup expression:
+  (a = x) AND (y >= b)
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x = a AND y < b
+----
+lookup expression:
+  (a = x) AND (y < b)
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x = a AND y <= b
+----
+lookup expression:
+  (a = x) AND (y <= b)
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x desc, y)
+x > a
+----
+lookup expression:
+  x > a
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x desc, y)
+x >= a
+----
+lookup expression:
+  x >= a
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x desc, y)
+x < a
+----
+lookup expression:
+  x < a
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x desc, y)
+x <= a
+----
+lookup expression:
+  x <= a
+
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x, y)
+x > a
+----
+lookup expression:
+  x > a
+
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x, y)
+x >= a
+----
+lookup expression:
+  x >= a
+
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x, y)
+x < a
+----
+lookup expression:
+  x < a
+
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x, y)
+x <= a
+----
+lookup expression:
+  x <= a
+
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x desc, y)
+x > a
+----
+lookup expression:
+  x > a
+
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x desc, y)
+x >= a
+----
+lookup expression:
+  x >= a
+
+# A '<' filter on a descending index column would require a call to Prev, which
+# is not possible for DECIMAL values.
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x desc, y)
+x < a
+----
+lookup join not possible
+
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x desc, y)
+x <= a
+----
+lookup expression:
+  x <= a
+
+# A '<' filter on a descending index column would require a call to Prev, which
+# is not possible for DECIMAL values. Leave the '<' condition in the remaining
+# filters.
+lookup-constraints left=(a decimal, b decimal) right=(x decimal, y decimal) index=(x, y desc)
+x = a AND y < b
+----
+key cols:
+  x = a
+remaining filters:
+  y < b
+
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x, y)
+x > a
+----
+lookup expression:
+  x > a
+
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x, y)
+x >= a
+----
+lookup expression:
+  x >= a
+
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x, y)
+x < a
+----
+lookup expression:
+  x < a
+
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x, y)
+x <= a
+----
+lookup expression:
+  x <= a
+
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x desc, y)
+x > a
+----
+lookup expression:
+  x > a
+
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x desc, y)
+x >= a
+----
+lookup expression:
+  x >= a
+
+# Similar to integers, floats support Datum.Prev, so a lookup can be performed with
+# this filter and index.
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x desc, y)
+x < a
+----
+lookup expression:
+  x < a
+
+lookup-constraints left=(a float, b float) right=(x float, y float) index=(x desc, y)
+x <= a
+----
+lookup expression:
+  x <= a
