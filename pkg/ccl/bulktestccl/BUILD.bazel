@@ -1,0 +1,44 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "bulktestccl",
+    srcs = [
+        "bulk_data_driven.go",
+        "bulk_utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/bulktestccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/backupccl/backupbase",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catprivilege",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/testutils",
+        "//pkg/testutils/jobutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/timeutil",
+        "//pkg/workload/bank",
+        "//pkg/workload/workloadsql",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

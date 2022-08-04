@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/ccl/bulktestccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
@@ -33,7 +34,7 @@ import (
 // tc.WaitForFullReplication before calling this method,
 // so up-replication has usually already taken place.
 func InitManualReplication(tc *testcluster.TestCluster) {
-	tc.ToggleReplicateQueues(false)
+	bulktestccl.InitManualReplication(tc)
 }
 
 // The tests in this file talk to remote APIs which require credentials.
