@@ -4813,13 +4813,20 @@ semi-join (hash)
  │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3), (2,3)~~>(1)
- ├── scan family
- │    ├── columns: "family".a:8!null "family".b:9 "family".c:10
+ ├── project
+ │    ├── columns: column15:15 "family".a:8!null
+ │    ├── immutable
  │    ├── key: (8)
- │    └── fd: (8)-->(9,10)
+ │    ├── fd: (8)-->(15)
+ │    ├── scan family
+ │    │    ├── columns: "family".a:8!null "family".b:9 "family".c:10
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9,10)
+ │    └── projections
+ │         └── "family".b:9 + "family".c:10 [as=column15:15, outer=(9,10), immutable]
  └── filters
       ├── abcde.a:1 = "family".a:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      └── abcde.b:2 > ("family".b:9 + "family".c:10) [outer=(2,9,10), immutable, constraints=(/2: (/NULL - ])]
+      └── abcde.b:2 > column15:15 [outer=(2,15), constraints=(/2: (/NULL - ]; /15: (/NULL - ])]
 
 norm expect=PruneSemiAntiJoinRightCols
 SELECT a, b, c FROM abcde WHERE NOT EXISTS (SELECT * FROM family WHERE abcde.a=family.a)
