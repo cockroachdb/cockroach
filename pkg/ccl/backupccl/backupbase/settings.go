@@ -28,6 +28,5 @@ var (
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
 		int64(defaultSmallFileBuffer),
-		settings.NonNegativeInt,
 	)
 )

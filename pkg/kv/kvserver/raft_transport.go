@@ -64,12 +64,7 @@ var targetRaftOutgoingBatchSize = settings.RegisterByteSizeSetting(
 	"kv.raft.command.target_batch_size",
 	"size of a batch of raft commands after which it will be sent without further batching",
 	64<<20, // 64 MB
-	func(size int64) error {
-		if size < 1 {
-			return errors.New("must be positive")
-		}
-		return nil
-	},
+	settings.PositiveInt,
 )
 
 // RaftMessageResponseStream is the subset of the
