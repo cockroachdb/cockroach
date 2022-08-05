@@ -2629,7 +2629,6 @@ CREATE TABLE crdb_internal.create_function_statements (
 				)
 			})
 		})
-		return nil
 	},
 }
 
