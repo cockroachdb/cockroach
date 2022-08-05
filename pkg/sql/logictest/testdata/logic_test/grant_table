@@ -44,6 +44,7 @@ test           crdb_internal       cluster_settings                       public
 test           crdb_internal       cluster_statement_statistics           public   SELECT          false
 test           crdb_internal       cluster_transaction_statistics         public   SELECT          false
 test           crdb_internal       cluster_transactions                   public   SELECT          false
+test           crdb_internal       create_function_statements             public   SELECT          false
 test           crdb_internal       create_schema_statements               public   SELECT          false
 test           crdb_internal       create_statements                      public   SELECT          false
 test           crdb_internal       create_type_statements                 public   SELECT          false

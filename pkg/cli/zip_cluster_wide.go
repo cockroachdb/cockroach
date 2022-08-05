@@ -94,6 +94,7 @@ var debugZipTablesPerCluster = []string{
 	`"".crdb_internal.create_statements`,
 	// Ditto, for CREATE TYPE.
 	`"".crdb_internal.create_type_statements`,
+	`"".crdb_internal.create_function_statements`,
 
 	"crdb_internal.kv_node_liveness",
 	"crdb_internal.kv_node_status",

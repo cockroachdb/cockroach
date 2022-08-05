@@ -409,6 +409,7 @@ crdb_internal       cluster_settings
 crdb_internal       cluster_statement_statistics
 crdb_internal       cluster_transaction_statistics
 crdb_internal       cluster_transactions
+crdb_internal       create_function_statements
 crdb_internal       create_schema_statements
 crdb_internal       create_statements
 crdb_internal       create_type_statements
@@ -733,6 +734,7 @@ cluster_settings
 cluster_statement_statistics
 cluster_transaction_statistics
 cluster_transactions
+create_function_statements
 create_schema_statements
 create_statements
 create_type_statements
@@ -1096,6 +1098,7 @@ system         crdb_internal       cluster_settings                       SYSTEM
 system         crdb_internal       cluster_statement_statistics           SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_transaction_statistics         SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_transactions                   SYSTEM VIEW  NO                  1
+system         crdb_internal       create_function_statements             SYSTEM VIEW  NO                  1
 system         crdb_internal       create_schema_statements               SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                      SYSTEM VIEW  NO                  1
 system         crdb_internal       create_type_statements                 SYSTEM VIEW  NO                  1
@@ -2749,6 +2752,7 @@ NULL     public   system         crdb_internal       cluster_settings           
 NULL     public   system         crdb_internal       cluster_statement_statistics           SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_transaction_statistics         SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NO            YES
+NULL     public   system         crdb_internal       create_function_statements             SELECT          NO            YES
 NULL     public   system         crdb_internal       create_schema_statements               SELECT          NO            YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NO            YES
 NULL     public   system         crdb_internal       create_type_statements                 SELECT          NO            YES
@@ -3319,6 +3323,7 @@ NULL     public   system         crdb_internal       cluster_settings           
 NULL     public   system         crdb_internal       cluster_statement_statistics           SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_transaction_statistics         SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NO            YES
+NULL     public   system         crdb_internal       create_function_statements             SELECT          NO            YES
 NULL     public   system         crdb_internal       create_schema_statements               SELECT          NO            YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NO            YES
 NULL     public   system         crdb_internal       create_type_statements                 SELECT          NO            YES
