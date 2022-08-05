@@ -143,7 +143,7 @@ func TestCoster(t *testing.T) {
 	runDataDrivenTest(
 		t, tu.TestDataPath(t, "coster", ""),
 		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|
-			memo.ExprFmtHideTypes,
+			memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -162,7 +162,8 @@ func TestPhysicalProps(t *testing.T) {
 			memo.ExprFmtHideCost|
 			memo.ExprFmtHideQualifications|
 			memo.ExprFmtHideScalars|
-			memo.ExprFmtHideTypes,
+			memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -176,7 +177,7 @@ func TestRuleProps(t *testing.T) {
 		t,
 		tu.TestDataPath(t, "ruleprops"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideQualifications|
-			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -191,7 +192,8 @@ func TestRules(t *testing.T) {
 		t,
 		tu.TestDataPath(t, "rules"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -217,7 +219,8 @@ func TestExternal(t *testing.T) {
 		t,
 		*externalTestData,
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -228,7 +231,8 @@ func TestPlaceholderFastPath(t *testing.T) {
 		t,
 		tu.TestDataPath(t, "placeholder-fast-path"),
 		memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 

@@ -31,7 +31,8 @@ func TestTyping(t *testing.T) {
 			memo.ExprFmtHideStats|
 			memo.ExprFmtHideCost|
 			memo.ExprFmtHideQualifications|
-			memo.ExprFmtHideScalars,
+			memo.ExprFmtHideScalars|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 

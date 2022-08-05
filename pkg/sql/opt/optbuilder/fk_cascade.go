@@ -299,6 +299,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 			nil, /* indexFlags */
 			noRowLocking,
 			b.allocScope(),
+			true, /* disableNotVisibleIndex */
 		)
 		mb.outScope = mb.fetchScope
 
@@ -520,6 +521,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 		nil, /* indexFlags */
 		noRowLocking,
 		b.allocScope(),
+		true, /* disableNotVisibleIndex */
 	)
 
 	numFKCols := fk.ColumnCount()
@@ -756,6 +758,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		nil, /* indexFlags */
 		noRowLocking,
 		b.allocScope(),
+		true, /* disableNotVisibleIndex */
 	)
 
 	numFKCols := fk.ColumnCount()

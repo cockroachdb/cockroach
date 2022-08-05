@@ -88,20 +88,21 @@ var (
 	)
 
 	formatFlags = map[string]memo.ExprFmtFlags{
-		"miscprops":   memo.ExprFmtHideMiscProps,
-		"constraints": memo.ExprFmtHideConstraints,
-		"funcdeps":    memo.ExprFmtHideFuncDeps,
-		"ruleprops":   memo.ExprFmtHideRuleProps,
-		"stats":       memo.ExprFmtHideStats,
-		"hist":        memo.ExprFmtHideHistograms,
-		"cost":        memo.ExprFmtHideCost,
-		"qual":        memo.ExprFmtHideQualifications,
-		"scalars":     memo.ExprFmtHideScalars,
-		"physprops":   memo.ExprFmtHidePhysProps,
-		"types":       memo.ExprFmtHideTypes,
-		"notnull":     memo.ExprFmtHideNotNull,
-		"columns":     memo.ExprFmtHideColumns,
-		"all":         memo.ExprFmtHideAll,
+		"miscprops":       memo.ExprFmtHideMiscProps,
+		"constraints":     memo.ExprFmtHideConstraints,
+		"funcdeps":        memo.ExprFmtHideFuncDeps,
+		"ruleprops":       memo.ExprFmtHideRuleProps,
+		"stats":           memo.ExprFmtHideStats,
+		"hist":            memo.ExprFmtHideHistograms,
+		"cost":            memo.ExprFmtHideCost,
+		"qual":            memo.ExprFmtHideQualifications,
+		"scalars":         memo.ExprFmtHideScalars,
+		"physprops":       memo.ExprFmtHidePhysProps,
+		"types":           memo.ExprFmtHideTypes,
+		"notnull":         memo.ExprFmtHideNotNull,
+		"columns":         memo.ExprFmtHideColumns,
+		"all":             memo.ExprFmtHideAll,
+		"notvisibleindex": memo.ExprFmtHideNotVisibleIndexInfo,
 	}
 )
 
