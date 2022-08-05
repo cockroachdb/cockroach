@@ -927,6 +927,7 @@ type castOpBase struct {
 	colIdx    int
 	outputIdx int
 	evalCtx   *eval.Context
+	buf       bytes.Buffer
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {
@@ -1164,9 +1165,13 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1186,9 +1191,13 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1214,9 +1223,13 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1236,9 +1249,13 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1296,9 +1313,13 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1318,9 +1339,13 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1346,9 +1371,13 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1368,9 +1397,13 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1428,9 +1461,13 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1450,9 +1487,13 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1478,9 +1519,13 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1500,9 +1545,13 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1560,9 +1609,13 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1582,9 +1635,13 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1610,9 +1667,13 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1632,9 +1693,13 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1692,9 +1757,13 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1715,9 +1784,13 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -1740,9 +1813,13 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1763,9 +1840,13 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -1820,9 +1901,13 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1843,9 +1928,13 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1872,9 +1961,13 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1895,9 +1988,13 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -1956,9 +2053,13 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -1975,9 +2076,13 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2000,9 +2105,13 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2019,9 +2128,13 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2076,9 +2189,13 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2099,9 +2216,13 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2128,9 +2249,13 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2151,9 +2276,13 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2212,9 +2341,13 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2235,9 +2368,13 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2264,9 +2401,13 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2287,9 +2428,13 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2348,9 +2493,13 @@ func (c *castDateIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2365,9 +2514,13 @@ func (c *castDateIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2388,9 +2541,13 @@ func (c *castDateIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2405,9 +2562,13 @@ func (c *castDateIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2460,9 +2621,13 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2477,9 +2642,13 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2500,9 +2669,13 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2517,9 +2690,13 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2572,9 +2749,13 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2594,9 +2775,13 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2622,9 +2807,13 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2644,9 +2833,13 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2704,9 +2897,13 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2729,9 +2926,13 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2760,9 +2961,13 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2785,9 +2990,13 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2848,9 +3057,13 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2884,9 +3097,13 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -2926,9 +3143,13 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -2962,9 +3183,13 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3036,9 +3261,13 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3072,9 +3301,13 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3114,9 +3347,13 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3150,9 +3387,13 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3224,9 +3465,13 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3254,9 +3499,13 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3290,9 +3539,13 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3320,9 +3573,13 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3388,9 +3645,13 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3407,9 +3668,13 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3432,9 +3697,13 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3451,9 +3720,13 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3508,9 +3781,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3533,9 +3810,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3564,9 +3845,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3589,9 +3874,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3652,9 +3941,13 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3674,9 +3967,13 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3702,9 +3999,13 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3724,9 +4025,13 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3784,9 +4089,13 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3806,9 +4115,13 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3834,9 +4147,13 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3856,9 +4173,13 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3916,9 +4237,13 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3938,9 +4263,13 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -3966,9 +4295,13 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -3988,9 +4321,13 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4048,9 +4385,13 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4067,9 +4408,13 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4092,9 +4437,13 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4111,9 +4460,13 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4168,9 +4521,13 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4191,9 +4548,13 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4220,9 +4581,13 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4243,9 +4608,13 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4304,9 +4673,13 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4323,9 +4696,13 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4348,9 +4725,13 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4367,9 +4748,13 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4424,9 +4809,13 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4441,9 +4830,13 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4464,9 +4857,13 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4481,9 +4878,13 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4536,9 +4937,13 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4553,9 +4958,13 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4576,9 +4985,13 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4593,9 +5006,13 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4648,9 +5065,13 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4667,9 +5088,13 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4692,9 +5117,13 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4711,9 +5140,13 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4768,9 +5201,13 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4791,9 +5228,13 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4820,9 +5261,13 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4843,9 +5288,13 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4904,9 +5353,13 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4923,9 +5376,13 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -4948,9 +5405,13 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -4967,9 +5428,13 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5024,9 +5489,13 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5047,9 +5516,13 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5076,9 +5549,13 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5099,9 +5576,13 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5160,9 +5641,13 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5177,9 +5662,13 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5200,9 +5689,13 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5217,9 +5710,13 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5272,9 +5769,13 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5291,9 +5792,13 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5316,9 +5821,13 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5335,9 +5844,13 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5392,9 +5905,13 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5415,9 +5932,13 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5444,9 +5965,13 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5467,9 +5992,13 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5528,9 +6057,13 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5547,9 +6080,13 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5572,9 +6109,13 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5591,9 +6132,13 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5648,9 +6193,13 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5671,9 +6220,13 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5700,9 +6253,13 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5723,9 +6280,13 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5784,9 +6345,13 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5807,9 +6372,13 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5836,9 +6405,13 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5859,9 +6432,13 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = inputCol.Get(n - 1)
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
@@ -5920,9 +6497,13 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -5948,9 +6529,13 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -5978,9 +6563,13 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6006,9 +6595,13 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -6068,9 +6661,13 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6091,9 +6688,13 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6118,9 +6719,13 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6141,9 +6746,13 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6200,9 +6809,13 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6223,9 +6836,13 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -6248,9 +6865,13 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6271,9 +6892,13 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -6328,9 +6953,13 @@ func (c *castStringDateOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6353,9 +6982,13 @@ func (c *castStringDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6382,9 +7015,13 @@ func (c *castStringDateOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6407,9 +7044,13 @@ func (c *castStringDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6468,9 +7109,13 @@ func (c *castStringDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6506,9 +7151,13 @@ func (c *castStringDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6548,9 +7197,13 @@ func (c *castStringDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6586,9 +7239,13 @@ func (c *castStringDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6660,9 +7317,13 @@ func (c *castStringFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6684,9 +7345,13 @@ func (c *castStringFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6712,9 +7377,13 @@ func (c *castStringFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6736,9 +7405,13 @@ func (c *castStringFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6796,9 +7469,13 @@ func (c *castStringInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6828,9 +7505,13 @@ func (c *castStringInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6864,9 +7545,13 @@ func (c *castStringInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6896,9 +7581,13 @@ func (c *castStringInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -6964,9 +7653,13 @@ func (c *castStringInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -6996,9 +7689,13 @@ func (c *castStringInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7032,9 +7729,13 @@ func (c *castStringInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7064,9 +7765,13 @@ func (c *castStringInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7132,9 +7837,13 @@ func (c *castStringIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7158,9 +7867,13 @@ func (c *castStringIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7188,9 +7901,13 @@ func (c *castStringIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7214,9 +7931,13 @@ func (c *castStringIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7276,9 +7997,13 @@ func (c *castStringIntervalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7303,9 +8028,13 @@ func (c *castStringIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7334,9 +8063,13 @@ func (c *castStringIntervalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7361,9 +8094,13 @@ func (c *castStringIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7424,9 +8161,13 @@ func (c *castStringJsonbOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7447,9 +8188,13 @@ func (c *castStringJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7472,9 +8217,13 @@ func (c *castStringJsonbOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7495,9 +8244,13 @@ func (c *castStringJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7552,9 +8305,13 @@ func (c *castStringStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7595,9 +8352,13 @@ func (c *castStringStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7640,9 +8401,13 @@ func (c *castStringStringOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7683,9 +8448,13 @@ func (c *castStringStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -7760,9 +8529,13 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7789,9 +8562,13 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7822,9 +8599,13 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7851,9 +8632,13 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7916,9 +8701,13 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -7945,9 +8734,13 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -7978,9 +8771,13 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8007,9 +8804,13 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8072,9 +8873,13 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8095,9 +8900,13 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -8120,9 +8929,13 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8143,9 +8956,13 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -8201,9 +9018,13 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8226,9 +9047,13 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8255,9 +9080,13 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8280,9 +9109,13 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8342,9 +9175,13 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8367,9 +9204,13 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8396,9 +9237,13 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8421,9 +9266,13 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8483,9 +9332,13 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8508,9 +9361,13 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8537,9 +9394,13 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8562,9 +9423,13 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8624,9 +9489,13 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8649,9 +9518,13 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8678,9 +9551,13 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8703,9 +9580,13 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8765,9 +9646,13 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8790,9 +9675,13 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8819,9 +9708,13 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8844,9 +9737,13 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8906,9 +9803,13 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8931,9 +9832,13 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -8960,9 +9865,13 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -8985,9 +9894,13 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9047,9 +9960,13 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9072,9 +9989,13 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9101,9 +10022,13 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9126,9 +10051,13 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9188,9 +10117,13 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9213,9 +10146,13 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9242,9 +10179,13 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9267,9 +10208,13 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9329,9 +10274,13 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9354,9 +10303,13 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9383,9 +10336,13 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9408,9 +10365,13 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9470,9 +10431,13 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9495,9 +10460,13 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -9522,9 +10491,13 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9547,9 +10520,13 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -9607,9 +10584,13 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9632,9 +10613,13 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -9659,9 +10644,13 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9684,9 +10673,13 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -9744,9 +10737,13 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9769,9 +10766,13 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9798,9 +10799,13 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9823,9 +10828,13 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						_ = outputCol.Get(n - 1)
 						var tupleIdx int
 						for i := 0; i < n; i++ {
@@ -9885,9 +10894,13 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9910,9 +10923,13 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -9937,9 +10954,13 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -9962,9 +10983,13 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -10022,9 +11047,13 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -10047,9 +11076,13 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -10074,9 +11107,13 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -10099,9 +11136,13 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -10158,9 +11199,13 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -10189,9 +11234,13 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i
@@ -10222,9 +11271,13 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = sel[i]
@@ -10253,9 +11306,13 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *eval.Context = c.evalCtx
-						// Silence unused warning.
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
 						_ = evalCtx
+						_ = buf
 						var tupleIdx int
 						for i := 0; i < n; i++ {
 							tupleIdx = i

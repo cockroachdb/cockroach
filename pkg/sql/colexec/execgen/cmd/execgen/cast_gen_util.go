@@ -107,7 +107,7 @@ type supportedNativeCastInfo struct {
 	cast castFunc
 }
 
-func boolToIntOrFloat(to, from, _, _ string) string {
+func boolToIntOrFloat(to, from, _, _, _ string) string {
 	convStr := `
 			%[1]s = 0
 			if %[2]s {
@@ -117,7 +117,7 @@ func boolToIntOrFloat(to, from, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func bytesToUUID(to, from, _, _ string) string {
+func bytesToUUID(to, from, _, _, _ string) string {
 	convStr := `
 		_uuid, err := uuid.FromBytes(%[2]s)
 		if err != nil {
@@ -128,15 +128,15 @@ func bytesToUUID(to, from, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func decimalToBool(to, from, _, _ string) string {
+func decimalToBool(to, from, _, _, _ string) string {
 	return fmt.Sprintf("%[1]s = %[2]s.Sign() != 0", to, from)
 }
 
-func decimalToDecimal(to, from, _, toType string) string {
+func decimalToDecimal(to, from, _, toType, _ string) string {
 	return toDecimal(fmt.Sprintf(`%[1]s.Set(&%[2]s)`, to, from), to, toType)
 }
 
-func decimalToFloat(to, from, _, _ string) string {
+func decimalToFloat(to, from, _, _, _ string) string {
 	convStr := `
 		{
 			f, err := %[2]s.Float64()
@@ -153,7 +153,7 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 	if toIntWidth == anyWidth {
 		toIntWidth = 64
 	}
-	return func(to, from, evalCtx, toType string) string {
+	return func(to, from, evalCtx, toType, buf string) string {
 		// convStr is a format string expecting three arguments:
 		// 1. the code snippet that performs an assigment of int64 local
 		//    variable named '_i' to the result, possibly performing the bounds
@@ -184,7 +184,7 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 		}
 		return fmt.Sprintf(
 			convStr,
-			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, evalCtx, toType),
+			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, evalCtx, toType, buf),
 			from,
 			errOutOfRange,
 		)
@@ -204,14 +204,14 @@ func toDecimal(conv, to, toType string) string {
 	return fmt.Sprintf(convStr, conv, to, toType)
 }
 
-func numToBool(to, from, _, _ string) string {
+func numToBool(to, from, _, _, _ string) string {
 	convStr := `
 		%[1]s = %[2]s != 0
 	`
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func floatToDecimal(to, from, _, toType string) string {
+func floatToDecimal(to, from, _, toType, _ string) string {
 	convStr := `
 		if _, err := %[1]s.SetFloat64(float64(%[2]s)); err != nil {
 			colexecerror.ExpectedError(err)
@@ -220,8 +220,8 @@ func floatToDecimal(to, from, _, toType string) string {
 	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
 }
 
-func floatToInt(intWidth, floatWidth int32) func(string, string, string, string) string {
-	return func(to, from, _, _ string) string {
+func floatToInt(intWidth, floatWidth int32) castFunc {
+	return func(to, from, _, _, _ string) string {
 		convStr := `
 			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
 				colexecerror.ExpectedError(tree.ErrIntOutOfRange)
@@ -235,14 +235,14 @@ func floatToInt(intWidth, floatWidth int32) func(string, string, string, string)
 	}
 }
 
-func intToDecimal(to, from, _, toType string) string {
+func intToDecimal(to, from, _, toType, _ string) string {
 	conv := `
 		%[1]s.SetInt64(int64(%[2]s))
 	`
 	return toDecimal(fmt.Sprintf(conv, to, from), to, toType)
 }
 
-func intToFloat(to, from, _, _ string) string {
+func intToFloat(to, from, _, _, _ string) string {
 	convStr := `
 		%[1]s = float64(%[2]s)
 	`
@@ -257,7 +257,7 @@ func getIntToIntCastFunc(fromWidth, toWidth int32) castFunc {
 	if toWidth == anyWidth {
 		toWidth = 64
 	}
-	return func(to, from, _, _ string) string {
+	return func(to, from, _, _, _ string) string {
 		if fromWidth <= toWidth {
 			// If we're not reducing the width, there is no need to perform the
 			// integer range check.
@@ -286,7 +286,7 @@ func getIntToIntCastFunc(fromWidth, toWidth int32) castFunc {
 	}
 }
 
-func jsonToString(to, from, _, toType string) string {
+func jsonToString(to, from, _, toType, _ string) string {
 	convStr := `
 		_string := %[2]s.String()
 		switch %[3]s.Oid() {
@@ -302,7 +302,7 @@ func jsonToString(to, from, _, toType string) string {
 	return fmt.Sprintf(convStr, to, from, toType)
 }
 
-func stringToBool(to, from, _, _ string) string {
+func stringToBool(to, from, _, _, _ string) string {
 	convStr := `
 		var err error
 		%[1]s, err = tree.ParseBool(string(%[2]s))
@@ -313,7 +313,7 @@ func stringToBool(to, from, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func stringToBytes(to, from, _, _ string) string {
+func stringToBytes(to, from, _, _, _ string) string {
 	convStr := `
 		var err error
 		%[1]s, err = lex.DecodeRawBytesToByteArrayAuto(%[2]s)
@@ -324,7 +324,7 @@ func stringToBytes(to, from, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func stringToDate(to, from, evalCtx, _ string) string {
+func stringToDate(to, from, evalCtx, _, _ string) string {
 	convStr := `
 		_now := %[3]s.GetRelativeParseTime()
 		_dateStyle := %[3]s.GetDateStyle()
@@ -337,7 +337,7 @@ func stringToDate(to, from, evalCtx, _ string) string {
 	return fmt.Sprintf(convStr, to, from, evalCtx)
 }
 
-func stringToDecimal(to, from, _, toType string) string {
+func stringToDecimal(to, from, _, toType, _ string) string {
 	convStr := `
 		_s := strings.TrimSpace(string(%[2]s))
 		_, res, err := tree.ExactCtx.SetString(&%[1]s, _s)
@@ -359,7 +359,7 @@ func stringToDecimal(to, from, _, toType string) string {
 	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
 }
 
-func stringToFloat(to, from, _, toType string) string {
+func stringToFloat(to, from, _, toType, _ string) string {
 	convStr := `
 		_s := string(%[2]s)
 		var _err error
@@ -375,7 +375,7 @@ func getStringToIntCastFunc(toIntWidth int32) castFunc {
 	if toIntWidth == anyWidth {
 		toIntWidth = 64
 	}
-	return func(to, from, evalCtx, toType string) string {
+	return func(to, from, evalCtx, toType, buf string) string {
 		// convStr is a format string expecting three arguments:
 		// 1. the code snippet that performs an assigment of int64 local
 		//    variable named '_i' to the result, possibly performing the bounds
@@ -394,14 +394,14 @@ func getStringToIntCastFunc(toIntWidth int32) castFunc {
 	`
 		return fmt.Sprintf(
 			convStr,
-			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, evalCtx, toType),
+			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, evalCtx, toType, buf),
 			from,
 			toType,
 		)
 	}
 }
 
-func stringToInterval(to, from, evalCtx, toType string) string {
+func stringToInterval(to, from, evalCtx, toType, _ string) string {
 	convStr := `
 		_itm, err := %[4]s.IntervalTypeMetadata()
 		if err != nil {
@@ -416,7 +416,7 @@ func stringToInterval(to, from, evalCtx, toType string) string {
 	return fmt.Sprintf(convStr, to, from, evalCtx, toType)
 }
 
-func stringToJSON(to, from, _, _ string) string {
+func stringToJSON(to, from, _, _, _ string) string {
 	convStr := `
 		var err error
 		%[1]s, err = json.ParseJSON(string(%[2]s))
@@ -427,7 +427,7 @@ func stringToJSON(to, from, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func stringToString(to, from, _, toType string) string {
+func stringToString(to, from, _, toType, _ string) string {
 	convStr := `
 		if %[3]s.Oid() == oid.T_name {
 			// For Names we don't perform the truncation, and there is no need
@@ -458,8 +458,8 @@ func stringToString(to, from, _, toType string) string {
 	return fmt.Sprintf(convStr, to, from, toType)
 }
 
-func getStringToTimestampCastFunc(withoutTimezone bool) func(_, _, _, _ string) string {
-	return func(to, from, evalCtx, toType string) string {
+func getStringToTimestampCastFunc(withoutTimezone bool) castFunc {
+	return func(to, from, evalCtx, toType, _ string) string {
 		var parseTimestampKind string
 		if withoutTimezone {
 			parseTimestampKind = "WithoutTimezone"
@@ -484,7 +484,7 @@ func getStringToTimestampCastFunc(withoutTimezone bool) func(_, _, _, _ string) 
 	}
 }
 
-func stringToUUID(to, from, _, _ string) string {
+func stringToUUID(to, from, _, _, _ string) string {
 	convStr := `
 		_uuid, err := uuid.FromString(string(%[2]s))
 		if err != nil {
@@ -499,10 +499,8 @@ func stringToUUID(to, from, _, _ string) string {
 // to a value of the specified physical representation (i.e. to natively
 // supported type). The returned castFunc assumes that there is a converter
 // function named "converter" in scope.
-func getDatumToNativeCastFunc(
-	nonDatumPhysicalRepresentation string,
-) func(string, string, string, string) string {
-	return func(to, from, evalCtx, toType string) string {
+func getDatumToNativeCastFunc(nonDatumPhysicalRepresentation string) castFunc {
+	return func(to, from, evalCtx, toType, _ string) string {
 		convStr := `
 		{
 			_castedDatum, err := eval.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
@@ -516,7 +514,7 @@ func getDatumToNativeCastFunc(
 	}
 }
 
-func datumToDatum(to, from, evalCtx, toType string) string {
+func datumToDatum(to, from, evalCtx, toType, _ string) string {
 	convStr := `
 		{
 			_castedDatum, err := eval.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
@@ -638,8 +636,8 @@ func (i castToWidthTmplInfo) TypeName() string {
 	return getTypeName(i.toType)
 }
 
-func (i castToWidthTmplInfo) Cast(to, from, evalCtx, toType string) string {
-	return i.CastFn(to, from, evalCtx, toType)
+func (i castToWidthTmplInfo) Cast(to, from, evalCtx, toType, buf string) string {
+	return i.CastFn(to, from, evalCtx, toType, buf)
 }
 
 func (i castToWidthTmplInfo) Sliceable() bool {
@@ -662,8 +660,8 @@ func (i castDatumToWidthTmplInfo) TypeName() string {
 	return getTypeName(i.toType)
 }
 
-func (i castDatumToWidthTmplInfo) Cast(to, from, evalCtx, toType string) string {
-	return i.CastFn(to, from, evalCtx, toType)
+func (i castDatumToWidthTmplInfo) Cast(to, from, evalCtx, toType, buf string) string {
+	return i.CastFn(to, from, evalCtx, toType, buf)
 }
 
 func (i castDatumToWidthTmplInfo) Sliceable() bool {
@@ -674,8 +672,8 @@ func (i castBetweenDatumsTmplInfo) TypeName() string {
 	return datumVecTypeName
 }
 
-func (i castBetweenDatumsTmplInfo) Cast(to, from, evalCtx, toType string) string {
-	return datumToDatum(to, from, evalCtx, toType)
+func (i castBetweenDatumsTmplInfo) Cast(to, from, evalCtx, toType, buf string) string {
+	return datumToDatum(to, from, evalCtx, toType, buf)
 }
 
 func (i castBetweenDatumsTmplInfo) Sliceable() bool {
