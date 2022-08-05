@@ -72,8 +72,8 @@ func (rs *CDCFunctionResolver) WrapFunction(name string) (*tree.ResolvedFunction
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
 func (rs *CDCFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.Overload, error) {
+) (string, *tree.Overload, error) {
 	// CDC doesn't support user defined function yet, so there's no need to
 	// resolve function by OID.
-	return nil, errors.AssertionFailedf("unimplemented yet")
+	return "", nil, errors.AssertionFailedf("unimplemented yet")
 }

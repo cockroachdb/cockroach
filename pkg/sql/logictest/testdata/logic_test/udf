@@ -389,3 +389,51 @@ $$
 
 statement ok
 SET search_path = public;
+
+subtest udf_regproc
+
+query T
+SELECT 'proc_implicit'::REGPROC;
+----
+proc_implicit
+
+query I
+SELECT 'proc_implicit'::REGPROC::INT;
+----
+100117
+
+query T
+SELECT '100117'::REGPROC;
+----
+proc_implicit
+
+query T
+SELECT 'sc.proc_f_2'::REGPROC;
+----
+proc_f_2
+
+query I
+SELECT 'sc.proc_f_2'::REGPROC::INT;
+----
+100119
+
+statement error pq: unknown function: no_such_func()
+SELECT 'no_such_func'::REGPROC;
+
+statement error pq: more than one function named 'proc_f'
+SELECT 'proc_f'::REGPROC;
+
+query T
+SELECT 100117::regproc;
+----
+proc_implicit
+
+query I
+SELECT 100117::regproc::INT;
+----
+100117
+
+query T
+SELECT 999999::regproc;
+----
+999999
