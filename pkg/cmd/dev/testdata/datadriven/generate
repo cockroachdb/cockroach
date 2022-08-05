@@ -16,6 +16,11 @@ bazel info workspace --color=no
 crdb-checkout/build/bazelutil/check.sh
 
 exec
+dev gen bazel --short
+----
+bazel run //:gazelle
+
+exec
 dev generate bazel --mirror --force
 ----
 bazel info workspace --color=no
