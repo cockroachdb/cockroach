@@ -76,11 +76,13 @@ const (
 
 // WriteMetadataSST controls if we write the experimental new format BACKUP
 // metadata file.
+// kv.bulkio.rite_metadata_sst.enabled set to false by default due to
+// https://github.com/cockroachdb/cockroach/issues/85564.
 var WriteMetadataSST = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	true,
+	false,
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check

@@ -46,6 +46,8 @@ func TestMetadataSST(t *testing.T) {
 		backuputils.InitManualReplication)
 	defer cleanupFn()
 
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
+
 	// Check that backup metadata is correct on full cluster backup.
 	sqlDB.Exec(t, `BACKUP TO $1`, userfile)
 	checkMetadata(ctx, t, tc, userfile)
