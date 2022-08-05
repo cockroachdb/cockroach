@@ -131,7 +131,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1,000 (missing stats)
 │ render ?column?: 1
 │
 └── • scan
@@ -256,7 +255,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1 (missing stats)
 │ render ?column?: 1
 │
 └── • scan
@@ -760,7 +758,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b)
-│ estimated row count: 100 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (b, a, b)
@@ -789,7 +786,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b)
-│ estimated row count: 100 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (b, a, b)
@@ -818,7 +814,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b)
-│ estimated row count: 100 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (b, a, b)
@@ -847,7 +842,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b)
-│ estimated row count: 100 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (b, a, b)
@@ -887,7 +881,6 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1,000 (missing stats)
 │ render a: a
 │
 └── • scan
@@ -904,7 +897,6 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1,000 (missing stats)
 │ render a: a
 │
 └── • scan
@@ -1019,7 +1011,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1053,7 +1044,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1086,7 +1076,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1119,7 +1108,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1153,7 +1141,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1190,7 +1177,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1224,7 +1210,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1258,7 +1243,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1292,7 +1276,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1330,7 +1313,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1373,7 +1355,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1406,7 +1387,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1439,7 +1419,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1477,7 +1456,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1520,7 +1498,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, c)
@@ -1735,7 +1712,6 @@ vectorized: true
 ·
 • project
 │ columns: (c)
-│ estimated row count: 1 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, c)
@@ -1760,7 +1736,6 @@ vectorized: true
 ·
 • project
 │ columns: (c)
-│ estimated row count: 9 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, c)
@@ -1835,10 +1810,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
           left table: inverted@b_inv
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
@@ -1868,10 +1843,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 2
             │
@@ -1890,10 +1865,10 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, a, b, c)
-│ estimated row count: 10,000 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, a, a, b, c)
+    │ estimated row count: 10,000 (missing stats)
     │ table: inverted@inverted_pkey
     │ equality: (a) = (a)
     │ equality cols are key
@@ -1902,10 +1877,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a, b, c, a)
-        │ estimated row count: 10,000 (missing stats)
         │
         └── • inverted join (inner)
             │ columns: (a, b, c, a, b_inverted_key)
+            │ estimated row count: 10,000 (missing stats)
             │ table: inverted@b_inv
             │ inverted expr: b_inverted_key @> b
             │ locking strength: for update
@@ -1940,10 +1915,10 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c)
-│ estimated row count: 1 (missing stats)
 │
 └── • zigzag join
       columns: (a, b, a, c)
+      estimated row count: 1 (missing stats)
       pred: (b = 5) AND (c = 6.0)
       left table: zigzag@b_idx
       left columns: (a, b)
@@ -1971,10 +1946,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, d_inverted_key, a, d_inverted_key)
+          estimated row count: 12 (missing stats)
           left table: zigzag@d_idx
           left columns: (a, d_inverted_key)
           left fixed values: 1 column
@@ -2111,7 +2086,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1,000 (missing stats)
 │ render ?column?: 1
 │
 └── • scan
@@ -2245,7 +2219,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1 (missing stats)
 │ render ?column?: 1
 │
 └── • scan

@@ -297,7 +297,6 @@ ORDER BY pk LIMIT 5] OFFSET 2
 ·
 • limit
 │ columns: (pk, pk2, a, b, j)
-│ estimated row count: 5 (missing stats)
 │ count: 5
 │
 └── • union all
@@ -1137,6 +1136,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
                 │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column2 = p_id)
                 │
                 └── • scan buffer
+                      estimated row count: 1
                       label: buffer 1
 
 # Non-constant insert values cannot be inlined in uniqueness check, and all
@@ -1154,7 +1154,6 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 2 columns, 2 rows
@@ -1169,6 +1168,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -1186,6 +1186,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
                 │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column2 = p_id)
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 query T
@@ -1321,11 +1322,9 @@ LIMIT 1] OFFSET 2
 ·
 • project
 │ columns: (a, b)
-│ estimated row count: 1
 │
 └── • limit
     │ columns: (a, b, count_rows)
-    │ estimated row count: 1
     │ count: 1
     │
     └── • filter
@@ -1403,11 +1402,9 @@ LIMIT 1] OFFSET 2
 ·
 • project
 │ columns: (b)
-│ estimated row count: 1
 │
 └── • limit
     │ columns: (b, count_rows)
-    │ estimated row count: 1
     │ count: 1
     │
     └── • filter
@@ -1471,11 +1468,9 @@ LIMIT 1] OFFSET 2
 ·
 • project
 │ columns: (c)
-│ estimated row count: 1
 │
 └── • limit
     │ columns: (c, count_rows)
-    │ estimated row count: 1
     │ count: 1
     │
     └── • filter
@@ -1743,7 +1738,6 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 5 columns, 2 rows
@@ -2946,6 +2940,7 @@ vectorized: true
             │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok

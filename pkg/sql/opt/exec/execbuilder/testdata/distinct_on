@@ -254,11 +254,11 @@ vectorized: true
 • project
 │ columns: (a, c)
 │ ordering: +a
-│ estimated row count: 100 (missing stats)
 │
 └── • distinct
     │ columns: (a, b, c)
     │ ordering: +a
+    │ estimated row count: 100 (missing stats)
     │ distinct on: a
     │ order key: a
     │
@@ -424,11 +424,9 @@ vectorized: true
 ·
 • project
 │ columns: (min)
-│ estimated row count: 1 (missing stats)
 │
 └── • limit
     │ columns: (y, min)
-    │ estimated row count: 1 (missing stats)
     │ count: 1
     │
     └── • filter

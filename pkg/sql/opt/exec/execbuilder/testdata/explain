@@ -649,7 +649,6 @@ vectorized: true
 │ order: +username
 │
 └── • render
-    │ estimated row count: 3
     │
     └── • group (hash)
         │ estimated row count: 3
@@ -672,7 +671,6 @@ vectorized: true
                 │       │ estimated row count: 3
                 │       │
                 │       └── • render
-                │           │ estimated row count: 3
                 │           │
                 │           └── • hash join (left outer)
                 │               │ estimated row count: 3
@@ -716,7 +714,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1
 │ render ?column?: last_value
 │
 └── • sequence select
@@ -840,7 +837,6 @@ vectorized: true
 ·
 • limit
 │ columns: (k, v, "ordinality")
-│ estimated row count: 1 (missing stats)
 │ offset: 1
 │
 └── • ordinality
@@ -876,12 +872,10 @@ vectorized: true
 ·
 • limit
 │ columns: (v)
-│ estimated row count: 1 (missing stats)
 │ offset: 1
 │
 └── • limit
     │ columns: (v)
-    │ estimated row count: 2 (missing stats)
     │ count: 2
     │
     └── • distinct
@@ -1066,7 +1060,6 @@ vectorized: true
 ·
 • render
 │ columns: (z int, v int)
-│ estimated row count: 0
 │ render z: ((count)[int] * (2)[int])[int]
 │ render v: (v)[int]
 │
@@ -1118,7 +1111,6 @@ vectorized: true
 │
 └── • render
     │ columns: (k int, v int, v_new int)
-    │ estimated row count: 333 (missing stats)
     │ render v_new: ((k)[int] + (1)[int])[int]
     │ render k: (k)[int]
     │ render v: (v)[int]
@@ -1651,7 +1643,6 @@ vectorized: true
 ·
 • project
 │ columns: (attnum)
-│ estimated row count: 1 (missing stats)
 │
 └── • filter
     │ columns: (attrelid, attname, attnum)

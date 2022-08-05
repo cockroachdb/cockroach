@@ -48,7 +48,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column7 int, column10 unknown, column17 bool, column19 bool, column21 bytes)
-    │ estimated row count: 1,000 (missing stats)
     │ render column7: (1)[int]
     │ render column10: (NULL)[unknown]
     │ render column17: (true)[bool]
@@ -101,7 +100,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column10 int, column16 bool, column19 bytes, k int, v int)
-    │ estimated row count: 1,000 (missing stats)
     │ render column10: (1)[int]
     │ render column16: ((v)[int] = (1)[int])[bool]
     │ render column19: ((s)[string]::BYTES)[bytes]
@@ -126,7 +124,6 @@ vectorized: true
 ·
 • render
 │ columns: (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
-│ estimated row count: 1
 │ render avg: ((avg)[decimal]::FLOAT8)[float]
 │ render to_hex: (to_hex((xor_agg)[bytes]))[string]
 │ render min: (min)[int]
@@ -223,7 +220,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column8 int)
-    │ estimated row count: 1,000 (missing stats)
     │ render column8: ((k)[int] + (v)[int])[int]
     │
     └── • scan
@@ -241,7 +237,6 @@ vectorized: true
 ·
 • render
 │ columns: (count int, r int)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((k)[int] + (any_not_null)[int])[int]
 │ render count_rows: (count_rows)[int]
 │
@@ -336,7 +331,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column13)
-        │ estimated row count: 1,000,000 (missing stats)
         │ render column13: ((k, v, w, s) AS k, v, w, s)
         │
         └── • cross join (inner)
@@ -363,7 +357,6 @@ vectorized: true
 ·
 • project
 │ columns: (min)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • group (hash)
     │ columns: (k, min)
@@ -395,7 +388,6 @@ vectorized: true
 ·
 • project
 │ columns: (min)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • group (hash)
     │ columns: (k, min)
@@ -428,7 +420,6 @@ vectorized: true
 ·
 • project
 │ columns: (min)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • group (hash)
     │ columns: (k, min)
@@ -461,7 +452,6 @@ vectorized: true
 ·
 • project
 │ columns: (v)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • distinct
     │ columns: (v, w, s)
@@ -1240,7 +1230,6 @@ vectorized: true
         │
         └── • render
             │ columns: (column7 unknown, v int)
-            │ estimated row count: 1,000 (missing stats)
             │ render column7: (NULL)[unknown]
             │ render v: (v)[int]
             │
@@ -1265,7 +1254,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column7, v)
-    │ estimated row count: 333 (missing stats)
     │ render column7: NULL
     │ render v: v
     │
@@ -1298,7 +1286,6 @@ vectorized: true
 ·
 • project
 │ columns: (count, max)
-│ estimated row count: 100 (missing stats)
 │
 └── • group (hash)
     │ columns: (v, count, max)
@@ -1309,7 +1296,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, column8, v)
-        │ estimated row count: 1,000 (missing stats)
         │ render column7: true
         │ render column8: k > 5
         │ render v: v
@@ -1328,7 +1314,6 @@ vectorized: true
 ·
 • project
 │ columns: (count)
-│ estimated row count: 100 (missing stats)
 │
 └── • group (hash)
     │ columns: (v, count)
@@ -1338,7 +1323,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, column8, v)
-        │ estimated row count: 1,000 (missing stats)
         │ render column7: true
         │ render column8: k > 5
         │ render v: v
@@ -1358,7 +1342,6 @@ vectorized: true
 ·
 • render
 │ columns: (a int)
-│ estimated row count: 1,000 (missing stats)
 │ render a: (1)[int]
 │
 └── • scan
@@ -1375,7 +1358,6 @@ vectorized: true
 ·
 • project
 │ columns: (sum decimal)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • group (hash)
     │ columns: (k int, sum decimal)
@@ -1442,7 +1424,6 @@ vectorized: true
     │
     └── • limit
         │ columns: (k int, v int)
-        │ estimated row count: 1 (missing stats)
         │ count: (1)[int]
         │
         └── • filter
@@ -1480,7 +1461,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column5 int)
-        │ estimated row count: 333 (missing stats)
         │ render column5: ((v)[int] + (1)[int])[int]
         │
         └── • filter
@@ -1503,7 +1483,6 @@ vectorized: true
 ·
 • project
 │ columns: (min int)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • group (streaming)
     │ columns: (k int, min int)
@@ -1530,7 +1509,6 @@ vectorized: true
 ·
 • render
 │ columns: (r tuple{int, int})
-│ estimated row count: 1,000 (missing stats)
 │ render r: (((b)[int], (a)[int]))[tuple{int, int}]
 │
 └── • scan
@@ -1547,7 +1525,6 @@ vectorized: true
 ·
 • render
 │ columns: (min string, r tuple{int, int})
-│ estimated row count: 100,000 (missing stats)
 │ render r: (((any_not_null)[int], (a)[int]))[tuple{int, int}]
 │ render min: (min)[string]
 │
@@ -1697,7 +1674,6 @@ vectorized: true
 ·
 • render
 │ columns: (a int)
-│ estimated row count: 333 (missing stats)
 │ render a: (1)[int]
 │
 └── • distinct
@@ -1712,7 +1688,6 @@ vectorized: true
         │
         └── • render
             │ columns: (column7 decimal, v int)
-            │ estimated row count: 1,000 (missing stats)
             │ render column7: ((w)[int]::DECIMAL)[decimal]
             │ render v: (v)[int]
             │
@@ -1734,7 +1709,6 @@ vectorized: true
 ·
 • project
 │ columns: (m)
-│ estimated row count: 100 (missing stats)
 │
 └── • group (hash)
     │ columns: (column7, min)
@@ -1744,7 +1718,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, a)
-        │ estimated row count: 1,000 (missing stats)
         │ render column7: a
         │ render a: a
         │
@@ -1762,7 +1735,6 @@ vectorized: true
 ·
 • project
 │ columns: (m)
-│ estimated row count: 100 (missing stats)
 │
 └── • group (hash)
     │ columns: (column7, min)
@@ -1772,7 +1744,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column7, a)
-        │ estimated row count: 1,000 (missing stats)
         │ render column7: b
         │ render a: a
         │
@@ -1881,7 +1852,6 @@ vectorized: true
 └── • render
     │ columns: (column7, k, s)
     │ ordering: +k
-    │ estimated row count: 1,000 (missing stats)
     │ render column7: ','
     │ render k: k
     │ render s: s
@@ -1964,7 +1934,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column7, s)
-    │ estimated row count: 1,000 (missing stats)
     │ render column7: ', '
     │ render s: s
     │
@@ -2009,7 +1978,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, company_id, employee)
-        │ estimated row count: 1,000 (missing stats)
         │ render column6: ','
         │ render company_id: company_id
         │ render employee: employee
@@ -2048,7 +2016,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, column7, company_id)
-        │ estimated row count: 1,000 (missing stats)
         │ render column6: employee::BYTES
         │ render column7: '\x2c'
         │ render company_id: company_id
@@ -2087,7 +2054,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, company_id, employee)
-        │ estimated row count: 1,000 (missing stats)
         │ render column6: NULL
         │ render company_id: company_id
         │ render employee: employee
@@ -2126,7 +2092,6 @@ vectorized: true
     │
     └── • render
         │ columns: (column6, column7, company_id)
-        │ estimated row count: 1,000 (missing stats)
         │ render column6: employee::BYTES
         │ render column7: NULL
         │ render company_id: company_id

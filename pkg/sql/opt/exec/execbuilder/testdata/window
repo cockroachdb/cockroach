@@ -63,7 +63,6 @@ vectorized: true
 ·
 • project
 │ columns: (ntile)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (ntile_1_arg1, ntile)
@@ -72,7 +71,6 @@ vectorized: true
     │
     └── • render
         │ columns: (ntile_1_arg1)
-        │ estimated row count: 1,000 (missing stats)
         │ render ntile_1_arg1: 1
         │
         └── • scan
@@ -89,7 +87,6 @@ vectorized: true
 ·
 • project
 │ columns: (nth_value)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (nth_value_1_arg1, nth_value_1_arg2, nth_value)
@@ -98,7 +95,6 @@ vectorized: true
     │
     └── • render
         │ columns: (nth_value_1_arg1, nth_value_1_arg2)
-        │ estimated row count: 1,000 (missing stats)
         │ render nth_value_1_arg1: 1
         │ render nth_value_1_arg2: 2
         │
@@ -144,7 +140,6 @@ vectorized: true
     │
     └── • project
         │ columns: (k int, stddev decimal, variance decimal)
-        │ estimated row count: 1,000 (missing stats)
         │
         └── • window
             │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
@@ -175,7 +170,6 @@ vectorized: true
     │
     └── • project
         │ columns: (k int, stddev decimal, variance decimal)
-        │ estimated row count: 1,000 (missing stats)
         │
         └── • window
             │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
@@ -207,7 +201,6 @@ vectorized: true
 │
 └── • project
     │ columns: (k int, stddev decimal)
-    │ estimated row count: 1,000 (missing stats)
     │
     └── • window
         │ columns: (k int, v int, d decimal, stddev decimal)
@@ -237,7 +230,6 @@ vectorized: true
     │
     └── • render
         │ columns: ("?column?" decimal, k int, variance decimal)
-        │ estimated row count: 1,000 (missing stats)
         │ render ?column?: ((k)[int] + (stddev)[decimal])[decimal]
         │ render k: (k)[int]
         │ render variance: (variance)[decimal]
@@ -275,7 +267,6 @@ vectorized: true
     │
     └── • render
         │ columns: ("?column?" decimal, max int, variance decimal)
-        │ estimated row count: 1,000 (missing stats)
         │ render ?column?: ((max)[int] + (stddev)[decimal])[decimal]
         │ render max: (max)[int]
         │ render variance: (variance)[decimal]
@@ -316,7 +307,6 @@ vectorized: true
 │
 └── • project
     │ columns: (max int, stddev decimal)
-    │ estimated row count: 1,000 (missing stats)
     │
     └── • window
         │ columns: (v int, d decimal, max int, stddev decimal)
@@ -345,7 +335,6 @@ vectorized: true
 ·
 • project
 │ columns: (lag, lead)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1, lead)
@@ -359,7 +348,6 @@ vectorized: true
         │
         └── • render
             │ columns: (lag_1_arg1, lag_1_arg3, lag_1_partition_1)
-            │ estimated row count: 1,000 (missing stats)
             │ render lag_1_arg1: 1
             │ render lag_1_arg3: CAST(NULL AS INT8)
             │ render lag_1_partition_1: 2
@@ -406,7 +394,6 @@ vectorized: true
 ·
 • project
 │ columns: (avg)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg)
@@ -427,7 +414,6 @@ vectorized: true
 ·
 • project
 │ columns: (avg)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg)
@@ -448,7 +434,6 @@ vectorized: true
 ·
 • project
 │ columns: (avg)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg)
@@ -484,7 +469,6 @@ vectorized: true
 ·
 • project
 │ columns: (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)
@@ -531,7 +515,6 @@ distribution: local
 │
 ├── • project
 │   │ columns: (avg)
-│   │ estimated row count: 1,000 (missing stats)
 │   │
 │   └── • window
 │       │ columns: (v, w, avg)
@@ -575,7 +558,6 @@ vectorized: true
 ·
 • project
 │ columns: (avg, avg, avg, avg)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • window
     │ columns: (k, avg, avg, avg, avg)

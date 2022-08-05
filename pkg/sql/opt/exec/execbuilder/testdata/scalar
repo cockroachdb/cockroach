@@ -70,7 +70,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: 3
 │
 └── • scan
@@ -87,7 +86,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a + 2
 │
 └── • scan
@@ -104,7 +102,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((a >= 5) AND (b <= 10)) AND (c < 4)
 │
 └── • scan
@@ -121,7 +118,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((a >= 5) OR (b <= 10)) OR (c < 4)
 │
 └── • scan
@@ -138,7 +134,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a != 5
 │
 └── • scan
@@ -155,7 +150,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: (a <= 5) OR (b < 10)
 │
 └── • scan
@@ -172,7 +166,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))
 │
 └── • scan
@@ -189,7 +182,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((a < 5) AND (b > 10)) AND (c < 10)
 │
 └── • scan
@@ -206,7 +198,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: (a = 1) AND (b = 2)
 │
 └── • scan
@@ -223,7 +214,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a IN (1, 2)
 │
 └── • scan
@@ -240,7 +230,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: (a, b) IN ((1, 2), (3, 4))
 │
 └── • scan
@@ -257,7 +246,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))
 │
 └── • scan
@@ -274,7 +262,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)
 │
 └── • scan
@@ -291,7 +278,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)
 │
 └── • scan
@@ -308,7 +294,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a IS NULL
 │
 └── • scan
@@ -325,7 +310,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a IS NULL
 │
 └── • scan
@@ -342,7 +326,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: (a, b) IS NULL
 │
 └── • scan
@@ -359,7 +342,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: false
 │
 └── • scan
@@ -376,7 +358,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a IS NOT DISTINCT FROM b
 │
 └── • scan
@@ -393,7 +374,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a IS NOT NULL
 │
 └── • scan
@@ -410,7 +390,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a IS NOT NULL
 │
 └── • scan
@@ -427,7 +406,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: (a, b) IS NOT NULL
 │
 └── • scan
@@ -444,7 +422,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: true
 │
 └── • scan
@@ -461,7 +438,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a IS DISTINCT FROM b
 │
 └── • scan
@@ -478,7 +454,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: a + (-b)
 │
 └── • scan
@@ -495,7 +470,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END
 │
 └── • scan
@@ -512,7 +486,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: CASE WHEN a = 2 THEN 1 ELSE 2 END
 │
 └── • scan
@@ -529,7 +502,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: CASE a + 3 WHEN b * 5 THEN 1 % b WHEN 6 THEN 2 ELSE -1 END
 │
 └── • scan
@@ -547,7 +519,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: CASE WHEN a = 2 THEN 1 ELSE CAST(NULL AS INT8) END
 │
 └── • scan
@@ -564,7 +535,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: CASE a WHEN 2 THEN 1 ELSE CAST(NULL AS INT8) END
 │
 └── • scan
@@ -591,7 +561,6 @@ vectorized: true
 ·
 • render
 │ columns: (length)
-│ estimated row count: 1,000 (missing stats)
 │ render length: length(s)
 │
 └── • scan
@@ -608,7 +577,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j @> '{"a": 1}'
 │
 └── • scan
@@ -625,7 +593,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: '{"a": 1}' <@ j
 │
 └── • scan
@@ -642,7 +609,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j->>'a'
 │
 └── • scan
@@ -659,7 +625,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j->'a'
 │
 └── • scan
@@ -676,7 +641,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j ? 'a'
 │
 └── • scan
@@ -693,7 +657,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j ?| ARRAY['a','b','c']
 │
 └── • scan
@@ -710,7 +673,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j ?& ARRAY['a','b','c']
 │
 └── • scan
@@ -727,7 +689,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j#>ARRAY['a']
 │
 └── • scan
@@ -744,7 +705,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: j#>>ARRAY['a']
 │
 └── • scan
@@ -762,7 +722,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, b)
-│ estimated row count: 1,000 (missing stats)
 │ render a: a::STRING
 │ render b: b::FLOAT8
 │
@@ -780,7 +739,6 @@ vectorized: true
 ·
 • render
 │ columns: (text)
-│ estimated row count: 1,000 (missing stats)
 │ render text: (c + (a + b))::STRING
 │
 └── • scan
@@ -797,7 +755,6 @@ vectorized: true
 ·
 • render
 │ columns: (s)
-│ estimated row count: 1,000 (missing stats)
 │ render s: s::VARCHAR(2)
 │
 └── • scan
@@ -814,7 +771,6 @@ vectorized: true
 ·
 • render
 │ columns: ("coalesce")
-│ estimated row count: 4
 │ render coalesce: COALESCE(column1, column2)
 │
 └── • values
@@ -837,7 +793,6 @@ vectorized: true
 ·
 • render
 │ columns: ("coalesce")
-│ estimated row count: 4
 │ render coalesce: COALESCE(column1, column2, column3)
 │
 └── • values
@@ -864,7 +819,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 110 (missing stats)
 │
 └── • filter
     │ columns: (a, b, d)
@@ -885,7 +839,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 330 (missing stats)
 │
 └── • filter
     │ columns: (a, b, d)
@@ -906,7 +859,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))
 │
 └── • scan
@@ -923,7 +875,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: ((a < b) OR (a > d)) AND ((a < d) OR (a > b))
 │
 └── • scan
@@ -940,7 +891,6 @@ vectorized: true
 ·
 • render
 │ columns: ("array")
-│ estimated row count: 1,000 (missing stats)
 │ render array: ARRAY[]
 │
 └── • scan
@@ -957,7 +907,6 @@ vectorized: true
 ·
 • render
 │ columns: ("array")
-│ estimated row count: 1,000 (missing stats)
 │ render array: ARRAY[1,2,3]
 │
 └── • scan
@@ -974,7 +923,6 @@ vectorized: true
 ·
 • render
 │ columns: ("array")
-│ estimated row count: 1,000 (missing stats)
 │ render array: ARRAY[a + 1, 2, 3]
 │
 └── • scan
@@ -991,7 +939,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1,000 (missing stats)
 │ render ?column?: 1 > ANY ARRAY[a + 1, 2, 3]
 │
 └── • scan
@@ -1008,7 +955,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1,000 (missing stats)
 │ render ?column?: true
 │
 └── • scan
@@ -1025,7 +971,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 1,000 (missing stats)
 │ render ?column?: false
 │
 └── • scan
@@ -1042,7 +987,6 @@ vectorized: true
 ·
 • render
 │ columns: ("least")
-│ estimated row count: 1,000 (missing stats)
 │ render least: least(NULL, 3, 6, a)
 │
 └── • scan
@@ -1097,7 +1041,6 @@ vectorized: true
 ·
 • render
 │ columns: (r1, r2)
-│ estimated row count: 1,000 (missing stats)
 │ render r1: 4.0
 │ render r2: length(upper(concat('a', 'b', s)))::FLOAT8 + 1.0
 │

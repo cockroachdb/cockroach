@@ -65,26 +65,25 @@ vectorized: true
         │
         └── • project
             │ columns: (pid)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ estimated row count: 1
                     │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                     │ render pid: column2
                     │
                     └── • project
                         │ columns: (column2)
-                        │ estimated row count: 1
                         │
                         └── • scan buffer
                               columns: (column1, column2)
+                              estimated row count: 1
                               label: buffer 1
 
 query T
@@ -120,7 +119,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (id)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • cross join (inner)
 │               │ columns: (id, id, part)
@@ -145,26 +143,25 @@ vectorized: true
         │
         └── • project
             │ columns: (pid)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ estimated row count: 1
                     │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                     │ render pid: column2
                     │
                     └── • project
                         │ columns: (column2)
-                        │ estimated row count: 1
                         │
                         └── • scan buffer
                               columns: (column1, column2, column3, check1)
+                              estimated row count: 1
                               label: buffer 1
 
 subtest test_uniqueness_check_uuid
@@ -195,7 +192,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_user_id_shard_16_comp, user_id_default, val_cast, column2, check1, check2)
-    │ estimated row count: 1
     │ render check1: column2 IN ('new york', 'seattle')
     │ render check2: crdb_internal_user_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column2: column2
@@ -205,7 +201,6 @@ vectorized: true
     │
     └── • render
         │ columns: (crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-        │ estimated row count: 1
         │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
         │ render column2: column2
         │ render val_cast: val_cast
@@ -233,7 +228,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_user_id_shard_16_comp, user_id_default, val_cast, column2, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column2 IN ('new york', 'seattle')
     │ render check2: crdb_internal_user_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column2: column2
@@ -249,17 +243,16 @@ vectorized: true
         │
         └── • project
             │ columns: (column2, val_cast, user_id_default, crdb_internal_user_id_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
                 │
                 └── • render
                     │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-                    │ estimated row count: 1
                     │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                     │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                     │ render column2: column2
@@ -288,7 +281,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_user_id_shard_16_comp, user_id_default, val_cast, column2, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column2 IN ('new york', 'seattle')
     │ render check2: crdb_internal_user_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column2: column2
@@ -304,17 +296,16 @@ vectorized: true
         │
         └── • project
             │ columns: (column2, val_cast, user_id_default, crdb_internal_user_id_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
                 │
                 └── • render
                     │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-                    │ estimated row count: 2
                     │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                     │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                     │ render column2: column2
@@ -323,7 +314,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (user_id_default, column2, val_cast)
-                        │ estimated row count: 2
                         │ render user_id_default: gen_random_uuid()
                         │ render column2: column2
                         │ render val_cast: val_cast
@@ -378,7 +368,6 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 1 (missing stats)
             │
             └── • cross join (inner)
                 │ columns: (id, crdb_internal_id_shard_16, id, part)
@@ -391,7 +380,6 @@ vectorized: true
                 │
                 └── • limit
                     │ columns: (crdb_internal_id_shard_16, id, part)
-                    │ estimated row count: 1 (missing stats)
                     │ count: 1
                     │
                     └── • distinct
@@ -430,7 +418,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column2 IN ('new york', 'seattle')
     │ render check2: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column1: column1
@@ -470,7 +457,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column2 IN ('new york', 'seattle')
     │ render check2: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column1: column1
@@ -479,17 +465,16 @@ vectorized: true
     │
     └── • project
         │ columns: (column1, column2, crdb_internal_id_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
+            │ estimated row count: 0 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
             │
             └── • render
                 │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-                │ estimated row count: 2
                 │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                 │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                 │ render column1: column1
@@ -518,7 +503,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column2 IN ('new york', 'seattle')
     │ render check2: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column1: column1
@@ -558,7 +542,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column2 IN ('new york', 'seattle')
     │ render check2: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column1: column1
@@ -567,17 +550,16 @@ vectorized: true
     │
     └── • project
         │ columns: (column1, column2, crdb_internal_id_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
+            │ estimated row count: 0 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
             │
             └── • render
                 │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-                │ estimated row count: 2
                 │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                 │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                 │ render column1: column1
@@ -615,7 +597,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part, upsert_part)
-│               │ estimated row count: 1 (missing stats)
 │               │ render check1: upsert_part IN ('new york', 'seattle')
 │               │ render check2: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render column1: column1
@@ -628,7 +609,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_part, column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part)
-│                   │ estimated row count: 1 (missing stats)
 │                   │ render upsert_part: CASE WHEN part IS NULL THEN column2 ELSE part END
 │                   │ render column1: column1
 │                   │ render column2: column2
@@ -663,21 +643,19 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (crdb_internal_id_shard_16, id, part)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
@@ -685,10 +663,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (crdb_internal_id_shard_16_comp, column1, upsert_part)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (crdb_internal_id_shard_16_comp, column1, column2, crdb_internal_id_shard_16, id, part, crdb_internal_id_shard_16_comp, column1, part, check1, check2, upsert_part)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 query T
@@ -715,7 +693,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part, upsert_part)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: upsert_part IN ('new york', 'seattle')
 │               │ render check2: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render column1: column1
@@ -728,7 +705,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_part, column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_part: CASE WHEN part IS NULL THEN column2 ELSE part END
 │                   │ render column1: column1
 │                   │ render column2: column2
@@ -739,10 +715,10 @@ vectorized: true
 │                   │
 │                   └── • project
 │                       │ columns: (column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part)
-│                       │ estimated row count: 2 (missing stats)
 │                       │
 │                       └── • lookup join (left outer)
 │                           │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2, crdb_internal_id_shard_16, id, part)
+│                           │ estimated row count: 2 (missing stats)
 │                           │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
 │                           │ equality cols are key
 │                           │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -750,7 +726,6 @@ vectorized: true
 │                           │
 │                           └── • render
 │                               │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-│                               │ estimated row count: 2
 │                               │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
 │                               │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
 │                               │ render column1: column1
@@ -771,21 +746,19 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 1 (missing stats)
             │
             └── • project
                 │ columns: (crdb_internal_id_shard_16, id, part)
-                │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                        │ estimated row count: 2 (missing stats)
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
@@ -793,10 +766,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (crdb_internal_id_shard_16_comp, column1, upsert_part)
-                            │ estimated row count: 2 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (crdb_internal_id_shard_16_comp, column1, column2, crdb_internal_id_shard_16, id, part, crdb_internal_id_shard_16_comp, column1, part, check1, check2, upsert_part)
+                                  estimated row count: 2 (missing stats)
                                   label: buffer 1
 
 query T
@@ -817,7 +790,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, check2, column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part)
-        │ estimated row count: 1 (missing stats)
         │ render check1: column2 IN ('new york', 'seattle')
         │ render check2: CASE WHEN part IS NULL THEN crdb_internal_id_shard_16_comp ELSE crdb_internal_id_shard_16 END IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         │ render column1: column1
@@ -864,7 +836,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, check2, column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part)
-        │ estimated row count: 2 (missing stats)
         │ render check1: column2 IN ('new york', 'seattle')
         │ render check2: CASE WHEN part IS NULL THEN crdb_internal_id_shard_16_comp ELSE crdb_internal_id_shard_16 END IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         │ render column1: column1
@@ -876,10 +847,10 @@ vectorized: true
         │
         └── • project
             │ columns: (column1, column2, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, part)
-            │ estimated row count: 2 (missing stats)
             │
             └── • lookup join (left outer)
                 │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2, crdb_internal_id_shard_16, id, part)
+                │ estimated row count: 2 (missing stats)
                 │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -887,7 +858,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-                    │ estimated row count: 2
                     │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                     │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                     │ render column1: column1
@@ -922,7 +892,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (crdb_internal_id_shard_16, id, part, crdb_internal_id_shard_16_comp, id_new, check2)
-│           │ estimated row count: 1 (missing stats)
 │           │ render check2: true
 │           │ render crdb_internal_id_shard_16_comp: 6
 │           │ render id_new: 1234
@@ -945,21 +914,19 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (crdb_internal_id_shard_16, id, part)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(id_new)), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: id_new
@@ -967,10 +934,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (crdb_internal_id_shard_16_comp, id_new, part)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (crdb_internal_id_shard_16, id, part, crdb_internal_id_shard_16_comp, id_new, check2)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 subtest test_uniqueness_check_sec_key
@@ -1020,7 +987,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (id)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • cross join (inner)
 │               │ columns: (id, id, part)
@@ -1045,7 +1011,6 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 1 (missing stats)
             │
             └── • cross join (inner)
                 │ columns: (email, id, email, part)
@@ -1058,7 +1023,6 @@ vectorized: true
                 │
                 └── • limit
                     │ columns: (id, email, part)
-                    │ estimated row count: 1 (missing stats)
                     │ count: 1
                     │
                     └── • distinct
@@ -1103,7 +1067,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column3 IN ('new york', 'seattle')
     │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column1: column1
@@ -1113,17 +1076,16 @@ vectorized: true
     │
     └── • project
         │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_email_shard_16_eq, column1, column2, column3, crdb_internal_email_shard_16_comp)
+            │ estimated row count: 0 (missing stats)
             │ table: t_unique_hash_sec_key@idx_uniq_hash_email
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
             │
             └── • render
                 │ columns: (crdb_internal_email_shard_16_eq, column1, column2, column3, crdb_internal_email_shard_16_comp)
-                │ estimated row count: 0 (missing stats)
                 │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                 │ render column1: column1
                 │ render column2: column2
@@ -1144,7 +1106,6 @@ vectorized: true
                     │
                     └── • project
                         │ columns: ()
-                        │ estimated row count: 1 (missing stats)
                         │
                         └── • scan
                               columns: (id)
@@ -1168,7 +1129,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column3 IN ('new york', 'seattle')
     │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render column1: column1
@@ -1185,17 +1145,16 @@ vectorized: true
         │
         └── • project
             │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
                 │
                 └── • render
                     │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
-                    │ estimated row count: 2
                     │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                     │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                     │ render column1: column1
@@ -1229,7 +1188,6 @@ vectorized: true
 │   │
 │   └── • render
 │       │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│       │ estimated row count: 0 (missing stats)
 │       │ render check1: column3 IN ('new york', 'seattle')
 │       │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │       │ render column1: column1
@@ -1251,7 +1209,6 @@ vectorized: true
 │           │
 │           └── • project
 │               │ columns: ()
-│               │ estimated row count: 1 (missing stats)
 │               │
 │               └── • scan
 │                     columns: (email)
@@ -1267,7 +1224,6 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 1 (missing stats)
             │
             └── • cross join (inner)
                 │ columns: (id, id, part)
@@ -1306,7 +1262,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│           │ estimated row count: 0 (missing stats)
 │           │ render check1: column3 IN ('new york', 'seattle')
 │           │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │           │ render column1: column1
@@ -1316,17 +1271,16 @@ vectorized: true
 │           │
 │           └── • project
 │               │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp)
-│               │ estimated row count: 0 (missing stats)
 │               │
 │               └── • lookup join (anti)
 │                   │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
+│                   │ estimated row count: 0 (missing stats)
 │                   │ table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                   │ equality cols are key
 │                   │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
-│                       │ estimated row count: 2
 │                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                       │ render column1: column1
@@ -1350,7 +1304,6 @@ vectorized: true
         │
         └── • project
             │ columns: (column1)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (semi)
                 │ columns: (column1, column3)
@@ -1361,10 +1314,10 @@ vectorized: true
                 │
                 └── • project
                     │ columns: (column1, column3)
-                    │ estimated row count: 0 (missing stats)
                     │
                     └── • scan buffer
                           columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
+                          estimated row count: 0 (missing stats)
                           label: buffer 1
 
 query T
@@ -1391,7 +1344,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_id, upsert_email, upsert_part, upsert_crdb_internal_email_shard_16)
-│               │ estimated row count: 1 (missing stats)
 │               │ render check1: upsert_part IN ('new york', 'seattle')
 │               │ render check2: upsert_crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render column1: column1
@@ -1409,7 +1361,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_id, upsert_email, upsert_part, upsert_crdb_internal_email_shard_16, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16)
-│                   │ estimated row count: 1 (missing stats)
 │                   │ render upsert_id: CASE WHEN part IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN part IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_part: CASE WHEN part IS NULL THEN column3 ELSE part END
@@ -1437,7 +1388,6 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16, id, email, part)
-│                           │ estimated row count: 1 (missing stats)
 │                           │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
 │                           │ render id: id
 │                           │ render email: email
@@ -1457,7 +1407,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (upsert_id)
-│           │ estimated row count: 0 (missing stats)
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (upsert_id, upsert_part)
@@ -1468,10 +1417,10 @@ vectorized: true
 │               │
 │               └── • project
 │                   │ columns: (upsert_id, upsert_part)
-│                   │ estimated row count: 1 (missing stats)
 │                   │
 │                   └── • scan buffer
 │                         columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, part, check1, check2, upsert_id, upsert_part)
+│                         estimated row count: 1 (missing stats)
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -1481,21 +1430,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (id, email, part)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
@@ -1503,10 +1450,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, upsert_email, upsert_part)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, part, check1, check2, upsert_id, upsert_part)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 query T
@@ -1533,7 +1480,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_id, upsert_email, upsert_part, upsert_crdb_internal_email_shard_16)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: upsert_part IN ('new york', 'seattle')
 │               │ render check2: upsert_crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render column1: column1
@@ -1551,7 +1497,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_id, upsert_email, upsert_part, upsert_crdb_internal_email_shard_16, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_id: CASE WHEN part IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN part IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_part: CASE WHEN part IS NULL THEN column3 ELSE part END
@@ -1567,7 +1512,6 @@ vectorized: true
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part)
-│                       │ estimated row count: 2 (missing stats)
 │                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
 │                       │ render column1: column1
 │                       │ render column2: column2
@@ -1579,14 +1523,13 @@ vectorized: true
 │                       │
 │                       └── • project
 │                           │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part)
-│                           │ estimated row count: 2 (missing stats)
 │                           │
 │                           └── • project
 │                               │ columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16)
-│                               │ estimated row count: 2 (missing stats)
 │                               │
 │                               └── • lookup join (left outer)
 │                                   │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3, id, email, part, crdb_internal_email_shard_16)
+│                                   │ estimated row count: 2 (missing stats)
 │                                   │ table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                                   │ equality cols are key
 │                                   │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1594,7 +1537,6 @@ vectorized: true
 │                                   │
 │                                   └── • render
 │                                       │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
-│                                       │ estimated row count: 2
 │                                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                                       │ render column1: column1
@@ -1618,7 +1560,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (upsert_id)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (upsert_id, upsert_part)
@@ -1629,10 +1570,10 @@ vectorized: true
 │               │
 │               └── • project
 │                   │ columns: (upsert_id, upsert_part)
-│                   │ estimated row count: 2 (missing stats)
 │                   │
 │                   └── • scan buffer
 │                         columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, part, check1, check2, upsert_id, upsert_part)
+│                         estimated row count: 2 (missing stats)
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -1642,21 +1583,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 1 (missing stats)
             │
             └── • project
                 │ columns: (id, email, part)
-                │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ estimated row count: 2 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
@@ -1664,10 +1603,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, upsert_email, upsert_part)
-                            │ estimated row count: 2 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, part, check1, check2, upsert_id, upsert_part)
+                                  estimated row count: 2 (missing stats)
                                   label: buffer 1
 
 query T
@@ -1694,7 +1633,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, upsert_id, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16)
-│               │ estimated row count: 1 (missing stats)
 │               │ render check1: column3 IN ('new york', 'seattle')
 │               │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render upsert_id: CASE WHEN part IS NULL THEN column1 ELSE id END
@@ -1721,7 +1659,6 @@ vectorized: true
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, id, email, part)
-│                       │ estimated row count: 1 (missing stats)
 │                       │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
 │                       │ render id: id
 │                       │ render email: email
@@ -1741,21 +1678,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (id, email, part)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render id: upsert_id
                         │ render email: column2
@@ -1763,10 +1698,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, column2, column3)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, column2, column3, crdb_internal_email_shard_16_comp, part, check1, check2, upsert_id)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 query T
@@ -1793,7 +1728,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, upsert_id, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: column3 IN ('new york', 'seattle')
 │               │ render check2: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render upsert_id: CASE WHEN part IS NULL THEN column1 ELSE id END
@@ -1808,7 +1742,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (crdb_internal_email_shard_16, column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
 │                   │ render column1: column1
 │                   │ render column2: column2
@@ -1828,7 +1761,6 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16_comp, column1, column2, column3)
-│                           │ estimated row count: 2
 │                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                           │ render column1: column1
 │                           │ render column2: column2
@@ -1851,21 +1783,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 1 (missing stats)
             │
             └── • project
                 │ columns: (id, email, part)
-                │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ estimated row count: 2 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render id: upsert_id
                         │ render email: column2
@@ -1873,10 +1803,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, column2, column3)
-                            │ estimated row count: 2 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, id, email, part, crdb_internal_email_shard_16, column2, column3, crdb_internal_email_shard_16_comp, part, check1, check2, upsert_id)
+                                  estimated row count: 2 (missing stats)
                                   label: buffer 1
 
 query T
@@ -1900,7 +1830,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (id, email, part, crdb_internal_email_shard_16, email_new, crdb_internal_email_shard_16_comp, check2)
-│           │ estimated row count: 1 (missing stats)
 │           │ render check2: true
 │           │ render crdb_internal_email_shard_16_comp: 5
 │           │ render email_new: 'email1'
@@ -1924,21 +1853,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (id, email, part)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(email_new)), 16)
                         │ render id: id
                         │ render email: email_new
@@ -1946,8 +1873,8 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (id, email_new, part)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (id, email, part, crdb_internal_email_shard_16, email_new, crdb_internal_email_shard_16_comp, check2)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1

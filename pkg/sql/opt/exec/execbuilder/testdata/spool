@@ -115,7 +115,6 @@ vectorized: true
 • root
 │
 ├── • limit
-│   │ estimated row count: 1
 │   │ count: 1
 │   │
 │   └── • scan buffer
@@ -241,7 +240,6 @@ vectorized: true
 • root
 │
 ├── • limit
-│   │ estimated row count: 1
 │   │ count: 1
 │   │
 │   └── • scan buffer
