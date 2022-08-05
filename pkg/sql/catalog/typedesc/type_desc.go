@@ -796,7 +796,6 @@ func EnsureTypeIsHydrated(
 				return err
 			}
 		}
-		return nil
 	}
 	if !t.UserDefined() || t.IsHydrated() {
 		return nil
