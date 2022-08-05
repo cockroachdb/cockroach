@@ -291,10 +291,16 @@ func registerKV(r registry.Registry) {
 		if opts.encryption {
 			encryption = registry.EncryptionAlwaysEnabled
 		}
+		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
+		var skip string
+		if opts.ssds != 0 && cSpec.Cloud != spec.GCE {
+			skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
+		}
 		r.Add(registry.TestSpec{
+			Skip:    skip,
 			Name:    strings.Join(nameParts, "/"),
 			Owner:   owner,
-			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0)),
+			Cluster: cSpec,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},

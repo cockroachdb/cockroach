@@ -1025,3 +1025,52 @@ union
            │    └── fd: (6)-->(7)
            └── filters
                 └── b:7 > 10 [outer=(7), constraints=(/7: [/11 - ]; tight)]
+
+# Regression test for #85502 - don't fire when the candidate key is empty.
+exec-ddl
+CREATE TABLE t1_85502 (c0 BOOL AS (1 IS NULL) STORED, CONSTRAINT "primary" PRIMARY KEY(c0));
+----
+
+exec-ddl
+CREATE TABLE t2_85502 (c0 INT);
+----
+
+norm expect-not=ConvertUnionToDistinctUnionAll
+SELECT t1_85502.c0 FROM t2_85502
+FULL OUTER JOIN t1_85502 ON false WHERE false IN (t1_85502.c0 IS NULL)
+UNION SELECT t1_85502.c0 FROM t2_85502
+FULL OUTER JOIN t1_85502 ON false WHERE NOT false IN (t1_85502.c0 IS NULL);
+----
+union
+ ├── columns: c0:15
+ ├── left columns: t1_85502.c0:5
+ ├── right columns: t1_85502.c0:12
+ ├── cardinality: [0 - 3]
+ ├── key: (15)
+ ├── scan t1_85502
+ │    ├── columns: t1_85502.c0:5!null
+ │    ├── computed column expressions
+ │    │    └── t1_85502.c0:5
+ │    │         └── false
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(5)
+ └── select
+      ├── columns: t1_85502.c0:12
+      ├── fd: ()-->(12)
+      ├── full-join (cross)
+      │    ├── columns: t1_85502.c0:12
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
+      │    ├── scan t2_85502
+      │    ├── scan t1_85502
+      │    │    ├── columns: t1_85502.c0:12!null
+      │    │    ├── computed column expressions
+      │    │    │    └── t1_85502.c0:12
+      │    │    │         └── false
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(12)
+      │    └── filters
+      │         └── false [constraints=(contradiction; tight)]
+      └── filters
+           └── t1_85502.c0:12 IS NULL [outer=(12), constraints=(/12: [/NULL - /NULL]; tight), fd=()-->(12)]
