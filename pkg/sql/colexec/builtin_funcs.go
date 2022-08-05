@@ -70,7 +70,7 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 					err error
 				)
 				// Some functions cannot handle null arguments.
-				if hasNulls && !b.funcExpr.ResolvedOverload().NullableArgs {
+				if hasNulls && !b.funcExpr.ResolvedOverload().CalledOnNullInput {
 					res = tree.DNull
 				} else {
 					res, err = b.funcExpr.ResolvedOverload().

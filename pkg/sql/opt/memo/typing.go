@@ -94,7 +94,7 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 	if !ok {
 		panic(errors.AssertionFailedf("could not find overload for binary expression %s", redact.Safe(op)))
 	}
-	return o.NullableArgs
+	return o.CalledOnNullInput
 }
 
 // GetBuiltinProperties is set to builtinsregistry.GetBuiltinProperties in an init

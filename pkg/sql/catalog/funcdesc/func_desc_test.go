@@ -544,7 +544,7 @@ func TestToOverload(t *testing.T) {
 			},
 		},
 		{
-			// Test NullableArgs matters.
+			// Test CalledOnNullInput matters.
 			desc: descpb.FunctionDescriptor{
 				ID:                1,
 				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
@@ -559,12 +559,12 @@ func TestToOverload(t *testing.T) {
 				Types: tree.ArgTypes{
 					{Name: "arg1", Typ: types.Int},
 				},
-				ReturnType:   tree.FixedReturnType(types.Int),
-				ReturnSet:    true,
-				Volatility:   volatility.Leakproof,
-				Body:         "ANY QUERIES",
-				IsUDF:        true,
-				NullableArgs: true,
+				ReturnType:        tree.FixedReturnType(types.Int),
+				ReturnSet:         true,
+				Volatility:        volatility.Leakproof,
+				Body:              "ANY QUERIES",
+				IsUDF:             true,
+				CalledOnNullInput: true,
 			},
 		},
 		{

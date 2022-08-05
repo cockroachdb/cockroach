@@ -211,22 +211,22 @@ func TestGetProjectionOperator(t *testing.T) {
 	inputTypes[col1Idx] = typ
 	inputTypes[col2Idx] = typ
 	outputIdx := 9
-	nullableArgs := false
+	calledOnNullInput := false
 	op, err := GetProjectionOperator(
 		testAllocator, inputTypes, types.Int2, binOp, input, col1Idx, col2Idx,
-		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, nullableArgs,
+		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, calledOnNullInput,
 	)
 	if err != nil {
 		t.Error(err)
 	}
 	expected := &projMultInt16Int16Op{
 		projOpBase: projOpBase{
-			OneInputHelper: colexecop.MakeOneInputHelper(op.(*projMultInt16Int16Op).Input),
-			allocator:      testAllocator,
-			col1Idx:        col1Idx,
-			col2Idx:        col2Idx,
-			outputIdx:      outputIdx,
-			nullableArgs:   nullableArgs,
+			OneInputHelper:    colexecop.MakeOneInputHelper(op.(*projMultInt16Int16Op).Input),
+			allocator:         testAllocator,
+			col1Idx:           col1Idx,
+			col2Idx:           col2Idx,
+			outputIdx:         outputIdx,
+			calledOnNullInput: calledOnNullInput,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
