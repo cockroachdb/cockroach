@@ -41,7 +41,8 @@ insert uniq
       │              │         ├──  column4:11 => x:23
       │              │         └──  column5:12 => y:24
       │              ├── scan uniq
-      │              │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:22 = uniq.w:15
       │                   └── k:20 != uniq.k:13
@@ -59,7 +60,8 @@ insert uniq
                      │         ├──  column4:11 => x:35
                      │         └──  column5:12 => y:36
                      ├── scan uniq
-                     │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    ├── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:35 = uniq.x:28
                           ├── y:36 = uniq.y:29
@@ -98,7 +100,8 @@ insert uniq
       │              │         ├──  column4:11 => x:23
       │              │         └──  column5:12 => y:24
       │              ├── scan uniq
-      │              │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:22 = uniq.w:15
       │                   └── k:20 != uniq.k:13
@@ -116,7 +119,8 @@ insert uniq
                      │         ├──  column4:11 => x:35
                      │         └──  column5:12 => y:36
                      ├── scan uniq
-                     │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    ├── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:35 = uniq.x:28
                           ├── y:36 = uniq.y:29
@@ -154,7 +158,8 @@ insert uniq
                      │         ├──  column4:11 => x:23
                      │         └──  column5:12 => y:24
                      ├── scan uniq
-                     │    └── columns: uniq.k:13!null uniq.x:16 uniq.y:17
+                     │    ├── columns: uniq.k:13!null uniq.x:16 uniq.y:17
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:23 = uniq.x:16
                           ├── y:24 = uniq.y:17
@@ -191,7 +196,8 @@ insert uniq
                      │         ├──  column1:8 => k:20
                      │         └──  column3:10 => w:22
                      ├── scan uniq
-                     │    └── columns: uniq.k:13!null uniq.w:15
+                     │    ├── columns: uniq.k:13!null uniq.w:15
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── w:22 = uniq.w:15
                           └── k:20 != uniq.k:13
@@ -227,7 +233,8 @@ insert uniq
                      │         ├──  column1:8 => k:20
                      │         └──  column3:10 => w:22
                      ├── scan uniq
-                     │    └── columns: uniq.k:13!null uniq.w:15
+                     │    ├── columns: uniq.k:13!null uniq.w:15
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── w:22 = uniq.w:15
                           └── k:20 != uniq.k:13
@@ -290,19 +297,23 @@ insert uniq
       │    │    │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
       │    │    │    │    │    │    │    │    └── (1, 2, 3, 4, 5)
       │    │    │    │    │    │    │    ├── scan uniq
-      │    │    │    │    │    │    │    │    └── columns: k:13!null v:14 w:15 x:16 y:17
+      │    │    │    │    │    │    │    │    ├── columns: k:13!null v:14 w:15 x:16 y:17
+      │    │    │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │         └── column1:8 = k:13
       │    │    │    │    │    │    ├── scan uniq
-      │    │    │    │    │    │    │    └── columns: k:20!null v:21 w:22 x:23 y:24
+      │    │    │    │    │    │    │    ├── columns: k:20!null v:21 w:22 x:23 y:24
+      │    │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── column2:9 = v:21
       │    │    │    │    │    ├── scan uniq
-      │    │    │    │    │    │    └── columns: k:27!null v:28 w:29 x:30 y:31
+      │    │    │    │    │    │    ├── columns: k:27!null v:28 w:29 x:30 y:31
+      │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── column3:10 = w:29
       │    │    │    │    ├── scan uniq
-      │    │    │    │    │    └── columns: k:34!null v:35 w:36 x:37 y:38
+      │    │    │    │    │    ├── columns: k:34!null v:35 w:36 x:37 y:38
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         ├── column4:11 = x:37
       │    │    │    │         └── column5:12 = y:38
@@ -364,7 +375,8 @@ insert uniq
  │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
  │    │    │    └── (1, 2, 3, 4, 5)
  │    │    ├── scan uniq
- │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column3:10 = uniq.w:15
  │    └── aggregations
@@ -386,7 +398,8 @@ insert uniq
                      │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
                      │    └── (1, 2, 3, 4, 5)
                      ├── scan uniq
-                     │    └── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:30 = uniq.x:23
                           ├── y:31 = uniq.y:24
@@ -417,7 +430,8 @@ insert uniq
  │    │    │    ├── (1, 2, 3, 4, 5)
  │    │    │    └── (6, 7, 8, 9, 10)
  │    │    ├── scan uniq
- │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column3:10 = uniq.w:15
  │    └── aggregations
@@ -444,7 +458,8 @@ insert uniq
                      │         ├──  column4:11 => x:30
                      │         └──  column5:12 => y:31
                      ├── scan uniq
-                     │    └── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:30 = uniq.x:23
                           ├── y:31 = uniq.y:24
@@ -472,7 +487,8 @@ insert uniq
  │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
  │    │    │    └── (1, 2, 3, 4, 5)
  │    │    ├── scan uniq
- │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column3:10 = uniq.w:15
  │    └── aggregations
@@ -494,7 +510,8 @@ insert uniq
                      │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
                      │    └── (1, 2, 3, 4, 5)
                      ├── scan uniq
-                     │    └── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:30 = uniq.x:23
                           ├── y:31 = uniq.y:24
@@ -536,7 +553,8 @@ insert uniq
       │              │         ├──  other.x:11 => x:26
       │              │         └──  other.y:12 => y:27
       │              ├── scan uniq
-      │              │    └── columns: uniq.k:16!null uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20
+      │              │    ├── columns: uniq.k:16!null uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:25 = uniq.w:18
       │                   └── k:23 != uniq.k:16
@@ -554,7 +572,8 @@ insert uniq
                      │         ├──  other.x:11 => x:38
                      │         └──  other.y:12 => y:39
                      ├── scan uniq
-                     │    └── columns: uniq.k:28!null uniq.v:29 uniq.w:30 uniq.x:31 uniq.y:32
+                     │    ├── columns: uniq.k:28!null uniq.v:29 uniq.w:30 uniq.x:31 uniq.y:32
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:38 = uniq.x:31
                           ├── y:39 = uniq.y:32
@@ -606,7 +625,8 @@ insert uniq_overlaps_pk
       │              │         ├──  column3:9 => c:19
       │              │         └──  column4:10 => d:20
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
+      │              │    ├── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:18 = uniq_overlaps_pk.b:12
       │                   ├── c:19 = uniq_overlaps_pk.c:13
@@ -624,7 +644,8 @@ insert uniq_overlaps_pk
       │              │         ├──  column3:9 => c:29
       │              │         └──  column4:10 => d:30
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:21!null uniq_overlaps_pk.b:22!null uniq_overlaps_pk.c:23 uniq_overlaps_pk.d:24
+      │              │    ├── columns: uniq_overlaps_pk.a:21!null uniq_overlaps_pk.b:22!null uniq_overlaps_pk.c:23 uniq_overlaps_pk.d:24
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:27 = uniq_overlaps_pk.a:21
       │                   └── b:28 != uniq_overlaps_pk.b:22
@@ -641,7 +662,8 @@ insert uniq_overlaps_pk
                      │         ├──  column3:9 => c:39
                      │         └──  column4:10 => d:40
                      ├── scan uniq_overlaps_pk
-                     │    └── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
+                     │    ├── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:39 = uniq_overlaps_pk.c:33
                           ├── d:40 = uniq_overlaps_pk.d:34
@@ -679,7 +701,8 @@ insert uniq_overlaps_pk
       │              │         ├──  x:10 => c:23
       │              │         └──  y:11 => d:24
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:15!null uniq_overlaps_pk.b:16!null uniq_overlaps_pk.c:17 uniq_overlaps_pk.d:18
+      │              │    ├── columns: uniq_overlaps_pk.a:15!null uniq_overlaps_pk.b:16!null uniq_overlaps_pk.c:17 uniq_overlaps_pk.d:18
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:22 = uniq_overlaps_pk.b:16
       │                   ├── c:23 = uniq_overlaps_pk.c:17
@@ -697,7 +720,8 @@ insert uniq_overlaps_pk
       │              │         ├──  x:10 => c:33
       │              │         └──  y:11 => d:34
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:25!null uniq_overlaps_pk.b:26!null uniq_overlaps_pk.c:27 uniq_overlaps_pk.d:28
+      │              │    ├── columns: uniq_overlaps_pk.a:25!null uniq_overlaps_pk.b:26!null uniq_overlaps_pk.c:27 uniq_overlaps_pk.d:28
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:31 = uniq_overlaps_pk.a:25
       │                   └── b:32 != uniq_overlaps_pk.b:26
@@ -714,7 +738,8 @@ insert uniq_overlaps_pk
                      │         ├──  x:10 => c:43
                      │         └──  y:11 => d:44
                      ├── scan uniq_overlaps_pk
-                     │    └── columns: uniq_overlaps_pk.a:35!null uniq_overlaps_pk.b:36!null uniq_overlaps_pk.c:37 uniq_overlaps_pk.d:38
+                     │    ├── columns: uniq_overlaps_pk.a:35!null uniq_overlaps_pk.b:36!null uniq_overlaps_pk.c:37 uniq_overlaps_pk.d:38
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:43 = uniq_overlaps_pk.c:37
                           ├── d:44 = uniq_overlaps_pk.d:38
@@ -769,7 +794,8 @@ insert uniq_hidden_pk
       │              │         ├──  column4:11 => d:23
       │              │         └──  rowid_default:12 => rowid:24
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17!null
+      │              │    ├── columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:21 = uniq_hidden_pk.b:14
       │                   ├── c:22 = uniq_hidden_pk.c:15
@@ -788,7 +814,8 @@ insert uniq_hidden_pk
       │              │         ├──  column4:11 => d:35
       │              │         └──  rowid_default:12 => rowid:36
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:25 uniq_hidden_pk.b:26 uniq_hidden_pk.c:27 uniq_hidden_pk.d:28 uniq_hidden_pk.rowid:29!null
+      │              │    ├── columns: uniq_hidden_pk.a:25 uniq_hidden_pk.b:26 uniq_hidden_pk.c:27 uniq_hidden_pk.d:28 uniq_hidden_pk.rowid:29!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:32 = uniq_hidden_pk.a:25
       │                   ├── b:33 = uniq_hidden_pk.b:26
@@ -808,7 +835,8 @@ insert uniq_hidden_pk
                      │         ├──  column4:11 => d:47
                      │         └──  rowid_default:12 => rowid:48
                      ├── scan uniq_hidden_pk
-                     │    └── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
+                     │    ├── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:44 = uniq_hidden_pk.a:37
                           └── rowid:48 != uniq_hidden_pk.rowid:41
@@ -850,7 +878,8 @@ insert uniq_hidden_pk
       │              │         ├──  y:12 => d:27
       │              │         └──  rowid_default:16 => rowid:28
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:17 uniq_hidden_pk.b:18 uniq_hidden_pk.c:19 uniq_hidden_pk.d:20 uniq_hidden_pk.rowid:21!null
+      │              │    ├── columns: uniq_hidden_pk.a:17 uniq_hidden_pk.b:18 uniq_hidden_pk.c:19 uniq_hidden_pk.d:20 uniq_hidden_pk.rowid:21!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:25 = uniq_hidden_pk.b:18
       │                   ├── c:26 = uniq_hidden_pk.c:19
@@ -869,7 +898,8 @@ insert uniq_hidden_pk
       │              │         ├──  y:12 => d:39
       │              │         └──  rowid_default:16 => rowid:40
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:29 uniq_hidden_pk.b:30 uniq_hidden_pk.c:31 uniq_hidden_pk.d:32 uniq_hidden_pk.rowid:33!null
+      │              │    ├── columns: uniq_hidden_pk.a:29 uniq_hidden_pk.b:30 uniq_hidden_pk.c:31 uniq_hidden_pk.d:32 uniq_hidden_pk.rowid:33!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:36 = uniq_hidden_pk.a:29
       │                   ├── b:37 = uniq_hidden_pk.b:30
@@ -889,7 +919,8 @@ insert uniq_hidden_pk
                      │         ├──  y:12 => d:51
                      │         └──  rowid_default:16 => rowid:52
                      ├── scan uniq_hidden_pk
-                     │    └── columns: uniq_hidden_pk.a:41 uniq_hidden_pk.b:42 uniq_hidden_pk.c:43 uniq_hidden_pk.d:44 uniq_hidden_pk.rowid:45!null
+                     │    ├── columns: uniq_hidden_pk.a:41 uniq_hidden_pk.b:42 uniq_hidden_pk.c:43 uniq_hidden_pk.d:44 uniq_hidden_pk.rowid:45!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:48 = uniq_hidden_pk.a:41
                           └── rowid:52 != uniq_hidden_pk.rowid:45
@@ -931,7 +962,8 @@ insert uniq_partial
                      │         ├──  column2:7 => a:15
                      │         └──  column3:8 => b:16
                      ├── scan uniq_partial
-                     │    └── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:15 = uniq_partial.a:10
                           ├── b:16 > 0
@@ -967,7 +999,8 @@ insert uniq_partial
                      │         ├──  column2:7 => a:15
                      │         └──  column3:8 => b:16
                      ├── scan uniq_partial
-                     │    └── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:15 = uniq_partial.a:10
                           ├── b:16 > 0
@@ -1023,13 +1056,15 @@ insert uniq_partial
            │    │    │    │    │    ├── (1, 2, 3)
            │    │    │    │    │    └── (2, 2, 3)
            │    │    │    │    ├── scan uniq_partial
-           │    │    │    │    │    └── columns: k:9!null a:10 b:11
+           │    │    │    │    │    ├── columns: k:9!null a:10 b:11
+           │    │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    │    └── filters
            │    │    │    │         └── column1:6 = k:9
            │    │    │    ├── select
            │    │    │    │    ├── columns: k:14!null a:15 b:16!null
            │    │    │    │    ├── scan uniq_partial
-           │    │    │    │    │    └── columns: k:14!null a:15 b:16
+           │    │    │    │    │    ├── columns: k:14!null a:15 b:16
+           │    │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    │    └── filters
            │    │    │    │         └── b:16 > 0
            │    │    │    └── filters
@@ -1088,7 +1123,8 @@ insert uniq_partial
            │    │    ├── select
            │    │    │    ├── columns: k:9!null a:10 b:11!null
            │    │    │    ├── scan uniq_partial
-           │    │    │    │    └── columns: k:9!null a:10 b:11
+           │    │    │    │    ├── columns: k:9!null a:10 b:11
+           │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    └── filters
            │    │    │         └── b:11 > 0
            │    │    └── filters
@@ -1130,7 +1166,8 @@ insert uniq_partial
                      │         ├──  v:7 => a:20
                      │         └──  w:8 => b:21
                      ├── scan uniq_partial
-                     │    └── columns: uniq_partial.k:14!null uniq_partial.a:15 uniq_partial.b:16
+                     │    ├── columns: uniq_partial.k:14!null uniq_partial.a:15 uniq_partial.b:16
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:20 = uniq_partial.a:15
                           ├── b:21 > 0
@@ -1184,7 +1221,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  column3:9 => c:19
       │              │         └──  column4:10 => d:20
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:11!null uniq_partial_overlaps_pk.b:12!null uniq_partial_overlaps_pk.c:13 uniq_partial_overlaps_pk.d:14
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:11!null uniq_partial_overlaps_pk.b:12!null uniq_partial_overlaps_pk.c:13 uniq_partial_overlaps_pk.d:14
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── c:19 = uniq_partial_overlaps_pk.c:13
       │                   ├── d:20 > 0
@@ -1203,7 +1241,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  column3:9 => c:29
       │              │         └──  column4:10 => d:30
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:21!null uniq_partial_overlaps_pk.b:22!null uniq_partial_overlaps_pk.c:23 uniq_partial_overlaps_pk.d:24
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:21!null uniq_partial_overlaps_pk.b:22!null uniq_partial_overlaps_pk.c:23 uniq_partial_overlaps_pk.d:24
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:27 = uniq_partial_overlaps_pk.a:21
       │                   ├── d:30 > 0
@@ -1222,7 +1261,8 @@ insert uniq_partial_overlaps_pk
                      │         ├──  column3:9 => c:39
                      │         └──  column4:10 => d:40
                      ├── scan uniq_partial_overlaps_pk
-                     │    └── columns: uniq_partial_overlaps_pk.a:31!null uniq_partial_overlaps_pk.b:32!null uniq_partial_overlaps_pk.c:33 uniq_partial_overlaps_pk.d:34
+                     │    ├── columns: uniq_partial_overlaps_pk.a:31!null uniq_partial_overlaps_pk.b:32!null uniq_partial_overlaps_pk.c:33 uniq_partial_overlaps_pk.d:34
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:38 = uniq_partial_overlaps_pk.b:32
                           ├── c:39 = uniq_partial_overlaps_pk.c:33
@@ -1262,7 +1302,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  x:10 => c:23
       │              │         └──  y:11 => d:24
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:15!null uniq_partial_overlaps_pk.b:16!null uniq_partial_overlaps_pk.c:17 uniq_partial_overlaps_pk.d:18
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:15!null uniq_partial_overlaps_pk.b:16!null uniq_partial_overlaps_pk.c:17 uniq_partial_overlaps_pk.d:18
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── c:23 = uniq_partial_overlaps_pk.c:17
       │                   ├── d:24 > 0
@@ -1281,7 +1322,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  x:10 => c:33
       │              │         └──  y:11 => d:34
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:25!null uniq_partial_overlaps_pk.b:26!null uniq_partial_overlaps_pk.c:27 uniq_partial_overlaps_pk.d:28
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:25!null uniq_partial_overlaps_pk.b:26!null uniq_partial_overlaps_pk.c:27 uniq_partial_overlaps_pk.d:28
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:31 = uniq_partial_overlaps_pk.a:25
       │                   ├── d:34 > 0
@@ -1300,7 +1342,8 @@ insert uniq_partial_overlaps_pk
                      │         ├──  x:10 => c:43
                      │         └──  y:11 => d:44
                      ├── scan uniq_partial_overlaps_pk
-                     │    └── columns: uniq_partial_overlaps_pk.a:35!null uniq_partial_overlaps_pk.b:36!null uniq_partial_overlaps_pk.c:37 uniq_partial_overlaps_pk.d:38
+                     │    ├── columns: uniq_partial_overlaps_pk.a:35!null uniq_partial_overlaps_pk.b:36!null uniq_partial_overlaps_pk.c:37 uniq_partial_overlaps_pk.d:38
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:42 = uniq_partial_overlaps_pk.b:36
                           ├── c:43 = uniq_partial_overlaps_pk.c:37
@@ -1353,7 +1396,8 @@ insert uniq_partial_hidden_pk
                      │         ├──  c_default:9 => c:19
                      │         └──  rowid_default:10 => rowid:20
                      ├── scan uniq_partial_hidden_pk
-                     │    └── columns: uniq_partial_hidden_pk.a:11 uniq_partial_hidden_pk.b:12 uniq_partial_hidden_pk.c:13 uniq_partial_hidden_pk.rowid:14!null
+                     │    ├── columns: uniq_partial_hidden_pk.a:11 uniq_partial_hidden_pk.b:12 uniq_partial_hidden_pk.c:13 uniq_partial_hidden_pk.rowid:14!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:18 = uniq_partial_hidden_pk.b:12
                           ├── c:19 > 0
@@ -1395,7 +1439,8 @@ insert uniq_partial_hidden_pk
                      │         ├──  c_default:15 => c:25
                      │         └──  rowid_default:16 => rowid:26
                      ├── scan uniq_partial_hidden_pk
-                     │    └── columns: uniq_partial_hidden_pk.a:17 uniq_partial_hidden_pk.b:18 uniq_partial_hidden_pk.c:19 uniq_partial_hidden_pk.rowid:20!null
+                     │    ├── columns: uniq_partial_hidden_pk.a:17 uniq_partial_hidden_pk.b:18 uniq_partial_hidden_pk.c:19 uniq_partial_hidden_pk.rowid:20!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:24 = uniq_partial_hidden_pk.b:18
                           ├── c:25 > 0
@@ -1445,8 +1490,9 @@ insert uniq_partial_constraint_and_index
  │    │    │    ├── columns: uniq_partial_constraint_and_index.a:10!null
  │    │    │    ├── scan uniq_partial_constraint_and_index
  │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:10
- │    │    │    │    └── partial index predicates
- │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    │    ├── partial index predicates
+ │    │    │    │    │    └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── uniq_partial_constraint_and_index.a:10 = 1
  │    │    └── filters (true)
@@ -1493,9 +1539,10 @@ insert uniq_constraint_and_partial_index
       │    │    ├── columns: a:10!null
       │    │    ├── scan uniq_constraint_and_partial_index
       │    │    │    ├── columns: a:10
-      │    │    │    └── partial index predicates
-      │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
-      │    │    │              └── b:11 > 0
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── uniq_constraint_and_partial_index_a_key: filters
+      │    │    │    │         └── b:11 > 0
+      │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── a:10 = 1
       │    └── filters (true)
@@ -1554,9 +1601,10 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    ├── columns: k:9!null a:10 b:11!null
       │         │    │         │    │    │    │    ├── scan uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    │    ├── columns: k:9!null a:10 b:11
-      │         │    │         │    │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_key: filters
-      │         │    │         │    │    │    │    │              └── b:11 > 0
+      │         │    │         │    │    │    │    │    ├── partial index predicates
+      │         │    │         │    │    │    │    │    │    └── uniq_partial_constraint_and_partial_index_a_key: filters
+      │         │    │         │    │    │    │    │    │         └── b:11 > 0
+      │         │    │         │    │    │    │    │    └── flags: disabled not visible index feature
       │         │    │         │    │    │    │    └── filters
       │         │    │         │    │    │    │         └── b:11 > 0
       │         │    │         │    │    │    └── filters
@@ -1566,9 +1614,10 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    ├── columns: k:14!null a:15 b:16!null
       │         │    │         │    │    │    ├── scan uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    ├── columns: k:14!null a:15 b:16
-      │         │    │         │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_key: filters
-      │         │    │         │    │    │    │              └── b:16 > 0
+      │         │    │         │    │    │    │    ├── partial index predicates
+      │         │    │         │    │    │    │    │    └── uniq_partial_constraint_and_partial_index_a_key: filters
+      │         │    │         │    │    │    │    │         └── b:16 > 0
+      │         │    │         │    │    │    │    └── flags: disabled not visible index feature
       │         │    │         │    │    │    └── filters
       │         │    │         │    │    │         └── b:16 > 10
       │         │    │         │    │    └── filters
@@ -1655,15 +1704,16 @@ insert uniq_computed_pk
                      │    ├── columns: uniq_computed_pk.c_s:37 uniq_computed_pk.i:33!null uniq_computed_pk.s:34 uniq_computed_pk.d:35 uniq_computed_pk.c_i_expr:36!null uniq_computed_pk.c_d:38 uniq_computed_pk.c_d_expr:39
                      │    ├── scan uniq_computed_pk
                      │    │    ├── columns: uniq_computed_pk.i:33!null uniq_computed_pk.s:34 uniq_computed_pk.d:35 uniq_computed_pk.c_i_expr:36!null uniq_computed_pk.c_d:38 uniq_computed_pk.c_d_expr:39
-                     │    │    └── computed column expressions
-                     │    │         ├── uniq_computed_pk.c_i_expr:36
-                     │    │         │    └── CASE WHEN uniq_computed_pk.i:33 < 0 THEN 'foo' ELSE 'bar' END
-                     │    │         ├── uniq_computed_pk.c_s:37
-                     │    │         │    └── uniq_computed_pk.s:34
-                     │    │         ├── uniq_computed_pk.c_d:38
-                     │    │         │    └── uniq_computed_pk.d:35
-                     │    │         └── uniq_computed_pk.c_d_expr:39
-                     │    │              └── uniq_computed_pk.d:35::STRING
+                     │    │    ├── computed column expressions
+                     │    │    │    ├── uniq_computed_pk.c_i_expr:36
+                     │    │    │    │    └── CASE WHEN uniq_computed_pk.i:33 < 0 THEN 'foo' ELSE 'bar' END
+                     │    │    │    ├── uniq_computed_pk.c_s:37
+                     │    │    │    │    └── uniq_computed_pk.s:34
+                     │    │    │    ├── uniq_computed_pk.c_d:38
+                     │    │    │    │    └── uniq_computed_pk.d:35
+                     │    │    │    └── uniq_computed_pk.c_d_expr:39
+                     │    │    │         └── uniq_computed_pk.d:35::STRING
+                     │    │    └── flags: disabled not visible index feature
                      │    └── projections
                      │         └── uniq_computed_pk.s:34 [as=uniq_computed_pk.c_s:37]
                      └── filters
@@ -1705,7 +1755,8 @@ insert uniq_default
                 ├── select
                 │    ├── columns: uniq_default.k:9!null uniq_default.a:10!null uniq_default.b:11!null
                 │    ├── scan uniq_default
-                │    │    └── columns: uniq_default.k:9!null uniq_default.a:10 uniq_default.b:11
+                │    │    ├── columns: uniq_default.k:9!null uniq_default.a:10 uniq_default.b:11
+                │    │    └── flags: disabled not visible index feature
                 │    └── filters
                 │         ├── uniq_default.a:10 = 10
                 │         ├── uniq_default.b:11 = 100
