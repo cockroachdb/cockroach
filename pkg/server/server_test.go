@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1144,5 +1146,49 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 			require.Equal(t, tt.exp, result)
 			require.True(t, testutils.IsError(err, tt.expErr), "%+v didn't match expectation %s", err, tt.expErr)
 		})
+	}
+}
+
+// TestSocketAutoNumbering checks that a socket name
+// ending with `.0` in the input config gets auto-assigned
+// the actual TCP port number.
+func TestSocketAutoNumbering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	socketName := "foo.0"
+	// We need a temp directory in which we'll create the unix socket.
+	// On BSD, binding to a socket is limited to a path length of 104 characters
+	// (including the NUL terminator). In glibc, this limit is 108 characters.
+	// macOS has a tendency to produce very long temporary directory names, so
+	// we are careful to keep all the constants involved short.
+	baseTmpDir := os.TempDir()
+	if len(baseTmpDir) >= 104-1-len(socketName)-1-4-len("TestSocketAutoNumbering")-10 {
+		t.Logf("temp dir name too long: %s", baseTmpDir)
+		t.Logf("using /tmp instead.")
+		// Note: /tmp might fail in some systems, that's why we still prefer
+		// os.TempDir() if available.
+		baseTmpDir = "/tmp"
+	}
+	tempDir, err := ioutil.TempDir(baseTmpDir, "TestSocketAutoNumbering")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	socketFile := filepath.Join(tempDir, socketName)
+
+	ctx := context.Background()
+
+	params := base.TestServerArgs{
+		Insecure:   true,
+		SocketFile: socketFile,
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, expectedPort, err := addr.SplitHostPort(s.SQLAddr(), "")
+	require.NoError(t, err)
+
+	if socketPath := s.(*TestServer).Cfg.SocketFile; !strings.HasSuffix(socketPath, "."+expectedPort) {
+		t.Errorf("expected unix socket ending with port %q, got %q", expectedPort, socketPath)
 	}
 }

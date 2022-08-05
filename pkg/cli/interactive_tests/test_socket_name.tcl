@@ -5,10 +5,58 @@ source [file join [file dirname $argv0] common.tcl]
 set longname "this-is-a-very-long-directory-name-the-point-is-to-be-more-than-one-hundred-and-twenty-three-characters/and-we-also-need-to-break-it-into-two-parts"
 
 spawn /bin/bash
+set shell1_spawn_id $spawn_id
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
 send "mkdir -p $longname\r"
+eexpect ":/# "
+
+start_test "Check derived Unix socket name is printed in server output"
+send "$argv start-single-node --insecure --listen-addr=`cat /etc/hostname`:0 --pid-file=logs/server_pid --socket-dir=.\r"
+eexpect "CockroachDB node starting"
+expect {
+    -re "sql:.*@\[^:\]*:(\[^/\]*)/" { set sql_port $expect_out(1,string) }
+    timeout { handle_timeout "sql port number" }
+}
+expect {
+    -re "socket: *\\.s\\.PGSQL\\.$sql_port" { }
+    timeout { handle_timeout "socket name" }
+}
+system "test -S .s.PGSQL.$sql_port"
+system "test -r .s.PGSQL.$sql_port.lock"
+end_test
+
+spawn /bin/bash
+set shell2_spawn_id $spawn_id
+send "PS1=':''/# '\r"
+eexpect ":/# "
+
+start_test "Check that the socket is locked from reuse while the server is running."
+# We use 127.0.0.1 so as to not overlap with the default address 0.0.0.0 selected above.
+# We also need a different data directory to avoid a conflict there.
+send "$argv start-single-node --insecure --listen-addr=127.0.0.1:$sql_port --http-addr=:0 --socket-dir=. -s=path=logs/other\r"
+eexpect ERROR
+eexpect "Socket appears locked by process"
+eexpect ":/# "
+end_test
+
+start_test "Check that stopping the first process abruptly enables the 2nd process to start"
+system "kill -9 `cat logs/server_pid`"
+send "$argv start-single-node --insecure --listen-addr=127.0.0.1:$sql_port --http-addr=:0 --socket-dir=. -s=path=logs/other\r"
+eexpect "CockroachDB node starting"
+system "test -S .s.PGSQL.$sql_port"
+system "test -r .s.PGSQL.$sql_port.lock"
+end_test
+
+# Stop the server that was started above.
+interrupt
+eexpect ":/# "
+send "exit\r"
+eexpect eof
+
+set spawn_id $shell1_spawn_id
+interrupt
 eexpect ":/# "
 
 start_test "Check that the socket-dir flag checks the length of the directory."
