@@ -134,3 +134,7 @@ const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 const TELEMETRY = logpb.Channel_TELEMETRY
+
+// KV_DISTRIBUTION is used to report data distribution events, such as
+// allocation and rebalancing.
+const KV_DISTRIBUTION = logpb.Channel_KV_DISTRIBUTION
