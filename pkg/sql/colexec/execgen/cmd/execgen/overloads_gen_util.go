@@ -49,13 +49,13 @@ func populateTwoArgsOverloads(
 		if !found {
 			colexecerror.InternalError(errors.AssertionFailedf("didn't find supported widths for %s", leftFamily))
 		}
-		leftFamilyStr := toString(leftFamily)
+		leftFamilyStr := familyToString(leftFamily)
 		for _, rightFamily := range combinableCanonicalTypeFamilies[leftFamily] {
 			rightWidths, found := supportedWidthsByCanonicalTypeFamily[rightFamily]
 			if !found {
 				colexecerror.InternalError(errors.AssertionFailedf("didn't find supported widths for %s", rightFamily))
 			}
-			rightFamilyStr := toString(rightFamily)
+			rightFamilyStr := familyToString(rightFamily)
 			for _, leftWidth := range leftWidths {
 				for _, rightWidth := range rightWidths {
 					customizer, ok := customizers[typePair{leftFamily, leftWidth, rightFamily, rightWidth}]

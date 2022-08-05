@@ -76,7 +76,7 @@ func rangeOffsetHandlerGenerator(inputFileContents string, wr io.Writer) error {
 				ordColDirInfo := windowFrameOrdDirInfo{IsOrdColAsc: isOrdColAsc}
 				for _, typeFamily := range rangeOrderColTypeFamilies {
 					canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
-					typeFamilyStr := toString(typeFamily)
+					typeFamilyStr := familyToString(typeFamily)
 					typeFamilyInfo := windowFrameOrderTypeFamilyInfo{
 						TypeFamily: typeFamilyStr,
 					}

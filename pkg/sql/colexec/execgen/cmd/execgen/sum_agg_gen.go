@@ -161,7 +161,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	var tmplInfos []sumAggTypeTmplInfo
 	for _, inputTypeFamily := range supportedTypeFamilies {
 		tmplInfo := sumAggTypeTmplInfo{
-			TypeFamily: toString(inputTypeFamily),
+			TypeFamily: familyToString(inputTypeFamily),
 		}
 		for _, inputTypeWidth := range supportedWidthsByCanonicalTypeFamily[inputTypeFamily] {
 			// Note that we don't use execinfrapb.GetAggregateInfo because we don't

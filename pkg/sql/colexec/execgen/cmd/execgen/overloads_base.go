@@ -123,7 +123,7 @@ func (b *overloadBase) String() string {
 	return fmt.Sprintf("%s: %s", b.Name, b.OpStr)
 }
 
-func toString(family types.Family) string {
+func familyToString(family types.Family) string {
 	switch family {
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "typeconv.DatumVecCanonicalTypeFamily"
@@ -140,7 +140,7 @@ type argTypeOverloadBase struct {
 func newArgTypeOverloadBase(canonicalTypeFamily types.Family) *argTypeOverloadBase {
 	return &argTypeOverloadBase{
 		CanonicalTypeFamily:    canonicalTypeFamily,
-		CanonicalTypeFamilyStr: toString(canonicalTypeFamily),
+		CanonicalTypeFamilyStr: familyToString(canonicalTypeFamily),
 	}
 }
 
