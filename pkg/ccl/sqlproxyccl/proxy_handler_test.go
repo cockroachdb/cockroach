@@ -924,13 +924,12 @@ func TestCancelQuery(t *testing.T) {
 	// Start two SQL pods for the test tenant.
 	const podCount = 2
 	tenantID := serverutils.TestTenantID()
-	var cancelFn func(context.Context) error
+	var cancelFn func()
 	tenantKnobs := base.TestingKnobs{}
 	tenantKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		BeforeExecute: func(ctx context.Context, stmt string) {
 			if strings.Contains(stmt, "cancel_me") {
-				err := cancelFn(ctx)
-				assert.NoError(t, err)
+				cancelFn()
 			}
 		},
 	}
@@ -998,16 +997,58 @@ func TestCancelQuery(t *testing.T) {
 		return nil
 	})
 
+	clearMetrics := func(t *testing.T, metrics *metrics) {
+		metrics.QueryCancelSuccessful.Clear()
+		metrics.QueryCancelIgnored.Clear()
+		metrics.QueryCancelForwarded.Clear()
+		metrics.QueryCancelReceivedPGWire.Clear()
+		metrics.QueryCancelReceivedHTTP.Clear()
+
+		testutils.SucceedsSoon(t, func() error {
+			if metrics.QueryCancelSuccessful.Count() != 0 ||
+				metrics.QueryCancelIgnored.Count() != 0 ||
+				metrics.QueryCancelForwarded.Count() != 0 ||
+				metrics.QueryCancelReceivedPGWire.Count() != 0 ||
+				metrics.QueryCancelReceivedHTTP.Count() != 0 {
+				return errors.Newf("expected metrics to update, got: "+
+					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
+					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
+					metrics.QueryCancelSuccessful.Count(), metrics.QueryCancelIgnored.Count(),
+					metrics.QueryCancelForwarded.Count(), metrics.QueryCancelReceivedPGWire.Count(),
+					metrics.QueryCancelReceivedHTTP.Count(),
+				)
+			}
+			return nil
+		})
+	}
+
 	t.Run("cancel over sql", func(t *testing.T) {
-		cancelFn = conn.PgConn().CancelRequest
+		clearMetrics(t, proxy.metrics)
+		cancelFn = func() {
+			_ = conn.PgConn().CancelRequest(ctx)
+		}
 		var b bool
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
+		testutils.SucceedsSoon(t, func() error {
+			if proxy.metrics.QueryCancelSuccessful.Count() != 1 ||
+				proxy.metrics.QueryCancelReceivedPGWire.Count() != 1 {
+				return errors.Newf("expected metrics to update, got: "+
+					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
+					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
+					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
+					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
+					proxy.metrics.QueryCancelReceivedHTTP.Count(),
+				)
+			}
+			return nil
+		})
 	})
 
 	t.Run("cancel over http", func(t *testing.T) {
-		cancelFn = func(ctx context.Context) error {
+		clearMetrics(t, proxy.metrics)
+		cancelFn = func() {
 			cancelRequest := proxyCancelRequest{
 				ProxyIP:   net.IP{},
 				SecretKey: conn.PgConn().SecretKey(),
@@ -1016,27 +1057,41 @@ func TestCancelQuery(t *testing.T) {
 			u := "http://" + httpAddr + "/_status/cancel/"
 			reqBody := bytes.NewReader(cancelRequest.Encode())
 			client := http.Client{
-				Timeout: 1 * time.Second,
+				Timeout: 10 * time.Second,
 			}
 			resp, err := client.Post(u, "application/octet-stream", reqBody)
-			if err != nil {
-				return err
+			if !assert.NoError(t, err) {
+				return
 			}
 			respBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				return err
+			if !assert.NoError(t, err) {
+				return
 			}
 			assert.Equal(t, "OK", string(respBytes))
-			return nil
 		}
 		var b bool
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
+		testutils.SucceedsSoon(t, func() error {
+			if proxy.metrics.QueryCancelSuccessful.Count() != 1 ||
+				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
+				return errors.Newf("expected metrics to update, got: "+
+					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
+					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
+					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
+					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
+					proxy.metrics.QueryCancelReceivedHTTP.Count(),
+				)
+			}
+			return nil
+		})
 	})
 
 	t.Run("cancel after migrating a session", func(t *testing.T) {
-		cancelFn = conn.PgConn().CancelRequest
+		cancelFn = func() {
+			_ = conn.PgConn().CancelRequest(ctx)
+		}
 		defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Minute)()
 		origCancelInfo, found := proxy.handler.cancelInfoMap.getCancelInfo(conn.PgConn().SecretKey())
 		require.True(t, found)
@@ -1080,10 +1135,11 @@ func TestCancelQuery(t *testing.T) {
 	})
 
 	t.Run("reject cancel from wrong client IP", func(t *testing.T) {
+		clearMetrics(t, proxy.metrics)
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
 			SecretKey: conn.PgConn().SecretKey(),
-			ClientIP:  net.IP{127, 1, 2, 3},
+			ClientIP:  net.IP{210, 1, 2, 3},
 		}
 		u := "http://" + httpAddr + "/_status/cancel/"
 		reqBody := bytes.NewReader(cancelRequest.Encode())
@@ -1097,9 +1153,23 @@ func TestCancelQuery(t *testing.T) {
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)
 		require.Regexp(t, "mismatched client IP for cancel request", httpCancelErr.Error())
+		testutils.SucceedsSoon(t, func() error {
+			if proxy.metrics.QueryCancelIgnored.Count() != 1 ||
+				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
+				return errors.Newf("expected metrics to update, got: "+
+					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
+					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
+					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
+					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
+					proxy.metrics.QueryCancelReceivedHTTP.Count(),
+				)
+			}
+			return nil
+		})
 	})
 
 	t.Run("forward over http", func(t *testing.T) {
+		clearMetrics(t, proxy.metrics)
 		var forwardedTo string
 		var forwardedReq proxyCancelRequest
 		var wg sync.WaitGroup
@@ -1116,7 +1186,7 @@ func TestCancelQuery(t *testing.T) {
 		})()
 		crdbRequest := &pgproto3.CancelRequest{
 			ProcessID: 1,
-			SecretKey: 2,
+			SecretKey: conn.PgConn().SecretKey() + 1,
 		}
 		buf := crdbRequest.Encode(nil /* buf */)
 		proxyAddr := conn.PgConn().Conn().RemoteAddr()
@@ -1132,10 +1202,57 @@ func TestCancelQuery(t *testing.T) {
 		require.Equal(t, "http://0.0.0.1:8080/_status/cancel/", forwardedTo)
 		expectedReq := proxyCancelRequest{
 			ProxyIP:   net.IP{0, 0, 0, 1},
-			SecretKey: 2,
+			SecretKey: conn.PgConn().SecretKey() + 1,
 			ClientIP:  net.IP{127, 0, 0, 1},
 		}
 		require.Equal(t, expectedReq, forwardedReq)
+		testutils.SucceedsSoon(t, func() error {
+			if proxy.metrics.QueryCancelForwarded.Count() != 1 ||
+				proxy.metrics.QueryCancelReceivedPGWire.Count() != 1 {
+				return errors.Newf("expected metrics to update, got: "+
+					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
+					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
+					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
+					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
+					proxy.metrics.QueryCancelReceivedHTTP.Count(),
+				)
+			}
+			return nil
+		})
+	})
+
+	t.Run("ignore unknown secret key", func(t *testing.T) {
+		clearMetrics(t, proxy.metrics)
+		cancelRequest := proxyCancelRequest{
+			ProxyIP:   net.IP{},
+			SecretKey: conn.PgConn().SecretKey() + 1,
+			ClientIP:  net.IP{127, 0, 0, 1},
+		}
+		u := "http://" + httpAddr + "/_status/cancel/"
+		reqBody := bytes.NewReader(cancelRequest.Encode())
+		client := http.Client{
+			Timeout: 10 * time.Second,
+		}
+		resp, err := client.Post(u, "application/octet-stream", reqBody)
+		require.NoError(t, err)
+		respBytes, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "OK", string(respBytes))
+		require.Error(t, httpCancelErr)
+		require.Regexp(t, "ignoring cancel request with unfamiliar key", httpCancelErr.Error())
+		testutils.SucceedsSoon(t, func() error {
+			if proxy.metrics.QueryCancelIgnored.Count() != 1 ||
+				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
+				return errors.Newf("expected metrics to update, got: "+
+					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
+					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
+					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
+					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
+					proxy.metrics.QueryCancelReceivedHTTP.Count(),
+				)
+			}
+			return nil
+		})
 	})
 }
 
