@@ -492,14 +492,32 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 
 // handleCancelRequest handles a pgwire query cancel request by either
 // forwarding it to a SQL node or to another proxy.
-func (handler *proxyHandler) handleCancelRequest(cr *proxyCancelRequest, allowForward bool) error {
+func (handler *proxyHandler) handleCancelRequest(
+	cr *proxyCancelRequest, allowForward bool,
+) (retErr error) {
+	if allowForward {
+		handler.metrics.QueryCancelReceivedPGWire.Inc(1)
+	} else {
+		handler.metrics.QueryCancelReceivedHTTP.Inc(1)
+	}
+	var triedForward bool
+	defer func() {
+		if retErr != nil {
+			handler.metrics.QueryCancelIgnored.Inc(1)
+		} else if triedForward {
+			handler.metrics.QueryCancelForwarded.Inc(1)
+		} else {
+			handler.metrics.QueryCancelSuccessful.Inc(1)
+		}
+	}()
 	if ci, ok := handler.cancelInfoMap.getCancelInfo(cr.SecretKey); ok {
 		return ci.sendCancelToBackend(cr.ClientIP)
 	}
 	// Only forward the request if it hasn't already been sent to the correct proxy.
 	if !allowForward {
-		return nil
+		return errors.Newf("ignoring cancel request with unfamiliar key: %d", cr.SecretKey)
 	}
+	triedForward = true
 	u := "http://" + cr.ProxyIP.String() + ":8080/_status/cancel/"
 	reqBody := bytes.NewReader(cr.Encode())
 	return forwardCancelRequest(u, reqBody)
