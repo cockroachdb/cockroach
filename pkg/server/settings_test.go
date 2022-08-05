@@ -56,12 +56,8 @@ var durationA = settings.RegisterDurationSetting(
 		return nil
 	})
 var byteSizeA = settings.RegisterByteSizeSetting(
-	settings.TenantWritable, byteSizeKey, "desc", 1024*1024, func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
-		}
-		return nil
-	})
+	settings.TenantWritable, byteSizeKey, "desc", 1024*1024,
+)
 var enumA = settings.RegisterEnumSetting(
 	settings.TenantWritable, enumKey, "desc", "foo", map[int64]string{1: "foo", 2: "bar"})
 

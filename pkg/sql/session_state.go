@@ -33,7 +33,6 @@ var maxSerializedSessionSize = settings.RegisterByteSizeSetting(
 	"if set to non-zero, then serializing a session will fail if it requires more"+
 		"than the specified size",
 	0,
-	settings.NonNegativeInt,
 )
 
 // SerializeSessionState is a wrapper for serializeSessionState, and uses the

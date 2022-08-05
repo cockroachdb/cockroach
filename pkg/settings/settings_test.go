@@ -181,13 +181,7 @@ var strVal = settings.RegisterValidatedStringSetting(settings.SystemOnly,
 	})
 var dVal = settings.RegisterDurationSetting(settings.SystemOnly, "dVal", "desc", time.Second, settings.NonNegativeDuration)
 var fVal = settings.RegisterFloatSetting(settings.SystemOnly, "fVal", "desc", 5.4, settings.NonNegativeFloat)
-var byteSizeVal = settings.RegisterByteSizeSetting(settings.SystemOnly,
-	"byteSize.Val", "desc", mb, func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("bytesize cannot be negative")
-		}
-		return nil
-	})
+var byteSizeVal = settings.RegisterByteSizeSetting(settings.SystemOnly, "byteSize.Val", "desc", mb)
 var iVal = settings.RegisterIntSetting(settings.SystemOnly,
 	"i.Val", "desc", 0, func(v int64) error {
 		if v < 0 {
@@ -644,7 +638,7 @@ func TestCache(t *testing.T) {
 		{
 			u := settings.NewUpdater(sv)
 			if err := u.Set(ctx, "byteSize.Val", v(settings.EncodeInt(-mb), "z")); !testutils.IsError(err,
-				"bytesize cannot be negative",
+				"cannot be set to a negative value",
 			) {
 				t.Fatal(err)
 			}

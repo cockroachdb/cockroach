@@ -158,7 +158,6 @@ var (
 		"the maximum byte size of individual error entries which will be stored"+
 			" for introspection",
 		defaultExecutionErrorsMaxEntrySize,
-		settings.NonNegativeInt,
 	)
 
 	debugPausepoints = settings.RegisterStringSetting(
