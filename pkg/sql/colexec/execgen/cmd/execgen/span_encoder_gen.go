@@ -48,7 +48,7 @@ func genSpanEncoder(inputFileContents string, wr io.Writer) error {
 				// We are currently unable to encode JSON as a table key.
 				continue
 			}
-			familyInfo := spanEncoderTypeFamilyInfo{TypeFamily: toString(family)}
+			familyInfo := spanEncoderTypeFamilyInfo{TypeFamily: familyToString(family)}
 			for _, width := range supportedWidthsByCanonicalTypeFamily[family] {
 				overload := spanEncoderTmplInfo{
 					Asc:        asc,

@@ -41,7 +41,9 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Bool, types.Int2, boolToIntOrFloat},
 	{types.Bool, types.Int4, boolToIntOrFloat},
 	{types.Bool, types.Int, boolToIntOrFloat},
+	{types.Bool, types.String, boolToString},
 
+	{types.Bytes, types.String, bytesToString},
 	{types.Bytes, types.Uuid, bytesToUUID},
 
 	{types.Date, types.Decimal, intToDecimal},
@@ -53,6 +55,7 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Date, types.Int2, getIntToIntCastFunc(64 /* fromWidth */, 16 /* toWidth */)},
 	{types.Date, types.Int4, getIntToIntCastFunc(64 /* fromWidth */, 32 /* toWidth */)},
 	{types.Date, types.Int, getIntToIntCastFunc(64 /* fromWidth */, anyWidth)},
+	{types.Date, types.String, dateToString},
 
 	{types.Decimal, types.Bool, decimalToBool},
 	{types.Decimal, types.Decimal, decimalToDecimal},
@@ -60,28 +63,35 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Decimal, types.Int2, getDecimalToIntCastFunc(16)},
 	{types.Decimal, types.Int4, getDecimalToIntCastFunc(32)},
 	{types.Decimal, types.Int, getDecimalToIntCastFunc(anyWidth)},
+	{types.Decimal, types.String, decimalToString},
 
 	{types.Float, types.Bool, numToBool},
 	{types.Float, types.Decimal, floatToDecimal},
 	{types.Float, types.Int2, floatToInt(16, 64 /* floatWidth */)},
 	{types.Float, types.Int4, floatToInt(32, 64 /* floatWidth */)},
 	{types.Float, types.Int, floatToInt(anyWidth, 64 /* floatWidth */)},
+	{types.Float, types.String, floatToString},
 
 	{types.Int2, types.Bool, numToBool},
 	{types.Int2, types.Decimal, intToDecimal},
 	{types.Int2, types.Float, intToFloat},
 	{types.Int2, types.Int4, getIntToIntCastFunc(16, 32)},
 	{types.Int2, types.Int, getIntToIntCastFunc(16, anyWidth)},
+	{types.Int2, types.String, intToString},
 	{types.Int4, types.Bool, numToBool},
 	{types.Int4, types.Decimal, intToDecimal},
 	{types.Int4, types.Float, intToFloat},
 	{types.Int4, types.Int2, getIntToIntCastFunc(32, 16)},
 	{types.Int4, types.Int, getIntToIntCastFunc(32, anyWidth)},
+	{types.Int4, types.String, intToString},
 	{types.Int, types.Bool, numToBool},
 	{types.Int, types.Decimal, intToDecimal},
 	{types.Int, types.Float, intToFloat},
 	{types.Int, types.Int2, getIntToIntCastFunc(anyWidth, 16)},
 	{types.Int, types.Int4, getIntToIntCastFunc(anyWidth, 32)},
+	{types.Int, types.String, intToString},
+
+	{types.Interval, types.String, intervalToString},
 
 	{types.Jsonb, types.String, jsonToString},
 
@@ -99,6 +109,12 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.String, types.Timestamp, getStringToTimestampCastFunc(true /* withoutTimezone */)},
 	{types.String, types.TimestampTZ, getStringToTimestampCastFunc(false /* withoutTimezone */)},
 	{types.String, types.Uuid, stringToUUID},
+
+	{types.Timestamp, types.String, timestampToString},
+
+	{types.TimestampTZ, types.String, timestampTZToString},
+
+	{types.Uuid, types.String, uuidToString},
 }
 
 type supportedNativeCastInfo struct {
@@ -117,6 +133,18 @@ func boolToIntOrFloat(to, from, _, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
+func boolToString(to, from, _, toType, _ string) string {
+	return toString(fmt.Sprintf("%s = []byte(strconv.FormatBool(%s))", to, from), to, toType)
+}
+
+func bytesToString(to, from, evalCtx, toType, _ string) string {
+	convStr := `
+		_format := %[3]s.SessionData().DataConversionConfig.BytesEncodeFormat
+		%[1]s = []byte(lex.EncodeByteArrayToRawBytes(string(%[2]s), _format, false /* skipHexPrefix */))
+`
+	return toString(fmt.Sprintf(convStr, to, from, evalCtx), to, toType)
+}
+
 func bytesToUUID(to, from, _, _, _ string) string {
 	convStr := `
 		_uuid, err := uuid.FromBytes(%[2]s)
@@ -126,6 +154,16 @@ func bytesToUUID(to, from, _, _, _ string) string {
 		%[1]s = _uuid.GetBytes()
 	`
 	return fmt.Sprintf(convStr, to, from)
+}
+
+func dateToString(to, from, _, toType, buf string) string {
+	convStr := `
+		_date := pgdate.MakeCompatibleDateFromDisk(%[2]s)
+		%[3]s.Reset()
+		_date.Format(%[3]s)
+		%[1]s = []byte(%[3]s.String())
+	`
+	return toString(fmt.Sprintf(convStr, to, from, buf), to, toType)
 }
 
 func decimalToBool(to, from, _, _, _ string) string {
@@ -191,6 +229,10 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 	}
 }
 
+func decimalToString(to, from, _, toType, _ string) string {
+	return toString(fmt.Sprintf("%s = []byte(%s.String())", to, from), to, toType)
+}
+
 // toDecimal returns the templated code that performs the cast to a decimal. It
 // first will execute whatever is passed in 'conv' (the main conversion) and
 // then will perform the rounding of 'to' variable according to 'toType'.
@@ -233,6 +275,14 @@ func floatToInt(intWidth, floatWidth int32) castFunc {
 		}
 		return fmt.Sprintf(convStr, to, from, intWidth, floatWidth)
 	}
+}
+
+func floatToString(to, from, evalCtx, toType, _ string) string {
+	convStr := `
+		dcc := %[3]s.SessionData().DataConversionConfig
+		%[1]s = tree.PgwireFormatFloat(nil /* buf */, %[2]s, dcc, types.Float)
+`
+	return toString(fmt.Sprintf(convStr, to, from, evalCtx), to, toType)
 }
 
 func intToDecimal(to, from, _, toType, _ string) string {
@@ -286,20 +336,37 @@ func getIntToIntCastFunc(fromWidth, toWidth int32) castFunc {
 	}
 }
 
-func jsonToString(to, from, _, toType, _ string) string {
+func intToString(to, from, _, toType, _ string) string {
 	convStr := `
-		_string := %[2]s.String()
-		switch %[3]s.Oid() {
-		case oid.T_char:
-			// "char" is supposed to truncate long values.
-			_string = util.TruncateString(_string, 1)
-		case oid.T_bpchar:
-			// bpchar types truncate trailing whitespace.
-			_string = strings.TrimRight(_string, " ")
+		if %[3]s.Oid() == oid.T_char {
+			// int to "char" casts just return the corresponding ASCII byte.
+			if %[2]s > math.MaxInt8 || %[2]s < math.MinInt8 {
+				colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+			}
+			if %[2]s == 0 {
+				%[1]s = []byte{}
+			} else {
+				%[1]s = []byte{byte(%[2]s)}
+			}
+		} else {
+			%[1]s = []byte(strconv.FormatInt(int64(%[2]s), 10))
 		}
-		%[1]s = []byte(_string)
-	`
-	return fmt.Sprintf(convStr, to, from, toType)
+`
+	return toString(fmt.Sprintf(convStr, to, from, toType), to, toType)
+}
+
+func intervalToString(to, from, evalCtx, toType, buf string) string {
+	convStr := `
+		dcc := %[3]s.SessionData().DataConversionConfig
+		%[4]s.Reset()
+		%[2]s.FormatWithStyle(%[4]s, dcc.IntervalStyle)
+		%[1]s = []byte(%[4]s.String())
+`
+	return toString(fmt.Sprintf(convStr, to, from, evalCtx, buf), to, toType)
+}
+
+func jsonToString(to, from, _, toType, _ string) string {
+	return toString(fmt.Sprintf("%s = []byte(%s.String())", to, from), to, toType)
 }
 
 func stringToBool(to, from, _, _, _ string) string {
@@ -427,13 +494,19 @@ func stringToJSON(to, from, _, _, _ string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-func stringToString(to, from, _, toType, _ string) string {
+// TODO(yuzefovich): figure out whether we can avoid converting to a string in
+// the template below.
+
+// toString returns the templated code that performs the cast to a string. It
+// first will execute whatever is passed in 'conv' (the main conversion) and
+// then will perform the truncation of 'to' variable according to 'toType'.
+func toString(conv, to, toType string) string {
+	// The logic here is a combination of the relevant pieces from
+	// eval.performCastWithoutPrecisionTruncation as well as from
+	// tree.AdjustValueToType.
 	convStr := `
-		if %[3]s.Oid() == oid.T_name {
-			// For Names we don't perform the truncation, and there is no need
-			// to do anything about the Oids since those are stored in the type.
-			%[1]s = %[2]s
-		} else {
+		%[1]s
+		if %[3]s.Oid() != oid.T_name {
 			// bpchar types truncate trailing whitespace.
 			if %[3]s.Oid() == oid.T_bpchar {
 				%[2]s = bytes.TrimRight(%[2]s, " ")
@@ -442,20 +515,37 @@ func stringToString(to, from, _, toType, _ string) string {
 			//   'hello'::CHAR(2) -> 'he'
 			// This is true of all the string type variants.
 			if %[3]s.Width() > 0 {
-				// TODO(yuzefovich): figure out whether we can avoid converting
-				// to a string.
 				%[2]s = []byte(util.TruncateString(string(%[2]s), int(%[3]s.Width())))
 			}
 			if %[3]s.Oid() == oid.T_char {
 				// "char" is supposed to truncate long values.
-				// TODO(yuzefovich): figure out whether we can avoid converting
-				// to a string.
 				%[2]s = []byte(util.TruncateString(string(%[2]s), 1))
 			}
-			%[1]s = %[2]s
+		}
+		if %[3]s.Width() > 0 && utf8.RuneCountInString(string(%[2]s)) > int(%[3]s.Width()) {
+			_typeString := %[3]s.SQLString()
+			colexecerror.ExpectedError(
+				pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type " + _typeString,
+			))
 		}
 	`
-	return fmt.Sprintf(convStr, to, from, toType)
+	return fmt.Sprintf(convStr, conv, to, toType)
+}
+
+func stringToString(to, from, _, toType, _ string) string {
+	return toString(fmt.Sprintf("%s = %s", to, from), to, toType)
+}
+
+// roundTimestamp is a template that takes a timestamp specified by 'from',
+// rounds it according to 'precision', and assigns the result to 'to' timestamp.
+func roundTimestamp(to, from, precision string) string {
+	roundStr := `
+		%[1]s = %[2]s.Round(%[3]s)
+		if %[1]s.After(tree.MaxSupportedTime) || %[1]s.Before(tree.MinSupportedTime) {
+			colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(%[1]s))
+		}
+`
+	return fmt.Sprintf(roundStr, to, from, precision)
 }
 
 func getStringToTimestampCastFunc(withoutTimezone bool) castFunc {
@@ -475,12 +565,10 @@ func getStringToTimestampCastFunc(withoutTimezone bool) castFunc {
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
-		%[1]s = _t.Round(_roundTo)
-		if %[1]s.After(tree.MaxSupportedTime) || %[1]s.Before(tree.MinSupportedTime) {
-			colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(%[1]s))
-		}
+		%[1]s
 `
-		return fmt.Sprintf(convStr, to, from, evalCtx, toType, parseTimestampKind)
+		roundAndAssign := roundTimestamp(to, "_t", "_roundTo")
+		return fmt.Sprintf(convStr, roundAndAssign, from, evalCtx, toType, parseTimestampKind)
 	}
 }
 
@@ -493,6 +581,34 @@ func stringToUUID(to, from, _, _, _ string) string {
 		%[1]s = _uuid.GetBytes()
 	`
 	return fmt.Sprintf(convStr, to, from)
+}
+
+func timestampToString(to, from, _, toType, _ string) string {
+	return toString(fmt.Sprintf("%s = []byte(tree.FormatTimestamp(%s))", to, from), to, toType)
+}
+
+func timestampTZToString(to, from, evalCtx, toType, buf string) string {
+	convStr := `
+		// Convert to context timezone for correct display.
+		_t := %[2]s.In(%[3]s.GetLocation())
+		%[5]s
+		%[4]s.Reset()
+		tree.FormatTimestampTZ(_t, %[4]s)
+		%[1]s = []byte(%[4]s.String())
+`
+	roundT := roundTimestamp("_t", "_t", "time.Microsecond")
+	return toString(fmt.Sprintf(convStr, to, from, evalCtx, buf, roundT), to, toType)
+}
+
+func uuidToString(to, from, _, toType, _ string) string {
+	convStr := `
+		_uuid, err := uuid.FromBytes(%[2]s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = []byte(_uuid.String())
+	`
+	return toString(fmt.Sprintf(convStr, to, from), to, toType)
 }
 
 // getDatumToNativeCastFunc returns a castFunc for casting datum-backed value

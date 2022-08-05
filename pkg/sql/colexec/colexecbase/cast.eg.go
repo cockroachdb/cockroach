@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -205,6 +206,12 @@ func GetCastOperator(
 					default:
 						return &castBoolIntOp{castOpBase: base}, nil
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castBoolStringOp{castOpBase: base}, nil
+					}
 				}
 			}
 		case types.BytesFamily:
@@ -212,6 +219,12 @@ func GetCastOperator(
 			case -1:
 			default:
 				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castBytesStringOp{castOpBase: base}, nil
+					}
 				case types.UuidFamily:
 					switch toType.Width() {
 					case -1:
@@ -246,6 +259,12 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castDateIntOp{castOpBase: base}, nil
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDateStringOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -282,6 +301,12 @@ func GetCastOperator(
 					default:
 						return &castDecimalIntOp{castOpBase: base}, nil
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castDecimalStringOp{castOpBase: base}, nil
+					}
 				}
 			}
 		case types.FloatFamily:
@@ -310,6 +335,12 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castFloatIntOp{castOpBase: base}, nil
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castFloatStringOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -343,6 +374,12 @@ func GetCastOperator(
 					default:
 						return &castInt2IntOp{castOpBase: base}, nil
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt2StringOp{castOpBase: base}, nil
+					}
 				}
 			case 32:
 				switch toType.Family() {
@@ -372,6 +409,12 @@ func GetCastOperator(
 					default:
 						return &castInt4IntOp{castOpBase: base}, nil
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castInt4StringOp{castOpBase: base}, nil
+					}
 				}
 			case -1:
 			default:
@@ -400,6 +443,25 @@ func GetCastOperator(
 						return &castIntInt2Op{castOpBase: base}, nil
 					case 32:
 						return &castIntInt4Op{castOpBase: base}, nil
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntStringOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.IntervalFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castIntervalStringOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -496,6 +558,45 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castStringUuidOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.TimestampFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castTimestampStringOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.TimestampTZFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castTimestamptzStringOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.UuidFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castUuidStringOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -621,6 +722,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					default:
 						return true
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
 				}
 			}
 		case types.BytesFamily:
@@ -628,6 +735,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			case -1:
 			default:
 				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
 				case types.UuidFamily:
 					switch toType.Width() {
 					case -1:
@@ -659,6 +772,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 						return true
 					case 32:
 						return true
+					case -1:
+					default:
+						return true
+					}
+				case types.StringFamily:
+					switch toType.Width() {
 					case -1:
 					default:
 						return true
@@ -698,6 +817,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					default:
 						return true
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
 				}
 			}
 		case types.FloatFamily:
@@ -723,6 +848,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 						return true
 					case 32:
 						return true
+					case -1:
+					default:
+						return true
+					}
+				case types.StringFamily:
+					switch toType.Width() {
 					case -1:
 					default:
 						return true
@@ -759,6 +890,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					default:
 						return true
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
 				}
 			case 32:
 				switch toType.Family() {
@@ -784,6 +921,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					switch toType.Width() {
 					case 16:
 						return true
+					case -1:
+					default:
+						return true
+					}
+				case types.StringFamily:
+					switch toType.Width() {
 					case -1:
 					default:
 						return true
@@ -815,6 +958,25 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					case 16:
 						return true
 					case 32:
+						return true
+					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.IntervalFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
 						return true
 					}
 				}
@@ -908,6 +1070,45 @@ func IsCastSupported(fromType, toType *types.T) bool {
 						return true
 					}
 				case types.UuidFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.TimestampFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.TimestampTZFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.UuidFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
 					default:
@@ -1718,6 +1919,442 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 							}
 
 							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castBoolStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castBoolStringOp{}
+var _ colexecop.ClosableOperator = &castBoolStringOp{}
+
+func (c *castBoolStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bool()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(strconv.FormatBool(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(strconv.FormatBool(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(strconv.FormatBool(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(strconv.FormatBool(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castBytesStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castBytesStringOp{}
+var _ colexecop.ClosableOperator = &castBytesStringOp{}
+
+func (c *castBytesStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
+							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
+							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
+							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
+							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
 							outputCol.Set(tupleIdx, r)
 						}
 					}
@@ -2582,6 +3219,238 @@ func (c *castDateIntOp) Next() coldata.Batch {
 							var r int64
 							r = int64(v)
 							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDateStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDateStringOp{}
+var _ colexecop.ClosableOperator = &castDateStringOp{}
+
+func (c *castDateStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_date := pgdate.MakeCompatibleDateFromDisk(v)
+							buf.Reset()
+							_date.Format(buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_date := pgdate.MakeCompatibleDateFromDisk(v)
+							buf.Reset()
+							_date.Format(buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_date := pgdate.MakeCompatibleDateFromDisk(v)
+							buf.Reset()
+							_date.Format(buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_date := pgdate.MakeCompatibleDateFromDisk(v)
+							buf.Reset()
+							_date.Format(buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
 							outputCol.Set(tupleIdx, r)
 						}
 					}
@@ -3616,6 +4485,222 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 	return batch
 }
 
+type castDecimalStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castDecimalStringOp{}
+var _ colexecop.ClosableOperator = &castDecimalStringOp{}
+
+func (c *castDecimalStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
 type castFloatBoolOp struct {
 	castOpBase
 }
@@ -4356,6 +5441,230 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 	return batch
 }
 
+type castFloatStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castFloatStringOp{}
+var _ colexecop.ClosableOperator = &castFloatStringOp{}
+
+func (c *castFloatStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Float64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
 type castInt2BoolOp struct {
 	castOpBase
 }
@@ -5026,6 +6335,274 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 							var r int64
 							r = int64(v)
 							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt2StringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt2StringOp{}
+var _ colexecop.ClosableOperator = &castInt2StringOp{}
+
+func (c *castInt2StringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
 							outputCol.Set(tupleIdx, r)
 						}
 					}
@@ -5730,6 +7307,274 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 							var r int64
 							r = int64(v)
 							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt4StringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castInt4StringOp{}
+var _ colexecop.ClosableOperator = &castInt4StringOp{}
+
+func (c *castInt4StringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
 							outputCol.Set(tupleIdx, r)
 						}
 					}
@@ -6468,6 +8313,506 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 	return batch
 }
 
+type castIntStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castIntStringOp{}
+var _ colexecop.ClosableOperator = &castIntStringOp{}
+
+func (c *castIntStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							if toType.Oid() == oid.T_char {
+								// int to "char" casts just return the corresponding ASCII byte.
+								if v > math.MaxInt8 || v < math.MinInt8 {
+									colexecerror.ExpectedError(tree.ErrCharOutOfRange)
+								}
+								if v == 0 {
+									r = []byte{}
+								} else {
+									r = []byte{byte(v)}
+								}
+							} else {
+								r = []byte(strconv.FormatInt(int64(v), 10))
+							}
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castIntervalStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castIntervalStringOp{}
+var _ colexecop.ClosableOperator = &castIntervalStringOp{}
+
+func (c *castIntervalStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Interval()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							buf.Reset()
+							v.FormatWithStyle(buf, dcc.IntervalStyle)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							buf.Reset()
+							v.FormatWithStyle(buf, dcc.IntervalStyle)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							buf.Reset()
+							v.FormatWithStyle(buf, dcc.IntervalStyle)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							dcc := evalCtx.SessionData().DataConversionConfig
+							buf.Reset()
+							v.FormatWithStyle(buf, dcc.IntervalStyle)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
 type castJsonbStringOp struct {
 	castOpBase
 }
@@ -6513,16 +8858,28 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
 							}
-							r = []byte(_string)
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -6545,16 +8902,28 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
 							}
-							r = []byte(_string)
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -6579,16 +8948,28 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
 							}
-							r = []byte(_string)
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -6611,16 +8992,28 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							_string := v.String()
-							switch toType.Oid() {
-							case oid.T_char:
-								// "char" is supposed to truncate long values.
-								_string = util.TruncateString(_string, 1)
-							case oid.T_bpchar:
+							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
-								_string = strings.TrimRight(_string, " ")
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
 							}
-							r = []byte(_string)
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
 
 							outputCol.Set(tupleIdx, r)
 						}
@@ -8321,30 +10714,27 @@ func (c *castStringStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							if toType.Oid() == oid.T_name {
-								// For Names we don't perform the truncation, and there is no need
-								// to do anything about the Oids since those are stored in the type.
-								r = v
-							} else {
+							r = v
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
-									v = bytes.TrimRight(v, " ")
+									r = bytes.TrimRight(r, " ")
 								}
 								// If the string type specifies a limit we truncate to that limit:
 								//   'hello'::CHAR(2) -> 'he'
 								// This is true of all the string type variants.
 								if toType.Width() > 0 {
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
 								}
 								if toType.Oid() == oid.T_char {
 									// "char" is supposed to truncate long values.
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), 1))
+									r = []byte(util.TruncateString(string(r), 1))
 								}
-								r = v
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
 							}
 
 							outputCol.Set(tupleIdx, r)
@@ -8368,30 +10758,27 @@ func (c *castStringStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							if toType.Oid() == oid.T_name {
-								// For Names we don't perform the truncation, and there is no need
-								// to do anything about the Oids since those are stored in the type.
-								r = v
-							} else {
+							r = v
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
-									v = bytes.TrimRight(v, " ")
+									r = bytes.TrimRight(r, " ")
 								}
 								// If the string type specifies a limit we truncate to that limit:
 								//   'hello'::CHAR(2) -> 'he'
 								// This is true of all the string type variants.
 								if toType.Width() > 0 {
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
 								}
 								if toType.Oid() == oid.T_char {
 									// "char" is supposed to truncate long values.
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), 1))
+									r = []byte(util.TruncateString(string(r), 1))
 								}
-								r = v
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
 							}
 
 							outputCol.Set(tupleIdx, r)
@@ -8417,30 +10804,27 @@ func (c *castStringStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							if toType.Oid() == oid.T_name {
-								// For Names we don't perform the truncation, and there is no need
-								// to do anything about the Oids since those are stored in the type.
-								r = v
-							} else {
+							r = v
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
-									v = bytes.TrimRight(v, " ")
+									r = bytes.TrimRight(r, " ")
 								}
 								// If the string type specifies a limit we truncate to that limit:
 								//   'hello'::CHAR(2) -> 'he'
 								// This is true of all the string type variants.
 								if toType.Width() > 0 {
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
 								}
 								if toType.Oid() == oid.T_char {
 									// "char" is supposed to truncate long values.
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), 1))
+									r = []byte(util.TruncateString(string(r), 1))
 								}
-								r = v
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
 							}
 
 							outputCol.Set(tupleIdx, r)
@@ -8464,30 +10848,27 @@ func (c *castStringStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							if toType.Oid() == oid.T_name {
-								// For Names we don't perform the truncation, and there is no need
-								// to do anything about the Oids since those are stored in the type.
-								r = v
-							} else {
+							r = v
+							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
-									v = bytes.TrimRight(v, " ")
+									r = bytes.TrimRight(r, " ")
 								}
 								// If the string type specifies a limit we truncate to that limit:
 								//   'hello'::CHAR(2) -> 'he'
 								// This is true of all the string type variants.
 								if toType.Width() > 0 {
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), int(toType.Width())))
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
 								}
 								if toType.Oid() == oid.T_char {
 									// "char" is supposed to truncate long values.
-									// TODO(yuzefovich): figure out whether we can avoid converting
-									// to a string.
-									v = []byte(util.TruncateString(string(v), 1))
+									r = []byte(util.TruncateString(string(r), 1))
 								}
-								r = v
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
 							}
 
 							outputCol.Set(tupleIdx, r)
@@ -8552,6 +10933,7 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8586,6 +10968,7 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8622,6 +11005,7 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8656,6 +11040,7 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8724,6 +11109,7 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8758,6 +11144,7 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8794,6 +11181,7 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8828,6 +11216,7 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 							r = _t.Round(_roundTo)
 							if r.After(tree.MaxSupportedTime) || r.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(r))
@@ -8977,6 +11366,714 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(err)
 							}
 							r = _uuid.GetBytes()
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castTimestampStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castTimestampStringOp{}
+var _ colexecop.ClosableOperator = &castTimestampStringOp{}
+
+func (c *castTimestampStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Timestamp()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(tree.FormatTimestamp(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(tree.FormatTimestamp(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(tree.FormatTimestamp(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							r = []byte(tree.FormatTimestamp(v))
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castTimestamptzStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castTimestamptzStringOp{}
+var _ colexecop.ClosableOperator = &castTimestamptzStringOp{}
+
+func (c *castTimestamptzStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Timestamp()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							// Convert to context timezone for correct display.
+							_t := v.In(evalCtx.GetLocation())
+
+							_t = _t.Round(time.Microsecond)
+							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
+							}
+
+							buf.Reset()
+							tree.FormatTimestampTZ(_t, buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							// Convert to context timezone for correct display.
+							_t := v.In(evalCtx.GetLocation())
+
+							_t = _t.Round(time.Microsecond)
+							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
+							}
+
+							buf.Reset()
+							tree.FormatTimestampTZ(_t, buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							// Convert to context timezone for correct display.
+							_t := v.In(evalCtx.GetLocation())
+
+							_t = _t.Round(time.Microsecond)
+							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
+							}
+
+							buf.Reset()
+							tree.FormatTimestampTZ(_t, buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						_ = inputCol.Get(n - 1)
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							//gcassert:bce
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							// Convert to context timezone for correct display.
+							_t := v.In(evalCtx.GetLocation())
+
+							_t = _t.Round(time.Microsecond)
+							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
+								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
+							}
+
+							buf.Reset()
+							tree.FormatTimestampTZ(_t, buf)
+							r = []byte(buf.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castUuidStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castUuidStringOp{}
+var _ colexecop.ClosableOperator = &castUuidStringOp{}
+
+func (c *castUuidStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(_uuid.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(_uuid.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(_uuid.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_uuid, err := uuid.FromBytes(v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(_uuid.String())
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
 
 							outputCol.Set(tupleIdx, r)
 						}

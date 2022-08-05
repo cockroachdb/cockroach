@@ -399,7 +399,7 @@ func performCastWithoutPrecisionTruncation(
 			s = string(b)
 		case *tree.DInt:
 			if typ.Oid() == oid.T_char {
-				// int to "char" casts just return the correspondong ASCII byte.
+				// int to "char" casts just return the corresponding ASCII byte.
 				if *t > math.MaxInt8 || *t < math.MinInt8 {
 					return nil, tree.ErrCharOutOfRange
 				} else if *t == 0 {
