@@ -870,6 +870,7 @@ func TestShowBackupCheckFiles(t *testing.T) {
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts,
 		InitManualReplication)
 	defer cleanupFn()
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
 
 	collectionRoot := "full"
 	incLocRoot := "inc"
