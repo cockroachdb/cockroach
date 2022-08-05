@@ -435,6 +435,20 @@ func (ep *DummyEvalPlanner) IsActive(_ context.Context, _ clusterversion.Key) bo
 	return true
 }
 
+// ResolveFunction implements FunctionReferenceResolver interface.
+func (ep *DummyEvalPlanner) ResolveFunction(
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	return nil, errors.AssertionFailedf("ResolveFunction unimplemented")
+}
+
+// ResolveFunctionByOID implements FunctionReferenceResolver interface.
+func (ep *DummyEvalPlanner) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (string, *tree.Overload, error) {
+	return "", nil, errors.AssertionFailedf("ResolveFunctionByOID unimplemented")
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 

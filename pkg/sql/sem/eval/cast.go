@@ -910,7 +910,7 @@ func performCastWithoutPrecisionTruncation(
 // performIntToOidCast casts the input integer to the OID type given by the
 // input types.T.
 func performIntToOidCast(
-	ctx context.Context, res TypeResolver, t *types.T, v tree.DInt,
+	ctx context.Context, res Planner, t *types.T, v tree.DInt,
 ) (tree.Datum, error) {
 	// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 	// store OIDs as signed 32-bit integers, so we implement the cast
@@ -940,13 +940,12 @@ func performIntToOidCast(
 		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
 	case oid.T_regproc, oid.T_regprocedure:
-		// Mapping an dOid to a regproc is easy: we have a hardcoded map.
-		name, ok := tree.OidToBuiltinName[o]
-		if !ok {
+		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
+		if err != nil {
 			if v == 0 {
 				return tree.WrapAsZeroOid(t), nil
 			}
-			return tree.NewDOidWithType(o, t), nil
+			return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
 		}
 		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
