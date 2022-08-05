@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgconn"
@@ -79,7 +80,10 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		cfg, err := pgconn.ParseConfig("postgres://localhost?sslmode=require")
+		cfg, err := pgconn.ParseConfig(fmt.Sprintf(
+			"postgres://localhost?sslmode=require&sslrootcert=%s",
+			testutils.TestDataPath(t, "testserver.crt"),
+		))
 		cfg.TLSConfig.ServerName = "test"
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
@@ -132,7 +136,12 @@ func TestFrontendAdmitRequireEncryption(t *testing.T) {
 func TestFrontendAdmitWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	cli, srv := net.Pipe()
+	cli, srvPipe := net.Pipe()
+	srv := &fakeTCPConn{
+		Conn:       srvPipe,
+		remoteAddr: &net.TCPAddr{IP: net.IP{1, 2, 3, 4}},
+		localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+	}
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
 	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
 
@@ -152,7 +161,12 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	cli, srv := net.Pipe()
+	cli, srvPipe := net.Pipe()
+	srv := &fakeTCPConn{
+		Conn:       srvPipe,
+		remoteAddr: &net.TCPAddr{IP: net.IP{1, 2, 3, 4}},
+		localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+	}
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
 	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
 
