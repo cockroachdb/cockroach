@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
-	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 const (
@@ -1285,8 +1284,7 @@ func (a Allocator) RebalanceTarget(
 		// it's better to simulate the removal with the info that we do have than to
 		// assume that the rebalance is ok (#20241).
 		if targetType == VoterTarget && raftStatus != nil && raftStatus.Progress != nil {
-			replicaCandidates = simulateFilterUnremovableReplicas(
-				ctx, raftStatus, replicaCandidates, newReplica.ReplicaID)
+			replicaCandidates = FilterUnremovableReplicas(ctx, raftStatus, replicaCandidates)
 		}
 		if len(replicaCandidates) == 0 {
 			// No existing replicas are suitable to remove.
@@ -2269,35 +2267,11 @@ func excludeReplicasInNeedOfSnapshots(
 	return replicas[:filled]
 }
 
-// simulateFilterUnremovableReplicas removes any unremovable replicas from the
-// supplied slice. Unlike FilterUnremovableReplicas, brandNewReplicaID is
-// considered up-to-date (and thus can participate in quorum), but is not
-// considered a candidate for removal.
-func simulateFilterUnremovableReplicas(
-	ctx context.Context,
-	raftStatus *raft.Status,
-	replicas []roachpb.ReplicaDescriptor,
-	brandNewReplicaID roachpb.ReplicaID,
-) []roachpb.ReplicaDescriptor {
-	status := *raftStatus
-	status.Progress[uint64(brandNewReplicaID)] = tracker.Progress{
-		State: tracker.StateReplicate,
-		Match: status.Commit,
-	}
-	return FilterUnremovableReplicas(ctx, &status, replicas, brandNewReplicaID)
-}
-
 // FilterUnremovableReplicas removes any unremovable replicas from the supplied
 // slice. An unremovable replica is one which is a necessary part of the
-// quorum that will result from removing 1 replica. We forgive brandNewReplicaID
-// for being behind, since a new range can take a little while to catch up.
-// This is important when we've just added a replica in order to rebalance to
-// it (#17879).
+// quorum that will result from removing 1 replica.
 func FilterUnremovableReplicas(
-	ctx context.Context,
-	raftStatus *raft.Status,
-	replicas []roachpb.ReplicaDescriptor,
-	brandNewReplicaID roachpb.ReplicaID,
+	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	upToDateReplicas := FilterBehindReplicas(ctx, raftStatus, replicas)
 	oldQuorum := computeQuorum(len(replicas))
@@ -2312,27 +2286,14 @@ func FilterUnremovableReplicas(
 	newQuorum := computeQuorum(len(replicas) - 1)
 	if len(upToDateReplicas) > newQuorum {
 		// The number of up-to-date replicas is larger than the new quorum. Any
-		// replica can be removed, though we want to filter out brandNewReplicaID.
-		if brandNewReplicaID != 0 {
-			candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
-			for _, r := range replicas {
-				if r.ReplicaID != brandNewReplicaID {
-					candidates = append(candidates, r)
-				}
-			}
-			return candidates
-		}
+		// replica can be removed.
 		return replicas
 	}
 
 	// The number of up-to-date replicas is equal to the new quorum. Only allow
-	// removal of behind replicas (except for brandNewReplicaID which is given a
-	// free pass).
+	// removal of behind replicas.
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
 	necessary := func(r roachpb.ReplicaDescriptor) bool {
-		if r.ReplicaID == brandNewReplicaID {
-			return true
-		}
 		for _, t := range upToDateReplicas {
 			if t == r {
 				return true
