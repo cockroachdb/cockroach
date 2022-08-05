@@ -119,6 +119,20 @@ type ChannelLogger interface {
 	// logging is currently redirected to a file. Arguments are handled in
 	// the manner of fmt.Printf.
 	Shoutf(ctx context.Context, sev Severity, format string, args ...interface{})
+
+	// VEvent either logs a message to the channel (which also outputs to the
+	// active trace or event log) or to the trace/event log alone, depending on
+	// whether the specified verbosity level is active.
+	VEvent(ctx context.Context, level Level, msg string)
+
+	// VEventf either logs a message to the channel (which also outputs to the
+	// active trace or event log) or to the trace/event log alone, depending on
+	// whether the specified verbosity level is active.
+	VEventf(ctx context.Context, level Level, format string, args ...interface{})
+
+	// VEventfDepth performs the same as VEventf but checks the verbosity level
+	// at the given depth in the call stack.
+	VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{})
 }
 
 // loggerDev is the logger type for the DEV channel.
@@ -943,6 +957,59 @@ func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args .
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect `DEV` logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
+func (loggerDev) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.DEV, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect `DEV` logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
+func (loggerDev) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.DEV, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
+//
+// This channel is special in that there are no constraints as to
+// what may or may not be logged on it. Conversely, users in
+// production deployments are invited to not collect `DEV` logs in
+// centralized logging facilities, because they likely contain
+// sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
+func (loggerDev) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.DEV, format, args...)
+}
+
 // Shout logs to channel DEV, and also to the real stderr if logging
 // is currently redirected to a file.
 //
@@ -1422,6 +1489,59 @@ func (loggerOps) Shoutf(ctx context.Context, sev Severity, format string, args .
 	shoutfDepth(ctx, 1, sev, channel.OPS, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `OPS` channel is used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - Operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
+func (loggerOps) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.OPS, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `OPS` channel is used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - Operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
+func (loggerOps) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.OPS, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `OPS` channel is used to report "point" operational events,
+// initiated by user operators or automation:
+//
+// - Operator or system actions on server processes: process starts,
+//   stops, shutdowns, crashes (if they can be logged),
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
+//   removals, decommissions, etc.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
+func (loggerOps) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.OPS, format, args...)
+}
+
 // loggerHealth is the logger type for the HEALTH channel.
 type loggerHealth struct{}
 
@@ -1807,6 +1927,50 @@ func (loggerHealth) Shoutf(ctx context.Context, sev Severity, format string, arg
 	shoutfDepth(ctx, 1, sev, channel.HEALTH, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `HEALTH` channel is used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
+func (loggerHealth) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.HEALTH, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `HEALTH` channel is used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
+func (loggerHealth) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.HEALTH, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `HEALTH` channel is used to report "background" operational
+// events, initiated by CockroachDB or reporting on automatic processes:
+//
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
+func (loggerHealth) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.HEALTH, format, args...)
+}
+
 // loggerStorage is the logger type for the STORAGE channel.
 type loggerStorage struct{}
 
@@ -2076,6 +2240,32 @@ func (loggerStorage) Shout(ctx context.Context, sev Severity, msg string) {
 // layer events (RocksDB/Pebble).
 func (loggerStorage) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.STORAGE, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `STORAGE` channel is used to report low-level storage
+// layer events (RocksDB/Pebble).
+func (loggerStorage) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.STORAGE, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `STORAGE` channel is used to report low-level storage
+// layer events (RocksDB/Pebble).
+func (loggerStorage) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.STORAGE, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `STORAGE` channel is used to report low-level storage
+// layer events (RocksDB/Pebble).
+func (loggerStorage) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.STORAGE, format, args...)
 }
 
 // loggerSessions is the logger type for the SESSIONS channel.
@@ -2499,6 +2689,56 @@ func (loggerSessions) Shout(ctx context.Context, sev Severity, msg string) {
 // numbering and synchronous writes.
 func (loggerSessions) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SESSIONS, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
+//
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSessions) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SESSIONS, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
+//
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSessions) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SESSIONS, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
+//
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSessions) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SESSIONS, format, args...)
 }
 
 // loggerSqlSchema is the logger type for the SQL_SCHEMA channel.
@@ -2981,6 +3221,65 @@ func (loggerSqlSchema) Shoutf(ctx context.Context, sev Severity, format string, 
 	shoutfDepth(ctx, 1, sev, channel.SQL_SCHEMA, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_SCHEMA` channel is used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
+//
+// This includes:
+//
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
+//
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+func (loggerSqlSchema) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_SCHEMA, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_SCHEMA` channel is used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
+//
+// This includes:
+//
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
+//
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+func (loggerSqlSchema) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_SCHEMA, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `SQL_SCHEMA` channel is used to report changes to the
+// SQL logical schema, excluding privilege and ownership changes
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
+//
+// This includes:
+//
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
+//
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
+// functional behavior of client apps using stored objects.
+func (loggerSqlSchema) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SQL_SCHEMA, format, args...)
+}
+
 // loggerUserAdmin is the logger type for the USER_ADMIN channel.
 type loggerUserAdmin struct{}
 
@@ -3404,6 +3703,56 @@ func (loggerUserAdmin) Shoutf(ctx context.Context, sev Severity, format string, 
 	shoutfDepth(ctx, 1, sev, channel.USER_ADMIN, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `USER_ADMIN` channel is used to report changes
+// in users and roles, including:
+//
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerUserAdmin) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.USER_ADMIN, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `USER_ADMIN` channel is used to report changes
+// in users and roles, including:
+//
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerUserAdmin) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.USER_ADMIN, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `USER_ADMIN` channel is used to report changes
+// in users and roles, including:
+//
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerUserAdmin) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.USER_ADMIN, format, args...)
+}
+
 // loggerPrivileges is the logger type for the PRIVILEGES channel.
 type loggerPrivileges struct{}
 
@@ -3787,6 +4136,50 @@ func (loggerPrivileges) Shout(ctx context.Context, sev Severity, msg string) {
 // numbering and synchronous writes.
 func (loggerPrivileges) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.PRIVILEGES, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `PRIVILEGES` channel is used to report data
+// authorization changes, including:
+//
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerPrivileges) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.PRIVILEGES, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `PRIVILEGES` channel is used to report data
+// authorization changes, including:
+//
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerPrivileges) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.PRIVILEGES, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `PRIVILEGES` channel is used to report data
+// authorization changes, including:
+//
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerPrivileges) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.PRIVILEGES, format, args...)
 }
 
 // loggerSensitiveAccess is the logger type for the SENSITIVE_ACCESS channel.
@@ -4212,6 +4605,56 @@ func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format st
 	shoutfDepth(ctx, 1, sev, channel.SENSITIVE_ACCESS, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
+//
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSensitiveAccess) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SENSITIVE_ACCESS, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
+//
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSensitiveAccess) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SENSITIVE_ACCESS, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
+//
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
+//
+// This is typically configured in "audit" mode, with event
+// numbering and synchronous writes.
+func (loggerSensitiveAccess) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SENSITIVE_ACCESS, format, args...)
+}
+
 // loggerSqlExec is the logger type for the SQL_EXEC channel.
 type loggerSqlExec struct{}
 
@@ -4557,6 +5000,44 @@ func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 // - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_EXEC` channel is used to report SQL execution on
+// behalf of client connections:
+//
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - uncaught Go panic errors during the execution of a SQL statement.
+func (loggerSqlExec) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_EXEC, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_EXEC` channel is used to report SQL execution on
+// behalf of client connections:
+//
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - uncaught Go panic errors during the execution of a SQL statement.
+func (loggerSqlExec) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_EXEC, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `SQL_EXEC` channel is used to report SQL execution on
+// behalf of client connections:
+//
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - uncaught Go panic errors during the execution of a SQL statement.
+func (loggerSqlExec) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SQL_EXEC, format, args...)
 }
 
 // loggerSqlPerf is the logger type for the SQL_PERF channel.
@@ -4963,6 +5444,53 @@ func (loggerSqlPerf) Shoutf(ctx context.Context, sev Severity, format string, ar
 	shoutfDepth(ctx, 1, sev, channel.SQL_PERF, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the SQL "slow query log".
+//
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
+// were redirected to separate files.
+func (loggerSqlPerf) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_PERF, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the SQL "slow query log".
+//
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
+// were redirected to separate files.
+func (loggerSqlPerf) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_PERF, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
+// to facilitate performance investigations.
+// This includes the SQL "slow query log".
+//
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
+// were redirected to separate files.
+func (loggerSqlPerf) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SQL_PERF, format, args...)
+}
+
 // loggerSqlInternalPerf is the logger type for the SQL_INTERNAL_PERF channel.
 type loggerSqlInternalPerf struct{}
 
@@ -5272,6 +5800,38 @@ func (loggerSqlInternalPerf) Shoutf(ctx context.Context, sev Severity, format st
 	shoutfDepth(ctx, 1, sev, channel.SQL_INTERNAL_PERF, format, args...)
 }
 
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the `SQL_PERF` logging output with
+// internal troubleshooting details.
+func (loggerSqlInternalPerf) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_INTERNAL_PERF, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the `SQL_PERF` logging output with
+// internal troubleshooting details.
+func (loggerSqlInternalPerf) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
+// helping developers of CockroachDB itself. It exists as a separate
+// channel so as to not pollute the `SQL_PERF` logging output with
+// internal troubleshooting details.
+func (loggerSqlInternalPerf) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SQL_INTERNAL_PERF, format, args...)
+}
+
 // loggerTelemetry is the logger type for the TELEMETRY channel.
 type loggerTelemetry struct{}
 
@@ -5560,4 +6120,352 @@ func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
 // specific data.
 func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+func (loggerTelemetry) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.TELEMETRY, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+func (loggerTelemetry) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.TELEMETRY, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+func (loggerTelemetry) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.TELEMETRY, format, args...)
+}
+
+// loggerKvDistribution is the logger type for the KV_DISTRIBUTION channel.
+type loggerKvDistribution struct{}
+
+// KvDistribution is a logger that logs to the KV_DISTRIBUTION channel.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+var KvDistribution loggerKvDistribution
+
+// KvDistribution and loggerKvDistribution implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = KvDistribution
+
+// Infof logs to the KV_DISTRIBUTION channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvDistribution) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// VInfof logs to the KV_DISTRIBUTION channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvDistribution) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.KV_DISTRIBUTION, format, args...)
+	}
+}
+
+// Info logs to the KV_DISTRIBUTION channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvDistribution) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.KV_DISTRIBUTION, msg)
+}
+
+// InfofDepth logs to the KV_DISTRIBUTION channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvDistribution) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// Warningf logs to the KV_DISTRIBUTION channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvDistribution) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// VWarningf logs to the KV_DISTRIBUTION channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvDistribution) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.KV_DISTRIBUTION, format, args...)
+	}
+}
+
+// Warning logs to the KV_DISTRIBUTION channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvDistribution) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.KV_DISTRIBUTION, msg)
+}
+
+// WarningfDepth logs to the KV_DISTRIBUTION channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvDistribution) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// Errorf logs to the KV_DISTRIBUTION channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvDistribution) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// VErrorf logs to the KV_DISTRIBUTION channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvDistribution) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.KV_DISTRIBUTION, format, args...)
+	}
+}
+
+// Error logs to the KV_DISTRIBUTION channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvDistribution) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.KV_DISTRIBUTION, msg)
+}
+
+// ErrorfDepth logs to the KV_DISTRIBUTION channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvDistribution) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// Fatalf logs to the KV_DISTRIBUTION channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvDistribution) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// VFatalf logs to the KV_DISTRIBUTION channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvDistribution) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.KV_DISTRIBUTION, format, args...)
+	}
+}
+
+// Fatal logs to the KV_DISTRIBUTION channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvDistribution) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.KV_DISTRIBUTION, msg)
+}
+
+// FatalfDepth logs to the KV_DISTRIBUTION channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvDistribution) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// Shout logs to channel KV_DISTRIBUTION, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+func (loggerKvDistribution) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.KV_DISTRIBUTION, msg)
+}
+
+// Shoutf logs to channel KV_DISTRIBUTION, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+func (loggerKvDistribution) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+func (loggerKvDistribution) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.KV_DISTRIBUTION, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+func (loggerKvDistribution) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.KV_DISTRIBUTION, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `KV_DISTRIBUTION` channel is used to report data distribution events, such as moving
+// replicas between stores in the cluster, or adding (removing) replicas to
+// ranges.
+func (loggerKvDistribution) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.KV_DISTRIBUTION, format, args...)
 }

@@ -679,7 +679,7 @@ func (a *Allocator) computeAction(
 		// count and the quorum of the desired voter count.
 		action = AllocatorAddVoter
 		adjustedPriority = action.Priority() + float64(desiredQuorum-haveVoters)
-		log.VEventf(ctx, 3, "%s - missing voter need=%d, have=%d, priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - missing voter need=%d, have=%d, priority=%.2f",
 			action, neededVoters, haveVoters, adjustedPriority)
 		return action, adjustedPriority
 	}
@@ -699,7 +699,7 @@ func (a *Allocator) computeAction(
 		// range, we also won't be able to add replicas as we try above, but hope
 		// springs eternal.
 		action = AllocatorRangeUnavailable
-		log.VEventf(ctx, 1, "unable to take action - live voters %v don't meet quorum of %d",
+		log.KvDistribution.VEventf(ctx, 1, "unable to take action - live voters %v don't meet quorum of %d",
 			liveVoters, quorum)
 		return action, action.Priority()
 	}
@@ -710,7 +710,7 @@ func (a *Allocator) computeAction(
 		// where the node is only temporarily dead, but we remove it from the range
 		// and lose a second node before we can up-replicate (#25392).
 		action = AllocatorReplaceDeadVoter
-		log.VEventf(ctx, 3, "%s - replacement for %d dead voters priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d dead voters priority=%.2f",
 			action, len(deadVoters), action.Priority())
 		return action, action.Priority()
 	}
@@ -718,7 +718,7 @@ func (a *Allocator) computeAction(
 	if haveVoters == neededVoters && len(decommissioningVoters) > 0 {
 		// Range has decommissioning voter(s), which should be replaced.
 		action = AllocatorReplaceDecommissioningVoter
-		log.VEventf(ctx, 3, "%s - replacement for %d decommissioning voters priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d decommissioning voters priority=%.2f",
 			action, len(decommissioningVoters), action.Priority())
 		return action, action.Priority()
 	}
@@ -732,7 +732,7 @@ func (a *Allocator) computeAction(
 		// The range has dead replicas, which should be removed immediately.
 		action = AllocatorRemoveDeadVoter
 		adjustedPriority = action.Priority() + float64(quorum-len(liveVoters))
-		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, quorum=%d, priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - dead=%d, live=%d, quorum=%d, priority=%.2f",
 			action, len(deadVoters), len(liveVoters), quorum, adjustedPriority)
 		return action, adjustedPriority
 	}
@@ -741,7 +741,7 @@ func (a *Allocator) computeAction(
 		// Range is over-replicated, and has a decommissioning voter which
 		// should be removed.
 		action = AllocatorRemoveDecommissioningVoter
-		log.VEventf(ctx, 3,
+		log.KvDistribution.VEventf(ctx, 3,
 			"%s - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
 			action, neededVoters, haveVoters, len(decommissioningVoters), action.Priority())
 		return action, action.Priority()
@@ -753,7 +753,7 @@ func (a *Allocator) computeAction(
 		// they have a more fragile quorum.
 		action = AllocatorRemoveVoter
 		adjustedPriority = action.Priority() - float64(haveVoters%2)
-		log.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action, neededVoters,
+		log.KvDistribution.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action, neededVoters,
 			haveVoters, adjustedPriority)
 		return action, adjustedPriority
 	}
@@ -765,7 +765,7 @@ func (a *Allocator) computeAction(
 	neededNonVoters := GetNeededNonVoters(haveVoters, int(conf.GetNumNonVoters()), clusterNodes)
 	if haveNonVoters < neededNonVoters {
 		action = AllocatorAddNonVoter
-		log.VEventf(ctx, 3, "%s - missing non-voter need=%d, have=%d, priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - missing non-voter need=%d, have=%d, priority=%.2f",
 			action, neededNonVoters, haveNonVoters, action.Priority())
 		return action, action.Priority()
 	}
@@ -776,7 +776,7 @@ func (a *Allocator) computeAction(
 	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
 		// The range has non-voter(s) on a dead node that we should replace.
 		action = AllocatorReplaceDeadNonVoter
-		log.VEventf(ctx, 3, "%s - replacement for %d dead non-voters priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d dead non-voters priority=%.2f",
 			action, len(deadNonVoters), action.Priority())
 		return action, action.Priority()
 	}
@@ -786,7 +786,7 @@ func (a *Allocator) computeAction(
 		// The range has non-voter(s) on a decommissioning node that we should
 		// replace.
 		action = AllocatorReplaceDecommissioningNonVoter
-		log.VEventf(ctx, 3, "%s - replacement for %d decommissioning non-voters priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d decommissioning non-voters priority=%.2f",
 			action, len(decommissioningNonVoters), action.Priority())
 		return action, action.Priority()
 	}
@@ -796,7 +796,7 @@ func (a *Allocator) computeAction(
 		// The range is over-replicated _and_ has non-voter(s) on a dead node. We'll
 		// just remove these.
 		action = AllocatorRemoveDeadNonVoter
-		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, priority=%.2f",
+		log.KvDistribution.VEventf(ctx, 3, "%s - dead=%d, live=%d, priority=%.2f",
 			action, len(deadNonVoters), len(liveNonVoters), action.Priority())
 		return action, action.Priority()
 	}
@@ -805,7 +805,7 @@ func (a *Allocator) computeAction(
 		// The range is over-replicated _and_ has non-voter(s) on a decommissioning
 		// node. We'll just remove these.
 		action = AllocatorRemoveDecommissioningNonVoter
-		log.VEventf(ctx, 3,
+		log.KvDistribution.VEventf(ctx, 3,
 			"%s - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
 			action, neededNonVoters, haveNonVoters, len(decommissioningNonVoters), action.Priority())
 		return action, action.Priority()
@@ -814,7 +814,7 @@ func (a *Allocator) computeAction(
 	if haveNonVoters > neededNonVoters {
 		// The range is simply over-replicated and should remove a non-voter.
 		action = AllocatorRemoveNonVoter
-		log.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action,
+		log.KvDistribution.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action,
 			neededNonVoters, haveNonVoters, action.Priority())
 		return action, action.Priority()
 	}
@@ -1013,7 +1013,7 @@ func (a *Allocator) AllocateTargetFromList(
 	case NonVoterTarget:
 		constraintsChecker = nonVoterConstraintsCheckerForAllocation(analyzedOverallConstraints)
 	default:
-		log.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
+		log.KvDistribution.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}
 
 	// We'll consider the targets that have a non-voter as feasible
@@ -1034,13 +1034,13 @@ func (a *Allocator) AllocateTargetFromList(
 		options,
 	)
 
-	log.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
+	log.KvDistribution.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
 	if target := selector.selectOne(candidates); target != nil {
-		log.VEventf(ctx, 3, "add target: %s", target)
+		log.KvDistribution.VEventf(ctx, 3, "add target: %s", target)
 		details := decisionDetails{Target: target.compactString()}
 		detailsBytes, err := json.Marshal(details)
 		if err != nil {
-			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %+v", err)
+			log.KvDistribution.Warningf(ctx, "failed to marshal details for choosing allocate target: %+v", err)
 		}
 		return roachpb.ReplicationTarget{
 			NodeID: target.store.Node.NodeID, StoreID: target.store.StoreID,
@@ -1080,7 +1080,7 @@ func (a Allocator) simulateRemoveTarget(
 			rangeUsageInfo,
 			roachpb.REMOVE_VOTER,
 		)
-		log.VEventf(ctx, 3, "simulating which voter would be removed after adding s%d",
+		log.KvDistribution.VEventf(ctx, 3, "simulating which voter would be removed after adding s%d",
 			targetStore)
 
 		return a.RemoveTarget(
@@ -1094,7 +1094,7 @@ func (a Allocator) simulateRemoveTarget(
 			rangeUsageInfo,
 			roachpb.REMOVE_NON_VOTER,
 		)
-		log.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
+		log.KvDistribution.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
 			targetStore)
 		return a.RemoveTarget(
 			ctx, conf, storepool.MakeStoreList(candidateStores),
@@ -1156,7 +1156,7 @@ func (a Allocator) RemoveTarget(
 	case NonVoterTarget:
 		constraintsChecker = nonVoterConstraintsCheckerForRemoval(analyzedOverallConstraints)
 	default:
-		log.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
+		log.KvDistribution.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}
 
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
@@ -1168,15 +1168,15 @@ func (a Allocator) RemoveTarget(
 		options,
 	)
 
-	log.VEventf(ctx, 3, "remove %s: %s", targetType, rankedCandidates)
+	log.KvDistribution.VEventf(ctx, 3, "remove %s: %s", targetType, rankedCandidates)
 	if bad := rankedCandidates.selectWorst(a.randGen); bad != nil {
 		for _, exist := range existingReplicas {
 			if exist.StoreID == bad.store.StoreID {
-				log.VEventf(ctx, 3, "remove target: %s", bad)
+				log.KvDistribution.VEventf(ctx, 3, "remove target: %s", bad)
 				details := decisionDetails{Target: bad.compactString()}
 				detailsBytes, err := json.Marshal(details)
 				if err != nil {
-					log.Warningf(ctx, "failed to marshal details for choosing remove target: %+v", err)
+					log.KvDistribution.Warningf(ctx, "failed to marshal details for choosing remove target: %+v", err)
 				}
 				return roachpb.ReplicationTarget{
 					StoreID: exist.StoreID, NodeID: exist.NodeID,
@@ -1304,7 +1304,7 @@ func (a Allocator) RebalanceTarget(
 		replicasWithExcludedStores = existingVoters
 		otherReplicaSet = existingVoters
 	default:
-		log.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
+		log.KvDistribution.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}
 
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
@@ -1357,7 +1357,7 @@ func (a Allocator) RebalanceTarget(
 		}
 		if len(replicaCandidates) == 0 {
 			// No existing replicas are suitable to remove.
-			log.VEventf(ctx, 2, "not rebalancing %s to s%d because there are no existing "+
+			log.KvDistribution.VEventf(ctx, 2, "not rebalancing %s to s%d because there are no existing "+
 				"replicas that can be removed", targetType, target.store.StoreID)
 			return zero, zero, "", false
 		}
@@ -1377,7 +1377,7 @@ func (a Allocator) RebalanceTarget(
 			options,
 		)
 		if err != nil {
-			log.Warningf(ctx, "simulating removal of %s failed: %+v", targetType, err)
+			log.KvDistribution.Warningf(ctx, "simulating removal of %s failed: %+v", targetType, err)
 			return zero, zero, "", false
 		}
 		if target.store.StoreID != removeReplica.StoreID {
@@ -1386,7 +1386,7 @@ func (a Allocator) RebalanceTarget(
 			break
 		}
 
-		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
+		log.KvDistribution.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
 			target.store.StoreID, removeDetails)
 	}
 
@@ -1398,7 +1398,7 @@ func (a Allocator) RebalanceTarget(
 	}
 	detailsBytes, err := json.Marshal(dDetails)
 	if err != nil {
-		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %+v", err)
+		log.KvDistribution.Warningf(ctx, "failed to marshal details for choosing rebalance target: %+v", err)
 	}
 
 	addTarget := roachpb.ReplicationTarget{
@@ -1642,7 +1642,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 		}
 	}
 	if !leaseholderInExisting {
-		log.Errorf(ctx, "programming error: expected leaseholder store to be in the slice of existing replicas")
+		log.KvDistribution.Errorf(ctx, "programming error: expected leaseholder store to be in the slice of existing replicas")
 	}
 
 	// Exclude suspect/draining/dead stores.
@@ -1731,7 +1731,7 @@ func (a *Allocator) TransferLeaseTarget(
 	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, opts)
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
-		log.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
+		log.KvDistribution.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
 		return roachpb.ReplicaDescriptor{}
 	}
 
@@ -1761,7 +1761,7 @@ func (a *Allocator) TransferLeaseTarget(
 				}
 			case shouldTransfer:
 			default:
-				log.Fatalf(ctx, "unexpected transfer decision %d with replica %+v", transferDec, repl)
+				log.KvDistribution.Fatalf(ctx, "unexpected transfer decision %d with replica %+v", transferDec, repl)
 			}
 		}
 		if repl != (roachpb.ReplicaDescriptor{}) {
@@ -1847,18 +1847,18 @@ func (a *Allocator) TransferLeaseTarget(
 		switch noRebalanceReason {
 		case noBetterCandidate:
 			a.Metrics.LoadBasedLeaseTransferMetrics.CannotFindBetterCandidate.Inc(1)
-			log.VEventf(ctx, 5, "r%d: could not find a better target for lease", leaseRepl.GetRangeID())
+			log.KvDistribution.VEventf(ctx, 5, "r%d: could not find a better target for lease", leaseRepl.GetRangeID())
 			return roachpb.ReplicaDescriptor{}
 		case existingNotOverfull:
 			a.Metrics.LoadBasedLeaseTransferMetrics.ExistingNotOverfull.Inc(1)
-			log.VEventf(
+			log.KvDistribution.VEventf(
 				ctx, 5, "r%d: existing leaseholder s%d is not overfull",
 				leaseRepl.GetRangeID(), leaseRepl.StoreID(),
 			)
 			return roachpb.ReplicaDescriptor{}
 		case deltaNotSignificant:
 			a.Metrics.LoadBasedLeaseTransferMetrics.DeltaNotSignificant.Inc(1)
-			log.VEventf(
+			log.KvDistribution.VEventf(
 				ctx, 5,
 				"r%d: delta between s%d and the coldest follower (ignoring r%d's lease) is not large enough",
 				leaseRepl.GetRangeID(), leaseRepl.StoreID(), leaseRepl.GetRangeID(),
@@ -1866,14 +1866,14 @@ func (a *Allocator) TransferLeaseTarget(
 			return roachpb.ReplicaDescriptor{}
 		case missingStatsForExistingStore:
 			a.Metrics.LoadBasedLeaseTransferMetrics.MissingStatsForExistingStore.Inc(1)
-			log.VEventf(
+			log.KvDistribution.VEventf(
 				ctx, 5, "r%d: missing stats for leaseholder s%d",
 				leaseRepl.GetRangeID(), leaseRepl.StoreID(),
 			)
 			return roachpb.ReplicaDescriptor{}
 		case shouldRebalance:
 			a.Metrics.LoadBasedLeaseTransferMetrics.ShouldTransfer.Inc(1)
-			log.VEventf(
+			log.KvDistribution.VEventf(
 				ctx,
 				5,
 				"r%d: should transfer lease (qps=%0.2f) from s%d (qps=%0.2f) to s%d (qps=%0.2f)",
@@ -1885,7 +1885,7 @@ func (a *Allocator) TransferLeaseTarget(
 				storeDescMap[bestStore].Capacity.QueriesPerSecond,
 			)
 		default:
-			log.Fatalf(ctx, "unknown declineReason: %v", noRebalanceReason)
+			log.KvDistribution.Fatalf(ctx, "unknown declineReason: %v", noRebalanceReason)
 		}
 
 		for _, repl := range existing {
@@ -1895,7 +1895,7 @@ func (a *Allocator) TransferLeaseTarget(
 		}
 		panic("unreachable")
 	default:
-		log.Fatalf(ctx, "unexpected lease transfer goal %d", g)
+		log.KvDistribution.Fatalf(ctx, "unexpected lease transfer goal %d", g)
 	}
 	panic("unreachable")
 }
@@ -1978,7 +1978,7 @@ func (a *Allocator) ShouldTransferLease(
 	sl, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterSuspect)
 	sl = sl.ExcludeInvalid(conf.Constraints)
 	sl = sl.ExcludeInvalid(conf.VoterConstraints)
-	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)
+	log.KvDistribution.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)
 
 	transferDec, _ := a.shouldTransferLeaseForAccessLocality(
 		ctx,
@@ -1997,10 +1997,10 @@ func (a *Allocator) ShouldTransferLease(
 	case decideWithoutStats:
 		result = a.shouldTransferLeaseForLeaseCountConvergence(ctx, sl, source, existing)
 	default:
-		log.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
+		log.KvDistribution.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
 	}
 
-	log.VEventf(
+	log.KvDistribution.VEventf(
 		ctx, 3, "ShouldTransferLease decision (lease-holder=s%d): %t", leaseRepl.StoreID(), result,
 	)
 	return result
@@ -2023,7 +2023,7 @@ func (a Allocator) FollowTheWorkloadPrefersLocal(
 	}
 	adjustment := adjustments[candidate]
 	if adjustment > baseLoadBasedLeaseRebalanceThreshold {
-		log.VEventf(ctx, 3,
+		log.KvDistribution.VEventf(ctx, 3,
 			"s%d is a better fit than s%d due to follow-the-workload (score: %.2f; threshold: %.2f)",
 			source.StoreID, candidate, adjustment, baseLoadBasedLeaseRebalanceThreshold)
 		return true
@@ -2074,7 +2074,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 	for requestLocalityStr, qps := range qpsStats {
 		var requestLocality roachpb.Locality
 		if err := requestLocality.Set(requestLocalityStr); err != nil {
-			log.Errorf(ctx, "unable to parse locality string %q: %+v", requestLocalityStr, err)
+			log.KvDistribution.Errorf(ctx, "unable to parse locality string %q: %+v", requestLocalityStr, err)
 			continue
 		}
 		for nodeID, replicaLocality := range replicaLocalities {
@@ -2084,7 +2084,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		}
 	}
 
-	log.VEventf(ctx, 1,
+	log.KvDistribution.VEventf(ctx, 1,
 		"shouldTransferLease qpsStats: %+v, replicaLocalities: %+v, replicaWeights: %+v",
 		qpsStats, replicaLocalities, replicaWeights)
 	sourceWeight := math.Max(minReplicaWeight, replicaWeights[source.Node.NodeID])
@@ -2104,7 +2104,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		}
 		addr, err := a.StorePool.Gossip.GetNodeIDAddress(repl.NodeID)
 		if err != nil {
-			log.Errorf(ctx, "missing address for n%d: %+v", repl.NodeID, err)
+			log.KvDistribution.Errorf(ctx, "missing address for n%d: %+v", repl.NodeID, err)
 			continue
 		}
 		remoteLatency, ok := a.nodeLatencyFn(addr.String())
@@ -2204,7 +2204,7 @@ func loadBasedLeaseRebalanceScore(
 	underfullScore := underfullLeaseThreshold - remoteStore.Capacity.LeaseCount
 	totalScore := overfullScore + underfullScore
 
-	log.VEventf(ctx, 1,
+	log.KvDistribution.VEventf(ctx, 1,
 		"node: %d, sourceWeight: %.2f, remoteWeight: %.2f, remoteLatency: %v, "+
 			"rebalanceThreshold: %.2f, meanLeases: %.2f, sourceLeaseCount: %d, overfullThreshold: %d, "+
 			"remoteLeaseCount: %d, underfullThreshold: %d, totalScore: %d",
@@ -2316,7 +2316,7 @@ func excludeReplicasInNeedOfSnapshots(
 	filled := 0
 	for _, repl := range replicas {
 		if raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID) != raftutil.NoSnapshotNeeded {
-			log.VEventf(
+			log.KvDistribution.VEventf(
 				ctx,
 				5,
 				"not considering [n%d, s%d] as a potential candidate for a lease transfer"+
