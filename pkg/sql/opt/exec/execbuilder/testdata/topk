@@ -74,7 +74,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 2 (missing stats)
 │
 └── • top-k
     │ columns: (k, w)

@@ -179,7 +179,6 @@ vectorized: true
 ·
 • project
 │ columns: (y)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (x, x, y)
@@ -206,7 +205,6 @@ vectorized: true
 ·
 • project
 │ columns: (y)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (x, x, y)
@@ -233,7 +231,6 @@ vectorized: true
 ·
 • project
 │ columns: (x)
-│ estimated row count: 326,700 (missing stats)
 │
 └── • cross join (inner)
     │ columns: (x, y)
@@ -260,7 +257,6 @@ vectorized: true
 ·
 • render
 │ columns: (x, two, plus1)
-│ estimated row count: 10,000 (missing stats)
 │ render x: COALESCE(x, x)
 │ render two: two
 │ render plus1: plus1
@@ -272,7 +268,6 @@ vectorized: true
     │
     ├── • render
     │   │ columns: (two, x)
-    │   │ estimated row count: 1,000 (missing stats)
     │   │ render two: 2
     │   │ render x: x
     │   │
@@ -284,7 +279,6 @@ vectorized: true
     │
     └── • render
         │ columns: (plus1, x)
-        │ estimated row count: 1,000 (missing stats)
         │ render plus1: y + 1
         │ render x: x
         │
@@ -310,7 +304,6 @@ vectorized: true
 │
 └── • project
     │ columns: (column1, column2, column2)
-    │ estimated row count: 2
     │
     └── • hash join (inner)
         │ columns: (column1, column2, column1, column2)
@@ -415,7 +408,6 @@ vectorized: true
     │
     └── • render
         │ columns: (pktable_cat, update_rule, delete_rule, deferrability, nspname, relname, attname, nspname, relname, attname, conname, generate_series, relname)
-        │ estimated row count: 110,908 (missing stats)
         │ render pktable_cat: CAST(NULL AS STRING)
         │ render update_rule: CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
         │ render delete_rule: CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
@@ -603,7 +595,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, n, sq)
-│ estimated row count: 990 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (column10, a, b, n, sq)
@@ -612,7 +603,6 @@ vectorized: true
     │
     ├── • render
     │   │ columns: (column10, a, b)
-    │   │ estimated row count: 1,000 (missing stats)
     │   │ render column10: a + b
     │   │ render a: a
     │   │ render b: b
@@ -639,7 +629,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, n, sq)
-│ estimated row count: 990 (missing stats)
 │
 └── • filter
     │ columns: (div, a, b, n, sq)
@@ -648,7 +637,6 @@ vectorized: true
     │
     └── • render
         │ columns: (div, a, b, n, sq)
-        │ estimated row count: 1,000,000 (missing stats)
         │ render div: (a * b) / 2
         │ render a: a
         │ render b: b
@@ -680,7 +668,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, n, sq)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • hash join (full outer)
     │ columns: (column10, a, b, n, sq)
@@ -689,7 +676,6 @@ vectorized: true
     │
     ├── • render
     │   │ columns: (column10, a, b)
-    │   │ estimated row count: 1,000 (missing stats)
     │   │ render column10: a + b
     │   │ render a: a
     │   │ render b: b
@@ -714,7 +700,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, n, sq)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (column10, a, b, n, sq)
@@ -728,7 +713,6 @@ vectorized: true
         │
         ├── • render
         │   │ columns: (column10, a, b)
-        │   │ estimated row count: 1,000 (missing stats)
         │   │ render column10: a + b
         │   │ render a: a
         │   │ render b: b
@@ -874,7 +858,6 @@ vectorized: true
 ·
 • project
 │ columns: (x)
-│ estimated row count: 96 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (x, y, y, x)
@@ -939,7 +922,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, d)
-│ estimated row count: 0 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -971,7 +953,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, d, d)
-│ estimated row count: 1 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -1090,7 +1071,6 @@ vectorized: true
 ·
 • render
 │ columns: (s, s, s)
-│ estimated row count: 10,000 (missing stats)
 │ render s: COALESCE(s, s)
 │ render s: s
 │ render s: s
@@ -1120,7 +1100,6 @@ vectorized: true
 ·
 • render
 │ columns: (s, s, s)
-│ estimated row count: 10,000 (missing stats)
 │ render s: COALESCE(s, s)
 │ render s: s
 │ render s: s
@@ -1152,7 +1131,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, s)
-│ estimated row count: 1,000 (missing stats)
 │ render s: COALESCE(s, s)
 │ render a: a
 │
@@ -1193,7 +1171,6 @@ vectorized: true
 ·
 • project
 │ columns: (x, y, u, v)
-│ estimated row count: 34 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (x, y, u, x, y, v)
@@ -1223,7 +1200,6 @@ vectorized: true
 ·
 • project
 │ columns: (x, y, u, v)
-│ estimated row count: 333 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (x, y, u, x, y, v)
@@ -1253,7 +1229,6 @@ vectorized: true
 ·
 • project
 │ columns: (x, y, u, v)
-│ estimated row count: 333 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (x, y, v, x, y, u)
@@ -1288,7 +1263,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, u, v)
-    │ estimated row count: 1,900 (missing stats)
     │ render x: COALESCE(x, x)
     │ render y: COALESCE(y, y)
     │ render u: u
@@ -1430,7 +1404,6 @@ vectorized: true
 ·
 • project
 │ columns: (x, y, u, v)
-│ estimated row count: 333 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (x, y, u, x, y, v)
@@ -1460,7 +1433,6 @@ vectorized: true
 ·
 • project
 │ columns: (x, y, u, v)
-│ estimated row count: 333 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (x, y, v, x, y, u)
@@ -1495,7 +1467,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, u, v)
-    │ estimated row count: 1,900 (missing stats)
     │ render x: COALESCE(x, x)
     │ render y: COALESCE(y, y)
     │ render u: u
@@ -1582,7 +1553,6 @@ vectorized: true
 ·
 • project
 │ columns: (x, y, u, v)
-│ estimated row count: 33 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (x, y, v, x, y, u)
@@ -1623,7 +1593,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b1, b2)
-│ estimated row count: 1 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (a, b1, a, b2)
@@ -1679,7 +1648,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b1, b2)
-│ estimated row count: 1 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (a, b2, a, b1)
@@ -1793,7 +1761,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, d)
-│ estimated row count: 0 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -1822,7 +1789,6 @@ vectorized: true
 ·
 • project
 │ columns: (b, a, c, d, a, c, d)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • cross join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -1850,7 +1816,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, d, c, d)
-│ estimated row count: 96 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -1879,7 +1844,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, d, d)
-│ estimated row count: 1 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (a, b, c, d, a, b, c, d)

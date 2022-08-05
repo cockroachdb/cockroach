@@ -162,7 +162,6 @@ vectorized: true
 ·
 • project
 │ columns: (pid1, pa1, cid1, ca1)
-│ estimated row count: 30 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (pid1, cid1, ca1, pid1, pa1)
@@ -217,7 +216,6 @@ vectorized: true
 ·
 • project
 │ columns: (pid1, cid1, ca1, pa1)
-│ estimated row count: 30 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (pid1, cid1, ca1, pid1, pa1)
@@ -333,7 +331,6 @@ vectorized: true
 • project
 │ columns: (pid1, pa1, cid2, cid3, ca2)
 │ ordering: +pid1
-│ estimated row count: 333 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (pid1, pa1, pid1, cid2, cid3, ca2)
@@ -389,7 +386,6 @@ vectorized: true
 • project
 │ columns: (pid1, pa1, cid2, cid3, ca2)
 │ ordering: +pid1
-│ estimated row count: 40 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (pid1, cid2, cid3, ca2, pid1, pa1)
@@ -451,7 +447,6 @@ vectorized: true
 ·
 • project
 │ columns: (pid1, pa1, cid2, cid3, gcid2, gca2)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (pid1, cid2, cid3, gcid2, gca2, pid1, pa1)
@@ -523,7 +518,6 @@ vectorized: true
 ·
 • project
 │ columns: (pid1, cid2, cid3, gcid2, gca2, pa1)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (pid1, cid2, cid3, gcid2, gca2, pid1, pa1)
@@ -780,7 +774,6 @@ vectorized: true
 ·
 • render
 │ columns: (pid1, pa1, cid1, cid2, ca1)
-│ estimated row count: 1,000 (missing stats)
 │ render pid1: COALESCE(pid1, pid1)
 │ render pa1: pa1
 │ render cid1: cid1
@@ -840,7 +833,6 @@ vectorized: true
 ·
 • render
 │ columns: (pid1, cid1, cid2, gcid1, gca1, ca1)
-│ estimated row count: 1,999 (missing stats)
 │ render pid1: COALESCE(pid1, pid1)
 │ render cid1: COALESCE(cid1, cid1)
 │ render cid2: COALESCE(cid2, cid2)
@@ -901,7 +893,6 @@ vectorized: true
 ·
 • project
 │ columns: (pid1, cid1, cid2, ca1, pa1)
-│ estimated row count: 400 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (pid1, cid1, cid2, ca1, pid1, pa1)
@@ -955,7 +946,6 @@ vectorized: true
 ·
 • project
 │ columns: (pid1, pa1, cid1, cid2, gcid1, gca1)
-│ estimated row count: 200 (missing stats)
 │
 └── • merge join (left outer)
     │ columns: (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)
