@@ -222,11 +222,11 @@ vectorized: true
 • project
 │ columns: (a, b)
 │ ordering: +a,+b
-│ estimated row count: 1,000 (missing stats)
 │
 └── • distinct
     │ columns: (a, b, c)
     │ ordering: +a,+b
+    │ estimated row count: 1,000 (missing stats)
     │ distinct on: a, b
     │ order key: a, b
     │

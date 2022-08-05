@@ -48,10 +48,8 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • render
-│               │ estimated row count: 2
 │               │
 │               └── • values
 │                     size: 2 columns, 2 rows
@@ -66,9 +64,9 @@ vectorized: true
             │ equality cols are key
             │
             └── • render
-                │ estimated row count: 2
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 
@@ -296,6 +294,7 @@ vectorized: true
 │               │ lookup condition: (((crdb_region = 'ap-southeast-2') AND (column3 = c_w_id)) AND (column2 = c_d_id)) AND (column1 = c_id)
 │               │
 │               └── • scan buffer
+│                     estimated row count: 1
 │                     label: buffer 1
 │
 └── • constraint-check
@@ -315,6 +314,7 @@ vectorized: true
                 │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (column5 = d_w_id)) AND (column4 = d_id)
                 │
                 └── • scan buffer
+                      estimated row count: 1
                       label: buffer 1
 
 # Regression test for #62269. Ensure that locality optimized search results in
