@@ -343,7 +343,7 @@ func (r *Replica) propose(
 		// ProposeConfChange. For that reason, we also don't need a Raft command
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
-		log.Infof(p.ctx, "proposing %s", crt)
+		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
 		prefix = false
 
 		// The following deals with removing a leaseholder. A voter can be removed

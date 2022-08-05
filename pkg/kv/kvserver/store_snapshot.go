@@ -1535,7 +1535,7 @@ func sendSnapshot(
 	if err := stream.Send(&kvserverpb.SnapshotRequest{Final: true}); err != nil {
 		return err
 	}
-	log.Infof(
+	log.KvDistribution.Infof(
 		ctx,
 		"streamed %s to %s with %s in %.2fs @ %s/s: %s, rate-limit: %s/s, queued: %.2fs",
 		snap,

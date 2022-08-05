@@ -2316,7 +2316,8 @@ func execChangeReplicasTxn(
 			sp.Finish()
 		}
 
-		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
+		log.KvDistribution.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s",
+			crt.Added(), crt.Removed(), desc)
 
 		{
 			ctx, sp := tracer.StartSpanCtx(ctx, replicaChangeTxnUpdateDescOpName, tracing.WithParent(parentSp))

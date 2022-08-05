@@ -112,7 +112,7 @@ sinks: { stderr: { channels: 'all except DEV ,sessions' } }
 sinks:
   stderr:
     channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
-      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]
+      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]
 
 yaml
 sinks: { stderr: { channels: 'all except [DEV, sessions]' } }
@@ -120,7 +120,7 @@ sinks: { stderr: { channels: 'all except [DEV, sessions]' } }
 sinks:
   stderr:
     channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
-      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]
+      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]
 
 # Verify that channels can be filtered separately.
 yaml
