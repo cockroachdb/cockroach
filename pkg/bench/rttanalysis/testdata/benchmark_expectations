@@ -35,9 +35,9 @@ exp,benchmark
 16,DropDatabase/drop_database_1_table
 17,DropDatabase/drop_database_2_tables
 18,DropDatabase/drop_database_3_tables
-18,DropRole/drop_1_role
-25,DropRole/drop_2_roles
-32,DropRole/drop_3_roles
+19,DropRole/drop_1_role
+27,DropRole/drop_2_roles
+35,DropRole/drop_3_roles
 17,DropSequence/drop_1_sequence
 19,DropSequence/drop_2_sequences
 21,DropSequence/drop_3_sequences

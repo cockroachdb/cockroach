@@ -1723,6 +1723,14 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 						}
 					}
 					d = a
+				case val.Type().Elem().Kind() == reflect.Int:
+					a := tree.NewDArray(types.Int)
+					for v := 0; v < val.Len(); v++ {
+						if err := a.Append(tree.NewDInt(tree.DInt(val.Index(v).Int()))); err != nil {
+							return nil, err
+						}
+					}
+					d = a
 				case val.Type().Elem().Kind() == reflect.Uint8:
 					d = tree.NewDBytes(tree.DBytes(val.Bytes()))
 				}

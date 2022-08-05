@@ -557,7 +557,7 @@ func TestRestoreFromFullClusterBackup(t *testing.T) {
 
 	t.Run("system tables", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE temp_sys`)
-		sqlDB.Exec(t, `RESTORE system.users FROM $1 WITH into_db='temp_sys'`, localFoo)
+		sqlDB.Exec(t, `RESTORE system.users, system.role_id_seq FROM $1 WITH into_db='temp_sys'`, localFoo)
 		sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
 	})
 }
@@ -642,6 +642,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"database_role_settings"},
 				{"external_connections"},
 				{"locations"},
+				{"role_id_seq"},
 				{"role_members"},
 				{"role_options"},
 				{"scheduled_jobs"},
@@ -733,6 +734,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"database_role_settings"},
 				{"external_connections"},
 				{"locations"},
+				{"role_id_seq"},
 				{"role_members"},
 				{"role_options"},
 				{"scheduled_jobs"},
@@ -1108,5 +1110,53 @@ DROP DATABASE defaultdb;
 	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
 	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
 		{fmt.Sprint(parentID), fmt.Sprint(parentSchemaID), name, fmt.Sprint(ID)},
+	})
+}
+
+func TestFullClusterRestoreWithUserIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+	const numAccounts = 10
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `CREATE USER test1`)
+	sqlDB.Exec(t, `CREATE USER test2`)
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+
+	sqlDB.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
+	})
+	// Ensure that the new backup succeeds.
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+
+	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
+	})
+
+	sqlDBRestore.Exec(t, `CREATE USER test3`)
+
+	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
+		{"test3", "NULL", "false", "102"},
 	})
 }

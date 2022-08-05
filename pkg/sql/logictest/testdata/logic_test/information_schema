@@ -1565,6 +1565,8 @@ system              public             primary                                  
 system              public             630200280_28_1_not_null                                                                                         system         public        reports_meta                     CHECK            NO             NO
 system              public             630200280_28_2_not_null                                                                                         system         public        reports_meta                     CHECK            NO             NO
 system              public             primary                                                                                                         system         public        reports_meta                     PRIMARY KEY      NO             NO
+system              public             630200280_48_1_not_null                                                                                         system         public        role_id_seq                      CHECK            NO             NO
+system              public             primary                                                                                                         system         public        role_id_seq                      PRIMARY KEY      NO             NO
 system              public             630200280_23_1_not_null                                                                                         system         public        role_members                     CHECK            NO             NO
 system              public             630200280_23_2_not_null                                                                                         system         public        role_members                     CHECK            NO             NO
 system              public             630200280_23_3_not_null                                                                                         system         public        role_members                     CHECK            NO             NO
@@ -1659,7 +1661,9 @@ system              public             630200280_14_3_not_null                  
 system              public             primary                                                                                                         system         public        ui                               PRIMARY KEY      NO             NO
 system              public             630200280_4_1_not_null                                                                                          system         public        users                            CHECK            NO             NO
 system              public             630200280_4_3_not_null                                                                                          system         public        users                            CHECK            NO             NO
+system              public             630200280_4_4_not_null                                                                                          system         public        users                            CHECK            NO             NO
 system              public             primary                                                                                                         system         public        users                            PRIMARY KEY      NO             NO
+system              public             users_user_id_idx                                                                                               system         public        users                            UNIQUE           NO             NO
 system              public             630200280_19_1_not_null                                                                                         system         public        web_sessions                     CHECK            NO             NO
 system              public             630200280_19_2_not_null                                                                                         system         public        web_sessions                     CHECK            NO             NO
 system              public             630200280_19_3_not_null                                                                                         system         public        web_sessions                     CHECK            NO             NO
@@ -1824,8 +1828,10 @@ system              public             630200280_46_1_not_null                  
 system              public             630200280_47_1_not_null                                                                                         start_key IS NOT NULL
 system              public             630200280_47_2_not_null                                                                                         end_key IS NOT NULL
 system              public             630200280_47_3_not_null                                                                                         config IS NOT NULL
+system              public             630200280_48_1_not_null                                                                                         value IS NOT NULL
 system              public             630200280_4_1_not_null                                                                                          username IS NOT NULL
 system              public             630200280_4_3_not_null                                                                                          isRole IS NOT NULL
+system              public             630200280_4_4_not_null                                                                                          user_id IS NOT NULL
 system              public             630200280_50_1_not_null                                                                                         tenant_id IS NOT NULL
 system              public             630200280_50_2_not_null                                                                                         name IS NOT NULL
 system              public             630200280_50_3_not_null                                                                                         value IS NOT NULL
@@ -1899,6 +1905,7 @@ system         public        replication_critical_localities  zone_id           
 system         public        replication_stats                subzone_id                                                                                                system              public             primary
 system         public        replication_stats                zone_id                                                                                                   system              public             primary
 system         public        reports_meta                     id                                                                                                        system              public             primary
+system         public        role_id_seq                      value                                                                                                     system              public             primary
 system         public        role_members                     member                                                                                                    system              public             primary
 system         public        role_members                     role                                                                                                      system              public             primary
 system         public        role_options                     option                                                                                                    system              public             primary
@@ -1936,6 +1943,7 @@ system         public        transaction_statistics           crdb_internal_aggr
 system         public        transaction_statistics           fingerprint_id                                                                                            system              public             primary
 system         public        transaction_statistics           node_id                                                                                                   system              public             primary
 system         public        ui                               key                                                                                                       system              public             primary
+system         public        users                            user_id                                                                                                   system              public             users_user_id_idx
 system         public        users                            username                                                                                                  system              public             primary
 system         public        web_sessions                     id                                                                                                        system              public             primary
 system         public        zones                            id                                                                                                        system              public             primary
@@ -2135,6 +2143,7 @@ system         public        replication_stats                under_replicated_r
 system         public        replication_stats                zone_id                                                                                                   1
 system         public        reports_meta                     generated                                                                                                 2
 system         public        reports_meta                     id                                                                                                        1
+system         public        role_id_seq                      value                                                                                                     1
 system         public        role_members                     isAdmin                                                                                                   3
 system         public        role_members                     member                                                                                                    2
 system         public        role_members                     role                                                                                                      1
@@ -2243,6 +2252,7 @@ system         public        ui                               lastUpdated       
 system         public        ui                               value                                                                                                     2
 system         public        users                            hashedPassword                                                                                            2
 system         public        users                            isRole                                                                                                    3
+system         public        users                            user_id                                                                                                   4
 system         public        users                            username                                                                                                  1
 system         public        web_sessions                     auditInfo                                                                                                 8
 system         public        web_sessions                     createdAt                                                                                                 4
@@ -3139,6 +3149,12 @@ NULL     root     system         public              reports_meta               
 NULL     root     system         public              reports_meta                           INSERT          YES           NO
 NULL     root     system         public              reports_meta                           SELECT          YES           YES
 NULL     root     system         public              reports_meta                           UPDATE          YES           NO
+NULL     admin    system         public              role_id_seq                            SELECT          YES           YES
+NULL     admin    system         public              role_id_seq                            UPDATE          YES           NO
+NULL     admin    system         public              role_id_seq                            USAGE           YES           NO
+NULL     root     system         public              role_id_seq                            SELECT          YES           YES
+NULL     root     system         public              role_id_seq                            UPDATE          YES           NO
+NULL     root     system         public              role_id_seq                            USAGE           YES           NO
 NULL     admin    system         public              role_members                           DELETE          YES           NO
 NULL     admin    system         public              role_members                           INSERT          YES           NO
 NULL     admin    system         public              role_members                           SELECT          YES           YES
@@ -3821,6 +3837,12 @@ NULL     root     system         public              span_configurations        
 NULL     root     system         public              span_configurations                    INSERT          YES           NO
 NULL     root     system         public              span_configurations                    SELECT          YES           YES
 NULL     root     system         public              span_configurations                    UPDATE          YES           NO
+NULL     admin    system         public              role_id_seq                            SELECT          YES           YES
+NULL     admin    system         public              role_id_seq                            UPDATE          YES           NO
+NULL     admin    system         public              role_id_seq                            USAGE           YES           NO
+NULL     root     system         public              role_id_seq                            SELECT          YES           YES
+NULL     root     system         public              role_id_seq                            UPDATE          YES           NO
+NULL     root     system         public              role_id_seq                            USAGE           YES           NO
 NULL     admin    system         public              tenant_settings                        DELETE          YES           NO
 NULL     admin    system         public              tenant_settings                        INSERT          YES           NO
 NULL     admin    system         public              tenant_settings                        SELECT          YES           YES

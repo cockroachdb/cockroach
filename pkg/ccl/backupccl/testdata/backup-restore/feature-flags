@@ -81,7 +81,6 @@ RESTORE TABLE d.t FROM 'nodelocal://1/deprecated';
 ----
 NOTICE: The `RESTORE FROM <backup>` syntax will be removed in a future release, please switch over to using `RESTORE FROM <backup> IN <collection>` to restore a particular backup from a collection: https://www.cockroachlabs.com/docs/stable/restore.html#view-the-backup-subdirectories
 
-
 exec-sql
 RESTORE SYSTEM USERS FROM 'nodelocal://1/deprecated';
 ----

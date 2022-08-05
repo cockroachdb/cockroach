@@ -54,7 +54,7 @@ func TestSystemPrivilegesMigration(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	// Delete system.role_id_seq.
-	tdb.Exec(t, `INSERT INTO system.users VALUES ('node', '', false)`)
+	tdb.Exec(t, `INSERT INTO system.users VALUES ('node', '', false, 3)`)
 	tdb.Exec(t, `GRANT node TO root`)
 	tdb.Exec(t, `DROP TABLE system.privileges`)
 	tdb.Exec(t, `REVOKE node FROM root`)
