@@ -169,3 +169,7 @@ The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 feature usage within CockroachDB and anonymizes any application-
 specific data.
 
+### `ALLOCATOR`
+
+The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+

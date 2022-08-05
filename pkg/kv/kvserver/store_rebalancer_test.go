@@ -1182,6 +1182,12 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Enable vmodule in the store rebalancer because we rely on the trace output
+	// from chooseRangeToRebalance() below.
+	prevVModule := log.GetVModule()
+	defer require.NoError(t, log.SetVModule(prevVModule))
+	require.NoError(t, log.SetVModule("store_rebalancer=5"))
+
 	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
 		context.Background(), tracing.NewTracer(), "test",
 	)

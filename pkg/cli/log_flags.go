@@ -456,6 +456,7 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 const predefinedLogFiles = `
 sinks:
  file-groups:
+  allocator:              { channels: ALLOCATOR }
   default:
     channels:
       INFO: [DEV, OPS]

@@ -5561,3 +5561,255 @@ func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
 func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, format, args...)
 }
+
+// loggerAllocator is the logger type for the ALLOCATOR channel.
+type loggerAllocator struct{}
+
+// Allocator is a logger that logs to the ALLOCATOR channel.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+var Allocator loggerAllocator
+
+// Allocator and loggerAllocator implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Allocator
+
+// Infof logs to the ALLOCATOR channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerAllocator) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.ALLOCATOR, format, args...)
+}
+
+// VInfof logs to the ALLOCATOR channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerAllocator) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.ALLOCATOR, format, args...)
+	}
+}
+
+// Info logs to the ALLOCATOR channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerAllocator) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.ALLOCATOR, msg)
+}
+
+// InfofDepth logs to the ALLOCATOR channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerAllocator) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.ALLOCATOR, format, args...)
+}
+
+// Warningf logs to the ALLOCATOR channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerAllocator) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.ALLOCATOR, format, args...)
+}
+
+// VWarningf logs to the ALLOCATOR channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerAllocator) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.ALLOCATOR, format, args...)
+	}
+}
+
+// Warning logs to the ALLOCATOR channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerAllocator) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.ALLOCATOR, msg)
+}
+
+// WarningfDepth logs to the ALLOCATOR channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerAllocator) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.ALLOCATOR, format, args...)
+}
+
+// Errorf logs to the ALLOCATOR channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerAllocator) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.ALLOCATOR, format, args...)
+}
+
+// VErrorf logs to the ALLOCATOR channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerAllocator) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.ALLOCATOR, format, args...)
+	}
+}
+
+// Error logs to the ALLOCATOR channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerAllocator) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.ALLOCATOR, msg)
+}
+
+// ErrorfDepth logs to the ALLOCATOR channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerAllocator) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.ALLOCATOR, format, args...)
+}
+
+// Fatalf logs to the ALLOCATOR channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerAllocator) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.ALLOCATOR, format, args...)
+}
+
+// VFatalf logs to the ALLOCATOR channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerAllocator) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.ALLOCATOR, format, args...)
+	}
+}
+
+// Fatal logs to the ALLOCATOR channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerAllocator) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.ALLOCATOR, msg)
+}
+
+// FatalfDepth logs to the ALLOCATOR channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerAllocator) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.ALLOCATOR, format, args...)
+}
+
+// Shout logs to channel ALLOCATOR, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+func (loggerAllocator) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.ALLOCATOR, msg)
+}
+
+// Shoutf logs to channel ALLOCATOR, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `ALLOCATOR` channel is used to report allocation and rebalancing events.
+func (loggerAllocator) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.ALLOCATOR, format, args...)
+}

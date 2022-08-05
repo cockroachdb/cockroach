@@ -4299,6 +4299,13 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 func TestNonVotersCannotRebalanceToVoterStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Enable vmodule in the allocator scorer because we rely on the trace output
+	// from RebalanceNonVoter() below.
+	prevVModule := log.GetVModule()
+	defer require.NoError(t, log.SetVModule(prevVModule))
+	require.NoError(t, log.SetVModule("allocator_scorer=6"))
+
 	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
 		context.Background(), tracing.NewTracer(), "test",
 	)

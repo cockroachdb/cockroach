@@ -134,3 +134,6 @@ const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 const TELEMETRY = logpb.Channel_TELEMETRY
+
+// ALLOCATOR is used to report allocation and rebalancing events.
+const ALLOCATOR = logpb.Channel_ALLOCATOR

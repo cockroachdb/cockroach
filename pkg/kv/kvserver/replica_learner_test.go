@@ -761,6 +761,12 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Run the replicate queue.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
+		// Enable vmodule in the replicate queue because we rely on the trace output
+		// from store.Enqueue() below.
+		prevVModule := log.GetVModule()
+		defer require.NoError(t, log.SetVModule(prevVModule))
+		require.NoError(t, log.SetVModule("replicate_queue=5"))
+
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 		store.SetReplicateQueueActive(true)
 		trace, processErr, err := store.Enqueue(

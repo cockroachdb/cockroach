@@ -435,10 +435,10 @@ func (rq *replicateQueue) shouldQueue(
 	action, priority := rq.allocator.ComputeAction(ctx, conf, desc)
 
 	if action == allocatorimpl.AllocatorNoop {
-		log.VEventf(ctx, 2, "no action to take")
+		log.Allocator.VInfof(ctx, 2, "no action to take")
 		return false, 0
 	} else if action != allocatorimpl.AllocatorConsiderRebalance {
-		log.VEventf(ctx, 2, "repair needed (%s), enqueuing", action)
+		log.Allocator.VInfof(ctx, 2, "repair needed (%s), enqueuing", action)
 		return true, priority
 	}
 
@@ -457,7 +457,7 @@ func (rq *replicateQueue) shouldQueue(
 			rq.allocator.ScorerOptions(ctx),
 		)
 		if ok {
-			log.VEventf(ctx, 2, "rebalance target found for voter, enqueuing")
+			log.Allocator.VInfof(ctx, 2, "rebalance target found for voter, enqueuing")
 			return true, 0
 		}
 		_, _, _, ok = rq.allocator.RebalanceNonVoter(
@@ -471,10 +471,10 @@ func (rq *replicateQueue) shouldQueue(
 			rq.allocator.ScorerOptions(ctx),
 		)
 		if ok {
-			log.VEventf(ctx, 2, "rebalance target found for non-voter, enqueuing")
+			log.Allocator.VInfof(ctx, 2, "rebalance target found for non-voter, enqueuing")
 			return true, 0
 		}
-		log.VEventf(ctx, 2, "no rebalance target found, not enqueuing")
+		log.Allocator.VInfof(ctx, 2, "no rebalance target found, not enqueuing")
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
@@ -483,7 +483,7 @@ func (rq *replicateQueue) shouldQueue(
 		rq.canTransferLeaseFrom(ctx, repl) &&
 		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.loadStats.batchRequests) {
 
-		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
+		log.Allocator.VInfof(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
 	}
 	if !status.IsValid() {
@@ -494,7 +494,7 @@ func (rq *replicateQueue) shouldQueue(
 		// requirement that the expired lease belongs to this replica, as
 		// regardless of the lease history, the current leader should hold the
 		// lease.
-		log.VEventf(ctx, 2, "invalid lease, enqueuing")
+		log.Allocator.VInfof(ctx, 2, "invalid lease, enqueuing")
 		return true, 0
 	}
 
@@ -533,7 +533,7 @@ func (rq *replicateQueue) process(
 			// there is only one option for a recipient, we will block the entire
 			// replicate queue until we are able to send this through. Also even if
 			// there are multiple options, we may choose a far inferior recipient.
-			log.Infof(ctx, "%v", err)
+			log.Allocator.Infof(ctx, "%v", err)
 			continue
 		}
 
@@ -543,7 +543,7 @@ func (rq *replicateQueue) process(
 
 		if testingAggressiveConsistencyChecks {
 			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader); err != nil {
-				log.Warningf(ctx, "%v", err)
+				log.Allocator.Warningf(ctx, "%v", err)
 			}
 		}
 
@@ -573,7 +573,7 @@ func (rq *replicateQueue) process(
 		}
 
 		if requeue {
-			log.VEventf(ctx, 1, "re-processing")
+			log.Allocator.VInfof(ctx, 1, "re-processing")
 			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
 		}
 		return true, nil
@@ -630,7 +630,7 @@ func (rq *replicateQueue) processOneChange(
 	_ = execChangeReplicasTxn
 
 	action, _ := rq.allocator.ComputeAction(ctx, conf, desc)
-	log.VEventf(ctx, 1, "next replica action: %s", action)
+	log.Allocator.VInfof(ctx, 1, "next replica action: %s", action)
 
 	switch action {
 	case allocatorimpl.AllocatorNoop, allocatorimpl.AllocatorRangeUnavailable:
@@ -908,14 +908,14 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		ops = roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newVoter)
 	}
 	if removeIdx < 0 {
-		log.VEventf(ctx, 1, "adding voter %+v: %s",
+		log.Allocator.VInfof(ctx, 1, "adding voter %+v: %s",
 			newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	} else {
 		if !dryRun {
 			rq.metrics.trackRemoveMetric(allocatorimpl.VoterTarget, replicaStatus)
 		}
 		removeVoter := existingVoters[removeIdx]
-		log.VEventf(ctx, 1, "replacing voter %s with %+v: %s",
+		log.Allocator.VInfof(ctx, 1, "replacing voter %s with %+v: %s",
 			removeVoter, newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 		// NB: We may have performed a promotion of a non-voter above, but we will
 		// not perform a demotion here and instead just remove the existing replica
@@ -970,14 +970,14 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 
 	ops := roachpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, newNonVoter)
 	if removeIdx < 0 {
-		log.VEventf(ctx, 1, "adding non-voter %+v: %s",
+		log.Allocator.VInfof(ctx, 1, "adding non-voter %+v: %s",
 			newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
 	} else {
 		if !dryRun {
 			rq.metrics.trackRemoveMetric(allocatorimpl.NonVoterTarget, replicaStatus)
 		}
 		removeNonVoter := existingNonVoters[removeIdx]
-		log.VEventf(ctx, 1, "replacing non-voter %s with %+v: %s",
+		log.Allocator.VInfof(ctx, 1, "replacing non-voter %s with %+v: %s",
 			removeNonVoter, newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
 		ops = append(ops,
 			roachpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, roachpb.ReplicationTarget{
@@ -1046,7 +1046,7 @@ func (rq *replicateQueue) findRemoveVoter(
 			return roachpb.ReplicationTarget{}, "", &benignError{errors.Errorf("not raft leader while range needs removal")}
 		}
 		candidates = allocatorimpl.FilterUnremovableReplicas(ctx, raftStatus, existingVoters, lastReplAdded)
-		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
+		log.Allocator.VInfof(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
 			existingVoters, candidates, rangeRaftProgress(raftStatus, existingVoters))
 		if len(candidates) > 0 {
 			break
@@ -1166,7 +1166,7 @@ func (rq *replicateQueue) removeVoter(
 		rq.metrics.trackRemoveMetric(allocatorimpl.VoterTarget, allocatorimpl.Alive)
 	}
 
-	log.VEventf(ctx, 1, "removing voting replica %+v due to over-replication: %s",
+	log.Allocator.VInfof(ctx, 1, "removing voting replica %+v due to over-replication: %s",
 		removeVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	desc := repl.Desc()
 	// TODO(aayush): Directly removing the voter here is a bit of a missed
@@ -1211,7 +1211,7 @@ func (rq *replicateQueue) removeNonVoter(
 	if !dryRun {
 		rq.metrics.trackRemoveMetric(allocatorimpl.NonVoterTarget, allocatorimpl.Alive)
 	}
-	log.VEventf(ctx, 1, "removing non-voting replica %+v due to over-replication: %s",
+	log.Allocator.VInfof(ctx, 1, "removing non-voting replica %+v due to over-replication: %s",
 		removeNonVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	target := roachpb.ReplicationTarget{
 		NodeID:  removeNonVoter.NodeID,
@@ -1252,7 +1252,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	}
 
 	if len(decommissioningReplicas) == 0 {
-		log.VEventf(ctx, 1, "range of %[1]ss %[2]s was identified as having decommissioning %[1]ss, "+
+		log.Allocator.VInfof(ctx, 1, "range of %[1]ss %[2]s was identified as having decommissioning %[1]ss, "+
 			"but no decommissioning %[1]ss were found", targetType, repl)
 		return true, nil
 	}
@@ -1272,7 +1272,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	if !dryRun {
 		rq.metrics.trackRemoveMetric(targetType, allocatorimpl.Decommissioning)
 	}
-	log.VEventf(ctx, 1, "removing decommissioning %s %+v from store", targetType, decommissioningReplica)
+	log.Allocator.VInfof(ctx, 1, "removing decommissioning %s %+v from store", targetType, decommissioningReplica)
 	target := roachpb.ReplicationTarget{
 		NodeID:  decommissioningReplica.NodeID,
 		StoreID: decommissioningReplica.StoreID,
@@ -1300,7 +1300,7 @@ func (rq *replicateQueue) removeDead(
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
 	if len(deadReplicas) == 0 {
-		log.VEventf(
+		log.Allocator.VInfof(
 			ctx,
 			1,
 			"range of %[1]s %[2]s was identified as having dead %[1]ss, but no dead %[1]ss were found",
@@ -1313,7 +1313,7 @@ func (rq *replicateQueue) removeDead(
 	if !dryRun {
 		rq.metrics.trackRemoveMetric(targetType, allocatorimpl.Dead)
 	}
-	log.VEventf(ctx, 1, "removing dead %s %+v from store", targetType, deadReplica)
+	log.Allocator.VInfof(ctx, 1, "removing dead %s %+v from store", targetType, deadReplica)
 	target := roachpb.ReplicationTarget{
 		NodeID:  deadReplica.NodeID,
 		StoreID: deadReplica.StoreID,
@@ -1367,7 +1367,7 @@ func (rq *replicateQueue) considerRebalance(
 		if !ok {
 			// If there was nothing to do for the set of voting replicas on this
 			// range, attempt to rebalance non-voters.
-			log.VEventf(ctx, 1, "no suitable rebalance target for voters")
+			log.Allocator.VInfof(ctx, 1, "no suitable rebalance target for voters")
 			addTarget, removeTarget, details, ok = rq.allocator.RebalanceNonVoter(
 				ctx,
 				conf,
@@ -1388,12 +1388,12 @@ func (rq *replicateQueue) considerRebalance(
 		lhBeingRemoved := removeTarget.StoreID == repl.store.StoreID()
 
 		if !ok {
-			log.VEventf(ctx, 1, "no suitable rebalance target for non-voters")
+			log.Allocator.VInfof(ctx, 1, "no suitable rebalance target for non-voters")
 		} else if !lhRemovalAllowed {
 			if done, err := rq.maybeTransferLeaseAway(
 				ctx, repl, removeTarget.StoreID, dryRun, canTransferLeaseFrom,
 			); err != nil {
-				log.VEventf(ctx, 1, "want to remove self, but failed to transfer lease away: %s", err)
+				log.Allocator.VInfof(ctx, 1, "want to remove self, but failed to transfer lease away: %s", err)
 				ok = false
 			} else if done {
 				// Lease is now elsewhere, so we're not in charge any more.
@@ -1415,7 +1415,7 @@ func (rq *replicateQueue) considerRebalance(
 					rq.metrics.NonVoterPromotionsCount.Inc(1)
 				}
 			}
-			log.VEventf(ctx,
+			log.Allocator.VInfof(ctx,
 				1,
 				"rebalancing %s %+v to %+v: %s",
 				rebalanceTargetType,
@@ -1482,7 +1482,7 @@ func replicationChangesForRebalance(
 		chgs = []roachpb.ReplicationChange{
 			{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
 		}
-		log.VEventf(ctx, 1, "can't swap replica due to lease; falling back to add")
+		log.Allocator.VInfof(ctx, 1, "can't swap replica due to lease; falling back to add")
 		return chgs, false, err
 	}
 
@@ -1568,7 +1568,7 @@ func (rq *replicateQueue) shedLease(
 	}
 
 	if opts.DryRun {
-		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+		log.Allocator.VInfof(ctx, 1, "transferring lease to s%d", target.StoreID)
 		return allocator.NoTransferDryRun, nil
 	}
 
@@ -1617,7 +1617,7 @@ func (rq *replicateQueue) TransferLease(
 	ctx context.Context, rlm ReplicaLeaseMover, source, target roachpb.StoreID, rangeQPS float64,
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
-	log.VEventf(ctx, 1, "transferring lease to s%d", target)
+	log.Allocator.VInfof(ctx, 1, "transferring lease to s%d", target)
 	if err := rlm.AdminTransferLease(ctx, target); err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
