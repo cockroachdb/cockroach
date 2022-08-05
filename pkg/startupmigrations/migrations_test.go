@@ -545,8 +545,8 @@ func TestAdminUserExists(t *testing.T) {
 
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
 	// knows about "isRole", but the migration hasn't run yet.
-	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
-		username.AdminRole)
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", user_id) VALUES ($1, '', $2)`,
+		username.AdminRole, username.AdminRoleID)
 
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
@@ -566,8 +566,8 @@ func TestPublicRoleExists(t *testing.T) {
 
 	// Create a user (we check for user or role) named "public".
 	// We have to do a manual insert as "CREATE USER" knows to disallow "public".
-	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)`,
-		username.PublicRole)
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ($1, '', false, $2)`,
+		username.PublicRole, username.PublicRoleID)
 
 	e := `found a user named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -577,8 +577,8 @@ func TestPublicRoleExists(t *testing.T) {
 
 	// Now try with a role instead of a user.
 	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, username.PublicRole)
-	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)`,
-		username.PublicRole)
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ($1, '', true, $2)`,
+		username.PublicRole, username.PublicRoleID)
 
 	e = `found a role named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.

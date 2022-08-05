@@ -26,6 +26,7 @@ SELECT * FROM system.namespace
 1    29  replication_critical_localities  26
 1    29  replication_stats                27
 1    29  reports_meta                     28
+1    29  role_id_seq                      48
 1    29  role_members                     23
 1    29  role_options                     33
 1    29  scheduled_jobs                   37
@@ -82,6 +83,7 @@ SELECT * FROM system.namespace
 1    29  replication_critical_localities  26
 1    29  replication_stats                27
 1    29  reports_meta                     28
+1    29  role_id_seq                      48
 1    29  role_members                     23
 1    29  role_options                     33
 1    29  scheduled_jobs                   37

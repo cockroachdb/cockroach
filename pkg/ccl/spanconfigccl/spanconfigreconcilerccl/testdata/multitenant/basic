@@ -22,6 +22,7 @@ mutations
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
@@ -69,6 +70,7 @@ upsert /Tenant/10/Table/4{2-3}             database system (tenant)
 upsert /Tenant/10/Table/4{3-4}             database system (tenant)
 upsert /Tenant/10/Table/4{4-5}             database system (tenant)
 upsert /Tenant/10/Table/4{6-7}             database system (tenant)
+upsert /Tenant/10/Table/4{8-9}             database system (tenant)
 upsert /Tenant/10/Table/5{0-1}             database system (tenant)
 upsert /Tenant/10/Table/5{1-2}             database system (tenant)
 upsert /Tenant/10/Table/5{2-3}             database system (tenant)
@@ -76,6 +78,7 @@ upsert /Tenant/10/Table/5{2-3}             database system (tenant)
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
@@ -113,6 +116,7 @@ state offset=47
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)
 /Tenant/10/Table/4{6-7}                    database system (tenant)
+/Tenant/10/Table/4{8-9}                    database system (tenant)
 /Tenant/10/Table/5{0-1}                    database system (tenant)
 /Tenant/10/Table/5{1-2}                    database system (tenant)
 /Tenant/10/Table/5{2-3}                    database system (tenant)
@@ -139,9 +143,11 @@ upsert /Tenant/10/Table/11{3-4}            range default
 state offset=81
 ----
 ...
+/Tenant/10/Table/4{2-3}                    database system (tenant)
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)
 /Tenant/10/Table/4{6-7}                    database system (tenant)
+/Tenant/10/Table/4{8-9}                    database system (tenant)
 /Tenant/10/Table/5{0-1}                    database system (tenant)
 /Tenant/10/Table/5{1-2}                    database system (tenant)
 /Tenant/10/Table/5{2-3}                    database system (tenant)
