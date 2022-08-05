@@ -2807,6 +2807,11 @@ func (d *DTimestamp) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestamp) AmbiguousFormat() bool { return true }
 
+// FormatTimestamp outputs a timestamp in the UTC timezone.
+func FormatTimestamp(t time.Time) string {
+	return t.UTC().Format(timestampOutputFormat)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -2814,7 +2819,7 @@ func (d *DTimestamp) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.UTC().Format(timestampOutputFormat))
+	ctx.WriteString(FormatTimestamp(d.Time))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2974,15 +2979,11 @@ func (d *DTimestampTZ) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DTimestampTZ) Format(ctx *FmtCtx) {
-	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
-	if !bareStrings {
-		ctx.WriteByte('\'')
-	}
-	ctx.WriteString(d.Time.Format(timestampTZOutputFormat))
-	_, offsetSecs := d.Time.Zone()
+// FormatTimestampTZ formats the given timestamp with timezone into the provided
+// buffer.
+func FormatTimestampTZ(t time.Time, buf *bytes.Buffer) {
+	buf.WriteString(t.Format(timestampTZOutputFormat))
+	_, offsetSecs := t.Zone()
 	// Only output remaining seconds offsets if it is available.
 	// This is to maintain backward compatibility with older CRDB versions,
 	// where we only output HH:MM.
@@ -2990,9 +2991,19 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 		if secondOffset < 0 {
 			secondOffset = 60 + secondOffset
 		}
-		ctx.WriteByte(':')
-		ctx.WriteString(fmt.Sprintf("%02d", secondOffset))
+		buf.WriteByte(':')
+		buf.WriteString(fmt.Sprintf("%02d", secondOffset))
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DTimestampTZ) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	FormatTimestampTZ(d.Time, &ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -5640,7 +5651,14 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		} else if v, ok := inVal.(*DCollatedString); ok {
 			sv = v.Contents
 		}
-		sv = adjustStringValueToType(typ, sv)
+		switch typ.Oid() {
+		case oid.T_char:
+			// "char" is supposed to truncate long values.
+			sv = util.TruncateString(sv, 1)
+		case oid.T_bpchar:
+			// bpchar types truncate trailing whitespace.
+			sv = strings.TrimRight(sv, " ")
+		}
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
 			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
 				"value too long for type %s",
@@ -5782,18 +5800,4 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 	}
 	return inVal, nil
-}
-
-// adjustStringToType checks that the width for strings fits the
-// specified column type.
-func adjustStringValueToType(typ *types.T, sv string) string {
-	switch typ.Oid() {
-	case oid.T_char:
-		// "char" is supposed to truncate long values
-		return util.TruncateString(sv, 1)
-	case oid.T_bpchar:
-		// bpchar types truncate trailing whitespace.
-		return strings.TrimRight(sv, " ")
-	}
-	return sv
 }
