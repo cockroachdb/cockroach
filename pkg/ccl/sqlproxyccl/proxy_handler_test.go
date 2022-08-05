@@ -998,15 +998,30 @@ func TestCancelQuery(t *testing.T) {
 		return nil
 	})
 
+	clearMetrics := func() {
+		proxy.metrics.QueryCancelSuccessful.Clear()
+		proxy.metrics.QueryCancelIgnored.Clear()
+		proxy.metrics.QueryCancelForwarded.Clear()
+		proxy.metrics.QueryCancelReceivedPGWire.Clear()
+		proxy.metrics.QueryCancelReceivedHTTP.Clear()
+	}
+
 	t.Run("cancel over sql", func(t *testing.T) {
+		clearMetrics()
 		cancelFn = conn.PgConn().CancelRequest
 		var b bool
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelReceivedPGWire.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelReceivedHTTP.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelSuccessful.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelForwarded.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelIgnored.Count())
 	})
 
 	t.Run("cancel over http", func(t *testing.T) {
+		clearMetrics()
 		cancelFn = func(ctx context.Context) error {
 			cancelRequest := proxyCancelRequest{
 				ProxyIP:   net.IP{},
@@ -1033,6 +1048,11 @@ func TestCancelQuery(t *testing.T) {
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelReceivedPGWire.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelReceivedHTTP.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelSuccessful.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelForwarded.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelIgnored.Count())
 	})
 
 	t.Run("cancel after migrating a session", func(t *testing.T) {
@@ -1080,6 +1100,7 @@ func TestCancelQuery(t *testing.T) {
 	})
 
 	t.Run("reject cancel from wrong client IP", func(t *testing.T) {
+		clearMetrics()
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
 			SecretKey: conn.PgConn().SecretKey(),
@@ -1097,9 +1118,15 @@ func TestCancelQuery(t *testing.T) {
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)
 		require.Regexp(t, "mismatched client IP for cancel request", httpCancelErr.Error())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelReceivedPGWire.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelReceivedHTTP.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelSuccessful.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelForwarded.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelIgnored.Count())
 	})
 
 	t.Run("forward over http", func(t *testing.T) {
+		clearMetrics()
 		var forwardedTo string
 		var forwardedReq proxyCancelRequest
 		var wg sync.WaitGroup
@@ -1116,7 +1143,7 @@ func TestCancelQuery(t *testing.T) {
 		})()
 		crdbRequest := &pgproto3.CancelRequest{
 			ProcessID: 1,
-			SecretKey: 2,
+			SecretKey: conn.PgConn().SecretKey() + 1,
 		}
 		buf := crdbRequest.Encode(nil /* buf */)
 		proxyAddr := conn.PgConn().Conn().RemoteAddr()
@@ -1132,10 +1159,41 @@ func TestCancelQuery(t *testing.T) {
 		require.Equal(t, "http://0.0.0.1:8080/_status/cancel/", forwardedTo)
 		expectedReq := proxyCancelRequest{
 			ProxyIP:   net.IP{0, 0, 0, 1},
-			SecretKey: 2,
+			SecretKey: conn.PgConn().SecretKey() + 1,
 			ClientIP:  net.IP{127, 0, 0, 1},
 		}
 		require.Equal(t, expectedReq, forwardedReq)
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelReceivedPGWire.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelReceivedHTTP.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelSuccessful.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelForwarded.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelIgnored.Count())
+	})
+
+	t.Run("ignore unknown secret key", func(t *testing.T) {
+		clearMetrics()
+		cancelRequest := proxyCancelRequest{
+			ProxyIP:   net.IP{},
+			SecretKey: conn.PgConn().SecretKey() + 1,
+			ClientIP:  net.IP{127, 0, 0, 1},
+		}
+		u := "http://" + httpAddr + "/_status/cancel/"
+		reqBody := bytes.NewReader(cancelRequest.Encode())
+		client := http.Client{
+			Timeout: 10 * time.Second,
+		}
+		resp, err := client.Post(u, "application/octet-stream", reqBody)
+		require.NoError(t, err)
+		respBytes, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "OK", string(respBytes))
+		require.Error(t, httpCancelErr)
+		require.Regexp(t, "ignoring cancel request with unfamiliar key", httpCancelErr.Error())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelReceivedPGWire.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelReceivedHTTP.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelSuccessful.Count())
+		require.Equal(t, int64(0), proxy.metrics.QueryCancelForwarded.Count())
+		require.Equal(t, int64(1), proxy.metrics.QueryCancelIgnored.Count())
 	})
 }
 
