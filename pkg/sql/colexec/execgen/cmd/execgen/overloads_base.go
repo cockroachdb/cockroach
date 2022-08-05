@@ -310,8 +310,9 @@ func (o *oneArgOverload) String() string {
 // only a single type family and a single type width on both sides).
 type twoArgsResolvedOverload struct {
 	*overloadBase
-	Left  *argWidthOverload
-	Right *lastArgWidthOverload
+	Left      *argWidthOverload
+	Right     *lastArgWidthOverload
+	Negatable bool
 }
 
 // NeedsBinaryOverloadHelper returns true iff the overload is such that it needs

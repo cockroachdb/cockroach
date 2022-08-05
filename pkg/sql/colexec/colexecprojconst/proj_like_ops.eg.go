@@ -20,9 +20,11 @@ import (
 type projPrefixBytesBytesConstOp struct {
 	projConstOpBase
 	constArg []byte
+	negate   bool
 }
 
 func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
+	_negate := p.negate
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -48,7 +50,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = bytes.HasPrefix(arg, p.constArg)
+						projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 					}
 				}
 			} else {
@@ -58,7 +60,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = bytes.HasPrefix(arg, p.constArg)
+						projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 					}
 				}
 			}
@@ -68,14 +70,14 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					arg := col.Get(i)
-					projCol[i] = bytes.HasPrefix(arg, p.constArg)
+					projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 				}
 			} else {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
-					projCol[i] = bytes.HasPrefix(arg, p.constArg)
+					projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 				}
 			}
 		}
@@ -86,9 +88,11 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 type projSuffixBytesBytesConstOp struct {
 	projConstOpBase
 	constArg []byte
+	negate   bool
 }
 
 func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
+	_negate := p.negate
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -114,7 +118,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = bytes.HasSuffix(arg, p.constArg)
+						projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 					}
 				}
 			} else {
@@ -124,7 +128,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = bytes.HasSuffix(arg, p.constArg)
+						projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 					}
 				}
 			}
@@ -134,14 +138,14 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					arg := col.Get(i)
-					projCol[i] = bytes.HasSuffix(arg, p.constArg)
+					projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 				}
 			} else {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
-					projCol[i] = bytes.HasSuffix(arg, p.constArg)
+					projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 				}
 			}
 		}
@@ -152,9 +156,11 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 type projContainsBytesBytesConstOp struct {
 	projConstOpBase
 	constArg []byte
+	negate   bool
 }
 
 func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
+	_negate := p.negate
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -180,7 +186,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = bytes.Contains(arg, p.constArg)
+						projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 					}
 				}
 			} else {
@@ -190,7 +196,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = bytes.Contains(arg, p.constArg)
+						projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 					}
 				}
 			}
@@ -200,14 +206,14 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					arg := col.Get(i)
-					projCol[i] = bytes.Contains(arg, p.constArg)
+					projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 				}
 			} else {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
-					projCol[i] = bytes.Contains(arg, p.constArg)
+					projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 				}
 			}
 		}
@@ -218,9 +224,11 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 type projSkeletonBytesBytesConstOp struct {
 	projConstOpBase
 	constArg [][]byte
+	negate   bool
 }
 
 func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
+	_negate := p.negate
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -257,7 +265,7 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 								arg = arg[idx+len(p.constArg[skeletonIdx]):]
 								skeletonIdx++
 							}
-							projCol[i] = skeletonIdx == len(p.constArg)
+							projCol[i] = skeletonIdx == len(p.constArg) != _negate
 						}
 					}
 				}
@@ -279,7 +287,7 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 								arg = arg[idx+len(p.constArg[skeletonIdx]):]
 								skeletonIdx++
 							}
-							projCol[i] = skeletonIdx == len(p.constArg)
+							projCol[i] = skeletonIdx == len(p.constArg) != _negate
 						}
 					}
 				}
@@ -301,7 +309,7 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 							arg = arg[idx+len(p.constArg[skeletonIdx]):]
 							skeletonIdx++
 						}
-						projCol[i] = skeletonIdx == len(p.constArg)
+						projCol[i] = skeletonIdx == len(p.constArg) != _negate
 					}
 				}
 			} else {
@@ -320,7 +328,7 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 							arg = arg[idx+len(p.constArg[skeletonIdx]):]
 							skeletonIdx++
 						}
-						projCol[i] = skeletonIdx == len(p.constArg)
+						projCol[i] = skeletonIdx == len(p.constArg) != _negate
 					}
 				}
 			}
@@ -332,9 +340,11 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 type projRegexpBytesBytesConstOp struct {
 	projConstOpBase
 	constArg *regexp.Regexp
+	negate   bool
 }
 
 func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
+	_negate := p.negate
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -360,7 +370,7 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = p.constArg.Match(arg)
+						projCol[i] = p.constArg.Match(arg) != _negate
 					}
 				}
 			} else {
@@ -370,7 +380,7 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
-						projCol[i] = p.constArg.Match(arg)
+						projCol[i] = p.constArg.Match(arg) != _negate
 					}
 				}
 			}
@@ -380,392 +390,14 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					arg := col.Get(i)
-					projCol[i] = p.constArg.Match(arg)
+					projCol[i] = p.constArg.Match(arg) != _negate
 				}
 			} else {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
-					projCol[i] = p.constArg.Match(arg)
-				}
-			}
-		}
-	})
-	return batch
-}
-
-type projNotPrefixBytesBytesConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Bytes
-	col = vec.Bytes()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-				}
-			}
-		}
-	})
-	return batch
-}
-
-type projNotSuffixBytesBytesConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Bytes
-	col = vec.Bytes()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-				}
-			}
-		}
-	})
-	return batch
-}
-
-type projNotContainsBytesBytesConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Bytes
-	col = vec.Bytes()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !bytes.Contains(arg, p.constArg)
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !bytes.Contains(arg, p.constArg)
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-					projCol[i] = !bytes.Contains(arg, p.constArg)
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-					projCol[i] = !bytes.Contains(arg, p.constArg)
-				}
-			}
-		}
-	})
-	return batch
-}
-
-type projNotSkeletonBytesBytesConstOp struct {
-	projConstOpBase
-	constArg [][]byte
-}
-
-func (p projNotSkeletonBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Bytes
-	col = vec.Bytes()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var idx, skeletonIdx int
-							for skeletonIdx < len(p.constArg) {
-								idx = bytes.Index(arg, p.constArg[skeletonIdx])
-								if idx < 0 {
-									break
-								}
-								arg = arg[idx+len(p.constArg[skeletonIdx]):]
-								skeletonIdx++
-							}
-							projCol[i] = skeletonIdx != len(p.constArg)
-						}
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var idx, skeletonIdx int
-							for skeletonIdx < len(p.constArg) {
-								idx = bytes.Index(arg, p.constArg[skeletonIdx])
-								if idx < 0 {
-									break
-								}
-								arg = arg[idx+len(p.constArg[skeletonIdx]):]
-								skeletonIdx++
-							}
-							projCol[i] = skeletonIdx != len(p.constArg)
-						}
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					{
-						var idx, skeletonIdx int
-						for skeletonIdx < len(p.constArg) {
-							idx = bytes.Index(arg, p.constArg[skeletonIdx])
-							if idx < 0 {
-								break
-							}
-							arg = arg[idx+len(p.constArg[skeletonIdx]):]
-							skeletonIdx++
-						}
-						projCol[i] = skeletonIdx != len(p.constArg)
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					{
-						var idx, skeletonIdx int
-						for skeletonIdx < len(p.constArg) {
-							idx = bytes.Index(arg, p.constArg[skeletonIdx])
-							if idx < 0 {
-								break
-							}
-							arg = arg[idx+len(p.constArg[skeletonIdx]):]
-							skeletonIdx++
-						}
-						projCol[i] = skeletonIdx != len(p.constArg)
-					}
-				}
-			}
-		}
-	})
-	return batch
-}
-
-type projNotRegexpBytesBytesConstOp struct {
-	projConstOpBase
-	constArg *regexp.Regexp
-}
-
-func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Bytes
-	col = vec.Bytes()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !p.constArg.Match(arg)
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-						projCol[i] = !p.constArg.Match(arg)
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-					projCol[i] = !p.constArg.Match(arg)
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-					projCol[i] = !p.constArg.Match(arg)
+					projCol[i] = p.constArg.Match(arg) != _negate
 				}
 			}
 		}
