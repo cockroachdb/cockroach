@@ -169,3 +169,8 @@ The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 feature usage within CockroachDB and anonymizes any application-
 specific data.
 
+### `KV_DISTRIBUTION`
+
+The `KV_DISTRIBUTION` channel is used to report data distribution events, such as
+allocation and rebalancing.
+
