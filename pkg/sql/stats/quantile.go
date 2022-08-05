@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -234,7 +233,7 @@ func makeQuantile(hist histogram, rowCount float64) (quantile, error) {
 // row count. It returns an error if the conversion fails. The quantile must be
 // well-formed before calling toHistogram.
 func (q quantile) toHistogram(
-	evalCtx *eval.Context, colType *types.T, rowCount float64,
+	evalCtx tree.CompareContext, colType *types.T, rowCount float64,
 ) (histogram, error) {
 	if len(q) < 2 || q[0].p != 0 || q[len(q)-1].p != 1 {
 		return histogram{}, errors.AssertionFailedf("invalid quantile: %v", q)
