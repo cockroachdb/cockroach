@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -108,6 +109,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -116,7 +118,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/marusama/semaphore"
+	"github.com/nightlyone/lockfile"
 	"google.golang.org/grpc"
 )
 
@@ -1205,7 +1209,6 @@ func (s *SQLServer) preStart(
 	knobs base.TestingKnobs,
 	connManager netutil.Server,
 	pgL net.Listener,
-	socketFile string,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
 	// The sqlliveness and sqlinstance subsystem should be started first to ensure
@@ -1392,7 +1395,7 @@ func (s *SQLServer) startServeSQL(
 	stopper *stop.Stopper,
 	connManager netutil.Server,
 	pgL net.Listener,
-	socketFile string,
+	socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
@@ -1414,13 +1417,19 @@ func (s *SQLServer) startServeSQL(
 			netutil.FatalIfUnexpected(err)
 		})
 
+	socketFile, socketLock, err := prepareUnixSocket(pgCtx, pgL, socketFileCfg)
+	if err != nil {
+		return err
+	}
+
 	// If a unix socket was requested, start serving there too.
 	if len(socketFile) != 0 {
-		log.Ops.Infof(ctx, "starting postgres server at unix:%s", socketFile)
+		log.Ops.Infof(ctx, "starting postgres server at unix: %s", socketFile)
 
 		// Unix socket enabled: postgres protocol only.
 		unixLn, err := net.Listen("unix", socketFile)
 		if err != nil {
+			err = errors.CombineErrors(err, socketLock.Unlock())
 			return err
 		}
 
@@ -1431,7 +1440,10 @@ func (s *SQLServer) startServeSQL(
 			// only when the listener closes. In other words, the listener needs
 			// to close when quiescing starts to allow that worker to shut down.
 			if err := unixLn.Close(); err != nil {
-				log.Ops.Fatalf(ctx, "%v", err)
+				log.Ops.Warningf(ctx, "closing unix socket: %v", err)
+			}
+			if err := socketLock.Unlock(); err != nil {
+				log.Ops.Warningf(ctx, "removing unix socket lock: %v", err)
 			}
 		}
 		if err := stopper.RunAsyncTaskEx(ctx,
@@ -1461,6 +1473,80 @@ func (s *SQLServer) startServeSQL(
 	s.isReady.Set(true)
 
 	return nil
+}
+
+const noLock lockfile.Lockfile = ""
+
+func prepareUnixSocket(
+	ctx context.Context, pgL net.Listener, socketFileCfg *string,
+) (socketFile string, socketLock lockfile.Lockfile, err error) {
+	socketFile = ""
+	if socketFileCfg != nil {
+		socketFile = *socketFileCfg
+	}
+	if len(socketFile) == 0 {
+		// No socket configured. Nothing to do.
+		return "", noLock, nil
+	}
+
+	if strings.HasSuffix(socketFile, ".0") {
+		// Either a test explicitly set the SocketFile parameter to "xxx.0", or
+		// the top-level 'start'  command was given a port number 0 to --listen-addr
+		// (means: auto-allocate TCP port number).
+		// In either case, this is an instruction for us to generate
+		// a socket name after the TCP port automatically.
+		tcpAddr := pgL.Addr()
+		_, port, err := addr.SplitHostPort(tcpAddr.String(), "")
+		if err != nil {
+			return "", noLock, errors.Wrapf(err, "extracting port from SQL addr %q", tcpAddr)
+		}
+		socketFile = socketFile[:len(socketFile)-1] + port
+		if socketFileCfg != nil {
+			// Remember the computed value for reporting in the top-level
+			// start command.
+			*socketFileCfg = socketFile
+		}
+	}
+
+	// Use a socket lock mechanism to ensure we reuse the socket only
+	// if it's safe to do so (there's no owner any more).
+	lockPath := socketFile + ".lock"
+	// The lockfile package wants an absolute path.
+	absLockPath, err := filepath.Abs(lockPath)
+	if err != nil {
+		return "", noLock, errors.Wrap(err, "computing absolute path for unix socket")
+	}
+	socketLock, err = lockfile.New(absLockPath)
+	if err != nil {
+		// This should only fail on non-absolute paths, but we
+		// just made it absolute above.
+		return "", noLock, errors.NewAssertionErrorWithWrappedErrf(err, "creating lock")
+	}
+	if err := socketLock.TryLock(); err != nil {
+		if owner, ownerErr := socketLock.GetOwner(); ownerErr == nil {
+			err = errors.WithHintf(err, "Socket appears locked by process %d.", owner.Pid)
+		}
+		return "", noLock, errors.Wrapf(err, "locking unix socket %q", socketFile)
+	}
+
+	// Now the lock has succeeded, we can delete the previous socket
+	// if it exists.
+	if _, err := os.Stat(socketFile); err != nil {
+		if !oserror.IsNotExist(err) {
+			// Socket exists but there's some file access error.
+			// we probably can't remove it.
+			return "", noLock, errors.CombineErrors(err, socketLock.Unlock())
+		}
+	} else {
+		// Socket file existed already.
+		if err := os.Remove(socketFile); err != nil {
+			return "", noLock, errors.CombineErrors(
+				errors.Wrap(err, "removing previous socket file"),
+				socketLock.Unlock())
+		}
+	}
+
+	return socketFile, socketLock, nil
 }
 
 // LogicalClusterID retrieves the logical (tenant-level) cluster ID
