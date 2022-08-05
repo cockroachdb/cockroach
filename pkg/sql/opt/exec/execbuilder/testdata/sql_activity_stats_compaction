@@ -32,7 +32,6 @@ vectorized: true
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-│ estimated row count: 0 (missing stats)
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
@@ -42,15 +41,12 @@ vectorized: true
     │
     └── • project
         │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-        │ estimated row count: 0 (missing stats)
         │
         └── • project
             │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (inner)
                     │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
@@ -60,7 +56,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-                        │ estimated row count: 9 (missing stats)
                         │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8)
                         │ render aggregated_ts: aggregated_ts
                         │ render fingerprint_id: fingerprint_id
@@ -94,7 +89,6 @@ vectorized: true
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, app_name, node_id)
-│ estimated row count: 0 (missing stats)
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
@@ -104,15 +98,12 @@ vectorized: true
     │
     └── • project
         │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-        │ estimated row count: 0 (missing stats)
         │
         └── • project
             │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (inner)
                     │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
@@ -122,7 +113,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-                        │ estimated row count: 9 (missing stats)
                         │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8)
                         │ render aggregated_ts: aggregated_ts
                         │ render fingerprint_id: fingerprint_id
@@ -164,7 +154,6 @@ vectorized: true
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-│ estimated row count: 0 (missing stats)
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
@@ -174,15 +163,12 @@ vectorized: true
     │
     └── • project
         │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-        │ estimated row count: 0 (missing stats)
         │
         └── • project
             │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (inner)
                     │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
@@ -192,7 +178,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-                        │ estimated row count: 9 (missing stats)
                         │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8)
                         │ render aggregated_ts: aggregated_ts
                         │ render fingerprint_id: fingerprint_id
@@ -234,7 +219,6 @@ vectorized: true
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, app_name, node_id)
-│ estimated row count: 0 (missing stats)
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
@@ -244,15 +228,12 @@ vectorized: true
     │
     └── • project
         │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-        │ estimated row count: 0 (missing stats)
         │
         └── • project
             │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (inner)
                     │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
@@ -262,7 +243,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-                        │ estimated row count: 9 (missing stats)
                         │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8)
                         │ render aggregated_ts: aggregated_ts
                         │ render fingerprint_id: fingerprint_id

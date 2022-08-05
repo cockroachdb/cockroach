@@ -1255,7 +1255,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 33
 │           │
 │           └── • scan
 │                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
@@ -1349,7 +1348,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 33
 │           │
 │           └── • scan
 │                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
@@ -1443,7 +1441,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 10
 │           │
 │           └── • project set
 │               │ estimated row count: 10

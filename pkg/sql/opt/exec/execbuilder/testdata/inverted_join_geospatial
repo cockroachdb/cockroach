@@ -101,12 +101,10 @@ vectorized: true
 └── • project
     │ columns: (lk, rk1)
     │ ordering: +lk
-    │ estimated row count: 326,700 (missing stats)
     │
     └── • project
         │ columns: (lk, geom1, rk1, geom)
         │ ordering: +lk
-        │ estimated row count: 326,700 (missing stats)
         │
         └── • lookup join (inner)
             │ columns: (lk, geom1, rk1, rk2, rk1, geom)
@@ -119,7 +117,6 @@ vectorized: true
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
                 │ ordering: +lk
-                │ estimated row count: 10,000 (missing stats)
                 │
                 └── • inverted join (inner)
                     │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -152,12 +149,10 @@ vectorized: true
 └── • project
     │ columns: (lk, rk1)
     │ ordering: +lk
-    │ estimated row count: 9,801 (missing stats)
     │
     └── • project
         │ columns: (lk, geom1, rk1, geom)
         │ ordering: +lk
-        │ estimated row count: 9,801 (missing stats)
         │
         └── • lookup join (inner)
             │ columns: (lk, geom1, rk1, rk2, rk1, geom)
@@ -170,7 +165,6 @@ vectorized: true
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
                 │ ordering: +lk
-                │ estimated row count: 10,000 (missing stats)
                 │
                 └── • inverted join (inner)
                     │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -196,11 +190,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1)
-│ estimated row count: 3,267 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, geom2, rk1, geom)
-    │ estimated row count: 3,267 (missing stats)
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, geom2, rk1, rk2, rk1, geom)
@@ -211,7 +203,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, geom2, rk1, rk2)
-            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (inner)
                 │ columns: (lk, geom1, geom2, rk1, rk2, geom_inverted_key)
@@ -235,11 +226,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk)
-│ estimated row count: 10 (missing stats)
 │
 └── • project
     │ columns: (lk, geom2)
-    │ estimated row count: 10 (missing stats)
     │
     └── • lookup join (semi)
         │ columns: (lk, geom2, rk1, rk2, cont)
@@ -250,7 +239,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
-            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (inner)
                 │ columns: (lk, geom2, rk1, rk2, geom_inverted_key, cont)
@@ -273,11 +261,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1)
-│ estimated row count: 10,000 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, rk1, geom)
-    │ estimated row count: 10,000 (missing stats)
     │
     └── • lookup join (left outer)
         │ columns: (lk, geom1, rk1, rk2, cont, rk1, geom)
@@ -288,7 +274,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
-            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (left outer)
                 │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
@@ -320,7 +305,6 @@ vectorized: true
 │
 ├── • render
 │   │ columns: (count, count)
-│   │ estimated row count: 333 (missing stats)
 │   │ render count: @S2
 │   │ render count_rows: count_rows
 │   │
@@ -335,7 +319,6 @@ vectorized: true
 │           │
 │           └── • project
 │               │ columns: (lk, geom1, geom)
-│               │ estimated row count: 3,333 (missing stats)
 │               │
 │               └── • lookup join (left outer)
 │                   │ columns: (lk, geom1, rk1, rk2, cont, geom)
@@ -346,7 +329,6 @@ vectorized: true
 │                   │
 │                   └── • project
 │                       │ columns: (lk, geom1, rk1, rk2, cont)
-│                       │ estimated row count: 3,333 (missing stats)
 │                       │
 │                       └── • inverted join (left outer)
 │                           │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
@@ -355,7 +337,6 @@ vectorized: true
 │                           │
 │                           └── • project
 │                               │ columns: (lk, geom1)
-│                               │ estimated row count: 333 (missing stats)
 │                               │
 │                               └── • scan buffer
 │                                     columns: (lk, geom1, geom2)
@@ -388,7 +369,6 @@ vectorized: true
         │
         └── • project
             │ columns: ()
-            │ estimated row count: 333 (missing stats)
             │
             └── • scan buffer
                   columns: (lk, geom1, geom2)
@@ -404,11 +384,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk)
-│ estimated row count: 990 (missing stats)
 │
 └── • project
     │ columns: (lk, geom2)
-    │ estimated row count: 990 (missing stats)
     │
     └── • lookup join (anti)
         │ columns: (lk, geom2, rk1, rk2, cont)
@@ -419,7 +397,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
-            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (left outer)
                 │ columns: (lk, geom2, rk1, rk2, geom_inverted_key, cont)
@@ -444,11 +421,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk)
-│ estimated row count: 997 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1)
-    │ estimated row count: 997 (missing stats)
     │
     └── • lookup join (anti)
         │ columns: (lk, geom1, rk1, rk2, cont)
@@ -459,7 +434,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
-            │ estimated row count: 1,111 (missing stats)
             │
             └── • inverted join (left outer)
                 │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
@@ -486,11 +460,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, rk1, geom, rk2)
-    │ estimated row count: 9,801 (missing stats)
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
@@ -501,7 +473,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
-            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (inner)
                 │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -523,11 +494,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, rk1, geom, rk2)
-    │ estimated row count: 9,801 (missing stats)
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
@@ -538,7 +507,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
-            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (inner)
                 │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
@@ -560,11 +528,9 @@ vectorized: true
 ·
 • project
 │ columns: (lk, rk1, rk2)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • project
     │ columns: (lk, geom1, rk1, geom, rk2)
-    │ estimated row count: 9,801 (missing stats)
     │
     └── • lookup join (inner)
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
@@ -575,7 +541,6 @@ vectorized: true
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
-            │ estimated row count: 10,000 (missing stats)
             │
             └── • inverted join (inner)
                 │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)

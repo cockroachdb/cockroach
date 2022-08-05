@@ -289,7 +289,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -319,7 +318,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -391,7 +389,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -418,7 +415,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -452,7 +448,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -484,7 +479,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -513,7 +507,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -543,7 +536,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -593,7 +585,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -642,7 +633,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -749,7 +739,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -778,7 +767,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -805,7 +793,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -832,7 +819,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -859,7 +845,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -890,7 +875,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -917,7 +901,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -944,7 +927,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -974,7 +956,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -1001,7 +982,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -1028,7 +1008,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -1056,7 +1035,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -1083,7 +1061,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -1269,7 +1246,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -1296,7 +1272,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 12 (missing stats)
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
@@ -1350,7 +1325,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -1405,7 +1379,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -1461,7 +1434,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -1516,7 +1488,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -1548,7 +1519,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -1596,7 +1566,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -1642,7 +1611,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
@@ -1684,7 +1652,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 110 (missing stats)
 │
 └── • filter
     │ columns: (k, geom)
@@ -1699,7 +1666,6 @@ vectorized: true
         │
         └── • project
             │ columns: (k)
-            │ estimated row count: 111 (missing stats)
             │
             └── • inverted filter
                 │ columns: (k, geom_inverted_key)
@@ -1764,7 +1730,6 @@ vectorized: true
 ·
 • project
 │ columns: (k, geom, k, geom)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (k, geom, k, k, geom)
@@ -1775,7 +1740,6 @@ vectorized: true
     │
     └── • project
         │ columns: (k, geom, k)
-        │ estimated row count: 10,000 (missing stats)
         │
         └── • inverted join (inner)
             │ columns: (k, geom, k, geom_inverted_key)
@@ -1797,7 +1761,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 330 (missing stats)
 │
 └── • filter
     │ columns: (k, geom)

@@ -265,7 +265,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, d)
-│ estimated row count: 0
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -469,7 +468,6 @@ vectorized: true
 • project
 │ columns: (name)
 │ ordering: +name
-│ estimated row count: 990
 │
 └── • lookup join (inner)
     │ columns: (name, book, title)
@@ -525,7 +523,6 @@ vectorized: true
 │ equality cols are key
 │
 └── • render
-    │ estimated row count: 100
     │
     └── • scan
           estimated row count: 100 (100% of the table; stats collected <hidden> ago)
@@ -584,7 +581,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, c)
-│ estimated row count: 1,000
 │
 └── • lookup join (inner)
     │ columns: (a, b, c)
@@ -607,11 +603,9 @@ vectorized: true
 ·
 • project
 │ columns: (a, d)
-│ estimated row count: 1,000
 │
 └── • project
     │ columns: (a, b, d)
-    │ estimated row count: 1,000
     │
     └── • lookup join (inner)
         │ columns: (a, a, b, d)
@@ -664,7 +658,6 @@ vectorized: true
 • project
 │ columns: (a, b)
 │ ordering: +a
-│ estimated row count: 100
 │
 └── • lookup join (left outer)
     │ columns: (a, a, b)
@@ -709,7 +702,6 @@ vectorized: true
 ·
 • project
 │ columns: (c, c)
-│ estimated row count: 1,000
 │
 └── • lookup join (left outer)
     │ columns: (c, b, c)
@@ -732,11 +724,9 @@ vectorized: true
 ·
 • project
 │ columns: (c, d)
-│ estimated row count: 1,000
 │
 └── • project
     │ columns: (c, b, d)
-    │ estimated row count: 1,000
     │
     └── • lookup join (left outer)
         │ columns: (c, a, b, d)
@@ -765,7 +755,6 @@ vectorized: true
 ·
 • project
 │ columns: (c, c)
-│ estimated row count: 336
 │
 └── • lookup join (left outer)
     │ columns: (c, b, c)
@@ -789,11 +778,9 @@ vectorized: true
 ·
 • project
 │ columns: (c, d)
-│ estimated row count: 336
 │
 └── • project
     │ columns: (c, b, d)
-    │ estimated row count: 336
     │
     └── • lookup join (left outer)
         │ columns: (c, a, b, c, cont, b, d)
@@ -823,7 +810,6 @@ vectorized: true
 ·
 • project
 │ columns: (c)
-│ estimated row count: 100
 │
 └── • lookup join (semi)
     │ columns: (c, a, b, c, cont)
@@ -853,7 +839,6 @@ vectorized: true
 ·
 • project
 │ columns: (c)
-│ estimated row count: 0
 │
 └── • lookup join (anti)
     │ columns: (c, a, b, c, cont)
@@ -896,7 +881,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, d, e, a, d)
@@ -930,7 +914,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 0 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, d, e, a, d)
@@ -966,7 +949,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 0 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, b, d, e, a, b, d)
@@ -1000,7 +982,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 0 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, b, d, e, a, b, d)
@@ -1034,7 +1015,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, d, e, a, d)
@@ -1917,11 +1897,9 @@ vectorized: true
 ·
 • project
 │ columns: (pk)
-│ estimated row count: 10 (missing stats)
 │
 └── • project
     │ columns: (pk, col0, col3)
-    │ estimated row count: 10 (missing stats)
     │
     └── • lookup join (semi)
         │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
@@ -1931,7 +1909,6 @@ vectorized: true
         │
         └── • render
             │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
-            │ estimated row count: 10 (missing stats)
             │ render lookup_join_const_col_@15: 495.6
             │ render pk: pk
             │ render col0: col0
@@ -2020,7 +1997,6 @@ vectorized: true
 │ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
-    │ estimated row count: 3
     │
     └── • values
           size: 2 columns, 3 rows
@@ -2040,7 +2016,6 @@ vectorized: true
 │ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
-    │ estimated row count: 3
     │
     └── • values
           size: 2 columns, 3 rows

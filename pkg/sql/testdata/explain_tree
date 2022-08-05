@@ -89,7 +89,6 @@ network usage: 0 B (0 messages)
     │
     └── • render
         │ columns: (column8 decimal, cid int, sum decimal)
-        │ estimated row count: 98 (missing stats)
         │ render column8: ((1)[decimal] - (sum)[decimal])[decimal]
         │ render cid: (cid)[int]
         │ render sum: (sum)[decimal]
@@ -192,7 +191,6 @@ network usage: 0 B (0 messages)
 
 • project
 │ columns: (cid int, date date, value decimal)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • hash join (inner)
     │ columns: (cid int, value decimal, date date, date date)
@@ -285,7 +283,6 @@ network usage: 0 B (0 messages)
 │
 ├── • render
 │   │ columns: (movie_id int, title string, name string)
-│   │ estimated row count: 1,000 (missing stats)
 │   │ render name: (@S1)[string]
 │   │ render id: (id)[int]
 │   │ render title: (title)[string]

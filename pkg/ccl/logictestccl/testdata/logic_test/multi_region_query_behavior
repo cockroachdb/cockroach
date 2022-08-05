@@ -48,10 +48,8 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • render
-│               │ estimated row count: 2
 │               │
 │               └── • values
 │                     size: 2 columns, 2 rows
@@ -66,7 +64,6 @@ vectorized: true
             │ equality cols are key
             │
             └── • render
-                │ estimated row count: 2
                 │
                 └── • scan buffer
                       label: buffer 1

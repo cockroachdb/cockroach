@@ -402,7 +402,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: x + 1
 │
 └── • scan
@@ -419,7 +418,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, b, y, c, d)
-│ estimated row count: 1,000 (missing stats)
 │ render b: x + 1
 │ render c: y + 1
 │ render d: x + y
@@ -440,12 +438,10 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: "?column?" + ("?column?" * "?column?")
 │
 └── • render
     │ columns: ("?column?", "?column?")
-    │ estimated row count: 1,000 (missing stats)
     │ render ?column?: x + 3
     │ render ?column?: y + 10
     │
@@ -478,7 +474,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
 │ render a: x + 1
 │ render b: x + y
 │
@@ -737,7 +732,6 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1,000 (missing stats)
 │ render a: 1
 │
 └── • scan
@@ -1354,7 +1348,6 @@ vectorized: true
 └── • render
     │ columns: ("?column?", a)
     │ ordering: +a
-    │ estimated row count: 1,000 (missing stats)
     │ render ?column?: a + (b + c)
     │ render a: a
     │
@@ -1382,7 +1375,6 @@ vectorized: true
     │
     └── • render
         │ columns: ("?column?", b)
-        │ estimated row count: 1,000 (missing stats)
         │ render ?column?: a + (c + (a + b))
         │ render b: b
         │
@@ -1405,7 +1397,6 @@ vectorized: true
 └── • render
     │ columns: ("?column?", a, b)
     │ ordering: -a,-b
-    │ estimated row count: 1,000 (missing stats)
     │ render ?column?: a + (c + (a + b))
     │ render a: a
     │ render b: b
@@ -1489,7 +1480,6 @@ vectorized: true
 • render
 │ columns: (a, x)
 │ ordering: +a
-│ estimated row count: 3 (missing stats)
 │ render x: c + (a + b)
 │ render a: a
 │

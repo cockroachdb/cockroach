@@ -84,9 +84,6 @@ network usage: <hidden>
 regions: <hidden>
 ·
 • limit
-│ nodes: <hidden>
-│ regions: <hidden>
-│ actual row count: 1
 │ count: 1
 │
 └── • union all
@@ -166,9 +163,6 @@ network usage: <hidden>
 regions: <hidden>
 ·
 • limit
-│ nodes: <hidden>
-│ regions: <hidden>
-│ actual row count: 1
 │ count: 1
 │
 └── • union all
@@ -321,15 +315,6 @@ network usage: <hidden>
 regions: <hidden>
 ·
 • limit
-│ nodes: <hidden>
-│ regions: <hidden>
-│ actual row count: 1
-│ KV time: 0µs
-│ KV contention time: 0µs
-│ KV rows read: 1
-│ KV bytes read: 8 B
-│ KV gRPC calls: 1
-│ estimated max memory allocated: 0 B
 │ count: 1
 │
 └── • lookup join
