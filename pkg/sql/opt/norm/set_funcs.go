@@ -143,6 +143,10 @@ func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
 		return opt.ColSet{}, false
 	}
 	keyCols = leftFDs.ReduceCols(leftColSet)
+	if keyCols.Empty() {
+		// The key columns set must not be empty
+		return opt.ColSet{}, false
+	}
 	if keyCols.Equals(leftColSet) {
 		// The key columns must form a strict subset of the union columns, or the
 		// transformation is not worth it.
