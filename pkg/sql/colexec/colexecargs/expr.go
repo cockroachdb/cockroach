@@ -33,8 +33,8 @@ func NewExprHelper() *ExprHelper {
 // ExprHelper is a utility struct that helps with expression handling in the
 // vectorized engine.
 type ExprHelper struct {
-	helper  execinfrapb.ExprHelper
 	SemaCtx *tree.SemaContext
+	helper  execinfrapb.ExprHelper
 }
 
 // ProcessExpr processes the given expression and returns a well-typed

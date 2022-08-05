@@ -156,6 +156,8 @@ func newSingleDistinct(
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctBoolOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -163,8 +165,6 @@ type distinctBoolOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal bool
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -435,6 +435,8 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctBytesOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -442,8 +444,6 @@ type distinctBytesOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal []byte
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -678,6 +678,8 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctDecimalOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -685,8 +687,6 @@ type distinctDecimalOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal apd.Decimal
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -925,6 +925,8 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctInt16Op struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -932,8 +934,6 @@ type distinctInt16Op struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal int16
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -1216,6 +1216,8 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctInt32Op struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -1223,8 +1225,6 @@ type distinctInt32Op struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal int32
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -1507,6 +1507,8 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctInt64Op struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -1514,8 +1516,6 @@ type distinctInt64Op struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal int64
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -1798,6 +1798,8 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctFloat64Op struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -1805,8 +1807,6 @@ type distinctFloat64Op struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal float64
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -2121,6 +2121,8 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctTimestampOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -2128,8 +2130,6 @@ type distinctTimestampOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal time.Time
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -2396,6 +2396,8 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctIntervalOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -2403,8 +2405,6 @@ type distinctIntervalOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal duration.Duration
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -2643,6 +2643,8 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctJSONOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -2650,8 +2652,6 @@ type distinctJSONOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal json.JSON
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -2921,6 +2921,8 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinctDatumOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -2928,8 +2930,6 @@ type distinctDatumOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal interface{}
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
