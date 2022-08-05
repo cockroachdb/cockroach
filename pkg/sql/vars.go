@@ -567,8 +567,8 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			if limit <= 0 {
-				return errors.New("distsql_workmem can only be set to a positive value")
+			if limit <= 1 {
+				return errors.New("distsql_workmem can only be set to a value greater than 1")
 			}
 			m.SetDistSQLWorkMem(limit)
 			return nil
