@@ -372,7 +372,6 @@ func (tc *Collection) GetObjectNamesAndIDs(
 		return nil, nil, err
 	}
 
-	alreadySeen := make(map[string]bool)
 	var tableNames tree.TableNames
 	var tableIDs descpb.IDs
 
@@ -382,7 +381,6 @@ func (tc *Collection) GetObjectNamesAndIDs(
 		if err != nil {
 			return nil, nil, err
 		}
-		alreadySeen[tableName] = true
 		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(tableName))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
