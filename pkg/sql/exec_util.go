@@ -533,6 +533,12 @@ var settingWorkMemBytes = settings.RegisterByteSizeSetting(
 	"sql.distsql.temp_storage.workmem",
 	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
 	execinfra.DefaultMemoryLimit, /* 64MiB */
+	func(v int64) error {
+		if v <= 1 {
+			return errors.Errorf("can only be set to a value greater than 1: %d", v)
+		}
+		return nil
+	},
 ).WithPublic()
 
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
