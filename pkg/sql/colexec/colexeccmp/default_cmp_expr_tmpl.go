@@ -41,7 +41,7 @@ type _EXPR_NAME struct {
 var _ ComparisonExprAdapter = &_EXPR_NAME{}
 
 func (c *_EXPR_NAME) Eval(left, right tree.Datum) (tree.Datum, error) {
-	// {{if not .NullableArgs}}
+	// {{if not .CalledOnNullInput}}
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}

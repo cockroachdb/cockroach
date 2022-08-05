@@ -17,16 +17,16 @@ import (
 )
 
 type defaultCmpExprTmplInfo struct {
-	NullableArgs bool
-	FlippedArgs  bool
-	Negate       bool
+	CalledOnNullInput bool
+	FlippedArgs       bool
+	Negate            bool
 }
 
 const defaultCmpExprTmpl = "pkg/sql/colexec/colexeccmp/default_cmp_expr_tmpl.go"
 
 func genDefaultCmpExpr(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(
-		inputFileContents, "_EXPR_NAME", "cmp{{if .NullableArgs}}Nullable{{end}}"+
+		inputFileContents, "_EXPR_NAME", "cmp{{if .CalledOnNullInput}}Nullable{{end}}"+
 			"{{if .FlippedArgs}}Flipped{{end}}{{if .Negate}}Negate{{end}}ExprAdapter",
 	)
 
@@ -39,9 +39,9 @@ func genDefaultCmpExpr(inputFileContents string, wr io.Writer) error {
 		for _, flipped := range []bool{false, true} {
 			for _, negate := range []bool{false, true} {
 				info = append(info, defaultCmpExprTmplInfo{
-					NullableArgs: nullable,
-					FlippedArgs:  flipped,
-					Negate:       negate,
+					CalledOnNullInput: nullable,
+					FlippedArgs:       flipped,
+					Negate:            negate,
 				})
 			}
 		}

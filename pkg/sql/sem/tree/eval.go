@@ -214,7 +214,7 @@ type BinOp struct {
 	LeftType          *types.T
 	RightType         *types.T
 	ReturnType        *types.T
-	NullableArgs      bool
+	CalledOnNullInput bool
 	EvalOp            BinaryEvalOp
 	Volatility        volatility.V
 	PreferredOverload bool
@@ -283,21 +283,21 @@ func initArrayElementConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
 		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
-			LeftType:     types.MakeArray(typ),
-			RightType:    typ,
-			ReturnType:   types.MakeArray(typ),
-			NullableArgs: true,
-			EvalOp:       &AppendToMaybeNullArrayOp{Typ: typ},
-			Volatility:   volatility.Immutable,
+			LeftType:          types.MakeArray(typ),
+			RightType:         typ,
+			ReturnType:        types.MakeArray(typ),
+			CalledOnNullInput: true,
+			EvalOp:            &AppendToMaybeNullArrayOp{Typ: typ},
+			Volatility:        volatility.Immutable,
 		})
 
 		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
-			LeftType:     typ,
-			RightType:    types.MakeArray(typ),
-			ReturnType:   types.MakeArray(typ),
-			NullableArgs: true,
-			EvalOp:       &PrependToMaybeNullArrayOp{Typ: typ},
-			Volatility:   volatility.Immutable,
+			LeftType:          typ,
+			RightType:         types.MakeArray(typ),
+			ReturnType:        types.MakeArray(typ),
+			CalledOnNullInput: true,
+			EvalOp:            &PrependToMaybeNullArrayOp{Typ: typ},
+			Volatility:        volatility.Immutable,
 		})
 	}
 }
@@ -392,12 +392,12 @@ func initArrayToArrayConcatenation() {
 		typ := t
 		at := types.MakeArray(typ)
 		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
-			LeftType:     at,
-			RightType:    at,
-			ReturnType:   at,
-			NullableArgs: true,
-			EvalOp:       &ConcatArraysOp{Typ: typ},
-			Volatility:   volatility.Immutable,
+			LeftType:          at,
+			RightType:         at,
+			ReturnType:        at,
+			CalledOnNullInput: true,
+			EvalOp:            &ConcatArraysOp{Typ: typ},
+			Volatility:        volatility.Immutable,
 		})
 	}
 }
@@ -407,10 +407,10 @@ func initArrayToArrayConcatenation() {
 func initNonArrayToNonArrayConcatenation() {
 	addConcat := func(leftType, rightType *types.T, volatility volatility.V) {
 		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
-			LeftType:     leftType,
-			RightType:    rightType,
-			ReturnType:   types.String,
-			NullableArgs: false,
+			LeftType:          leftType,
+			RightType:         rightType,
+			ReturnType:        types.String,
+			CalledOnNullInput: false,
 			EvalOp: &ConcatOp{
 				Left:  leftType,
 				Right: rightType,
@@ -1296,9 +1296,9 @@ type CmpOp struct {
 
 	OnTypeCheck func()
 
-	// If NullableArgs is false, the operator returns NULL
+	// If CalledOnNullInput is false, the operator returns NULL
 	// whenever either argument is NULL.
-	NullableArgs bool
+	CalledOnNullInput bool
 
 	Volatility volatility.V
 
@@ -1358,11 +1358,11 @@ func cmpOpFixups(
 		})
 
 		cmpOps[treecmp.IsNotDistinctFrom] = append(cmpOps[treecmp.IsNotDistinctFrom], &CmpOp{
-			LeftType:     types.MakeArray(t),
-			RightType:    types.MakeArray(t),
-			EvalOp:       &CompareScalarOp{treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)},
-			NullableArgs: true,
-			Volatility:   findVolatility(treecmp.IsNotDistinctFrom, t),
+			LeftType:          types.MakeArray(t),
+			RightType:         types.MakeArray(t),
+			EvalOp:            &CompareScalarOp{treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)},
+			CalledOnNullInput: true,
+			Volatility:        findVolatility(treecmp.IsNotDistinctFrom, t),
 		})
 	}
 
@@ -1391,14 +1391,14 @@ func (o cmpOpOverload) LookupImpl(left, right *types.T) (*CmpOp, bool) {
 }
 
 func makeCmpOpOverload(
-	op treecmp.ComparisonOperatorSymbol, a, b *types.T, nullableArgs bool, v volatility.V,
+	op treecmp.ComparisonOperatorSymbol, a, b *types.T, calledOnNullInput bool, v volatility.V,
 ) *CmpOp {
 	return &CmpOp{
-		LeftType:     a,
-		RightType:    b,
-		EvalOp:       &CompareScalarOp{ComparisonOperator: treecmp.MakeComparisonOperator(op)},
-		NullableArgs: nullableArgs,
-		Volatility:   v,
+		LeftType:          a,
+		RightType:         b,
+		EvalOp:            &CompareScalarOp{ComparisonOperator: treecmp.MakeComparisonOperator(op)},
+		CalledOnNullInput: calledOnNullInput,
+		Volatility:        v,
 	}
 }
 
@@ -1593,7 +1593,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 			EvalOp: &CompareScalarOp{
 				ComparisonOperator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom),
 			},
-			NullableArgs: true,
+			CalledOnNullInput: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL.
 			PreferredOverload: true,
 			Volatility:        volatility.Leakproof,
@@ -1604,8 +1604,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 			EvalOp: &CompareScalarOp{
 				ComparisonOperator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom),
 			},
-			NullableArgs: true,
-			Volatility:   volatility.Leakproof,
+			CalledOnNullInput: true,
+			Volatility:        volatility.Leakproof,
 		},
 		// Single-type comparisons.
 		makeIsFn(types.AnyEnum, types.AnyEnum, volatility.Immutable),
@@ -1654,9 +1654,9 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:     types.AnyTuple,
-			RightType:    types.AnyTuple,
-			NullableArgs: true,
+			LeftType:          types.AnyTuple,
+			RightType:         types.AnyTuple,
+			CalledOnNullInput: true,
 			EvalOp: &CompareAnyTupleOp{
 				ComparisonOperator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom),
 			},
@@ -1894,11 +1894,11 @@ func CmpOpInverse(i treecmp.ComparisonOperatorSymbol) (treecmp.ComparisonOperato
 
 func makeEvalTupleIn(typ *types.T, v volatility.V) *CmpOp {
 	return &CmpOp{
-		LeftType:     typ,
-		RightType:    types.AnyTuple,
-		EvalOp:       &InTupleOp{},
-		NullableArgs: true,
-		Volatility:   v,
+		LeftType:          typ,
+		RightType:         types.AnyTuple,
+		EvalOp:            &InTupleOp{},
+		CalledOnNullInput: true,
+		Volatility:        v,
 	}
 }
 

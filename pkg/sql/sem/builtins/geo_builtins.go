@@ -1217,8 +1217,8 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a Box2D from a GeoHash string with supplied precision.",
 			}.String(),
-			Volatility:   volatility.Immutable,
-			NullableArgs: true,
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1240,8 +1240,8 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a Box2D from a GeoHash string with max precision.",
 			}.String(),
-			Volatility:   volatility.Immutable,
-			NullableArgs: true,
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -6104,8 +6104,8 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info: infoBuilder{
 				info: "Combines the current bounding box with the bounding box of the Geometry.",
 			}.String(),
-			Volatility:   volatility.Immutable,
-			NullableArgs: true,
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
 		},
 	),
 	"st_expand": makeBuiltin(
