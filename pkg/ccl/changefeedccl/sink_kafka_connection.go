@@ -32,7 +32,7 @@ func parseAndValidateKafkaSinkURI(
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_TypeKafka,
+		Provider: connectionpb.ConnectionProvider_kafka,
 		Details: &connectionpb.ConnectionDetails_SimpleURI{
 			SimpleURI: &connectionpb.SimpleURI{
 				URI: uri.String(),

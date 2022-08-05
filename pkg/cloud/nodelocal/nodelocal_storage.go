@@ -34,6 +34,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const scheme = "nodelocal"
+
 func validateLocalFileURI(uri *url.URL) error {
 	if uri.Host == "" {
 		return errors.Newf(
@@ -231,7 +233,6 @@ func (*localFileStorage) Close() error {
 }
 
 func init() {
-	const scheme = "nodelocal"
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
 		parseLocalFileURI, makeLocalFileStorage, cloud.RedactedParams(), scheme)
 }

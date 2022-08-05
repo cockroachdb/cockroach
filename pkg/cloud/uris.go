@@ -96,14 +96,16 @@ func ParseRoleString(roleString string) (assumeRole string, delegateRoles []stri
 	return assumeRole, delegateRoles
 }
 
-// consumeURL is a helper struct which for "consuming" URL query
+// ConsumeURL is a helper struct which for "consuming" URL query
 // parameters from the underlying URL.
-type consumeURL struct {
+type ConsumeURL struct {
 	*url.URL
 	q url.Values
 }
 
-func (u *consumeURL) consumeParam(p string) string {
+// ConsumeParam returns the value of the parameter p from the underlying URL,
+// and deletes the parameter from the URL.
+func (u *ConsumeURL) ConsumeParam(p string) string {
 	if u.q == nil {
 		u.q = u.Query()
 	}
@@ -112,7 +114,9 @@ func (u *consumeURL) consumeParam(p string) string {
 	return v
 }
 
-func (u *consumeURL) remainingQueryParams() (res []string) {
+// RemainingQueryParams returns the query parameters that have not been consumed
+// from the underlying URL.
+func (u *ConsumeURL) RemainingQueryParams() (res []string) {
 	if u.q == nil {
 		u.q = u.Query()
 	}
@@ -126,12 +130,12 @@ func (u *consumeURL) remainingQueryParams() (res []string) {
 // are not part of the supportedParameters.
 func ValidateQueryParameters(uri url.URL, supportedParameters []string) error {
 	u := uri
-	validateURL := consumeURL{URL: &u}
+	validateURL := ConsumeURL{URL: &u}
 	for _, option := range supportedParameters {
-		validateURL.consumeParam(option)
+		validateURL.ConsumeParam(option)
 	}
 
-	if unknownParams := validateURL.remainingQueryParams(); len(unknownParams) > 0 {
+	if unknownParams := validateURL.RemainingQueryParams(); len(unknownParams) > 0 {
 		return errors.Errorf(
 			`unknown query parameters: %s for %s URI`,
 			strings.Join(unknownParams, ", "), uri.Scheme)

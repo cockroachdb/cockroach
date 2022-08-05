@@ -27,7 +27,7 @@ func parseAndValidateLocalFileConnectionURI(
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_TypeNodelocal,
+		Provider: connectionpb.ConnectionProvider_nodelocal,
 		Details: &connectionpb.ConnectionDetails_SimpleURI{
 			SimpleURI: &connectionpb.SimpleURI{
 				URI: uri.String(),
@@ -38,7 +38,6 @@ func parseAndValidateLocalFileConnectionURI(
 }
 
 func init() {
-	const scheme = "nodelocal"
 	externalconn.RegisterConnectionDetailsFromURIFactory(
 		scheme,
 		parseAndValidateLocalFileConnectionURI,

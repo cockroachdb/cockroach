@@ -8,38 +8,39 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package gcp
+package amazon
 
 import (
 	"context"
 	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 )
 
-func parseAndValidateGCSKMSConnectionURI(
+func parseAndValidateS3ConnectionURI(
 	_ context.Context, uri *url.URL,
 ) (externalconn.ExternalConnection, error) {
-	if err := validateKMSURI(*uri); err != nil {
+	// Parse and validate the S3 URL.
+	if _, err := parseS3URL(cloud.ExternalStorageURIContext{}, uri); err != nil {
 		return nil, err
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_gs_kms,
+		Provider: connectionpb.ConnectionProvider_s3,
 		Details: &connectionpb.ConnectionDetails_SimpleURI{
 			SimpleURI: &connectionpb.SimpleURI{
 				URI: uri.String(),
 			},
 		},
 	}
-
 	return externalconn.NewExternalConnection(connDetails), nil
 }
 
 func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
-		gcsScheme,
-		parseAndValidateGCSKMSConnectionURI,
+		scheme,
+		parseAndValidateS3ConnectionURI,
 	)
 }
