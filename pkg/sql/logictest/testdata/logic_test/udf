@@ -333,54 +333,58 @@ $$  104  test  118  sc  119  proc_f_2
 
 subtest show_create_function
 
-query TT
-SHOW CREATE FUNCTION proc_f;
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION proc_f];
 ----
-proc_f  CREATE FUNCTION public.proc_f(IN INT8)
-RETURNS INT8
-VOLATILE
-NOT LEAKPROOF
-CALLED ON NULL INPUT
-AS $$
-SELECT 1;
+CREATE FUNCTION public.proc_f(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
 $$
-proc_f  CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-RETURNS SETOF STRING
-IMMUTABLE
-LEAKPROOF
-STRICT
-AS $$
-SELECT 'hello';
+CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
+    RETURNS SETOF STRING
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
 $$
 
 statement error pq: unknown function: proc_f_2()
 SHOW CREATE FUNCTION proc_f_2;
 
-query TT
-SHOW CREATE FUNCTION sc.proc_f_2;
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION sc.proc_f_2];
 ----
-proc_f_2  CREATE FUNCTION sc.proc_f_2(IN STRING)
-RETURNS STRING
-VOLATILE
-NOT LEAKPROOF
-CALLED ON NULL INPUT
-AS $$
-SELECT 'hello';
+CREATE FUNCTION sc.proc_f_2(IN STRING)
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
 $$
 
 statement ok
 SET search_path = sc;
 
-query TT
-SHOW CREATE FUNCTION proc_f_2;
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION proc_f_2];
 ----
-proc_f_2  CREATE FUNCTION sc.proc_f_2(IN STRING)
-RETURNS STRING
-VOLATILE
-NOT LEAKPROOF
-CALLED ON NULL INPUT
-AS $$
-SELECT 'hello';
+CREATE FUNCTION sc.proc_f_2(IN STRING)
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
 $$
 
 statement ok
