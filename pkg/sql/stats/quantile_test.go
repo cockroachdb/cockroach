@@ -70,7 +70,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 // randHist makes a random histogram of the specified type, with [1, 200]
 // buckets. Not all types are supported. Every bucket will have NumEq > 0 but
 // could have NumRange == 0.
-func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogram, float64) {
+func randHist(evalCtx tree.CompareContext, colType *types.T, rng *rand.Rand) (histogram, float64) {
 	numBuckets := rng.Intn(200) + 1
 	buckets := make([]cat.HistogramBucket, numBuckets)
 	bounds := randBounds(evalCtx, colType, rng, numBuckets)
@@ -109,7 +109,9 @@ func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogra
 // type. Not all types are supported. This differs from randgen.RandDatum in
 // that it generates no "interesting" Datums, and differs from
 // randgen.RandDatumSimple in that it generates distinct Datums without repeats.
-func randBounds(evalCtx *eval.Context, colType *types.T, rng *rand.Rand, num int) tree.Datums {
+func randBounds(
+	evalCtx tree.CompareContext, colType *types.T, rng *rand.Rand, num int,
+) tree.Datums {
 	datums := make(tree.Datums, num)
 
 	// randInts creates an ordered slice of num distinct random ints in the closed

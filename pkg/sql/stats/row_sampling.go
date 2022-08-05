@@ -265,7 +265,7 @@ func (sr *SampleReservoir) copyRow(
 			dst[i].Datum = truncateDatum(evalCtx, dst[i].Datum, maxBytesPerSample)
 			afterSize = dst[i].Size()
 		} else {
-			dst[i].Datum = deepCopyDatum(evalCtx, dst[i].Datum)
+			dst[i].Datum = deepCopyDatum(dst[i].Datum)
 		}
 
 		// Perform memory accounting.
@@ -351,7 +351,7 @@ func truncateString(s string, maxBytes int) string {
 // Note: this function is currently only called for key-encoded datums. Update
 // the calling function if there is a need to call this for value-encoded
 // datums as well.
-func deepCopyDatum(evalCtx *eval.Context, d tree.Datum) tree.Datum {
+func deepCopyDatum(d tree.Datum) tree.Datum {
 	switch t := d.(type) {
 	case *tree.DString:
 		return tree.NewDString(deepCopyString(string(*t)))
@@ -365,7 +365,7 @@ func deepCopyDatum(evalCtx *eval.Context, d tree.Datum) tree.Datum {
 
 	case *tree.DOidWrapper:
 		return &tree.DOidWrapper{
-			Wrapped: deepCopyDatum(evalCtx, t.Wrapped),
+			Wrapped: deepCopyDatum(t.Wrapped),
 			Oid:     t.Oid,
 		}
 
