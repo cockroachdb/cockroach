@@ -66,13 +66,13 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.FuncName)
 	ctx.WriteString("(")
 	ctx.FormatNode(node.Args)
-	ctx.WriteString(") ")
+	ctx.WriteString(")\n\t")
 	ctx.WriteString("RETURNS ")
 	if node.ReturnType.IsSet {
 		ctx.WriteString("SETOF ")
 	}
 	ctx.WriteString(node.ReturnType.Type.SQLString())
-	ctx.WriteString(" ")
+	ctx.WriteString("\n\t")
 	var funcBody FunctionBodyStr
 	for _, option := range node.Options {
 		switch t := option.(type) {
@@ -81,7 +81,7 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 			continue
 		}
 		ctx.FormatNode(option)
-		ctx.WriteString(" ")
+		ctx.WriteString("\n\t")
 	}
 	if len(funcBody) > 0 {
 		ctx.FormatNode(funcBody)
