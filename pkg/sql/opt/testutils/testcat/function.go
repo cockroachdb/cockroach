@@ -85,19 +85,19 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		panic(err)
 	}
 
-	// Retrieve the function body, volatility, and nullableArgs.
-	body, v, nullableArgs := collectFuncOptions(c.Options)
+	// Retrieve the function body, volatility, and calledOnNullInput.
+	body, v, calledOnNullInput := collectFuncOptions(c.Options)
 
 	if tc.udfs == nil {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
 	}
 
 	overload := &tree.Overload{
-		Types:        argTypes,
-		ReturnType:   tree.FixedReturnType(retType),
-		Body:         body,
-		Volatility:   v,
-		NullableArgs: nullableArgs,
+		Types:             argTypes,
+		ReturnType:        tree.FixedReturnType(retType),
+		Body:              body,
+		Volatility:        v,
+		CalledOnNullInput: calledOnNullInput,
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
 	def := &tree.ResolvedFunctionDefinition{
@@ -109,16 +109,18 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 	tc.udfs[name] = def
 }
 
-func collectFuncOptions(o tree.FunctionOptions) (body string, v volatility.V, nullableArgs bool) {
+func collectFuncOptions(
+	o tree.FunctionOptions,
+) (body string, v volatility.V, calledOnNullInput bool) {
 	// The default volatility is VOLATILE.
 	v = volatility.Volatile
 
 	// The default leakproof option is NOT LEAKPROOF.
 	leakproof := false
 
-	// The default for nullableArgs is CALLED ON NULL INPUT, which is equivalent
-	// to NullableArgs=true in function overloads.
-	nullableArgs = true
+	// The default is CALLED ON NULL INPUT, which is equivalent to
+	// CalledOnNullInput=true in function overloads.
+	calledOnNullInput = true
 
 	for _, option := range o {
 		switch t := option.(type) {
@@ -139,7 +141,7 @@ func collectFuncOptions(o tree.FunctionOptions) (body string, v volatility.V, nu
 		case tree.FunctionNullInputBehavior:
 			switch t {
 			case tree.FunctionReturnsNullOnNullInput, tree.FunctionStrict:
-				nullableArgs = false
+				calledOnNullInput = false
 			}
 
 		case tree.FunctionLanguage:
@@ -160,7 +162,7 @@ func collectFuncOptions(o tree.FunctionOptions) (body string, v volatility.V, nu
 		panic(fmt.Errorf("LEAKPROOF functions must be IMMUTABLE"))
 	}
 
-	return body, v, nullableArgs
+	return body, v, calledOnNullInput
 }
 
 // formatFunction nicely formats a function definition creating in the opt test
@@ -172,8 +174,8 @@ func formatFunction(fn *tree.ResolvedFunctionDefinition) string {
 	o := fn.Overloads[0]
 	tp := treeprinter.New()
 	nullStr := ""
-	if !o.NullableArgs {
-		nullStr = ", nullable-args=false"
+	if !o.CalledOnNullInput {
+		nullStr = ", called-on-null-input=false"
 	}
 	child := tp.Childf(
 		"FUNCTION %s%s [%s%s]",
