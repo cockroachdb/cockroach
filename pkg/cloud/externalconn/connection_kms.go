@@ -46,6 +46,11 @@ func makeExternalConnectionKMS(
 		return nil, errors.Wrap(err, "failed to load external connection object")
 	}
 
+	// Sanity check that we are connecting to a KMS object.
+	if ec.ConnectionType() != connectionpb.TypeKMS {
+		return nil, errors.Newf("KMS cannot use object of type %s", ec.ConnectionType().String())
+	}
+
 	// Construct a KMS handle for the underlying resource represented by the
 	// external connection object.
 	switch d := ec.ConnectionProto().Details.(type) {
