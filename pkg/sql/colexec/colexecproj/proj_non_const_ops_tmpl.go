@@ -89,10 +89,10 @@ type projOpBase struct {
 // {{define "projOp"}}
 
 type _OP_NAME struct {
-	projOpBase
 	// {{if .NeedsBinaryOverloadHelper}}
 	colexecutils.BinaryOverloadHelper
 	// {{end}}
+	projOpBase
 }
 
 func (p _OP_NAME) Next() coldata.Batch {
