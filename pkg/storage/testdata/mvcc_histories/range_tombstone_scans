@@ -98,7 +98,6 @@ scan k=a end=z ts=2 tombstones
 scan: "a" -> /<empty> @2.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @2.000000000,0
-scan: "d" -> /<empty> @2.000000000,0
 scan: "f" -> /BYTES/f1 @1.000000000,0
 scan: "h" -> /BYTES/h2 @2.000000000,0
 
@@ -256,7 +255,6 @@ scan k=a end=z ts=2 tombstones reverse
 ----
 scan: "h" -> /BYTES/h2 @2.000000000,0
 scan: "f" -> /BYTES/f1 @1.000000000,0
-scan: "d" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @2.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "a" -> /<empty> @2.000000000,0
