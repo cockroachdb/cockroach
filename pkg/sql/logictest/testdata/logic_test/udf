@@ -322,6 +322,9 @@ statement
 CREATE FUNCTION proc_f(STRING, b INT) RETURNS SETOF STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
 statement ok
+CREATE FUNCTION proc_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+statement ok
 CREATE SCHEMA sc;
 
 statement
@@ -333,4 +336,95 @@ FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
 ----
 100115  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
 100116  proc_f    4101115737  1546506610  14  true   true   true   i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
-100118  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+100119  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+
+subtest create_function_statements
+
+query TITITIT
+SELECT create_statement, database_id, database_name, schema_id, schema_name, function_id, function_name
+FROM crdb_internal.create_function_statements
+WHERE function_name IN ('proc_f', 'proc_f_2')
+ORDER BY function_name;
+----
+CREATE FUNCTION public.proc_f(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$  104  test  105  public  115  proc_f
+CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
+    RETURNS SETOF STRING
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$  104  test  105  public  116  proc_f
+CREATE FUNCTION sc.proc_f_2(IN STRING)
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$  104  test  118  sc  119  proc_f_2
+
+subtest show_create_function
+
+query TT
+SHOW CREATE FUNCTION proc_f;
+----
+proc_f  CREATE FUNCTION public.proc_f(IN INT8)
+RETURNS INT8
+VOLATILE
+NOT LEAKPROOF
+CALLED ON NULL INPUT
+AS $$
+SELECT 1;
+$$
+proc_f  CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
+RETURNS SETOF STRING
+IMMUTABLE
+LEAKPROOF
+STRICT
+AS $$
+SELECT 'hello';
+$$
+
+statement error pq: unknown function: proc_f_2()
+SHOW CREATE FUNCTION proc_f_2;
+
+query TT
+SHOW CREATE FUNCTION sc.proc_f_2;
+----
+proc_f_2  CREATE FUNCTION sc.proc_f_2(IN STRING)
+RETURNS STRING
+VOLATILE
+NOT LEAKPROOF
+CALLED ON NULL INPUT
+AS $$
+SELECT 'hello';
+$$
+
+statement ok
+SET search_path = sc;
+
+query TT
+SHOW CREATE FUNCTION proc_f_2;
+----
+proc_f_2  CREATE FUNCTION sc.proc_f_2(IN STRING)
+RETURNS STRING
+VOLATILE
+NOT LEAKPROOF
+CALLED ON NULL INPUT
+AS $$
+SELECT 'hello';
+$$
+
+statement ok
+SET search_path = public;
