@@ -264,6 +264,7 @@ go_test(
         "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",

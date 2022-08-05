@@ -57,6 +57,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 	}
 	generateCmd.Flags().Bool(mirrorFlag, false, "mirror new dependencies to cloud storage (use if vendoring)")
 	generateCmd.Flags().Bool(forceFlag, false, "force regeneration even if relevant files are unchanged from upstream")
+	generateCmd.Flags().Bool(shortFlag, false, "if used for the bazel target, only update BUILD.bazel files and skip checks")
 	return generateCmd
 }
 
@@ -126,6 +127,11 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		}
 	}
 
+	short := mustGetFlagBool(cmd, shortFlag)
+	if short {
+		return nil
+	}
+
 	ctx := cmd.Context()
 	env := os.Environ()
 	envvar := "COCKROACH_BAZEL_CHECK_FAST=1"
@@ -140,6 +146,14 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 
 func (d *dev) generateBazel(cmd *cobra.Command) error {
 	ctx := cmd.Context()
+
+	short := mustGetFlagBool(cmd, shortFlag)
+	if short {
+		return d.exec.CommandContextInheritingStdStreams(
+			ctx, "bazel", "run", "//:gazelle",
+		)
+	}
+
 	mirror := mustGetFlagBool(cmd, mirrorFlag)
 	force := mustGetFlagBool(cmd, forceFlag)
 	workspace, err := d.getWorkspace(ctx)

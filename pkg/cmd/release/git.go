@@ -33,7 +33,7 @@ type releaseInfo struct {
 
 // findNextVersion returns the next release version for given releaseSeries.
 func findNextVersion(releaseSeries string) (string, error) {
-	prevReleaseVersion, err := findPreviousRelease(releaseSeries)
+	prevReleaseVersion, err := findPreviousRelease(releaseSeries, false)
 	if err != nil {
 		return "", fmt.Errorf("cannot find previous release: %w", err)
 	}
@@ -46,7 +46,7 @@ func findNextVersion(releaseSeries string) (string, error) {
 
 // findNextRelease finds all required information for the next release.
 func findNextRelease(releaseSeries string) (releaseInfo, error) {
-	prevReleaseVersion, err := findPreviousRelease(releaseSeries)
+	prevReleaseVersion, err := findPreviousRelease(releaseSeries, false)
 	if err != nil {
 		return releaseInfo{}, fmt.Errorf("cannot find previous release: %w", err)
 	}
@@ -115,9 +115,14 @@ func findVersions(text string) []*semver.Version {
 
 // findPreviousRelease finds the latest version tag for a particular release series.
 // It ignores non-semantic versions and tags with the alpha.0* suffix.
-func findPreviousRelease(releaseSeries string) (string, error) {
+// if ignorePrereleases is set to true, only stable versions are returned.
+func findPreviousRelease(releaseSeries string, ignorePrereleases bool) (string, error) {
 	// TODO: filter version using semantic version, not a git pattern
-	cmd := exec.Command("git", "tag", "--list", fmt.Sprintf("v%s.*", releaseSeries))
+	pattern := "v*"
+	if releaseSeries != "" {
+		pattern = fmt.Sprintf("v%s.*", releaseSeries)
+	}
+	cmd := exec.Command("git", "tag", "--list", pattern)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("cannot get version from tags: %w", err)
@@ -125,6 +130,15 @@ func findPreviousRelease(releaseSeries string) (string, error) {
 	versions := findVersions(string(output))
 	if len(versions) == 0 {
 		return "", fmt.Errorf("zero versions found")
+	}
+	if ignorePrereleases {
+		var filteredVersions []*semver.Version
+		for _, v := range versions {
+			if v.Prerelease() == "" {
+				filteredVersions = append(filteredVersions, v)
+			}
+		}
+		versions = filteredVersions
 	}
 	sort.Sort(semver.Collection(versions))
 	return versions[len(versions)-1].Original(), nil

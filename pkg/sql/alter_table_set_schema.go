@@ -161,11 +161,9 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	return p.logEvent(ctx,
 		desiredSchemaID,
 		&eventpb.SetSchema{
-			CommonEventDetails:    eventpb.CommonEventDetails{},
-			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{},
-			DescriptorName:        oldName.FQString(),
-			NewDescriptorName:     newName.FQString(),
-			DescriptorType:        kind,
+			DescriptorName:    oldName.FQString(),
+			NewDescriptorName: newName.FQString(),
+			DescriptorType:    kind,
 		},
 	)
 }
