@@ -219,7 +219,7 @@ func (c *CustomFuncs) AreValuesDistinct(
 func (c *CustomFuncs) areRowsDistinct(
 	rows memo.ScalarListExpr, cols opt.ColList, groupingCols opt.ColSet, nullsAreDistinct bool,
 ) bool {
-	var seen map[string]bool
+	var seen map[string]struct{}
 	var encoded []byte
 	for _, scalar := range rows {
 		row := scalar.(*memo.TupleExpr)
@@ -263,7 +263,7 @@ func (c *CustomFuncs) areRowsDistinct(
 		}
 
 		if seen == nil {
-			seen = make(map[string]bool, len(rows))
+			seen = make(map[string]struct{}, len(rows))
 		}
 
 		// Determine whether key has already been seen.
@@ -274,7 +274,7 @@ func (c *CustomFuncs) areRowsDistinct(
 		}
 
 		// Add the key to the seen map.
-		seen[key] = true
+		seen[key] = struct{}{}
 	}
 
 	return true
