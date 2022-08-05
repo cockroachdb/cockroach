@@ -878,6 +878,10 @@ type FunctionDescriptor interface {
 
 	// GetLanguage returns the language of this function.
 	GetLanguage() catpb.Function_Language
+
+	// ToTreeNode converts a function descriptor back to a statement tree node.
+	// This is mainly used for formatting, e.g. SHOW CREATE FUNCTION.
+	ToTreeNode() (*tree.CreateFunction, error)
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an

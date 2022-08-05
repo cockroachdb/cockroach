@@ -569,6 +569,7 @@ cluster_settings                       NULL
 cluster_statement_statistics           NULL
 cluster_transaction_statistics         NULL
 cluster_transactions                   NULL
+create_function_statements             NULL
 create_schema_statements               NULL
 create_statements                      NULL
 create_type_statements                 NULL
