@@ -65,7 +65,7 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8, 64, 512} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-							for _, numRangeKeys := range []int{0, 1} { // TODO(erikgrinaker): 100
+							for _, numRangeKeys := range []int{0, 1, 100} {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 									runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
 										benchDataOptions: benchDataOptions{
@@ -130,7 +130,7 @@ func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8, 64, 512} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-							for _, numRangeKeys := range []int{0, 1} { // TODO(erikgrinaker): 100
+							for _, numRangeKeys := range []int{0, 1, 100} {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 									runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
 										benchDataOptions: benchDataOptions{
@@ -172,7 +172,7 @@ func BenchmarkMVCCGet_Pebble(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-							for _, numRangeKeys := range []int{0, 1} { // TODO(erikgrinaker): 100
+							for _, numRangeKeys := range []int{0, 1, 100} {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 									runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
 										numVersions:  numVersions,
@@ -194,7 +194,7 @@ func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
 	ctx := context.Background()
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			for _, numRangeKeys := range []int{0, 1} { // TODO(erikgrinaker): 100
+			for _, numRangeKeys := range []int{0, 1, 100} {
 				b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 					runMVCCComputeStats(ctx, b, setupMVCCPebble, valueSize, numRangeKeys)
 				})
