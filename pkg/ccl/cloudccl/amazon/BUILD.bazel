@@ -1,0 +1,34 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "amazon_test",
+    srcs = [
+        "main_test.go",
+        "s3_connection_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/cloud",
+        "//pkg/cloud/amazon",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn/providers",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_aws_aws_sdk_go//aws/credentials",
+    ],
+)
+
+get_x_data(name = "get_x_data")
