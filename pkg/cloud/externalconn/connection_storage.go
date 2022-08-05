@@ -74,6 +74,11 @@ func makeExternalConnectionStorage(
 		return nil, errors.Wrap(err, "failed to load external connection object")
 	}
 
+	// Sanity check that we are connecting to a STORAGE object.
+	if ec.ConnectionType() != connectionpb.TypeStorage {
+		return nil, errors.Newf("STORAGE cannot use object of type %s", ec.ConnectionType().String())
+	}
+
 	// Construct an ExternalStorage handle for the underlying resource represented
 	// by the external connection object.
 	switch d := ec.ConnectionProto().Details.(type) {

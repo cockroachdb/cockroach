@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register ExternalStorage providers.
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -146,8 +147,7 @@ func TestGCSKMSExternalConnection(t *testing.T) {
 		// ExternalStorage. This should be disallowed.
 		backupExternalConnectionURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
 		sqlDB.ExpectErr(t,
-			"failed to load external connection object: expected External Connection object of type KMS but "+
-				"'backup' is of type STORAGE",
+			"KMS cannot use object of type STORAGE",
 			fmt.Sprintf(`BACKUP DATABASE foo INTO '%s' WITH kms='%s'`,
 				backupExternalConnectionURI, backupExternalConnectionURI))
 	})
@@ -177,7 +177,6 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 
 	createExternalConnection := func(externalConnectionName, uri string) {
 		sqlDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
-		fmt.Printf("created external connection %s\n\n", externalConnectionName)
 	}
 	backupAndRestoreFromExternalConnection := func(backupExternalConnectionName, kmsExternalConnectionName string) {
 		backupURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
@@ -191,7 +190,6 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 	disallowedBackupToExternalConnection := func(backupExternalConnectionName, kmsExternalConnectionName string) {
 		backupURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
 		kmsURI := fmt.Sprintf("external://%s", kmsExternalConnectionName)
-		fmt.Printf("backing up into %s with kms %s\n\n", backupURI, kmsURI)
 		sqlDB.ExpectErr(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED)",
 			fmt.Sprintf(`BACKUP INTO '%s' WITH kms='%s'`, backupURI, kmsURI))
 	}
