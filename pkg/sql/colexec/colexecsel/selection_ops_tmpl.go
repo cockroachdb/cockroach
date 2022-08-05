@@ -191,9 +191,20 @@ type selOpBase struct {
 type _OP_CONST_NAME struct {
 	selConstOpBase
 	constArg _R_GO_TYPE
+	// {{if .Negatable}}
+	negate bool
+	// {{end}}
 }
 
 func (p *_OP_CONST_NAME) Next() coldata.Batch {
+	// {{if .Negatable}}
+	// {{/*
+	//     In order to inline the templated code of the LIKE overloads, we need
+	//     to have a `_negate` local variable indicating whether the assignment
+	//     should be negated.
+	// */}}
+	_negate := p.negate
+	// {{end}}
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
