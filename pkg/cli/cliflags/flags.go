@@ -443,8 +443,6 @@ in a later version.`,
 The address/hostname and port to listen on for intra-cluster
 communication, for example --listen-addr=myhost:26257 or
 --listen-addr=:26257 (listen on all interfaces).
-Unless --sql-addr is also specified, this address is also
-used to accept SQL client connections.
 <PRE>
 
 </PRE>
@@ -462,7 +460,15 @@ example [::1]:26257 or [fe80::f6f2:::]:26257.
 If --advertise-addr is left unspecified, the node will also announce
 this address for use by other nodes. It is strongly recommended to use
 --advertise-addr in cloud and container deployments or any setup where
-NAT is present between cluster nodes.`,
+NAT is present between cluster nodes.
+<PRE>
+
+</PRE>
+Unless --sql-addr is also specified, this address is also
+used to accept SQL client connections. Using --listen-addr
+to specify the SQL address without --sql-addr is a deprecated
+feature.
+`,
 	}
 
 	ServerHost = FlagInfo{
@@ -515,8 +521,6 @@ forwarding is set up on an intermediate firewall/router.`,
 		Description: `
 The hostname or IP address to bind to for SQL clients, for example
 --sql-addr=myhost:26257 or --sql-addr=:26257 (listen on all interfaces).
-If left unspecified, the address specified by --listen-addr will be
-used for both RPC and SQL connections.
 <PRE>
 
 </PRE>
@@ -536,7 +540,14 @@ to use the same port number but separate host addresses.
 
 </PRE>
 An IPv6 address can also be specified with the notation [...], for
-example [::1]:26257 or [fe80::f6f2:::]:26257.`,
+example [::1]:26257 or [fe80::f6f2:::]:26257.
+<PRE>
+
+</PRE>
+If --sql-addr is left unspecified, the address specified by
+--listen-addr will be used for both RPC and SQL connections.
+This default behavior is deprecated; we recommend always
+setting --sql-addr.`,
 	}
 
 	SQLAdvertiseAddr = FlagInfo{

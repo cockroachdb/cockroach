@@ -1076,17 +1076,23 @@ func expandTabsInRedactableBytes(s redact.RedactableBytes) (redact.RedactableByt
 func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 	pf := cliflagcfg.FlagSetForCmd(cmd)
 
+	sqlAddrSpecified := pf.Lookup(cliflags.ListenSQLAddr.Name).Changed
+	if !sqlAddrSpecified {
+		log.Ops.Shoutf(ctx, severity.WARNING,
+			"Running a server without --sql-addr, with a combined RPC/SQL listener, is deprecated.\n"+
+				"This feature will be removed in the next version of CockroachDB.")
+	}
+
 	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ServerHost.Name).Changed
 	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseHost.Name).Changed
-
 	if !listenAddrSpecified && !advAddrSpecified {
 		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
 		log.Ops.Shoutf(ctx, severity.WARNING,
 			"neither --listen-addr nor --advertise-addr was specified.\n"+
 				"The server will advertise %q to other nodes, is this routable?\n\n"+
 				"Consider using:\n"+
-				"- for local-only servers:  --listen-addr=localhost\n"+
-				"- for multi-node clusters: --advertise-addr=<host/IP addr>\n", host)
+				"- for local-only servers:  --listen-addr=localhost:36257 --sql-addr=localhost:26257\n"+
+				"- for multi-node clusters: --listen-addr=:36257 --sql-addr=:26257 --advertise-addr=<host/IP addr>\n", host)
 	}
 }
 

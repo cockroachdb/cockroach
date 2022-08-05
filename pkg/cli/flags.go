@@ -1046,7 +1046,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverSQLPort = serverListenPort
 	}
 	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
-	serverCfg.SplitListenSQL = fs.Lookup(cliflags.ListenSQLAddr.Name).Changed
+	serverCfg.SplitListenSQL = changed(fs, cliflags.ListenSQLAddr.Name)
 
 	// Fill in the defaults for --advertise-sql-addr, if the flag exists on `cmd`.
 	advSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
