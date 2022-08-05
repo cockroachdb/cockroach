@@ -70,11 +70,7 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		for i := 0; i < len(substrs); i++ {
 			name.Parts[i] = substrs[len(substrs)-1-i]
 		}
-		fn, err := name.ToFunctionName()
-		if err != nil {
-			return nil, err
-		}
-		funcDef, err := tree.GetBuiltinFuncDefinitionOrFail(fn, &ctx.SessionData().SearchPath)
+		funcDef, err := ctx.Planner.ResolveFunction(ctx.Ctx(), &name, &ctx.SessionData().SearchPath)
 		if err != nil {
 			return nil, err
 		}

@@ -2457,7 +2457,6 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						}
 
 						return addRow(
-							// TODO (chengxiong) fix this when we have the ID to OID thing
 							tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())),  // oid
 							tree.NewDName(fnDesc.GetName()),                  // proname
 							h.NamespaceOid(dbDesc.GetID(), scDesc.GetName()), // pronamespace

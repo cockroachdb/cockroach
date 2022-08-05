@@ -117,7 +117,7 @@ CREATE FUNCTION f() RETURNS t IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b, c FROM t
 		require.Equal(t, types.TupleFamily, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}).Family())
 		require.NotZero(t, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}).TypeMeta)
 
-		overload, err := funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
+		_, overload, err := funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
 		require.NoError(t, err)
 		require.Equal(t, `SELECT a FROM defaultdb.public.t;
 SELECT b FROM defaultdb.public.t@t_idx_b;
@@ -131,7 +131,7 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 		require.Equal(t, types.EnumFamily, overload.Types.Types()[0].Family())
 		require.Equal(t, types.Int, overload.ReturnType([]tree.TypedExpr{}))
 
-		overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[1].Oid)
+		_, overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[1].Oid)
 		require.NoError(t, err)
 		require.Equal(t, `SELECT 1;`, overload.Body)
 		require.True(t, overload.IsUDF)
@@ -139,7 +139,7 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 		require.Equal(t, 0, len(overload.Types.Types()))
 		require.Equal(t, types.Void, overload.ReturnType([]tree.TypedExpr{}))
 
-		overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[2].Oid)
+		_, overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[2].Oid)
 		require.NoError(t, err)
 		require.Equal(t, `SELECT a, b, c FROM defaultdb.public.t;`, overload.Body)
 		require.True(t, overload.IsUDF)
@@ -257,7 +257,7 @@ CREATE FUNCTION sc1.lower() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$
 			bodies := make([]string, len(funcDef.Overloads))
 			schemas := make([]string, len(funcDef.Overloads))
 			for i, o := range funcDef.Overloads {
-				overload, err := funcResolver.ResolveFunctionByOID(ctx, o.Oid)
+				_, overload, err := funcResolver.ResolveFunctionByOID(ctx, o.Oid)
 				require.NoError(t, err)
 				bodies[i] = overload.Body
 				schemas[i] = o.Schema

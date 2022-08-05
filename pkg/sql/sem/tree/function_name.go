@@ -44,10 +44,11 @@ type FunctionReferenceResolver interface {
 	) (*ResolvedFunctionDefinition, error)
 
 	// ResolveFunctionByOID looks up a function overload by using a given oid.
-	// Error is thrown if there is no function with the same oid.
+	// Function name is returned together with the overload. Error is thrown if
+	// there is no function with the same oid.
 	ResolveFunctionByOID(
 		ctx context.Context, oid oid.Oid,
-	) (*Overload, error)
+	) (string, *Overload, error)
 }
 
 // ResolvableFunctionReference implements the editable reference call of a
