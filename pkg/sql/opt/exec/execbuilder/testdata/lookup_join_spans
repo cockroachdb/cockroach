@@ -837,11 +837,11 @@ vectorized: true
         │ equality cols are key
         │
         └── • lookup join
+            │ estimated row count: 0
             │ table: metric_values@secondary
             │ lookup condition: ((id = metric_id) AND ("lookup_join_const_col_@3" = nullable)) AND ("time" < '2020-01-01 00:00:10+00:00')
             │
             └── • render
-                │ estimated row count: 1
                 │
                 └── • scan
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -886,7 +886,6 @@ vectorized: true
 ·
 • project
 │ columns: (s_i_id, ol_o_id)
-│ estimated row count: 7,939 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (s_i_id, ol_o_id, ol_i_id)
@@ -915,7 +914,6 @@ vectorized: true
 ·
 • project
 │ columns: (s_i_id, ol_o_id)
-│ estimated row count: 196 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (s_i_id, ol_o_id, ol_i_id)

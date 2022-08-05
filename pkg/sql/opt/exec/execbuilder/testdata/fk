@@ -39,6 +39,7 @@ vectorized: true
             │ equality cols are key
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Use data from a different table as input.
@@ -116,6 +117,7 @@ vectorized: true
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # Tests with multicolumn FKs.
@@ -161,6 +163,7 @@ vectorized: true
                 │ filter: (column2 IS NOT NULL) AND (column3 IS NOT NULL)
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 statement ok
@@ -210,6 +213,7 @@ vectorized: true
 │               │ filter: column2 IS NOT NULL
 │               │
 │               └── • scan buffer
+│                     estimated row count: 2
 │                     label: buffer 1
 │
 └── • constraint-check
@@ -226,6 +230,7 @@ vectorized: true
                 │ filter: (column3 IS NOT NULL) AND (column4 IS NOT NULL)
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # FK check can be omitted when we are inserting only NULLs.
@@ -1232,6 +1237,7 @@ vectorized: true
             │ right cols are key
             │
             ├── • scan buffer
+            │     estimated row count: 10
             │     label: buffer 1
             │
             └── • scan
@@ -1255,7 +1261,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 33
 │           │
 │           └── • scan
 │                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
@@ -1277,6 +1282,7 @@ vectorized: true
             │   │ filter: p_new IS NOT NULL
             │   │
             │   └── • scan buffer
+            │         estimated row count: 33
             │         label: buffer 1
             │
             └── • scan
@@ -1349,7 +1355,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 33
 │           │
 │           └── • scan
 │                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
@@ -1372,6 +1377,7 @@ vectorized: true
                 │ filter: p_new IS NOT NULL
                 │
                 └── • scan buffer
+                      estimated row count: 33
                       label: buffer 1
 
 query T
@@ -1443,7 +1449,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 10
 │           │
 │           └── • project set
 │               │ estimated row count: 10
@@ -1460,6 +1465,7 @@ vectorized: true
             │ right cols are key
             │
             ├── • scan buffer
+            │     estimated row count: 10
             │     label: buffer 1
             │
             └── • scan

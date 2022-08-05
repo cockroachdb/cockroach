@@ -137,7 +137,6 @@ vectorized: true
 │   │
 │   └── • limit
 │       │ columns: (a, b, c)
-│       │ estimated row count: 1 (missing stats)
 │       │ count: 1
 │       │
 │       └── • filter
@@ -163,7 +162,6 @@ vectorized: true
         │
         └── • limit
             │ columns: (a)
-            │ estimated row count: 1 (missing stats)
             │ count: 1
             │
             └── • filter
@@ -270,15 +268,12 @@ vectorized: true
 ·
 • project
 │ columns: (col0)
-│ estimated row count: 311 (missing stats)
 │
 └── • project
     │ columns: (col0, col3, col4)
-    │ estimated row count: 311 (missing stats)
     │
     └── • render
         │ columns: (col0, col3, col4, rowid)
-        │ estimated row count: 311 (missing stats)
         │ render col0: col0
         │ render col3: col3
         │ render col4: col4
@@ -350,7 +345,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column9)
-    │ estimated row count: 1,000 (missing stats)
     │ render column9: x - 1
     │
     └── • scan
@@ -407,7 +401,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column9)
-    │ estimated row count: 1,000 (missing stats)
     │ render column9: x - 1
     │
     └── • scan

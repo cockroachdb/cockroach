@@ -37,7 +37,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b)
-│ estimated row count: 100 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, a, b)

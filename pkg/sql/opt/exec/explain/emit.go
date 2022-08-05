@@ -361,8 +361,26 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 	return fmt.Sprintf("%s join (%s)", algo, typ)
 }
 
+// omitStats returns true if n should not be annotated with the execution
+// statistics nor estimates.
+func omitStats(n *Node) bool {
+	// Some simple nodes don't have their own statistics, yet they share the
+	// stats with their children. In such scenarios, we skip stats for the
+	// "simple" node to avoid confusion. The rule of thumb for including a node
+	// into this list is checking whether it is handled during the
+	// post-processing stage by the DistSQL engine.
+	switch n.op {
+	case simpleProjectOp,
+		serializingProjectOp,
+		renderOp,
+		limitOp:
+		return true
+	}
+	return false
+}
+
 func (e *emitter) emitNodeAttributes(n *Node) error {
-	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
+	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
 			e.ob.AddRedactableField(RedactNodes, "nodes", strings.Join(s.Nodes, ", "))
@@ -415,7 +433,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 	}
 
-	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
+	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.EstimatedStats)
 
 		var estimatedRowCountString string

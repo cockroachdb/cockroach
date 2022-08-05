@@ -12,7 +12,6 @@ vectorized: true
 ·
 • limit
 │ columns: (k, v, w)
-│ estimated row count: 2 (missing stats)
 │ count: 2
 │
 └── • filter
@@ -46,7 +45,6 @@ vectorized: true
 ·
 • limit
 │ columns: (w)
-│ estimated row count: 25 (missing stats)
 │ count: 25
 │
 └── • distinct
@@ -91,7 +89,6 @@ vectorized: true
 ·
 • limit
 │ columns: (k, v)
-│ estimated row count: 995 (missing stats)
 │ offset: 5
 │
 └── • scan
@@ -109,7 +106,6 @@ vectorized: true
 ·
 • limit
 │ columns: (k, v)
-│ estimated row count: 5 (missing stats)
 │ offset: 1
 │
 └── • scan
@@ -128,7 +124,6 @@ vectorized: true
 ·
 • limit
 │ columns: (k, v)
-│ estimated row count: 5 (missing stats)
 │ offset: 1
 │
 └── • revscan
@@ -151,7 +146,6 @@ vectorized: true
 └── • project
     │ columns: (any_not_null, sum)
     │ ordering: -any_not_null
-    │ estimated row count: 10 (missing stats)
     │
     └── • top-k
         │ columns: (k, sum, any_not_null)
@@ -183,7 +177,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 4 (missing stats)
 │
 └── • scan
       columns: (k, v)
@@ -200,7 +193,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 4 (missing stats)
 │
 └── • scan
       columns: (k, v)
@@ -235,11 +227,9 @@ vectorized: true
 ·
 • project
 │ columns: (k, w)
-│ estimated row count: 10 (missing stats)
 │
 └── • limit
     │ columns: (k, v, w)
-    │ estimated row count: 10 (missing stats)
     │ count: 10
     │
     └── • filter
@@ -294,7 +284,6 @@ vectorized: true
     │
     └── • limit
         │ columns: (k, v, w)
-        │ estimated row count: 10 (missing stats)
         │ count: 10
         │
         └── • filter
@@ -323,7 +312,6 @@ vectorized: true
 ·
 • limit
 │ columns: (k, a)
-│ estimated row count: 1 (missing stats)
 │ count: 1
 │
 └── • filter
@@ -397,7 +385,6 @@ distribution: local
 vectorized: true
 ·
 • limit
-│ estimated row count: 5
 │ count: 5
 │
 └── • union all
@@ -515,7 +502,6 @@ distribution: local
 vectorized: true
 ·
 • limit
-│ estimated row count: 5
 │ count: 5
 │
 └── • lookup join

@@ -67,10 +67,10 @@ vectorized: true
         │
         └── • project
             │ columns: (pid)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -84,16 +84,15 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, pid)
-                        │ estimated row count: 1
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render pid: column2
                         │
                         └── • project
                             │ columns: (column2)
-                            │ estimated row count: 1
                             │
                             └── • scan buffer
                                   columns: (column1, column2)
+                                  estimated row count: 1
                                   label: buffer 1
 
 query T
@@ -129,7 +128,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (id)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • cross join (inner)
 │               │ columns: (id, id, crdb_region)
@@ -154,10 +152,10 @@ vectorized: true
         │
         └── • project
             │ columns: (pid)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -171,16 +169,15 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, pid)
-                        │ estimated row count: 1
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render pid: column2
                         │
                         └── • project
                             │ columns: (column2)
-                            │ estimated row count: 1
                             │
                             └── • scan buffer
                                   columns: (column1, column2, crdb_region_default, check1)
+                                  estimated row count: 1
                                   label: buffer 1
 
 subtest test_uniqueness_check_uuid
@@ -207,7 +204,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_user_id_shard_16_comp, user_id_default, val_cast, crdb_region_default, check1, check2)
-    │ estimated row count: 1
     │ render check1: crdb_internal_user_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render val_cast: val_cast
@@ -217,7 +213,6 @@ vectorized: true
     │
     └── • render
         │ columns: (crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-        │ estimated row count: 1
         │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
         │ render val_cast: val_cast
         │ render user_id_default: user_id_default
@@ -245,7 +240,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_user_id_shard_16_comp, user_id_default, val_cast, crdb_region_default, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_user_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render val_cast: val_cast
@@ -261,10 +255,10 @@ vectorized: true
         │
         └── • project
             │ columns: (val_cast, user_id_default, crdb_region_default, crdb_internal_user_id_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -278,7 +272,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-                        │ estimated row count: 1
                         │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                         │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                         │ render val_cast: val_cast
@@ -307,7 +300,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_user_id_shard_16_comp, user_id_default, val_cast, crdb_region_default, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_user_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render val_cast: val_cast
@@ -323,10 +315,10 @@ vectorized: true
         │
         └── • project
             │ columns: (val_cast, user_id_default, crdb_region_default, crdb_internal_user_id_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -340,7 +332,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-                        │ estimated row count: 2
                         │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                         │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
                         │ render val_cast: val_cast
@@ -349,7 +340,6 @@ vectorized: true
                         │
                         └── • render
                             │ columns: (user_id_default, crdb_region_default, val_cast)
-                            │ estimated row count: 2
                             │ render user_id_default: gen_random_uuid()
                             │ render crdb_region_default: 'ap-southeast-2'
                             │ render val_cast: val_cast
@@ -397,7 +387,6 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 1 (missing stats)
             │
             └── • cross join (inner)
                 │ columns: (id, crdb_internal_id_shard_16, id, crdb_region)
@@ -410,7 +399,6 @@ vectorized: true
                 │
                 └── • limit
                     │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                    │ estimated row count: 1 (missing stats)
                     │ count: 1
                     │
                     └── • filter
@@ -450,7 +438,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -501,7 +488,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -510,10 +496,10 @@ vectorized: true
     │
     └── • project
         │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
+            │ estimated row count: 0 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -527,7 +513,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-                    │ estimated row count: 2
                     │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                     │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                     │ render crdb_region_default: 'ap-southeast-2'
@@ -554,7 +539,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -605,7 +589,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -614,10 +597,10 @@ vectorized: true
     │
     └── • project
         │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
+            │ estimated row count: 0 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -631,7 +614,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-                    │ estimated row count: 2
                     │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                     │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                     │ render crdb_region_default: 'ap-southeast-2'
@@ -667,7 +649,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region, upsert_crdb_region)
-│               │ estimated row count: 1 (missing stats)
 │               │ render check1: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render check2: upsert_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │               │ render column1: column1
@@ -680,7 +661,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_crdb_region, column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region)
-│                   │ estimated row count: 1 (missing stats)
 │                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
 │                   │ render column1: column1
 │                   │ render crdb_region_default: crdb_region_default
@@ -725,21 +705,19 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
@@ -747,10 +725,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (crdb_internal_id_shard_16_comp, column1, upsert_crdb_region)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, crdb_internal_id_shard_16, id, crdb_region, crdb_internal_id_shard_16_comp, column1, crdb_region, check1, check2, upsert_crdb_region)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 query T
@@ -777,7 +755,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region, upsert_crdb_region)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: crdb_internal_id_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render check2: upsert_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │               │ render column1: column1
@@ -790,7 +767,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_crdb_region, column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
 │                   │ render column1: column1
 │                   │ render crdb_region_default: crdb_region_default
@@ -801,10 +777,10 @@ vectorized: true
 │                   │
 │                   └── • project
 │                       │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region)
-│                       │ estimated row count: 2 (missing stats)
 │                       │
 │                       └── • lookup join (left outer)
 │                           │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1, crdb_internal_id_shard_16, id, crdb_region)
+│                           │ estimated row count: 2 (missing stats)
 │                           │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
 │                           │ equality cols are key
 │                           │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -813,7 +789,6 @@ vectorized: true
 │                           │
 │                           └── • render
 │                               │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-│                               │ estimated row count: 2
 │                               │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
 │                               │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
 │                               │ render crdb_region_default: 'ap-southeast-2'
@@ -832,21 +807,19 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 1 (missing stats)
             │
             └── • project
                 │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                        │ estimated row count: 2 (missing stats)
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
@@ -854,10 +827,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (crdb_internal_id_shard_16_comp, column1, upsert_crdb_region)
-                            │ estimated row count: 2 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, crdb_internal_id_shard_16, id, crdb_region, crdb_internal_id_shard_16_comp, column1, crdb_region, check1, check2, upsert_crdb_region)
+                                  estimated row count: 2 (missing stats)
                                   label: buffer 1
 
 query T
@@ -875,7 +848,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, crdb_region, check1, check2)
-    │ estimated row count: 1 (missing stats)
     │ render check1: CASE WHEN crdb_region IS NULL THEN crdb_internal_id_shard_16_comp ELSE crdb_internal_id_shard_16 END IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -927,7 +899,6 @@ vectorized: true
 │
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, crdb_region, check1, check2)
-    │ estimated row count: 2 (missing stats)
     │ render check1: CASE WHEN crdb_region IS NULL THEN crdb_internal_id_shard_16_comp ELSE crdb_internal_id_shard_16 END IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -937,10 +908,10 @@ vectorized: true
     │
     └── • project
         │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region)
-        │ estimated row count: 2 (missing stats)
         │
         └── • lookup join (left outer)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1, crdb_internal_id_shard_16, id, crdb_region)
+            │ estimated row count: 2 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -949,7 +920,6 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-                │ estimated row count: 2
                 │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                 │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
                 │ render crdb_region_default: 'ap-southeast-2'
@@ -982,7 +952,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (crdb_internal_id_shard_16, id, crdb_region, crdb_internal_id_shard_16_comp, id_new, check1)
-│           │ estimated row count: 1 (missing stats)
 │           │ render check1: true
 │           │ render crdb_internal_id_shard_16_comp: 6
 │           │ render id_new: 1234
@@ -1015,21 +984,19 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(id_new)), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: id_new
@@ -1037,10 +1004,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (crdb_internal_id_shard_16_comp, id_new, crdb_region)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (crdb_internal_id_shard_16, id, crdb_region, crdb_internal_id_shard_16_comp, id_new, check1)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 subtest test_uniqueness_check_sec_key
@@ -1086,7 +1053,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (id)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • cross join (inner)
 │               │ columns: (id, id, crdb_region)
@@ -1111,7 +1077,6 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 1 (missing stats)
             │
             └── • cross join (inner)
                 │ columns: (email, id, email, crdb_region)
@@ -1124,7 +1089,6 @@ vectorized: true
                 │
                 └── • limit
                     │ columns: (id, email, crdb_region)
-                    │ estimated row count: 1 (missing stats)
                     │ count: 1
                     │
                     └── • distinct
@@ -1180,7 +1144,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -1190,17 +1153,16 @@ vectorized: true
     │
     └── • project
         │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
+            │ estimated row count: 0 (missing stats)
             │ table: t_unique_hash_sec_key@idx_uniq_hash_email
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
             │
             └── • render
                 │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-                │ estimated row count: 0 (missing stats)
                 │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                 │ render column1: column1
                 │ render column2: column2
@@ -1221,7 +1183,6 @@ vectorized: true
                     │
                     └── • project
                         │ columns: ()
-                        │ estimated row count: 1 (missing stats)
                         │
                         └── • union all
                             │ columns: (id)
@@ -1256,7 +1217,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-    │ estimated row count: 0 (missing stats)
     │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
@@ -1273,10 +1233,10 @@ vectorized: true
         │
         └── • project
             │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1290,7 +1250,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-                        │ estimated row count: 2
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render crdb_region_default: 'ap-southeast-2'
@@ -1322,7 +1281,6 @@ vectorized: true
 │   │
 │   └── • render
 │       │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-│       │ estimated row count: 0 (missing stats)
 │       │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │       │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │       │ render column1: column1
@@ -1344,7 +1302,6 @@ vectorized: true
 │           │
 │           └── • project
 │               │ columns: ()
-│               │ estimated row count: 1 (missing stats)
 │               │
 │               └── • union all
 │                   │ columns: (email)
@@ -1371,7 +1328,6 @@ vectorized: true
         │
         └── • project
             │ columns: (id)
-            │ estimated row count: 1 (missing stats)
             │
             └── • cross join (inner)
                 │ columns: (id, id, crdb_region)
@@ -1410,7 +1366,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-│           │ estimated row count: 0 (missing stats)
 │           │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │           │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │           │ render column1: column1
@@ -1420,10 +1375,10 @@ vectorized: true
 │           │
 │           └── • project
 │               │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-│               │ estimated row count: 0 (missing stats)
 │               │
 │               └── • lookup join (anti)
 │                   │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
+│                   │ estimated row count: 0 (missing stats)
 │                   │ table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                   │ equality cols are key
 │                   │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1437,7 +1392,6 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                           │ estimated row count: 2
 │                           │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                           │ render crdb_region_default: 'ap-southeast-2'
@@ -1459,7 +1413,6 @@ vectorized: true
         │
         └── • project
             │ columns: (column1)
-            │ estimated row count: 0 (missing stats)
             │
             └── • lookup join (semi)
                 │ columns: (column1, crdb_region_default)
@@ -1470,10 +1423,10 @@ vectorized: true
                 │
                 └── • project
                     │ columns: (column1, crdb_region_default)
-                    │ estimated row count: 0 (missing stats)
                     │
                     └── • scan buffer
                           columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
+                          estimated row count: 0 (missing stats)
                           label: buffer 1
 
 query T
@@ -1500,7 +1453,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, upsert_id, upsert_email, upsert_crdb_region, upsert_crdb_internal_email_shard_16)
-│               │ estimated row count: 1 (missing stats)
 │               │ render check1: upsert_crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render check2: upsert_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │               │ render column1: column1
@@ -1518,7 +1470,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_id, upsert_email, upsert_crdb_region, upsert_crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
-│                   │ estimated row count: 1 (missing stats)
 │                   │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN crdb_region IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
@@ -1546,7 +1497,6 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16, id, email, crdb_region)
-│                           │ estimated row count: 1 (missing stats)
 │                           │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
 │                           │ render id: id
 │                           │ render email: email
@@ -1577,7 +1527,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (upsert_id)
-│           │ estimated row count: 0 (missing stats)
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (upsert_id, upsert_crdb_region)
@@ -1588,10 +1537,10 @@ vectorized: true
 │               │
 │               └── • project
 │                   │ columns: (upsert_id, upsert_crdb_region)
-│                   │ estimated row count: 1 (missing stats)
 │                   │
 │                   └── • scan buffer
 │                         columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, crdb_region, check1, check2, upsert_id, upsert_crdb_region)
+│                         estimated row count: 1 (missing stats)
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -1601,21 +1550,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (id, email, crdb_region)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
@@ -1623,10 +1570,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, upsert_email, upsert_crdb_region)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, crdb_region, check1, check2, upsert_id, upsert_crdb_region)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 query T
@@ -1653,7 +1600,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, upsert_id, upsert_email, upsert_crdb_region, upsert_crdb_internal_email_shard_16)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: upsert_crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render check2: upsert_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │               │ render column1: column1
@@ -1671,7 +1617,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_id, upsert_email, upsert_crdb_region, upsert_crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN crdb_region IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
@@ -1687,7 +1632,6 @@ vectorized: true
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
-│                       │ estimated row count: 2 (missing stats)
 │                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
 │                       │ render column1: column1
 │                       │ render column2: column2
@@ -1699,14 +1643,13 @@ vectorized: true
 │                       │
 │                       └── • project
 │                           │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
-│                           │ estimated row count: 2 (missing stats)
 │                           │
 │                           └── • project
 │                               │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
-│                               │ estimated row count: 2 (missing stats)
 │                               │
 │                               └── • lookup join (left outer)
 │                                   │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2, id, email, crdb_region, crdb_internal_email_shard_16)
+│                                   │ estimated row count: 2 (missing stats)
 │                                   │ table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                                   │ equality cols are key
 │                                   │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1715,7 +1658,6 @@ vectorized: true
 │                                   │
 │                                   └── • render
 │                                       │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                                       │ estimated row count: 2
 │                                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                                       │ render crdb_region_default: 'ap-southeast-2'
@@ -1737,7 +1679,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (upsert_id)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (upsert_id, upsert_crdb_region)
@@ -1748,10 +1689,10 @@ vectorized: true
 │               │
 │               └── • project
 │                   │ columns: (upsert_id, upsert_crdb_region)
-│                   │ estimated row count: 2 (missing stats)
 │                   │
 │                   └── • scan buffer
 │                         columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, crdb_region, check1, check2, upsert_id, upsert_crdb_region)
+│                         estimated row count: 2 (missing stats)
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -1761,21 +1702,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 1 (missing stats)
             │
             └── • project
                 │ columns: (id, email, crdb_region)
-                │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ estimated row count: 2 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
@@ -1783,10 +1722,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, upsert_email, upsert_crdb_region)
-                            │ estimated row count: 2 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, upsert_email, upsert_crdb_internal_email_shard_16, crdb_region, check1, check2, upsert_id, upsert_crdb_region)
+                                  estimated row count: 2 (missing stats)
                                   label: buffer 1
 
 query T
@@ -1813,7 +1752,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, upsert_id, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
-│               │ estimated row count: 1 (missing stats)
 │               │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │               │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
@@ -1840,7 +1778,6 @@ vectorized: true
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, id, email, crdb_region)
-│                       │ estimated row count: 1 (missing stats)
 │                       │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
 │                       │ render id: id
 │                       │ render email: email
@@ -1871,21 +1808,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (id, email, crdb_region)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render id: upsert_id
                         │ render email: column2
@@ -1893,10 +1828,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, column2, crdb_region_default)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, column2, crdb_region_default, crdb_internal_email_shard_16_comp, crdb_region, check1, check2, upsert_id)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1
 
 query T
@@ -1923,7 +1858,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, check2, upsert_id, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
 │               │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
 │               │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
@@ -1938,7 +1872,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
 │                   │ render column1: column1
 │                   │ render column2: column2
@@ -1959,7 +1892,6 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                           │ estimated row count: 2
 │                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
 │                           │ render crdb_region_default: 'ap-southeast-2'
 │                           │ render column1: column1
@@ -1980,21 +1912,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 1 (missing stats)
             │
             └── • project
                 │ columns: (id, email, crdb_region)
-                │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ estimated row count: 2 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
                         │ render id: upsert_id
                         │ render email: column2
@@ -2002,10 +1932,10 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (upsert_id, column2, crdb_region_default)
-                            │ estimated row count: 2 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, column2, crdb_region_default, crdb_internal_email_shard_16_comp, crdb_region, check1, check2, upsert_id)
+                                  estimated row count: 2 (missing stats)
                                   label: buffer 1
 
 query T
@@ -2029,7 +1959,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (id, email, crdb_region, crdb_internal_email_shard_16, email_new, crdb_internal_email_shard_16_comp, check1)
-│           │ estimated row count: 1 (missing stats)
 │           │ render check1: true
 │           │ render crdb_internal_email_shard_16_comp: 5
 │           │ render email_new: 'email1'
@@ -2063,21 +1992,19 @@ vectorized: true
         │
         └── • project
             │ columns: (email)
-            │ estimated row count: 0 (missing stats)
             │
             └── • project
                 │ columns: (id, email, crdb_region)
-                │ estimated row count: 0 (missing stats)
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ estimated row count: 1 (missing stats)
                         │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(email_new)), 16)
                         │ render id: id
                         │ render email: email_new
@@ -2085,8 +2012,8 @@ vectorized: true
                         │
                         └── • project
                             │ columns: (id, email_new, crdb_region)
-                            │ estimated row count: 1 (missing stats)
                             │
                             └── • scan buffer
                                   columns: (id, email, crdb_region, crdb_internal_email_shard_16, email_new, crdb_internal_email_shard_16_comp, check1)
+                                  estimated row count: 1 (missing stats)
                                   label: buffer 1

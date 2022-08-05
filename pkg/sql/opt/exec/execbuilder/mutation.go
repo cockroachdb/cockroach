@@ -57,7 +57,7 @@ func (b *Builder) buildMutationInput(
 		}
 	}
 
-	input, err = b.ensureColumns(input, colList, inputExpr.ProvidedPhysical().Ordering)
+	input, err = b.ensureColumns(input, inputExpr, colList, inputExpr.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}

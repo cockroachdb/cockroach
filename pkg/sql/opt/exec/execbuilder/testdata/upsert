@@ -123,7 +123,6 @@ vectorized: true
         │
         └── • render
             │ columns: (v_default, k)
-            │ estimated row count: 2 (missing stats)
             │ render v_default: CAST(NULL AS INT8)
             │ render k: k
             │
@@ -172,7 +171,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
-        │ estimated row count: 1 (missing stats)
         │ render check1: c_default > 0
         │ render column1: column1
         │ render b_default: b_default
@@ -220,7 +218,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
-        │ estimated row count: 4 (missing stats)
         │ render check1: c_default > 0
         │ render column1: column1
         │ render b_default: b_default
@@ -241,7 +238,6 @@ vectorized: true
             │
             └── • render
                 │ columns: (d_comp, b_default, c_default, column1)
-                │ estimated row count: 4
                 │ render d_comp: column1 + 10
                 │ render b_default: CAST(NULL AS INT8)
                 │ render c_default: 10
@@ -277,7 +273,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d)
-        │ estimated row count: 1 (missing stats)
         │ render check1: upsert_c > 0
         │ render column1: column1
         │ render column2: column2
@@ -293,7 +288,6 @@ vectorized: true
         │
         └── • render
             │ columns: (upsert_b, upsert_c, upsert_d, column1, column2, column3, d_comp, a, b, c, d)
-            │ estimated row count: 1 (missing stats)
             │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE 2 END
             │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 3 END
             │ render upsert_d: CASE WHEN a IS NULL THEN d_comp ELSE a + 3 END
@@ -440,7 +434,6 @@ vectorized: true
         │
         └── • project
             │ columns: (z)
-            │ estimated row count: 1,000 (missing stats)
             │
             └── • upsert
                 │ columns: (z, rowid)
@@ -452,7 +445,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (rowid_default, a, b, c)
-                        │ estimated row count: 1,000 (missing stats)
                         │ render rowid_default: unique_rowid()
                         │ render a: a
                         │ render b: b
@@ -566,7 +558,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_z, column1, column2, column3, x, y, z)
-        │ estimated row count: 2 (missing stats)
         │ render upsert_z: CASE WHEN x IS NULL THEN column3 ELSE 1 END
         │ render column1: column1
         │ render column2: column2
@@ -627,7 +618,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_b, x, y, z, a, b, c)
-        │ estimated row count: 311 (missing stats)
         │ render upsert_b: CASE WHEN a IS NULL THEN y ELSE 5 END
         │ render x: x
         │ render y: y

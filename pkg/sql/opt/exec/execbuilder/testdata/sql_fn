@@ -168,7 +168,6 @@ vectorized: true
 │
 ├── • render
 │   │ columns: (k, addgeometrycolumn, addgeometrycolumn)
-│   │ estimated row count: 1,000 (missing stats)
 │   │ render addgeometrycolumn: addgeometrycolumn('my_spatial_table', 'geom7', 4326, 'POINT', 2)
 │   │ render addgeometrycolumn: addgeometrycolumn('my_spatial_table', 'geom8', 4326, 'POINT', 2)
 │   │ render k: k
