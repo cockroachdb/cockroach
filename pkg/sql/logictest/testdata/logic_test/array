@@ -983,7 +983,8 @@ SELECT NULL::INT[] || NULL::INT[]
 ----
 NULL
 
-# The following test check for projection operators that can handle nullable arguments.
+# The following test check for projection operators that are called when an
+# argument is NULL.
 statement ok
 CREATE TABLE t_bool (b BOOL[]);
 

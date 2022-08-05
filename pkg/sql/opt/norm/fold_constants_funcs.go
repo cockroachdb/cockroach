@@ -557,12 +557,13 @@ func (c *CustomFuncs) FoldColumnAccess(
 // to Null when any of its arguments are Null. A function can be folded to Null
 // in this case if all of the following are true:
 //
-//   1. It does not allow Null arguments (NullableArgs=false).
+//   1. It is not evaluated when any of its arguments are null
+//      (CalledOnNullInput=false).
 //   2. It is a normal function, not an aggregate, window, or generator.
 //
 // See FoldFunctionWithNullArg for more details.
 func (c *CustomFuncs) CanFoldFunctionWithNullArg(private *memo.FunctionPrivate) bool {
-	return !private.Overload.NullableArgs &&
+	return !private.Overload.CalledOnNullInput &&
 		private.Properties.Class == tree.NormalClass
 }
 

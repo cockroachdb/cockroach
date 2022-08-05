@@ -488,7 +488,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	if err != nil {
 		return nil, err
 	}
-	ret.NullableArgs, err = desc.getOverloadNullableArgs()
+	ret.CalledOnNullInput, err = desc.calledOnNullInput()
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +517,10 @@ func (desc *immutable) getOverloadVolatility() (volatility.V, error) {
 	return ret, nil
 }
 
-func (desc *immutable) getOverloadNullableArgs() (bool, error) {
+// calledOnNullInput returns true if the function should be called when any of
+// its input arguments are NULL. See Overload.CalledOnNullInput for more
+// details.
+func (desc *immutable) calledOnNullInput() (bool, error) {
 	switch desc.NullInputBehavior {
 	case catpb.Function_CALLED_ON_NULL_INPUT:
 		return true, nil

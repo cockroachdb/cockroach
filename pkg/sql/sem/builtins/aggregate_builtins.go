@@ -84,10 +84,10 @@ var allMaxMinAggregateTypes = append(
 // table, so their evaluation must always be delayed until query
 // execution.
 //
-// Some aggregate functions must handle nullable arguments, since normalizing
+// Some aggregate functions must be called with NULL inputs, so normalizing
 // an aggregate function call to NULL in the presence of a NULL argument may
 // not be correct. There are two cases where an aggregate function must handle
-// nullable arguments:
+// be called with null inputs:
 // 1) the aggregate function does not skip NULLs (e.g., ARRAY_AGG); and
 // 2) the aggregate function does not return NULL when it aggregates no rows
 //		(e.g., COUNT).
@@ -112,7 +112,7 @@ var aggregates = map[string]builtinDefinition{
 				newArrayAggregate,
 				"Aggregates the selected values into an array.",
 				volatility.Immutable,
-				true, /* nullableArgs */
+				true, /* calledOnNullInput */
 			)
 		}),
 	),
@@ -304,7 +304,7 @@ var aggregates = map[string]builtinDefinition{
 
 	"count": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
-			"Calculates the number of selected elements.", volatility.Immutable, true /* nullableArgs */),
+			"Calculates the number of selected elements.", volatility.Immutable, true /* calledOnNullInput */),
 	),
 
 	"count_rows": makeBuiltin(aggProps(),
@@ -348,9 +348,9 @@ var aggregates = map[string]builtinDefinition{
 
 	"string_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String, types.String}, types.String, newStringConcatAggregate,
-			"Concatenates all selected values using the provided delimiter.", volatility.Immutable, true /* nullableArgs */),
+			"Concatenates all selected values using the provided delimiter.", volatility.Immutable, true /* calledOnNullInput */),
 		makeAggOverload([]*types.T{types.Bytes, types.Bytes}, types.Bytes, newBytesConcatAggregate,
-			"Concatenates all selected values using the provided delimiter.", volatility.Immutable, true /* nullableArgs */),
+			"Concatenates all selected values using the provided delimiter.", volatility.Immutable, true /* calledOnNullInput */),
 	),
 
 	"sum_int": makeBuiltin(aggProps(),
@@ -482,21 +482,21 @@ var aggregates = map[string]builtinDefinition{
 
 	"json_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* nullableArgs */),
+			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
 	"jsonb_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* nullableArgs */),
+			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
 	"json_object_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
-			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* nullableArgs */),
+			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* calledOnNullInput */),
 	),
 	"jsonb_object_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
-			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* nullableArgs */),
+			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
 	"st_makeline": makeBuiltin(
@@ -518,7 +518,7 @@ var aggregates = map[string]builtinDefinition{
 				info: "Forms a LineString from Point, MultiPoint or LineStrings. Other shapes will be ignored.",
 			}.String(),
 			volatility.Immutable,
-			true, /* nullableArgs */
+			true, /* calledOnNullInput */
 		),
 	),
 	"st_extent": makeBuiltin(
@@ -538,7 +538,7 @@ var aggregates = map[string]builtinDefinition{
 				info: "Forms a Box2D that encapsulates all provided geometries.",
 			}.String(),
 			volatility.Immutable,
-			true, /* nullableArgs */
+			true, /* calledOnNullInput */
 		),
 	),
 	"st_union":      makeSTUnionBuiltin(),
@@ -654,7 +654,7 @@ func makeImmutableAggOverload(
 	f func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	info string,
 ) tree.Overload {
-	return makeAggOverload(in, ret, f, info, volatility.Immutable, false /* nullableArgs */)
+	return makeAggOverload(in, ret, f, info, volatility.Immutable, false /* calledOnNullInput */)
 }
 
 func makeAggOverload(
@@ -663,7 +663,7 @@ func makeAggOverload(
 	f func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	info string,
 	volatility volatility.V,
-	nullableArgs bool,
+	calledOnNullInput bool,
 ) tree.Overload {
 	return makeAggOverloadWithReturnType(
 		in,
@@ -671,7 +671,7 @@ func makeAggOverload(
 		f,
 		info,
 		volatility,
-		nullableArgs,
+		calledOnNullInput,
 	)
 }
 
@@ -687,7 +687,7 @@ func makeAggOverloadWithReturnType(
 	f eval.AggregateOverload,
 	info string,
 	volatility volatility.V,
-	nullableArgs bool,
+	calledOnNullInput bool,
 ) tree.Overload {
 	argTypes := make(tree.ArgTypes, len(in))
 	for i, typ := range in {
@@ -736,9 +736,9 @@ func makeAggOverloadWithReturnType(
 				},
 			)
 		}),
-		Info:         info,
-		Volatility:   volatility,
-		NullableArgs: nullableArgs,
+		Info:              info,
+		Volatility:        volatility,
+		CalledOnNullInput: calledOnNullInput,
 	}
 }
 
@@ -767,7 +767,7 @@ func makeSTCollectBuiltin() builtinDefinition {
 				info: "Collects geometries into a GeometryCollection or multi-type as appropriate.",
 			}.String(),
 			volatility.Immutable,
-			true, /* nullableArgs */
+			true, /* calledOnNullInput */
 		),
 	)
 }
@@ -792,7 +792,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 				info: "Applies a spatial union to the geometries provided.",
 			}.String(),
 			volatility.Immutable,
-			true, /* nullableArgs */
+			true, /* calledOnNullInput */
 		),
 	)
 }

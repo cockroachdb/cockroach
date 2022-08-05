@@ -462,13 +462,13 @@ The OpName built-in function can also be a parameter to a custom match or
 replace function which needs to know which name matched. For example:
 
   [FoldBinaryNull]
-  (Binary $left:* (Null) & ^(HasNullableArgs (OpName)))
+  (Binary $left:* (Null) & ^(IsCalledOnNullInput (OpName)))
   =>
   (Null)
 
 The name of the matched Binary node (e.g. Plus, In, Contains) is passed to the
-HasNullableArgs function as a symbolic identifier. Here is an example that uses
-a custom replace function and the OpName function with an argument:
+IsCalledOnNullInput function as a symbolic identifier. Here is an example that
+uses a custom replace function and the OpName function with an argument:
 
   [NegateComparison]
   (Not $input:(Comparison $left:* $right:*))

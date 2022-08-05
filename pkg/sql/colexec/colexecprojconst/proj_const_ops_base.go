@@ -19,8 +19,8 @@ import (
 // except for the constant itself.
 type projConstOpBase struct {
 	colexecop.OneInputHelper
-	allocator    *colmem.Allocator
-	colIdx       int
-	outputIdx    int
-	nullableArgs bool
+	allocator         *colmem.Allocator
+	colIdx            int
+	outputIdx         int
+	calledOnNullInput bool
 }

@@ -434,7 +434,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 func (cb *constraintsBuilder) buildFunctionConstraints(
 	f *FunctionExpr,
 ) (_ *constraint.Set, tight bool) {
-	if f.FunctionPrivate.Overload.NullableArgs {
+	if f.FunctionPrivate.Overload.CalledOnNullInput {
 		return unconstrained, false
 	}
 

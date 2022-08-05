@@ -1497,9 +1497,10 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 		GeneratorWithExprs: gen,
 		Info:               info,
 		Volatility:         volatility.Stable,
-		// The typical way to call json_populate_record is to send NULL::atype as the
-		// first argument, so we have to accept nullable args.
-		NullableArgs: true,
+		// The typical way to call json_populate_record is to send NULL::atype
+		// as the first argument, so we have to call the function with NULL
+		// inputs.
+		CalledOnNullInput: true,
 	}
 }
 

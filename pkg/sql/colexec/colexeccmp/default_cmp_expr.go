@@ -38,7 +38,7 @@ func NewComparisonExprAdapter(
 			expr:               expr,
 		}
 	}
-	nullable := expr.Op.NullableArgs
+	nullable := expr.Op.CalledOnNullInput
 	_, _, _, flipped, negate := tree.FoldComparisonExpr(op, nil /* left */, nil /* right */)
 	if nullable {
 		if flipped {

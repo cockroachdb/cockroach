@@ -829,9 +829,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
 			},
-			Info:         notUsableInfo,
-			Volatility:   volatility.Stable,
-			NullableArgs: true,
+			Info:              notUsableInfo,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 
@@ -960,8 +960,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
-			Volatility:   volatility.Stable,
-			NullableArgs: true,
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
 		},
 	),
 

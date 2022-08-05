@@ -48,7 +48,7 @@ func GetAggregateInfo(
 		match := true
 		for i, t := range typs {
 			if !inputTypes[i].Equivalent(t) {
-				if b.NullableArgs && inputTypes[i].IsAmbiguous() {
+				if b.CalledOnNullInput && inputTypes[i].IsAmbiguous() {
 					continue
 				}
 				match = false
@@ -141,7 +141,7 @@ func GetWindowFunctionInfo(
 		match := true
 		for i, t := range typs {
 			if !inputTypes[i].Equivalent(t) {
-				if b.NullableArgs && inputTypes[i].IsAmbiguous() {
+				if b.CalledOnNullInput && inputTypes[i].IsAmbiguous() {
 					continue
 				}
 				match = false
