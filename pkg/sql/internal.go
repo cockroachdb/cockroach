@@ -345,6 +345,10 @@ func (r *rowsIterator) Cur() tree.Datums {
 	return r.lastRow
 }
 
+func (r *rowsIterator) RowsAffected() int {
+	return r.rowsAffected
+}
+
 func (r *rowsIterator) Close() error {
 	// Closing the stmtBuf will tell the connExecutor to stop executing commands
 	// (if it hasn't exited yet).
