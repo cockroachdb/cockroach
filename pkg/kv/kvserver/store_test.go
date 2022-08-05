@@ -2937,7 +2937,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 	s := tc.store
 
-	cleanupNonEmpty1, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupNonEmpty1, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
@@ -2946,9 +2946,15 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
+		"unexpected snapshot queue length")
+	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
+		"unexpected snapshots in progress")
+	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvTotalInProgress.Value(),
+		"unexpected snapshots in progress")
 
 	// Ensure we allow a concurrent empty snapshot.
-	cleanupEmpty, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{})
+	cleanupEmpty, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2957,6 +2963,12 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
+		"unexpected snapshot queue length")
+	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
+		"unexpected snapshots in progress")
+	require.Equal(t, int64(2), s.Metrics().RangeSnapshotRecvTotalInProgress.Value(),
+		"unexpected snapshots in progress")
 	cleanupEmpty()
 
 	if n := s.ReservationCount(); n != 1 {
@@ -2970,18 +2982,38 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		if atomic.LoadInt32(&boom) == 0 {
+			if s.Metrics().RangeSnapshotRecvQueueLength.Value() != int64(1) {
+				t.Errorf("unexpected snapshot queue length; expected: %d, got: %d", 1,
+					s.Metrics().RangeSnapshotRecvQueueLength.Value())
+			}
+			if s.Metrics().RangeSnapshotRecvInProgress.Value() != int64(1) {
+				t.Errorf("unexpected snapshots in progress; expected: %d, got: %d", 1,
+					s.Metrics().RangeSnapshotRecvInProgress.Value())
+			}
 			cleanupNonEmpty1()
+		} else {
+			t.Errorf("next snapshot acquired reservation before previous called cleanup()")
 		}
 	}()
 
-	cleanupNonEmpty3, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupNonEmpty3, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	atomic.StoreInt32(&boom, 1)
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
+		"unexpected snapshot queue length")
+	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
+		"unexpected snapshots in progress")
+	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvTotalInProgress.Value(),
+		"unexpected snapshots in progress")
 	cleanupNonEmpty3()
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvInProgress.Value(),
+		"unexpected snapshots in progress")
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvTotalInProgress.Value(),
+		"unexpected snapshots in progress")
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
@@ -3017,7 +3049,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	}
 
 	// A snapshot should be allowed.
-	cleanupAccepted, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupAccepted, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
@@ -3091,7 +3123,7 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 				if err := func() error {
 					snapCtx, cancel := context.WithTimeout(ctx, timeout)
 					defer cancel()
-					cleanup, err := s.reserveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
+					cleanup, err := s.reserveReceiveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
 					if err != nil {
 						if errors.Is(err, context.DeadlineExceeded) {
 							return nil
