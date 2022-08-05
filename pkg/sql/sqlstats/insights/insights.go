@@ -68,7 +68,6 @@ var LatencyQuantileDetectorMemoryCap = settings.RegisterByteSizeSetting(
 	"sql.stats.insights.experimental.latency_quantile_detection.memory_limit",
 	"the maximum amount of memory allowed for tracking statement latencies",
 	1024*1024,
-	settings.NonNegativeInt,
 )
 
 // Metrics holds running measurements of various outliers-related runtime stats.
