@@ -490,12 +490,12 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 				castCtx := cCtx.PGString()
 
 				_ = addRow(
-					h.CastOid(src, tgt),      //oid
-					tree.NewDOid(src),        //cast source
-					tree.NewDOid(tgt),        //casttarget
-					tree.DNull,               //castfunc
-					tree.NewDString(castCtx), //castcontext
-					tree.DNull,               //castmethod
+					h.CastOid(src, tgt),      // oid
+					tree.NewDOid(src),        // cast source
+					tree.NewDOid(tgt),        // casttarget
+					tree.DNull,               // castfunc
+					tree.NewDString(castCtx), // castcontext
+					tree.DNull,               // castmethod
 				)
 			}
 		})
@@ -2370,6 +2370,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 							variadicType = oidZero
 						}
 						provolatile, proleakproof := builtin.Volatility.ToPostgres()
+						proisstrict := !builtin.CalledOnNullInput
 
 						err := addRow(
 							tree.NewDOid(builtin.Oid),                // oid
@@ -2385,7 +2386,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 							tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
 							tree.DBoolFalse,                          // prosecdef
 							tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
-							tree.DBoolFalse,                          // proisstrict
+							tree.MakeDBool(tree.DBool(proisstrict)),  // proisstrict
 							tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
 							tree.NewDString(provolatile),             // provolatile
 							tree.DNull,                               // proparallel
