@@ -104,14 +104,14 @@ func newSingleSorter_WITH_NULLS(t *types.T, dir execinfrapb.Ordering_Column_Dire
 // {{range .WidthOverloads}}
 
 type sort_TYPE_DIR_HANDLES_NULLSOp struct {
-	sortCol _GOTYPESLICE
 	// {{if .CanAbbreviate}}
 	allocator          *colmem.Allocator
 	abbreviatedSortCol []uint64
 	// {{end}}
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       _GOTYPESLICE
+	order         []int
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(
