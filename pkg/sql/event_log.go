@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -127,14 +128,12 @@ type eventLogEntry struct {
 	targetID int32
 
 	// event is the main event payload.
-	event eventpb.EventPayload
+	event logpb.EventPayload
 }
 
 // logEvent emits a cluster event in the context of a regular SQL
 // statement.
-func (p *planner) logEvent(
-	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
-) error {
+func (p *planner) logEvent(ctx context.Context, descID descpb.ID, event logpb.EventPayload) error {
 	return p.logEventsWithOptions(ctx,
 		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
@@ -232,7 +231,7 @@ func logEventInternalForSchemaChanges(
 	sqlInstanceID base.SQLInstanceID,
 	descID descpb.ID,
 	mutationID descpb.MutationID,
-	event eventpb.EventPayload,
+	event logpb.EventPayload,
 ) error {
 	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
 	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
@@ -334,7 +333,7 @@ func (l schemaChangerEventLogger) LogEvent(
 	ctx context.Context,
 	descID descpb.ID,
 	details eventpb.CommonSQLEventDetails,
-	event eventpb.EventPayload,
+	event logpb.EventPayload,
 ) error {
 	entry := eventLogEntry{targetID: int32(descID), event: event}
 	return logEventInternalForSQLStatements(ctx,
@@ -347,7 +346,7 @@ func (l schemaChangerEventLogger) LogEvent(
 }
 
 func (l schemaChangerEventLogger) LogEventForSchemaChange(
-	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
+	ctx context.Context, descID descpb.ID, event logpb.EventPayload,
 ) error {
 	event.CommonDetails().Timestamp = l.txn.ReadTimestamp().WallTime
 	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
@@ -373,7 +372,7 @@ func LogEventForJobs(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
-	event eventpb.EventPayload,
+	event logpb.EventPayload,
 	jobID int64,
 	payload jobspb.Payload,
 	user username.SQLUsername,
@@ -452,7 +451,7 @@ func InsertEventRecord(
 	reportingID int32,
 	dst LogEventDestination,
 	targetID int32,
-	info eventpb.EventPayload,
+	info logpb.EventPayload,
 ) error {
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
@@ -486,7 +485,7 @@ func insertEventRecords(
 	for i := range entries {
 		// Ensure the type field is populated.
 		event := entries[i].event
-		eventType := eventpb.GetEventTypeName(event)
+		eventType := logpb.GetEventTypeName(event)
 		event.CommonDetails().EventType = eventType
 
 		// The caller is responsible for the timestamp field.
@@ -554,7 +553,7 @@ VALUES($1, $2, $3, $4, $5)`
 		// In the system.eventlog table, we do not use redaction markers.
 		// (compatibility with previous versions of CockroachDB.)
 		infoBytes = infoBytes.StripMarkers()
-		eventType := eventpb.GetEventTypeName(event)
+		eventType := logpb.GetEventTypeName(event)
 		args = append(
 			args,
 			timeutil.Unix(0, event.CommonDetails().Timestamp),

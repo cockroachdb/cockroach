@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -14,15 +14,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strconv"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/cobra"
 )
 
 var versionMapFlags = struct {
-	file    string
-	version string
+	file       string
+	versionStr string
 }{}
 
 var versionMapCmd = &cobra.Command{
@@ -35,13 +35,20 @@ var versionMapCmd = &cobra.Command{
 func init() {
 	versionMapCmd.Flags().StringVar(&versionMapFlags.file, "version-map-file",
 		"pkg/cmd/roachtest/tests/predecessor_version.json", "version map json file")
-	versionMapCmd.Flags().StringVar(&versionMapFlags.version, versionFlag, "", "cockroachdb version")
+	versionMapCmd.Flags().StringVar(&versionMapFlags.versionStr, versionFlag, "", "cockroachdb version")
 	_ = versionMapCmd.MarkFlagRequired(versionFlag)
 }
 
 type versionMap map[string]string
 
 func updateVersionMap(_ *cobra.Command, _ []string) error {
+	// make sure we have the leading "v" in the version
+	versionMapFlags.versionStr = "v" + strings.TrimPrefix(versionMapFlags.versionStr, "v")
+	var err error
+	version, err := semver.NewVersion(versionMapFlags.versionStr)
+	if err != nil {
+		return fmt.Errorf("cannot parse version %s: %w", updateVersionsFlags.versionStr, err)
+	}
 	content, err := ioutil.ReadFile(versionMapFlags.file)
 	if err != nil {
 		return fmt.Errorf("cannot open %s: %w", versionMapFlags.file, err)
@@ -51,19 +58,16 @@ func updateVersionMap(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("cannot unmarshal %s: %w", versionMapFlags.file, err)
 	}
-	// The version upgrade version map uses versions without the "v" prefix
-	version := strings.TrimPrefix(versionMapFlags.version, "v")
-	nextSeries, err := nextReleaseSeries(version)
-	if err != nil {
-		return fmt.Errorf("cannot determine next release series for %s: %w", version, err)
-	}
+	nextSeries := nextReleaseSeries(version)
 	// If there is no entry in the version map, probably this is the major version release case,
 	// where we also should update the fixtures. Bail for now.
 	if _, ok := verMap[nextSeries]; !ok {
 		return fmt.Errorf("cannot create a new major release entry for %s in verMap", nextSeries)
 	}
-	// replace the previous version with the current one
-	verMap[nextSeries] = version
+	// The version upgrade version map uses versions without the "v" prefix.
+	// Replace the previous version with the current one. Note instead of using Original(),
+	// which returns the version with a leading "v", we use String() with returns the version without it.
+	verMap[nextSeries] = version.String()
 	out, err := json.MarshalIndent(verMap, "", "  ")
 	if err != nil {
 		return fmt.Errorf("cannot marshal: %w", err)
@@ -77,24 +81,13 @@ func updateVersionMap(_ *cobra.Command, _ []string) error {
 }
 
 // nextReleaseSeries parses the version and returns the next release series assuming we have 2 releases yearly
-func nextReleaseSeries(version string) (string, error) {
-	parts := strings.Split(version, ".")
-	if len(parts) < 3 {
-		return "", fmt.Errorf("cannot use %s with less than 3 parts", version)
-	}
-	first, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return "", fmt.Errorf("cannot parse %s first part", version)
-	}
-	second, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return "", fmt.Errorf("cannot parse %s second part", version)
-	}
-	second++
+func nextReleaseSeries(version *semver.Version) string {
+	nextMinor := version.IncMinor()
 	// TODO(rail): revisit when we have more than 2 releases a year
-	if second > 2 {
-		second = 1
-		first++
+	if nextMinor.Minor() > 2 {
+		nextMinor = nextMinor.IncMajor()
+		// IncMajor() resets all version parts to 0, thus we need to bump the minor part to match our version schema.
+		nextMinor = nextMinor.IncMinor()
 	}
-	return fmt.Sprintf("%d.%d", first, second), nil
+	return fmt.Sprintf("%d.%d", nextMinor.Major(), nextMinor.Minor())
 }

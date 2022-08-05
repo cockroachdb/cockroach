@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -997,7 +998,7 @@ func (s *TestState) LogEvent(
 	_ context.Context,
 	descID descpb.ID,
 	details eventpb.CommonSQLEventDetails,
-	event eventpb.EventPayload,
+	event logpb.EventPayload,
 ) error {
 	s.LogSideEffectf("write %T to event log for descriptor #%d: %s",
 		event, descID, details.Statement)
@@ -1006,7 +1007,7 @@ func (s *TestState) LogEvent(
 
 // LogEventForSchemaChange implements scexec.EventLogger
 func (s *TestState) LogEventForSchemaChange(
-	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
+	ctx context.Context, descID descpb.ID, event logpb.EventPayload,
 ) error {
 	s.LogSideEffectf("write %T to event log for descriptor %d",
 		event, descID)

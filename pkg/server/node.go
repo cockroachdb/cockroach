@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -926,7 +927,7 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, must
 // join" or "node restart" event. This query will retry until it succeeds or the
 // server stops.
 func (n *Node) recordJoinEvent(ctx context.Context) {
-	var event eventpb.EventPayload
+	var event logpb.EventPayload
 	var nodeDetails *eventpb.CommonNodeEventDetails
 	if !n.initialStart {
 		ev := &eventpb.NodeRestart{}

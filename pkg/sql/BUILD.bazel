@@ -465,6 +465,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logcrash",
+        "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
         "//pkg/util/memzipper",
         "//pkg/util/metric",

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -171,7 +172,7 @@ func captureIndexUsageStats(
 	// Capture index usage statistics for each database.
 	var ok bool
 	expectedNumDatums := 9
-	var allCapturedIndexUsageStats []eventpb.EventPayload
+	var allCapturedIndexUsageStats []logpb.EventPayload
 	for _, databaseName := range allDatabaseNames {
 		// Omit index usage statistics on the default databases 'system',
 		// 'defaultdb', and 'postgres'.
@@ -262,7 +263,7 @@ func captureIndexUsageStats(
 // Currently, this log-line limit is only shared with 1 other telemetry event,
 // SampledQuery, which now has a logging frequency of 8 logs per second.
 func logIndexUsageStatsWithDelay(
-	ctx context.Context, events []eventpb.EventPayload, stopper *stop.Stopper, delay time.Duration,
+	ctx context.Context, events []logpb.EventPayload, stopper *stop.Stopper, delay time.Duration,
 ) {
 
 	// Log the first event immediately.

@@ -13,13 +13,14 @@ package eventpb
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestEventJSON(t *testing.T) {
 	testCases := []struct {
-		ev  EventPayload
+		ev  logpb.EventPayload
 		exp string
 	}{
 		// Check that sensitive fields get redaction markers.

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -1317,7 +1318,7 @@ WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, f
 	require.Equal(t, 2, len(schedules))
 
 	expectedCreateSchedule := eventpb.RecoveryEvent{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
 		RecoveryType:            createdScheduleEventType,
@@ -1344,7 +1345,7 @@ WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, f
 	require.NoError(t, th.executeSchedules())
 
 	expectedScheduledBackup := eventpb.RecoveryEvent{
-		CommonEventDetails: eventpb.CommonEventDetails{
+		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
 		RecoveryType:            scheduledBackupEventType,
