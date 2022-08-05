@@ -84,10 +84,10 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 // {{define "projConstOp"}}
 
 type _OP_CONST_NAME struct {
-	projConstOpBase
 	// {{if .NeedsBinaryOverloadHelper}}
 	colexecutils.BinaryOverloadHelper
 	// {{end}}
+	projConstOpBase
 	// {{if _IS_CONST_LEFT}}
 	constArg _L_GO_TYPE
 	// {{else}}

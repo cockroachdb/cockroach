@@ -139,6 +139,8 @@ func newPartitioner(t *types.T, nullsAreDistinct bool) partitioner {
 // true to the resultant bool column for every value that differs from the
 // previous one.
 type distinct_TYPEOp struct {
+	colexecop.OneInputHelper
+
 	// outputCol is the boolean output column. It is shared by all of the
 	// other distinct operators in a distinct operator set.
 	outputCol []bool
@@ -146,8 +148,6 @@ type distinct_TYPEOp struct {
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal _GOTYPE
-
-	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int

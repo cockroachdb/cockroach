@@ -813,8 +813,8 @@ func (p projBitandInt64Int64Op) Next() coldata.Batch {
 }
 
 type projBitandDatumDatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projBitandDatumDatumOp) Next() coldata.Batch {
@@ -1680,8 +1680,8 @@ func (p projBitorInt64Int64Op) Next() coldata.Batch {
 }
 
 type projBitorDatumDatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projBitorDatumDatumOp) Next() coldata.Batch {
@@ -2547,8 +2547,8 @@ func (p projBitxorInt64Int64Op) Next() coldata.Batch {
 }
 
 type projBitxorDatumDatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projBitxorDatumDatumOp) Next() coldata.Batch {
@@ -3542,8 +3542,8 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 }
 
 type projPlusInt16DatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusInt16DatumOp) Next() coldata.Batch {
@@ -4110,8 +4110,8 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 }
 
 type projPlusInt32DatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusInt32DatumOp) Next() coldata.Batch {
@@ -4678,8 +4678,8 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 }
 
 type projPlusInt64DatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusInt64DatumOp) Next() coldata.Batch {
@@ -5170,8 +5170,8 @@ func (p projPlusIntervalIntervalOp) Next() coldata.Batch {
 }
 
 type projPlusIntervalDatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusIntervalDatumOp) Next() coldata.Batch {
@@ -5298,8 +5298,8 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 }
 
 type projPlusDatumIntervalOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusDatumIntervalOp) Next() coldata.Batch {
@@ -5426,8 +5426,8 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 }
 
 type projPlusDatumInt16Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusDatumInt16Op) Next() coldata.Batch {
@@ -5554,8 +5554,8 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 }
 
 type projPlusDatumInt32Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusDatumInt32Op) Next() coldata.Batch {
@@ -5682,8 +5682,8 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 }
 
 type projPlusDatumInt64Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projPlusDatumInt64Op) Next() coldata.Batch {
@@ -6694,8 +6694,8 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 }
 
 type projMinusInt16DatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusInt16DatumOp) Next() coldata.Batch {
@@ -7262,8 +7262,8 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 }
 
 type projMinusInt32DatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusInt32DatumOp) Next() coldata.Batch {
@@ -7830,8 +7830,8 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 }
 
 type projMinusInt64DatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusInt64DatumOp) Next() coldata.Batch {
@@ -8314,8 +8314,8 @@ func (p projMinusIntervalIntervalOp) Next() coldata.Batch {
 }
 
 type projMinusIntervalDatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusIntervalDatumOp) Next() coldata.Batch {
@@ -8832,8 +8832,8 @@ func (p projMinusJSONInt64Op) Next() coldata.Batch {
 }
 
 type projMinusDatumDatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusDatumDatumOp) Next() coldata.Batch {
@@ -8943,8 +8943,8 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 }
 
 type projMinusDatumIntervalOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusDatumIntervalOp) Next() coldata.Batch {
@@ -9071,8 +9071,8 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 }
 
 type projMinusDatumBytesOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusDatumBytesOp) Next() coldata.Batch {
@@ -9197,8 +9197,8 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 }
 
 type projMinusDatumInt16Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusDatumInt16Op) Next() coldata.Batch {
@@ -9325,8 +9325,8 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 }
 
 type projMinusDatumInt32Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusDatumInt32Op) Next() coldata.Batch {
@@ -9453,8 +9453,8 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 }
 
 type projMinusDatumInt64Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projMinusDatumInt64Op) Next() coldata.Batch {
@@ -21205,8 +21205,8 @@ func (p projConcatJSONJSONOp) Next() coldata.Batch {
 }
 
 type projConcatDatumDatumOp struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projConcatDatumDatumOp) Next() coldata.Batch {
@@ -22288,8 +22288,8 @@ func (p projLShiftInt64Int64Op) Next() coldata.Batch {
 }
 
 type projLShiftDatumInt16Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projLShiftDatumInt16Op) Next() coldata.Batch {
@@ -22416,8 +22416,8 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 }
 
 type projLShiftDatumInt32Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projLShiftDatumInt32Op) Next() coldata.Batch {
@@ -22544,8 +22544,8 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 }
 
 type projLShiftDatumInt64Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projLShiftDatumInt64Op) Next() coldata.Batch {
@@ -23644,8 +23644,8 @@ func (p projRShiftInt64Int64Op) Next() coldata.Batch {
 }
 
 type projRShiftDatumInt16Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projRShiftDatumInt16Op) Next() coldata.Batch {
@@ -23772,8 +23772,8 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 }
 
 type projRShiftDatumInt32Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projRShiftDatumInt32Op) Next() coldata.Batch {
@@ -23900,8 +23900,8 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 }
 
 type projRShiftDatumInt64Op struct {
-	projOpBase
 	colexecutils.BinaryOverloadHelper
+	projOpBase
 }
 
 func (p projRShiftDatumInt64Op) Next() coldata.Batch {

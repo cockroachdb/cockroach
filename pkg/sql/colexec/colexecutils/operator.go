@@ -113,12 +113,11 @@ func (s *fixedNumTuplesNoInputOp) Next() coldata.Batch {
 //   ---------------------              in column at position of N+1)
 //
 type vectorTypeEnforcer struct {
-	colexecop.OneInputInitCloserHelper
 	colexecop.NonExplainable
-
 	allocator *colmem.Allocator
 	typ       *types.T
-	idx       int
+	colexecop.OneInputInitCloserHelper
+	idx int
 }
 
 var _ colexecop.ResettableOperator = &vectorTypeEnforcer{}
