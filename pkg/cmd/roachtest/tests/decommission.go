@@ -304,7 +304,9 @@ func runDecommission(
 			}
 
 			if whileDown {
-				h.stop(ctx, node)
+				if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
+					return err
+				}
 			}
 
 			run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"-node%d"}'`, node))
@@ -319,7 +321,9 @@ func runDecommission(
 			}
 
 			if !whileDown {
-				h.stop(ctx, node)
+				if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
+					return err
+				}
 			}
 
 			// Wipe the node and re-add to cluster with a new node ID.
@@ -1148,14 +1152,6 @@ func newDecommTestHelper(t test.Test, c cluster.Cluster) *decommTestHelper {
 		nodeIDs:           nodeIDs,
 		randNodeBlocklist: map[int]struct{}{},
 	}
-}
-
-// stop gracefully stops a node with a signal.
-func (h *decommTestHelper) stop(ctx context.Context, node int) {
-	opts := option.DefaultStopOpts()
-	opts.RoachprodOpts.Sig = 15 // SIGTERM
-	opts.RoachprodOpts.Wait = true
-	h.c.Stop(ctx, h.t.L(), opts, h.c.Node(node))
 }
 
 // getLogicalNodeID connects to the nodeIdx-th node in the roachprod cluster to
