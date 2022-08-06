@@ -107,6 +107,10 @@ type tokensLinearModel struct {
 	constant int64
 }
 
+func (m tokensLinearModel) applyLinearModel(b int64) int64 {
+	return int64(float64(b)*m.multiplier) + m.constant
+}
+
 // tokensLinearModelFitter fits y = multiplier.x + constant, based on the
 // current interval and then exponentially smooths the multiplier and
 // constant.
@@ -252,10 +256,17 @@ type storePerWorkTokenEstimator struct {
 	atAdmissionWorkTokens         int64
 	atDoneWriteTokensLinearModel  tokensLinearModelFitter
 	atDoneIngestTokensLinearModel tokensLinearModelFitter
+	// Unlike the models above that model bytes into L0, for disk bandwidth
+	// tokens we need to look at all the incoming bytes into the LSM. There is
+	// of course a multiplier over these incoming bytes, in the actual disk
+	// bandwidth consumed -- that is the concern of the code in
+	// disk_bandwidth.go and not the code in this file.
+	atDoneDiskBWTokensLinearModel tokensLinearModelFitter
 
-	cumStoreAdmissionStats storeAdmissionStats
-	cumL0WriteBytes        uint64
-	cumL0IngestedBytes     uint64
+	cumStoreAdmissionStats      storeAdmissionStats
+	cumL0WriteBytes             uint64
+	cumL0IngestedBytes          uint64
+	cumLSMWriteAndIngestedBytes uint64
 
 	// Tracked for logging and copied out of here.
 	aux perWorkTokensAux
@@ -267,19 +278,22 @@ type perWorkTokensAux struct {
 	intWorkCount                int64
 	intL0WriteBytes             int64
 	intL0IngestedBytes          int64
+	intLSMWriteAndIngestedBytes int64
 	intL0WriteAccountedBytes    int64
-	intL0IngestedAccountedBytes int64
+	intIngestedAccountedBytes   int64
 	intWriteLinearModel         tokensLinearModel
 	intIngestedLinearModel      tokensLinearModel
+	intDiskBWLinearModel        tokensLinearModel
 
 	// The bypassed count and bytes are also included in the overall interval
 	// stats.
-	intBypassedWorkCount                int64
-	intL0WriteBypassedAccountedBytes    int64
-	intL0IngestedBypassedAccountedBytes int64
+	intBypassedWorkCount              int64
+	intL0WriteBypassedAccountedBytes  int64
+	intIngestedBypassedAccountedBytes int64
 
-	// The ignored bytes are included in intL0IngestedBytes, and may even be
-	// higher than that value because these are from a different source.
+	// The ignored bytes are included in intL0IngestedBytes, and in
+	// intLSMWriteAndIngestedBytes, and may even be higher than that value
+	// because these are from a different source.
 	intL0IgnoredIngestedBytes int64
 }
 
@@ -288,17 +302,21 @@ func makeStorePerWorkTokenEstimator() storePerWorkTokenEstimator {
 		atAdmissionWorkTokens:         1,
 		atDoneWriteTokensLinearModel:  makeTokensLinearModelFitter(0.5, 3, false),
 		atDoneIngestTokensLinearModel: makeTokensLinearModelFitter(0.001, 1.5, true),
+		atDoneDiskBWTokensLinearModel: makeTokensLinearModelFitter(0.5, 3, false),
 	}
 }
 
 // NB: first call to updateEstimates only initializes the cumulative values.
 func (e *storePerWorkTokenEstimator) updateEstimates(
-	l0Metrics pebble.LevelMetrics, admissionStats storeAdmissionStats,
+	l0Metrics pebble.LevelMetrics,
+	cumLSMWriteAndIngestedBytes uint64,
+	admissionStats storeAdmissionStats,
 ) {
 	if e.cumL0WriteBytes == 0 {
 		e.cumStoreAdmissionStats = admissionStats
 		e.cumL0WriteBytes = l0Metrics.BytesFlushed
 		e.cumL0IngestedBytes = l0Metrics.BytesIngested
+		e.cumLSMWriteAndIngestedBytes = cumLSMWriteAndIngestedBytes
 		return
 	}
 	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
@@ -313,14 +331,26 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		int64(e.cumStoreAdmissionStats.admittedCount)
 	intL0WriteAccountedBytes :=
 		int64(admissionStats.writeAccountedBytes) - int64(e.cumStoreAdmissionStats.writeAccountedBytes)
-	// Note that these are not really L0 ingested bytes, since we don't know how
+	// Note that these are not L0 ingested bytes, since we don't know how
 	// many did go to L0.
-	intL0IngestedAccountedBytes := int64(admissionStats.ingestedAccountedBytes) -
+	intIngestedAccountedBytes := int64(admissionStats.ingestedAccountedBytes) -
 		int64(e.cumStoreAdmissionStats.ingestedAccountedBytes)
 	e.atDoneWriteTokensLinearModel.updateModelUsingIntervalStats(
 		intL0WriteAccountedBytes, intL0WriteBytes, intWorkCount)
 	e.atDoneIngestTokensLinearModel.updateModelUsingIntervalStats(
-		intL0IngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
+		intIngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
+	// Disk bandwidth model.
+	intLSMWriteAndIngestedBytes := int64(cumLSMWriteAndIngestedBytes) -
+		int64(e.cumLSMWriteAndIngestedBytes)
+	intIgnoredIngestedBytes :=
+		int64(admissionStats.statsToIgnore.Bytes) - int64(e.cumStoreAdmissionStats.statsToIgnore.Bytes)
+	adjustedIntLSMWriteAndIngestedBytes := intLSMWriteAndIngestedBytes - intIgnoredIngestedBytes
+	if adjustedIntLSMWriteAndIngestedBytes < 0 {
+		adjustedIntLSMWriteAndIngestedBytes = 0
+	}
+	e.atDoneDiskBWTokensLinearModel.updateModelUsingIntervalStats(
+		intL0WriteAccountedBytes+intIngestedAccountedBytes, adjustedIntLSMWriteAndIngestedBytes,
+		intWorkCount)
 
 	intL0TotalBytes := intL0WriteBytes + adjustedIntL0IngestedBytes
 	if intWorkCount > 1 && intL0TotalBytes > 0 {
@@ -335,15 +365,17 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		intWorkCount:                intWorkCount,
 		intL0WriteBytes:             intL0WriteBytes,
 		intL0IngestedBytes:          intL0IngestedBytes,
+		intLSMWriteAndIngestedBytes: intLSMWriteAndIngestedBytes,
 		intL0WriteAccountedBytes:    intL0WriteAccountedBytes,
-		intL0IngestedAccountedBytes: intL0IngestedAccountedBytes,
+		intIngestedAccountedBytes:   intIngestedAccountedBytes,
 		intWriteLinearModel:         e.atDoneWriteTokensLinearModel.intLinearModel,
 		intIngestedLinearModel:      e.atDoneIngestTokensLinearModel.intLinearModel,
+		intDiskBWLinearModel:        e.atDoneDiskBWTokensLinearModel.intLinearModel,
 		intBypassedWorkCount: int64(admissionStats.aux.bypassedCount) -
 			int64(e.cumStoreAdmissionStats.aux.bypassedCount),
 		intL0WriteBypassedAccountedBytes: int64(admissionStats.aux.writeBypassedAccountedBytes) -
 			int64(e.cumStoreAdmissionStats.aux.writeBypassedAccountedBytes),
-		intL0IngestedBypassedAccountedBytes: int64(admissionStats.aux.ingestedBypassedAccountedBytes) -
+		intIngestedBypassedAccountedBytes: int64(admissionStats.aux.ingestedBypassedAccountedBytes) -
 			int64(e.cumStoreAdmissionStats.aux.ingestedBypassedAccountedBytes),
 		intL0IgnoredIngestedBytes: intL0IgnoredIngestedBytes,
 	}
@@ -351,6 +383,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	e.cumStoreAdmissionStats = admissionStats
 	e.cumL0WriteBytes = l0Metrics.BytesFlushed
 	e.cumL0IngestedBytes = l0Metrics.BytesIngested
+	e.cumLSMWriteAndIngestedBytes = cumLSMWriteAndIngestedBytes
 }
 
 func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() storeRequestEstimates {
@@ -360,7 +393,9 @@ func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() store
 func (e *storePerWorkTokenEstimator) getModelsAtAdmittedDone() (
 	writeLM tokensLinearModel,
 	ingestedLM tokensLinearModel,
+	diskBWLM tokensLinearModel,
 ) {
 	return e.atDoneWriteTokensLinearModel.smoothedLinearModel,
-		e.atDoneIngestTokensLinearModel.smoothedLinearModel
+		e.atDoneIngestTokensLinearModel.smoothedLinearModel,
+		e.atDoneDiskBWTokensLinearModel.smoothedLinearModel
 }
