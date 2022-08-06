@@ -43,12 +43,15 @@ const (
 //
 // The second return parameter always contains a single []byte, unless
 // "skeleton" LikeOpType is returned.
-func GetLikeOperatorType(pattern string) (LikeOpType, [][]byte, error) {
+func GetLikeOperatorType(pattern string, caseInsensitive bool) (LikeOpType, [][]byte, error) {
 	if pattern == "" {
 		return LikeConstant, [][]byte{{}}, nil
 	}
 	if pattern == "%" {
 		return LikeAlwaysMatch, [][]byte{{}}, nil
+	}
+	if caseInsensitive {
+		pattern = strings.ToUpper(pattern)
 	}
 	hasEscape := strings.Contains(pattern, `\`)
 	if !hasEscape && len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {

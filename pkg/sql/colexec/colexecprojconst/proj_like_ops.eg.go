@@ -19,12 +19,14 @@ import (
 
 type projPrefixBytesBytesConstOp struct {
 	projConstOpBase
-	constArg []byte
-	negate   bool
+	constArg        []byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -50,6 +52,9 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 					}
 				}
@@ -60,6 +65,9 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 					}
 				}
@@ -70,6 +78,9 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 				}
 			} else {
@@ -77,6 +88,9 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					projCol[i] = bytes.HasPrefix(arg, p.constArg) != _negate
 				}
 			}
@@ -87,12 +101,14 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 
 type projSuffixBytesBytesConstOp struct {
 	projConstOpBase
-	constArg []byte
-	negate   bool
+	constArg        []byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -118,6 +134,9 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 					}
 				}
@@ -128,6 +147,9 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 					}
 				}
@@ -138,6 +160,9 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 				}
 			} else {
@@ -145,6 +170,9 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					projCol[i] = bytes.HasSuffix(arg, p.constArg) != _negate
 				}
 			}
@@ -155,12 +183,14 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 
 type projContainsBytesBytesConstOp struct {
 	projConstOpBase
-	constArg []byte
-	negate   bool
+	constArg        []byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -186,6 +216,9 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 					}
 				}
@@ -196,6 +229,9 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 					}
 				}
@@ -206,6 +242,9 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 				}
 			} else {
@@ -213,6 +252,9 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					projCol[i] = bytes.Contains(arg, p.constArg) != _negate
 				}
 			}
@@ -223,12 +265,14 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 
 type projSkeletonBytesBytesConstOp struct {
 	projConstOpBase
-	constArg [][]byte
-	negate   bool
+	constArg        [][]byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -256,6 +300,9 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 						arg := col.Get(i)
 
 						{
+							if _caseInsensitive {
+								arg = bytes.ToUpper(arg)
+							}
 							var idx, skeletonIdx int
 							for skeletonIdx < len(p.constArg) {
 								idx = bytes.Index(arg, p.constArg[skeletonIdx])
@@ -278,6 +325,9 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 						arg := col.Get(i)
 
 						{
+							if _caseInsensitive {
+								arg = bytes.ToUpper(arg)
+							}
 							var idx, skeletonIdx int
 							for skeletonIdx < len(p.constArg) {
 								idx = bytes.Index(arg, p.constArg[skeletonIdx])
@@ -300,6 +350,9 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 					arg := col.Get(i)
 
 					{
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						var idx, skeletonIdx int
 						for skeletonIdx < len(p.constArg) {
 							idx = bytes.Index(arg, p.constArg[skeletonIdx])
@@ -319,6 +372,9 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 					arg := col.Get(i)
 
 					{
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						var idx, skeletonIdx int
 						for skeletonIdx < len(p.constArg) {
 							idx = bytes.Index(arg, p.constArg[skeletonIdx])
