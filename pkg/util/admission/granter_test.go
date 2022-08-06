@@ -37,10 +37,11 @@ import (
 )
 
 type testRequester struct {
-	workKind   WorkKind
-	granter    granter
-	usesTokens bool
-	buf        *strings.Builder
+	workKind     WorkKind
+	additionalID string
+	granter      granter
+	usesTokens   bool
+	buf          *strings.Builder
 
 	waitingRequests        bool
 	returnValueFromGranted int64
@@ -48,14 +49,14 @@ type testRequester struct {
 }
 
 var _ requester = &testRequester{}
-var _ storeRequester = &testRequester{}
 
 func (tr *testRequester) hasWaitingRequests() bool {
 	return tr.waitingRequests
 }
 
 func (tr *testRequester) granted(grantChainID grantChainID) int64 {
-	fmt.Fprintf(tr.buf, "%s: granted in chain %d, and returning %d\n", workKindString(tr.workKind),
+	fmt.Fprintf(tr.buf, "%s%s: granted in chain %d, and returning %d\n",
+		workKindString(tr.workKind), tr.additionalID,
 		grantChainID, tr.returnValueFromGranted)
 	tr.grantChainID = grantChainID
 	return tr.returnValueFromGranted
@@ -65,30 +66,50 @@ func (tr *testRequester) close() {}
 
 func (tr *testRequester) tryGet(count int64) {
 	rv := tr.granter.tryGet(count)
-	fmt.Fprintf(tr.buf, "%s: tryGet(%d) returned %t\n", workKindString(tr.workKind), count, rv)
+	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", workKindString(tr.workKind),
+		tr.additionalID, count, rv)
 }
 
 func (tr *testRequester) returnGrant(count int64) {
-	fmt.Fprintf(tr.buf, "%s: returnGrant(%d)\n", workKindString(tr.workKind), count)
+	fmt.Fprintf(tr.buf, "%s%s: returnGrant(%d)\n", workKindString(tr.workKind), tr.additionalID,
+		count)
 	tr.granter.returnGrant(count)
 }
 
 func (tr *testRequester) tookWithoutPermission(count int64) {
-	fmt.Fprintf(tr.buf, "%s: tookWithoutPermission(%d)\n", workKindString(tr.workKind), count)
+	fmt.Fprintf(tr.buf, "%s%s: tookWithoutPermission(%d)\n", workKindString(tr.workKind),
+		tr.additionalID, count)
 	tr.granter.tookWithoutPermission(count)
 }
 
 func (tr *testRequester) continueGrantChain() {
-	fmt.Fprintf(tr.buf, "%s: continueGrantChain\n", workKindString(tr.workKind))
+	fmt.Fprintf(tr.buf, "%s%s: continueGrantChain\n", workKindString(tr.workKind),
+		tr.additionalID)
 	tr.granter.continueGrantChain(tr.grantChainID)
 }
 
-func (tr *testRequester) getStoreAdmissionStats() storeAdmissionStats {
+type storeTestRequester struct {
+	requesters [numWorkClasses]*testRequester
+}
+
+var _ storeRequester = &storeTestRequester{}
+
+func (str *storeTestRequester) getRequesters() [numWorkClasses]requester {
+	var rv [numWorkClasses]requester
+	for i := range str.requesters {
+		rv[i] = str.requesters[i]
+	}
+	return rv
+}
+
+func (str *storeTestRequester) close() {}
+
+func (str *storeTestRequester) getStoreAdmissionStats() storeAdmissionStats {
 	// Only used by ioLoadListener, so don't bother.
 	return storeAdmissionStats{}
 }
 
-func (tr *testRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
+func (str *storeTestRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
 	// Only used by ioLoadListener, so don't bother.
 }
 
@@ -119,7 +140,9 @@ func TestGranterBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var ambientCtx log.AmbientContext
-	var requesters [numWorkKinds]*testRequester
+	// requesters[numWorkKinds] is used for kv elastic work, when working with a
+	// store grant coordinator.
+	var requesters [numWorkKinds + 1]*testRequester
 	var coord *GrantCoordinator
 	var ssg *SoftSlotGranter
 	clearRequesterAndCoord := func() {
@@ -188,16 +211,29 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, granter granterWithStoreWriteDone,
+					ambientCtx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
 					settings *cluster.Settings, opts workQueueOptions) storeRequester {
-					req := &testRequester{
-						workKind:               KVWork,
-						granter:                granter,
-						usesTokens:             true,
-						buf:                    &buf,
-						returnValueFromGranted: 0,
+					makeTestRequester := func(wc workClass) *testRequester {
+						req := &testRequester{
+							workKind:               KVWork,
+							granter:                granters[wc],
+							usesTokens:             true,
+							buf:                    &buf,
+							returnValueFromGranted: 0,
+						}
+						switch wc {
+						case regularWorkClass:
+							req.additionalID = "-regular"
+						case elasticWorkClass:
+							req.additionalID = "-elastic"
+						}
+						return req
 					}
-					requesters[KVWork] = req
+					req := &storeTestRequester{}
+					req.requesters[regularWorkClass] = makeTestRequester(regularWorkClass)
+					req.requesters[elasticWorkClass] = makeTestRequester(elasticWorkClass)
+					requesters[KVWork] = req.requesters[regularWorkClass]
+					requesters[numWorkKinds] = req.requesters[elasticWorkClass]
 					return req
 				},
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
@@ -210,6 +246,12 @@ func TestGranterBasic(t *testing.T) {
 			unsafeGranter, ok := storeCoordinators.gcMap.Load(int64(1))
 			require.True(t, ok)
 			coord = (*GrantCoordinator)(unsafeGranter)
+			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
+			// Use the same model for all 3 kinds of models.
+			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
+			coord.mu.Lock()
+			kvStoreGranter.setAdmittedDoneModelsLocked(tlm, tlm, tlm)
+			coord.mu.Unlock()
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -285,6 +327,27 @@ func TestGranterBasic(t *testing.T) {
 			coord.testingTryGrant()
 			return flushAndReset()
 
+		case "set-elastic-disk-bw-tokens":
+			var tokens int
+			d.ScanArgs(t, "tokens", &tokens)
+			// We are not using a real ioLoadListener, and simply setting the
+			// tokens (the ioLoadListener has its own test).
+			coord.mu.Lock()
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableElasticDiskBandwidthTokensLocked(
+				int64(tokens))
+			coord.mu.Unlock()
+			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "store-write-done":
+			var origTokens, writeBytes int
+			d.ScanArgs(t, "orig-tokens", &origTokens)
+			d.ScanArgs(t, "write-bytes", &writeBytes)
+			requesters[scanWorkKind(t, d)].granter.(granterWithStoreWriteDone).storeWriteDone(
+				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
+			coord.testingTryGrant()
+			return flushAndReset()
+
 		case "try-get-soft-slots":
 			var slots int
 			d.ScanArgs(t, "slots", &slots)
@@ -304,20 +367,22 @@ func TestGranterBasic(t *testing.T) {
 	})
 }
 
-func scanWorkKind(t *testing.T, d *datadriven.TestData) WorkKind {
+func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {
 	var kindStr string
 	d.ScanArgs(t, "work", &kindStr)
 	switch kindStr {
 	case "kv":
-		return KVWork
+		return int8(KVWork)
 	case "sql-kv-response":
-		return SQLKVResponseWork
+		return int8(SQLKVResponseWork)
 	case "sql-sql-response":
-		return SQLSQLResponseWork
+		return int8(SQLSQLResponseWork)
 	case "sql-leaf-start":
-		return SQLStatementLeafStartWork
+		return int8(SQLStatementLeafStartWork)
 	case "sql-root-start":
-		return SQLStatementRootStartWork
+		return int8(SQLStatementRootStartWork)
+	case "kv-elastic":
+		return int8(numWorkKinds)
 	}
 	panic("unknown WorkKind")
 }
@@ -375,10 +440,16 @@ func TestStoreCoordinators(t *testing.T) {
 		Settings:          settings,
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, granter granterWithStoreWriteDone, settings *cluster.Settings,
-			opts workQueueOptions) storeRequester {
-			req := makeRequesterFunc(ctx, KVWork, granter, settings, opts)
-			return req.(*testRequester)
+			ctx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+			settings *cluster.Settings, opts workQueueOptions) storeRequester {
+			reqReg := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, opts)
+			reqElastic := makeRequesterFunc(ctx, KVWork, granters[elasticWorkClass], settings, opts)
+			str := &storeTestRequester{}
+			str.requesters[regularWorkClass] = reqReg.(*testRequester)
+			str.requesters[regularWorkClass].additionalID = "-regular"
+			str.requesters[elasticWorkClass] = reqElastic.(*testRequester)
+			str.requesters[elasticWorkClass].additionalID = "-elastic"
+			return str
 		},
 	}
 	coords, _ := NewGrantCoordinators(ambientCtx, opts)
@@ -392,8 +463,8 @@ func TestStoreCoordinators(t *testing.T) {
 	// Setting the metrics provider will cause the initialization of two
 	// GrantCoordinators for the two stores.
 	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, &mp)
-	// Now we have 1+2 = 3 KVWork requesters.
-	require.Equal(t, 3, len(requesters))
+	// Now we have 1+2*2 = 5 KVWork requesters.
+	require.Equal(t, 5, len(requesters))
 	// Confirm that the store IDs are as expected.
 	var actualStores []int32
 
@@ -415,7 +486,9 @@ func TestStoreCoordinators(t *testing.T) {
 		requesters[i].tryGet(1)
 	}
 	require.Equal(t,
-		"kv: tryGet(1) returned false\nkv: tryGet(1) returned true\nkv: tryGet(1) returned true\n",
+		"kv: tryGet(1) returned false\n"+
+			"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n"+
+			"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n",
 		buf.String())
 	coords.Close()
 }
@@ -427,15 +500,11 @@ type testRequesterForIOLL struct {
 
 var _ storeRequester = &testRequesterForIOLL{}
 
-func (r *testRequesterForIOLL) hasWaitingRequests() bool {
-	panic("unimplemented")
-}
-
-func (r *testRequesterForIOLL) granted(grantChainID grantChainID) int64 {
-	panic("unimplemented")
-}
-
 func (r *testRequesterForIOLL) close() {}
+
+func (r *testRequesterForIOLL) getRequesters() [numWorkClasses]requester {
+	panic("unimplemented")
+}
 
 func (r *testRequesterForIOLL) getStoreAdmissionStats() storeAdmissionStats {
 	return r.stats
@@ -446,8 +515,9 @@ func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEs
 }
 
 type testGranterWithIOTokens struct {
-	buf           strings.Builder
-	allTokensUsed bool
+	buf                     strings.Builder
+	allTokensUsed           bool
+	diskBandwidthTokensUsed [numWorkClasses]int64
 }
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
@@ -460,13 +530,24 @@ func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) (toke
 	return 0
 }
 
+func (g *testGranterWithIOTokens) setAvailableElasticDiskBandwidthTokensLocked(tokens int64) {
+	fmt.Fprintf(&g.buf, " setAvailableElasticDiskTokens: %s",
+		tokensForTokenTickDurationToString(tokens))
+}
+
+func (g *testGranterWithIOTokens) getDiskTokensUsedAndResetLocked() [numWorkClasses]int64 {
+	return g.diskBandwidthTokensUsed
+}
+
 func (g *testGranterWithIOTokens) setAdmittedDoneModelsLocked(
-	writeLM tokensLinearModel, ingestedLM tokensLinearModel,
+	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
-	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: write-lm: ")
-	printLinearModel(&g.buf, writeLM)
-	fmt.Fprintf(&g.buf, " ingested-lm: ")
-	printLinearModel(&g.buf, ingestedLM)
+	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: l0-write-lm: ")
+	printLinearModel(&g.buf, l0WriteLM)
+	fmt.Fprintf(&g.buf, " l0-ingest-lm: ")
+	printLinearModel(&g.buf, l0IngestLM)
+	fmt.Fprintf(&g.buf, " ingest-lm: ")
+	printLinearModel(&g.buf, ingestLM)
 	fmt.Fprintf(&g.buf, "\n")
 }
 
@@ -497,6 +578,7 @@ func TestIOLoadListener(t *testing.T) {
 					settings:              st,
 					kvRequester:           req,
 					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
+					diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
 				}
 				// The mutex is needed by ioLoadListener but is not useful in this
 				// test -- the channels provide synchronization and prevent this
@@ -527,6 +609,14 @@ func TestIOLoadListener(t *testing.T) {
 				MinFlushUtilizationFraction.Override(ctx, &st.SV, float64(percent)/100)
 				return ""
 
+			// TODO(sumeer): the output printed by set-state is hard to follow. It
+			// prints the internal fields which are hard to interpret, and it prints
+			// a properly formatted ioLoadListenerState. The latter is supposed to
+			// be easier to understand, but reviewers have noted that it is still
+			// challenging to understand whether the output is correct. Come up with
+			// more easily consumable output. Additionally, the input uses
+			// cumulative values, so one has to look at the preceding testdata -- we
+			// could instead accept the interval delta as input.
 			case "set-state":
 				// Setup state used as input for token adjustment.
 				var metrics pebble.Metrics
@@ -568,6 +658,25 @@ func TestIOLoadListener(t *testing.T) {
 					d.ScanArgs(t, "all-tokens-used", &allTokensUsed)
 				}
 				kvGranter.allTokensUsed = allTokensUsed
+				var provisionedBandwidth, bytesRead, bytesWritten int
+				if d.HasArg("provisioned-bandwidth") {
+					d.ScanArgs(t, "provisioned-bandwidth", &provisionedBandwidth)
+				}
+				if d.HasArg("bytes-read") {
+					d.ScanArgs(t, "bytes-read", &bytesRead)
+				}
+				if d.HasArg("bytes-written") {
+					d.ScanArgs(t, "bytes-written", &bytesWritten)
+				}
+				if d.HasArg("disk-bw-tokens-used") {
+					var regularTokensUsed, elasticTokensUsed int
+					d.ScanArgs(t, "disk-bw-tokens-used", &regularTokensUsed, &elasticTokensUsed)
+					kvGranter.diskBandwidthTokensUsed[regularWorkClass] = int64(regularTokensUsed)
+					kvGranter.diskBandwidthTokensUsed[elasticWorkClass] = int64(elasticTokensUsed)
+				} else {
+					kvGranter.diskBandwidthTokensUsed[regularWorkClass] = 0
+					kvGranter.diskBandwidthTokensUsed[elasticWorkClass] = 0
+				}
 				var printOnlyFirstTick bool
 				if d.HasArg("print-only-first-tick") {
 					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
@@ -576,6 +685,11 @@ func TestIOLoadListener(t *testing.T) {
 					Metrics:                 &metrics,
 					WriteStallCount:         int64(writeStallCount),
 					InternalIntervalMetrics: im,
+					DiskStats: DiskStats{
+						BytesRead:            uint64(bytesRead),
+						BytesWritten:         uint64(bytesWritten),
+						ProvisionedBandwidth: int64(provisionedBandwidth),
+					},
 				})
 				var buf strings.Builder
 				// Do the ticks until just before next adjustment.
@@ -617,7 +731,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	for i := int64(0); i < adjustmentInterval; i++ {
 		// Override the totalNumByteTokens manually to trigger the overflow bug.
 		ioll.totalNumByteTokens = math.MaxInt64 - i
-		ioll.tokensAllocated = 0
+		ioll.byteTokensAllocated = 0
 		for j := 0; j < ticksInAdjustmentInterval; j++ {
 			ioll.allocateTokensTick()
 		}
@@ -639,18 +753,30 @@ type testGranterNonNegativeTokens struct {
 	t *testing.T
 }
 
+var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
+
 func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
 	require.LessOrEqual(g.t, int64(0), tokens)
 	return 0
 }
 
+func (g *testGranterNonNegativeTokens) setAvailableElasticDiskBandwidthTokensLocked(tokens int64) {
+	require.LessOrEqual(g.t, int64(0), tokens)
+}
+
+func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndResetLocked() [numWorkClasses]int64 {
+	return [numWorkClasses]int64{}
+}
+
 func (g *testGranterNonNegativeTokens) setAdmittedDoneModelsLocked(
-	writeLM tokensLinearModel, ingestedLM tokensLinearModel,
+	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
-	require.LessOrEqual(g.t, 0.5, writeLM.multiplier)
-	require.LessOrEqual(g.t, int64(0), writeLM.constant)
-	require.Less(g.t, 0.0, ingestedLM.multiplier)
-	require.LessOrEqual(g.t, int64(0), ingestedLM.constant)
+	require.LessOrEqual(g.t, 0.5, l0WriteLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), l0WriteLM.constant)
+	require.Less(g.t, 0.0, l0IngestLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), l0IngestLM.constant)
+	require.LessOrEqual(g.t, 0.5, ingestLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
 }
 
 // TODO(sumeer): we now do more work outside adjustTokensInner, so the parts
@@ -706,6 +832,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 // stats and negative values) don't cause panics or tokens to be negative.
 func TestBadIOLoadListenerStats(t *testing.T) {
 	var m pebble.Metrics
+	var d DiskStats
 	req := &testRequesterForIOLL{}
 	ctx := context.Background()
 
@@ -715,10 +842,17 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		m.Levels[0].NumFiles = int64(rand.Uint64())
 		m.Levels[0].Size = int64(rand.Uint64())
 		m.Levels[0].BytesFlushed = rand.Uint64()
-		m.Levels[0].BytesIngested = rand.Uint64()
+		for i := range m.Levels {
+			m.Levels[i].BytesIngested = rand.Uint64()
+		}
+		d.BytesRead = rand.Uint64()
+		d.BytesWritten = rand.Uint64()
+		d.ProvisionedBandwidth = 1 << 20
 		req.stats.admittedCount = rand.Uint64()
 		req.stats.writeAccountedBytes = rand.Uint64()
 		req.stats.ingestedAccountedBytes = rand.Uint64()
+		req.stats.statsToIgnore.Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ApproxIngestedIntoL0Bytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()
@@ -726,6 +860,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		settings:              st,
 		kvRequester:           req,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
+		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
 	}
 	ioll.mu.Mutex = &syncutil.Mutex{}
 	ioll.mu.kvGranter = kvGranter
@@ -734,6 +869,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		ioll.pebbleMetricsTick(ctx, StoreMetrics{
 			Metrics:                 &m,
 			InternalIntervalMetrics: &pebble.InternalIntervalMetrics{},
+			DiskStats:               d,
 		})
 		for j := 0; j < ticksInAdjustmentInterval; j++ {
 			ioll.allocateTokensTick()
@@ -742,7 +878,9 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			require.LessOrEqual(t, float64(0), ioll.smoothedNumFlushTokens)
 			require.LessOrEqual(t, float64(0), ioll.flushUtilTargetFraction)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
-			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.byteTokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.elasticDiskBWTokens)
+			require.LessOrEqual(t, int64(0), ioll.elasticDiskBWTokensAllocated)
 		}
 	}
 }
