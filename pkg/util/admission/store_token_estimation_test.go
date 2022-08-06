@@ -89,6 +89,7 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 	var estimator storePerWorkTokenEstimator
 	var l0Metrics pebble.LevelMetrics
 	var admissionStats storeAdmissionStats
+	var cumLSMWriteAndIngestedBytes uint64
 
 	datadriven.RunTest(t, testutils.TestDataPath(t, "store_per_work_token_estimator"),
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -106,6 +107,12 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				d.ScanArgs(t, "ingested", &intIngested)
 				l0Metrics.BytesFlushed += intFlushed
 				l0Metrics.BytesIngested += intIngested
+				cumLSMWriteAndIngestedBytes += intFlushed + intIngested
+				if d.HasArg("other-levels-ingested") {
+					var otherLevelsIngested uint64
+					d.ScanArgs(t, "other-levels-ingested", &otherLevelsIngested)
+					cumLSMWriteAndIngestedBytes += otherLevelsIngested
+				}
 				var admitted, writeAccounted, ingestedAccounted uint64
 				d.ScanArgs(t, "admitted", &admitted)
 				d.ScanArgs(t, "write-accounted", &writeAccounted)
@@ -126,11 +133,13 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 					var ignoreIngestedIntoL0 int
 					d.ScanArgs(t, "ignore-ingested-into-L0", &ignoreIngestedIntoL0)
 					admissionStats.statsToIgnore.ApproxIngestedIntoL0Bytes += uint64(ignoreIngestedIntoL0)
+					admissionStats.statsToIgnore.Bytes += uint64(ignoreIngestedIntoL0)
 				}
-				estimator.updateEstimates(l0Metrics, admissionStats)
-				wlm, ilm := estimator.getModelsAtAdmittedDone()
+				estimator.updateEstimates(l0Metrics, cumLSMWriteAndIngestedBytes, admissionStats)
+				wlm, ilm, dbwlm := estimator.getModelsAtAdmittedDone()
 				require.Equal(t, wlm, estimator.atDoneWriteTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, ilm, estimator.atDoneIngestTokensLinearModel.smoothedLinearModel)
+				require.Equal(t, dbwlm, estimator.atDoneDiskBWTokensLinearModel.smoothedLinearModel)
 				var b strings.Builder
 				fmt.Fprintf(&b, "interval state: %+v\n", estimator.aux)
 				fmt.Fprintf(&b, "at-admission-tokens: %d\n",
@@ -139,6 +148,8 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				printLinearModelFitter(&b, estimator.atDoneWriteTokensLinearModel)
 				fmt.Fprintf(&b, "ingest-tokens: ")
 				printLinearModelFitter(&b, estimator.atDoneIngestTokensLinearModel)
+				fmt.Fprintf(&b, "disk-bw-tokens: ")
+				printLinearModelFitter(&b, estimator.atDoneDiskBWTokensLinearModel)
 				return b.String()
 
 			default:
