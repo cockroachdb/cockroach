@@ -56,29 +56,30 @@ func (b *builderWithMu) stringAndReset() string {
 }
 
 type testGranter struct {
+	name                  string
 	buf                   *builderWithMu
 	r                     requester
 	returnValueFromTryGet bool
 	additionalTokens      int64
 }
 
-var _ granter = &testGranter{}
+var _ granterWithStoreWriteDone = &testGranter{}
 
 func (tg *testGranter) grantKind() grantKind {
 	return slot
 }
 func (tg *testGranter) tryGet(count int64) bool {
-	tg.buf.printf("tryGet: returning %t", tg.returnValueFromTryGet)
+	tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
 	return tg.returnValueFromTryGet
 }
 func (tg *testGranter) returnGrant(count int64) {
-	tg.buf.printf("returnGrant %d", count)
+	tg.buf.printf("returnGrant%s %d", tg.name, count)
 }
 func (tg *testGranter) tookWithoutPermission(count int64) {
-	tg.buf.printf("tookWithoutPermission %d", count)
+	tg.buf.printf("tookWithoutPermission%s %d", tg.name, count)
 }
 func (tg *testGranter) continueGrantChain(grantChainID grantChainID) {
-	tg.buf.printf("continueGrantChain %d", grantChainID)
+	tg.buf.printf("continueGrantChain%s %d", tg.name, grantChainID)
 }
 func (tg *testGranter) grant(grantChainID grantChainID) {
 	rv := tg.r.granted(grantChainID)
@@ -89,13 +90,13 @@ func (tg *testGranter) grant(grantChainID grantChainID) {
 		// concurrency_manager_test.go.
 		time.Sleep(50 * time.Millisecond)
 	}
-	tg.buf.printf("granted: returned %d", rv)
+	tg.buf.printf("granted%s: returned %d", tg.name, rv)
 }
 func (tg *testGranter) storeWriteDone(
 	originalTokens int64, doneInfo StoreWorkDoneInfo,
 ) (additionalTokens int64) {
-	tg.buf.printf("storeWriteDone: originalTokens %d, doneBytes(write %d,ingested %d) returning %d",
-		originalTokens, doneInfo.WriteBytes, doneInfo.IngestedBytes, tg.additionalTokens)
+	tg.buf.printf("storeWriteDone%s: originalTokens %d, doneBytes(write %d,ingested %d) returning %d",
+		tg.name, originalTokens, doneInfo.WriteBytes, doneInfo.IngestedBytes, tg.additionalTokens)
 	return tg.additionalTokens
 }
 
@@ -448,12 +449,24 @@ func TestPriorityStates(t *testing.T) {
 		})
 }
 
+func tryScanWorkClass(t *testing.T, d *datadriven.TestData) workClass {
+	wc := regularWorkClass
+	if d.HasArg("elastic") {
+		var b bool
+		d.ScanArgs(t, "elastic", &b)
+		if b {
+			wc = elasticWorkClass
+		}
+	}
+	return wc
+}
+
 /*
 TestStoreWorkQueueBasic is a datadriven test with the following commands:
 init
 admit id=<int> tenant=<int> priority=<int> create-time-millis=<int> bypass=<bool>
-set-try-get-return-value v=<bool>
-granted
+set-try-get-return-value v=<bool> [elastic=<bool>]
+granted [elastic=<bool>]
 cancel-work id=<int>
 work-done id=<int> [write-bytes=<int>] [ingested-bytes=<int>] [additional-tokens=<int>]
 print
@@ -469,14 +482,15 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 		}
 	}
 	defer closeFn()
-	var tg *testGranter
+	var tg [numWorkClasses]*testGranter
 	var wrkMap workMap
 	var buf builderWithMu
 	var st *cluster.Settings
 	printQueue := func() string {
 		q.mu.Lock()
 		defer q.mu.Unlock()
-		return fmt.Sprintf("%s\nstats:%+v\nestimates:%+v", q.q.String(), q.mu.stats,
+		return fmt.Sprintf("regular workqueue: %s\nelastic workqueue: %s\nstats:%+v\nestimates:%+v",
+			q.q[regularWorkClass].String(), q.q[elasticWorkClass].String(), q.mu.stats,
 			q.mu.estimates)
 	}
 
@@ -485,15 +499,18 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg = &testGranter{buf: &buf}
+				tg[regularWorkClass] = &testGranter{name: " regular", buf: &buf}
+				tg[elasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
 				opts.usesTokens = true
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
 				st = cluster.MakeTestingClusterSettings()
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					tg, st, opts).(*StoreWorkQueue)
-				tg.r = q
+					[numWorkClasses]granterWithStoreWriteDone{tg[regularWorkClass], tg[elasticWorkClass]},
+					st, opts).(*StoreWorkQueue)
+				tg[regularWorkClass].r = q.getRequesters()[regularWorkClass]
+				tg[elasticWorkClass].r = q.getRequesters()[elasticWorkClass]
 				wrkMap.resetMap()
 				return ""
 
@@ -537,7 +554,8 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			case "set-try-get-return-value":
 				var v bool
 				d.ScanArgs(t, "v", &v)
-				tg.returnValueFromTryGet = v
+				wc := tryScanWorkClass(t, d)
+				tg[wc].returnValueFromTryGet = v
 				return ""
 
 			case "set-store-request-estimates":
@@ -549,7 +567,8 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				return printQueue()
 
 			case "granted":
-				tg.grant(0)
+				wc := tryScanWorkClass(t, d)
+				tg[wc].grant(0)
 				return buf.stringAndReset()
 
 			case "cancel-work":
@@ -589,7 +608,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				if !work.admitted {
 					return fmt.Sprintf("id not admitted: %d\n", id)
 				}
-				tg.additionalTokens = int64(additionalTokens)
+				tg[work.handle.workClass].additionalTokens = int64(additionalTokens)
 				require.NoError(t, q.AdmittedWorkDone(work.handle,
 					StoreWorkDoneInfo{
 						WriteBytes:    int64(writeBytes),
@@ -607,7 +626,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 					WriteBytes:    int64(writeBytes),
 					IngestedBytes: int64(ingestedBytes),
 				})
-				return printQueue()
+				return buf.stringAndReset()
 
 			case "stats-to-ignore":
 				var ingestedBytes, ingestedIntoL0Bytes int
