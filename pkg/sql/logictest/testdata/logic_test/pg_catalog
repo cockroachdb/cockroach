@@ -3657,14 +3657,14 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    proisstrict  proretset  provolatile  proparallel
-substring  false        false      i            NULL
-substring  false        false      i            NULL
-substring  false        false      i            NULL
-substring  false        false      i            NULL
-substring  false        false      i            NULL
-substring  false        false      i            NULL
-substring  false        false      i            NULL
-substring  false        false      i            NULL
+substring  true         false      i            NULL
+substring  true         false      i            NULL
+substring  true         false      i            NULL
+substring  true         false      i            NULL
+substring  true         false      i            NULL
+substring  true         false      i            NULL
+substring  true         false      i            NULL
+substring  true         false      i            NULL
 
 query TIIOTTTT colnames
 SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults
@@ -3696,29 +3696,29 @@ substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 
-query TOIOTT colnames
-SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
+query TOIOTTB colnames
+SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
 FROM pg_catalog.pg_proc
 WHERE proname='least'
 ----
-proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
-least    2283         1         2283        2283         {v}
+proname  provariadic  pronargs  prorettype  proargtypes  proargmodes  proisstrict
+least    2283         1         2283        2283         {v}          false
 
-query TOIOTT colnames
-SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
+query TOIOTTB colnames
+SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
 FROM pg_catalog.pg_proc
 WHERE proname='json_extract_path'
 ----
-proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
-json_extract_path  25           2         3802        3802 25      {i,v}
+proname            provariadic  pronargs  prorettype  proargtypes  proargmodes  proisstrict
+json_extract_path  25           2         3802        3802 25      {i,v}        true
 
-query TOIOTT colnames
-SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
+query TOIOTTB colnames
+SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
 FROM pg_catalog.pg_proc
 WHERE proname='json_extract_path_text'
 ----
-proname                 provariadic  pronargs  prorettype  proargtypes  proargmodes
-json_extract_path_text  25           2         25          3802 25      {i,v}
+proname                 provariadic  pronargs  prorettype  proargtypes  proargmodes  proisstrict
+json_extract_path_text  25           2         25          3802 25      {i,v}        true
 
 user testuser
 

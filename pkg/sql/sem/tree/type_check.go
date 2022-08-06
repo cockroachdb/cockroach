@@ -328,7 +328,7 @@ func (expr *BinaryExpr) TypeCheck(
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
-				if e.(*BinOp).NullableArgs {
+				if e.(*BinOp).CalledOnNullInput {
 					noneAcceptNull = false
 					break
 				}
@@ -1082,13 +1082,13 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
-	var nullableArgFns []overloadImpl
-	var notNullableArgsFn []overloadImpl
+	var calledOnNullInputFns []overloadImpl
+	var notCalledOnNullInputFns []overloadImpl
 	for _, f := range fns {
-		if f.(QualifiedOverload).NullableArgs {
-			nullableArgFns = append(nullableArgFns, f)
+		if f.(QualifiedOverload).CalledOnNullInput {
+			calledOnNullInputFns = append(calledOnNullInputFns, f)
 		} else {
-			notNullableArgsFn = append(notNullableArgsFn, f)
+			notCalledOnNullInputFns = append(notCalledOnNullInputFns, f)
 		}
 	}
 
@@ -1106,7 +1106,7 @@ func (expr *FuncExpr) TypeCheck(
 		for i := range typedSubExprs {
 			if typedSubExprs[i].ResolvedType().Family() == types.UnknownFamily {
 				var filtered []overloadImpl
-				for j := range notNullableArgsFn {
+				for j := range notCalledOnNullInputFns {
 					if fns[j].params().GetAt(i).Equivalent(types.String) {
 						if filtered == nil {
 							filtered = make([]overloadImpl, 0, len(fns)-j)
@@ -1117,7 +1117,7 @@ func (expr *FuncExpr) TypeCheck(
 
 				// Only use the filtered list if it's not empty.
 				if filtered != nil {
-					notNullableArgsFn = filtered
+					notCalledOnNullInputFns = filtered
 
 					// Cast the expression to a string so the execution engine will find
 					// the correct overload.
@@ -1125,13 +1125,13 @@ func (expr *FuncExpr) TypeCheck(
 				}
 			}
 		}
-		fns = append(nullableArgFns, notNullableArgsFn...)
+		fns = append(calledOnNullInputFns, notCalledOnNullInputFns...)
 	}
 
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument.
-	if len(fns) > 0 && len(nullableArgFns) == 0 && funcCls != GeneratorClass &&
+	if len(fns) > 0 && len(calledOnNullInputFns) == 0 && funcCls != GeneratorClass &&
 		funcCls != AggregateClass {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
@@ -2258,7 +2258,7 @@ func typeCheckComparisonOp(
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
-				if e.(*CmpOp).NullableArgs {
+				if e.(*CmpOp).CalledOnNullInput {
 					noneAcceptNull = false
 					break
 				}

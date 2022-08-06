@@ -101,14 +101,14 @@ func (e *evaluator) EvalBinaryExpr(expr *tree.BinaryExpr) (tree.Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if left == tree.DNull && !expr.Op.NullableArgs {
+	if left == tree.DNull && !expr.Op.CalledOnNullInput {
 		return tree.DNull, nil
 	}
 	right, err := expr.Right.(tree.TypedExpr).Eval(e)
 	if err != nil {
 		return nil, err
 	}
-	if right == tree.DNull && !expr.Op.NullableArgs {
+	if right == tree.DNull && !expr.Op.CalledOnNullInput {
 		return tree.DNull, nil
 	}
 	res, err := expr.Op.EvalOp.Eval(e, left, right)
@@ -247,7 +247,7 @@ func (e *evaluator) EvalComparisonExpr(expr *tree.ComparisonExpr) (tree.Datum, e
 	}
 
 	_, newLeft, newRight, _, not := tree.FoldComparisonExpr(op, left, right)
-	if !expr.Op.NullableArgs && (newLeft == tree.DNull || newRight == tree.DNull) {
+	if !expr.Op.CalledOnNullInput && (newLeft == tree.DNull || newRight == tree.DNull) {
 		return tree.DNull, nil
 	}
 	d, err := expr.Op.EvalOp.Eval(e, newLeft.(tree.Datum), newRight.(tree.Datum))
@@ -477,7 +477,7 @@ func (e *evaluator) evalFuncArgs(
 		if err != nil {
 			return false, nil, err
 		}
-		if arg == tree.DNull && !expr.ResolvedOverload().NullableArgs {
+		if arg == tree.DNull && !expr.ResolvedOverload().CalledOnNullInput {
 			return true, nil, nil
 		}
 		args[i] = arg
