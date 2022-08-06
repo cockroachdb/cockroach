@@ -1,4 +1,3 @@
-# This table has ID 53.
 exec-ddl
 CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX idx(b))
 ----
@@ -9,6 +8,10 @@ CREATE SEQUENCE s
 
 exec-ddl
 CREATE TYPE workday AS ENUM ('MON', 'TUE')
+----
+
+exec-ddl
+CREATE TABLE workdays (w workday)
 ----
 
 build
@@ -29,7 +32,42 @@ create-function
  │   	RETURNS INT8
  │   	LANGUAGE SQL
  │   	AS $$SELECT 1;$$
- └── no dependencies
+ └── dependencies
+      └── workday
+
+build
+CREATE FUNCTION f() RETURNS workday LANGUAGE SQL AS $$SELECT w FROM workdays$$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS workday
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT w FROM t.public.workdays;$$
+ └── dependencies
+      ├── workdays [columns: w]
+      └── workday
+
+build
+CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$ SELECT 'MON'::workday::STRING $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS STRING
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 'MON'::STRING;$$
+ └── dependencies
+      └── workday
+
+build
+CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$SELECT w::STRING FROM workdays$$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS STRING
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT w::STRING FROM t.public.workdays;$$
+ └── dependencies
+      └── workdays [columns: w]
 
 build
 CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM ab $$
