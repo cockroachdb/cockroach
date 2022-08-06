@@ -11,6 +11,14 @@ exec-ddl
 CREATE SEQUENCE s
 ----
 
+exec-ddl
+CREATE TYPE foobar AS ENUM ('foo', 'bar')
+----
+
+exec-ddl
+CREATE TABLE foobars (fb foobar)
+----
+
 build
 CREATE VIEW v1 AS VALUES (1)
 ----
@@ -352,3 +360,21 @@ create-view t.public.v24
  ├── columns: setval:1
  └── dependencies
       └── s
+
+build
+CREATE VIEW v25 AS VALUES ('foo'::foobar)
+----
+create-view t.public.v25
+ ├── VALUES ('foo'::foobar)
+ ├── columns: column1:1
+ └── dependencies
+      └── foobar
+
+build
+CREATE VIEW v26 AS SELECT fb FROM foobars
+----
+create-view t.public.v26
+ ├── SELECT fb FROM t.public.foobars
+ ├── columns: fb:1
+ └── dependencies
+      └── foobars [columns: fb]
