@@ -1,5 +1,11 @@
 # LogicTest: local-udf
 
+statement ok
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+)
+
 statement error pq: unimplemented: replacing function
 CREATE OR REPLACE FUNCTION f(a int) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
@@ -9,6 +15,43 @@ CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$
 
+statement ok
+CREATE FUNCTION a(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i'
+
+statement ok
+CREATE FUNCTION b(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT a FROM ab WHERE a = i'
+
+statement ok
+CREATE FUNCTION c(i INT, j INT) RETURNS INT LANGUAGE SQL AS 'SELECT i - j'
+
+statement error column \"j\" does not exist
+CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT j'
+
+statement error column \"j\" does not exist
+CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT * FROM ab WHERE a = j'
+
+statement ok
+CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
+
+# TODO(mgartner): This should be allowed because the cast from INT2::FLOAT4 is
+# allowed in implicit contexts.
+statement error return type mismatch in function declared to return float4\nDETAIL: Actual return type is int2
+CREATE FUNCTION e(i INT2) RETURNS FLOAT4 LANGUAGE SQL AS 'SELECT i'
+
+# TODO(mgartner): This should be allowed because the cast from BOOL::STRING is
+# allowed in assignment contexts.
+statement error return type mismatch in function declared to return string\nDETAIL: Actual return type is bool
+CREATE FUNCTION f(b BOOL) RETURNS STRING LANGUAGE SQL AS 'SELECT b'
+
+statement error return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
+CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
+
+statement error return type mismatch in function declared to return int\nDETAIL: Actual return type is bool
+CREATE FUNCTION err(b BOOL) RETURNS INT LANGUAGE SQL AS 'SELECT b'
+
+statement error return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
+CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
+
 # Make sure using table name as tuple type name works properly.
 # It should pass the return type validation and stored as a tuple type.
 statement ok
@@ -17,7 +60,7 @@ CREATE TABLE t_implicit_type(a INT PRIMARY KEY, b STRING);
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
 
-statement error pq: unimplemented: functions do not currently support \* expressions.*
+statement ok
 CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
 
 statement ok
@@ -38,11 +81,11 @@ WHERE id = $max_desc_id;
 {
     "function": {
         "dependsOn": [
-            107,
-            107
+            112,
+            112
         ],
         "functionBody": "SELECT a, b FROM test.public.t_implicit_type;",
-        "id": 108,
+        "id": 114,
         "lang": "SQL",
         "modificationTime": {},
         "name": "f",
@@ -68,7 +111,7 @@ WHERE id = $max_desc_id;
         "returnType": {
             "type": {
                 "family": "TupleFamily",
-                "oid": 100107,
+                "oid": 100112,
                 "tupleContents": [
                     {
                         "family": "IntFamily",
@@ -121,7 +164,7 @@ WHERE id = $max_desc_id;
             }
         ],
         "functionBody": "SELECT 1;",
-        "id": 109,
+        "id": 115,
         "lang": "SQL",
         "modificationTime": {},
         "name": "f",
@@ -201,23 +244,23 @@ WHERE id = $max_desc_id;
                 "name": "a",
                 "type": {
                     "family": "EnumFamily",
-                    "oid": 100112,
+                    "oid": 100118,
                     "udtMetadata": {
-                        "arrayTypeOid": 100113
+                        "arrayTypeOid": 100119
                     }
                 }
             }
         ],
         "dependsOn": [
-            110,
-            111
+            116,
+            117
         ],
         "dependsOnTypes": [
-            112,
-            113
+            118,
+            119
         ],
-        "functionBody": "SELECT a FROM test.public.t;\nSELECT b FROM test.public.t@t_idx_b;\nSELECT c FROM test.public.t@t_idx_c;\nSELECT nextval(111:::REGCLASS);",
-        "id": 114,
+        "functionBody": "SELECT a FROM test.public.t;\nSELECT b FROM test.public.t@t_idx_b;\nSELECT c FROM test.public.t@t_idx_c;\nSELECT nextval(117:::REGCLASS);",
+        "id": 120,
         "lang": "SQL",
         "modificationTime": {},
         "name": "f",

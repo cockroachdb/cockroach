@@ -64,9 +64,6 @@ func (b *Builder) expandStar(
 	if b.insideViewDef {
 		panic(unimplemented.NewWithIssue(10028, "views do not currently support * expressions"))
 	}
-	if b.insideFuncDef {
-		panic(unimplemented.NewWithIssue(10028, "functions do not currently support * expressions"))
-	}
 	switch t := expr.(type) {
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
@@ -633,7 +630,8 @@ func (b *Builder) resolveDataSource(
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef {
-		// Avoid taking descriptor leases when we're creating a view/function.
+		// Avoid taking descriptor leases when we're creating a view or a
+		// function.
 		flags.AvoidDescriptorCaches = true
 	}
 	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, flags, tn)
@@ -660,7 +658,7 @@ func (b *Builder) resolveDataSourceRef(
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef {
-		// Avoid taking table leases when we're creating a view.
+		// Avoid taking table leases when we're creating a view or a function.
 		flags.AvoidDescriptorCaches = true
 	}
 	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
