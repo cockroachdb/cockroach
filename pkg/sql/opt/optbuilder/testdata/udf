@@ -9,7 +9,7 @@ CREATE TABLE abc (
 build
 SELECT foo()
 ----
-error (42883): unknown function: foo
+error (42883): unknown function: foo: function undefined
 
 exec-ddl
 CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
