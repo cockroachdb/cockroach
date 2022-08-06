@@ -57,7 +57,7 @@ create-function
 build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM ab $$
 ----
-error (0A000): unimplemented: functions do not currently support * expressions
+error (42P13): return type mismatch in function declared to return int
 
 build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;
