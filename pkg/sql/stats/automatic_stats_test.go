@@ -511,13 +511,13 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	// The most recent stat is over 4 hours old, which is more than 2x the
 	// average time between refreshes, so this call must refresh the statistics
-	// on table t even though rowsAffected=0. After refresh, only 15 stats should
-	// remain (5 from column k and 10 from column v), since the old stats on k
-	// were deleted.
+	// on table t even though rowsAffected=0. After refresh, only 10 stats should
+	// remain (5 from column k and 5 from column v), since the old stats on k
+	// and v were deleted.
 	refresher.maybeRefreshStats(
 		ctx, table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, table, 15 /* expected */); err != nil {
+	if err := checkStatsCount(ctx, cache, table, 10 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 }

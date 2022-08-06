@@ -250,33 +250,6 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		}
 	}
 
-	// findStat searches for a statistic in the given list of stats and returns
-	// an error if expectDeleted is true but the statistic is found. Likewise, it
-	// returns an error if expectDeleted is false but the statistic is not found.
-	findStat := func(
-		stats []*TableStatistic, tableID descpb.ID, statisticID uint64, expectDeleted bool,
-	) error {
-		for j := range stats {
-			if stats[j].StatisticID == statisticID {
-				if expectDeleted {
-					return fmt.Errorf(
-						"expected statistic %d in table %d to be deleted, but it was not",
-						statisticID, tableID,
-					)
-				}
-				return nil
-			}
-		}
-
-		if !expectDeleted {
-			return fmt.Errorf(
-				"expected statistic %d in table %d not to be deleted, but it was",
-				statisticID, tableID,
-			)
-		}
-		return nil
-	}
-
 	// checkDelete deletes old statistics for the given table and column IDs and
 	// checks that only the statisticIDs contained in expectDeleted have been
 	// deleted.
@@ -356,4 +329,342 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	if err := checkDelete(tableID, columnIDs, expectDeleted); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestDeleteOldStatsForOtherColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cache := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		db,
+		ex,
+		keys.SystemSQLCodec,
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
+	)
+	testData := []TableStatisticProto{
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   1,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     timeutil.Now().Add(-1 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     0,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   2,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     timeutil.Now().Add(-2 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     0,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   3,
+			Name:          "stat_100_1",
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     timeutil.Now().Add(-23 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     0,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   4,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     timeutil.Now().Add(-25 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     0,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   5,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     timeutil.Now().Add(-26 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     0,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   6,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     timeutil.Now().Add(-27 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     0,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   7,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     timeutil.Now().Add(-1 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   8,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     timeutil.Now().Add(-29 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   9,
+			Name:          "stat_100_2_3",
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     timeutil.Now().Add(-9 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   10,
+			Name:          "stat_100_2_3",
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     timeutil.Now().Add(-30 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   11,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     timeutil.Now().Add(-31 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   12,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     timeutil.Now().Add(-32 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   13,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{2},
+			CreatedAt:     timeutil.Now().Add(-33 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   14,
+			Name:          "stat_100_1_3",
+			ColumnIDs:     []descpb.ColumnID{1, 3},
+			CreatedAt:     timeutil.Now().Add(-34 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(100),
+			StatisticID:   15,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{3, 2},
+			CreatedAt:     timeutil.Now().Add(-35 * time.Hour),
+			RowCount:      1000,
+			DistinctCount: 1000,
+			NullCount:     5,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(101),
+			StatisticID:   16,
+			Name:          "stat_101_1",
+			ColumnIDs:     []descpb.ColumnID{1},
+			CreatedAt:     timeutil.Now().Add(-36 * time.Hour),
+			RowCount:      320000,
+			DistinctCount: 300000,
+			NullCount:     100,
+			AvgSize:       4,
+		},
+		{
+			TableID:       descpb.ID(102),
+			StatisticID:   17,
+			Name:          jobspb.AutoStatsName,
+			ColumnIDs:     []descpb.ColumnID{2, 3},
+			CreatedAt:     timeutil.Now().Add(-37 * time.Hour),
+			RowCount:      0,
+			DistinctCount: 0,
+			NullCount:     0,
+			AvgSize:       0,
+		},
+	}
+
+	for i := range testData {
+		stat := &testData[i]
+		if err := insertTableStat(ctx, db, ex, stat); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// checkDelete deletes old statistics for columns in the given table other
+	// than the provided column IDs and checks that only the statisticIDs
+	// contained in expectDeleted have been deleted.
+	checkDelete := func(
+		tableID descpb.ID, columnIDs [][]descpb.ColumnID, expectDeleted map[uint64]struct{},
+	) error {
+		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return DeleteOldStatsForOtherColumns(ctx, ex, txn, tableID, columnIDs, defaultKeepTime)
+		}); err != nil {
+			return err
+		}
+
+		return testutils.SucceedsSoonError(func() error {
+			tableStats, err := cache.getTableStatsFromCache(ctx, tableID)
+			if err != nil {
+				return err
+			}
+
+			for i := range testData {
+				stat := &testData[i]
+				if stat.TableID != tableID {
+					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID)
+					if err != nil {
+						return err
+					}
+					// No stats from other tables should be deleted.
+					if err := findStat(
+						stats, stat.TableID, stat.StatisticID, false, /* expectDeleted */
+					); err != nil {
+						return err
+					}
+					continue
+				}
+
+				// Check whether this stat should have been deleted.
+				_, expectDeleted := expectDeleted[stat.StatisticID]
+				if err := findStat(tableStats, tableID, stat.StatisticID, expectDeleted); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+	}
+
+	expectDeleted := make(map[uint64]struct{}, len(testData))
+	getExpectDeleted := func(tableID descpb.ID, columnIDsSet [][]descpb.ColumnID) {
+		for i := range testData {
+			stat := &testData[i]
+			if stat.TableID != tableID {
+				continue
+			}
+			found := false
+			for _, columnIDs := range columnIDsSet {
+				if reflect.DeepEqual(stat.ColumnIDs, columnIDs) {
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+			if stat.CreatedAt.After(timeutil.Now().Add(-defaultKeepTime)) {
+				continue
+			}
+			expectDeleted[stat.StatisticID] = struct{}{}
+		}
+	}
+
+	// Delete old stats for columns other than column 1 in table 100.
+	tableID := descpb.ID(100)
+	columnIDs := [][]descpb.ColumnID{{1}}
+	getExpectDeleted(tableID, columnIDs)
+	if err := checkDelete(tableID, columnIDs, expectDeleted); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete old stats for columns other than columns {2, 3} in table 100.
+	tableID = descpb.ID(100)
+	columnIDs = [][]descpb.ColumnID{{2, 3}}
+	getExpectDeleted(tableID, columnIDs)
+	if err := checkDelete(tableID, columnIDs, expectDeleted); err != nil {
+		fmt.Println(err)
+		t.Fatal(err)
+	}
+
+	// Delete old stats for columns other than {1}, {2, 3} in table 100.
+	tableID = descpb.ID(100)
+	columnIDs = [][]descpb.ColumnID{{1}, {2, 3}}
+	getExpectDeleted(tableID, columnIDs)
+	if err := checkDelete(tableID, columnIDs, expectDeleted); err != nil {
+		fmt.Println(err)
+		t.Fatal(err)
+	}
+}
+
+// findStat searches for a statistic in the given list of stats and returns
+// an error if expectDeleted is true but the statistic is found. Likewise, it
+// returns an error if expectDeleted is false but the statistic is not found.
+func findStat(
+	stats []*TableStatistic, tableID descpb.ID, statisticID uint64, expectDeleted bool,
+) error {
+	for j := range stats {
+		if stats[j].StatisticID == statisticID {
+			if expectDeleted {
+				return fmt.Errorf(
+					"expected statistic %d in table %d to be deleted, but it was not",
+					statisticID, tableID,
+				)
+			}
+			return nil
+		}
+	}
+
+	if !expectDeleted {
+		return fmt.Errorf(
+			"expected statistic %d in table %d not to be deleted, but it was",
+			statisticID, tableID,
+		)
+	}
+	return nil
 }
