@@ -19,12 +19,14 @@ import (
 
 type selPrefixBytesBytesConstOp struct {
 	selConstOpBase
-	constArg []byte
-	negate   bool
+	constArg        []byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45,6 +47,9 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 					}
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasPrefix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -61,6 +66,9 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 					}
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasPrefix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -74,6 +82,9 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 				for _, i := range sel {
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasPrefix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -87,6 +98,9 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 				for i := 0; i < n; i++ {
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasPrefix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -104,12 +118,14 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 
 type selSuffixBytesBytesConstOp struct {
 	selConstOpBase
-	constArg []byte
-	negate   bool
+	constArg        []byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -130,6 +146,9 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 					}
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasSuffix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -146,6 +165,9 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 					}
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasSuffix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -159,6 +181,9 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 				for _, i := range sel {
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasSuffix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -172,6 +197,9 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 				for i := 0; i < n; i++ {
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.HasSuffix(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -189,12 +217,14 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 
 type selContainsBytesBytesConstOp struct {
 	selConstOpBase
-	constArg []byte
-	negate   bool
+	constArg        []byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -215,6 +245,9 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 					}
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.Contains(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -231,6 +264,9 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 					}
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.Contains(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -244,6 +280,9 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 				for _, i := range sel {
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.Contains(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -257,6 +296,9 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 				for i := 0; i < n; i++ {
 					var cmp bool
 					arg := col.Get(i)
+					if _caseInsensitive {
+						arg = bytes.ToUpper(arg)
+					}
 					cmp = bytes.Contains(arg, p.constArg) != _negate
 					if cmp {
 						sel[idx] = i
@@ -274,12 +316,14 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 
 type selSkeletonBytesBytesConstOp struct {
 	selConstOpBase
-	constArg [][]byte
-	negate   bool
+	constArg        [][]byte
+	negate          bool
+	caseInsensitive bool
 }
 
 func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
 	_negate := p.negate
+	_caseInsensitive := p.caseInsensitive
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -302,6 +346,9 @@ func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
 					arg := col.Get(i)
 
 					{
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						var idx, skeletonIdx int
 						for skeletonIdx < len(p.constArg) {
 							idx = bytes.Index(arg, p.constArg[skeletonIdx])
@@ -330,6 +377,9 @@ func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
 					arg := col.Get(i)
 
 					{
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						var idx, skeletonIdx int
 						for skeletonIdx < len(p.constArg) {
 							idx = bytes.Index(arg, p.constArg[skeletonIdx])
@@ -355,6 +405,9 @@ func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
 					arg := col.Get(i)
 
 					{
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						var idx, skeletonIdx int
 						for skeletonIdx < len(p.constArg) {
 							idx = bytes.Index(arg, p.constArg[skeletonIdx])
@@ -380,6 +433,9 @@ func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
 					arg := col.Get(i)
 
 					{
+						if _caseInsensitive {
+							arg = bytes.ToUpper(arg)
+						}
 						var idx, skeletonIdx int
 						for skeletonIdx < len(p.constArg) {
 							idx = bytes.Index(arg, p.constArg[skeletonIdx])
