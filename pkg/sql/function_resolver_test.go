@@ -219,7 +219,7 @@ CREATE FUNCTION sc1.lower() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$
 			testName:    "unsupported builtin function",
 			funName:     tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{"querytree", "", "", ""}},
 			searchPath:  []string{"sc1", "sc2"},
-			expectedErr: "querytree(): unimplemented: this function is not yet supported",
+			expectedErr: `querytree\(\): unimplemented: this function is not yet supported`,
 		},
 		// TODO(Chengxiong): add test case for builtin function names when builtin
 		// OIDs are changed to fixed IDs.
@@ -248,7 +248,7 @@ CREATE FUNCTION sc1.lower() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$
 			path := sessiondata.MakeSearchPath(tc.searchPath)
 			funcDef, err := funcResolver.ResolveFunction(ctx, &tc.funName, &path)
 			if tc.expectedErr != "" {
-				require.Equal(t, tc.expectedErr, err.Error())
+				require.Regexp(t, tc.expectedErr, err.Error())
 				continue
 			}
 			require.NoError(t, err)
@@ -391,7 +391,7 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ 
 				}
 				typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, desired)
 				if tc.expectedErr != "" {
-					require.Equal(t, tc.expectedErr, err.Error())
+					require.Regexp(t, tc.expectedErr, err.Error())
 					return
 				}
 				require.NoError(t, err)
