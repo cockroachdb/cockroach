@@ -15,11 +15,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
+
+// ErrFunctionUndefined indicates that the required function is not found. It is
+// used as the cause of the errors thrown when function resolution cannot find a
+// required function.
+var ErrFunctionUndefined = pgerror.Newf(pgcode.UndefinedFunction, "function undefined")
 
 // Function names are used in expressions in the FuncExpr node.
 // General syntax:
@@ -34,7 +41,9 @@ import (
 // resolve built-in or user-defined function definitions from unresolved names.
 type FunctionReferenceResolver interface {
 	// ResolveFunction resolves a group of overloads with the given function name
-	// within a search path.
+	// within a search path. An error with ErrFunctionUndefined cause is returned
+	// if function does not exist.
+	//
 	// TODO(Chengxiong): Consider adding an optional slice of argument types to
 	// the input of this method, so that we can try to narrow down the scope of
 	// overloads a bit earlier and decrease the possibility of ambiguous error
