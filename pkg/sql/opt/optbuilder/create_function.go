@@ -54,7 +54,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	}
 
 	// Look for function body string from function options.
-	// Note that function body can be empty string.
+	// Note that function body can be an empty string.
 	funcBodyFound := false
 	languageFound := false
 	var funcBodyStr string
@@ -79,37 +79,76 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
 	}
 
+	// Track the dependencies in the arguments, return type, and statements in
+	// the function body.
+	var deps opt.SchemaDeps
+	var typeDeps opt.SchemaTypeDeps
+
+	// bodyScope is the base scope for each statement in the body. We add the
+	// named arguments to the scope so that references to them in the body can
+	// be resolved.
+	// TODO(mgartner): Support numeric argument references, like $1. We should
+	// error if there is a reference $n and less than n arguments.
+	bodyScope := b.allocScope()
+	for i := range cf.Args {
+		arg := &cf.Args[i]
+		typ, err := tree.ResolveType(b.ctx, arg.Type, b.semaCtx.TypeResolver)
+		if err != nil {
+			panic(err)
+		}
+
+		// Add the argument to the base scope of the body.
+		id := b.factory.Metadata().AddColumn(string(arg.Name), typ)
+		bodyScope.appendColumn(&scopeColumn{
+			name: scopeColName(arg.Name),
+			typ:  typ,
+			id:   id,
+		})
+
+		// Collect the user defined type dependencies.
+		typeIDs, err := typedesc.GetTypeDescriptorClosure(typ)
+		if err != nil {
+			panic(err)
+		}
+		for typeID := range typeIDs {
+			typeDeps.Add(int(typeID))
+		}
+	}
+
+	// Collect the user defined type dependency of the return type.
+	funcReturnType, err := tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
+	if err != nil {
+		panic(err)
+	}
+	typeIDs, err := typedesc.GetTypeDescriptorClosure(funcReturnType)
+	if err != nil {
+		panic(err)
+	}
+	for typeID := range typeIDs {
+		typeDeps.Add(int(typeID))
+	}
+
+	// Parse the function body.
 	stmts, err := parser.Parse(funcBodyStr)
 	if err != nil {
 		panic(err)
 	}
 
-	deps := make(opt.SchemaDeps, 0)
-	var typeDeps opt.SchemaTypeDeps
-
-	funcReturnType, err := tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
-	if err != nil {
-		panic(err)
-	}
-
+	// Validate each statement and collect the dependencies.
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	appendFuncBodyStmt := func(ast tree.Statement, newLine bool) {
-		if newLine {
-			fmtCtx.WriteString("\n")
-		}
-		fmtCtx.FormatNode(ast)
-		fmtCtx.WriteString(";")
-	}
-
-	// TODO (mgartner): Inject argument names so that the builder doesn't panic on
-	// unknown column names which are actually argument names.
 	for i, stmt := range stmts {
-		defScope := b.buildStmtAtRoot(stmt.AST, nil)
-		// Format the statements with qualified datasource names.
-		appendFuncBodyStmt(stmt.AST, i > 0 /* newLine */)
+		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 
+		// Format the statements with qualified datasource names.
+		formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
+
+		// Validate that the result type of the last statement matches the
+		// return type of the function.
 		if i == len(stmts)-1 {
-			err := validateReturnType(funcReturnType, defScope.cols)
+			// TODO(mgartner): stmtScope.cols does not describe the result
+			// columns of the statement. We should use physical.Presentation
+			// instead.
+			err := validateReturnType(funcReturnType, stmtScope.cols)
 			if err != nil {
 				panic(err)
 			}
@@ -130,27 +169,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		}
 	}
 
-	// Collect user defined type dependencies from function signature.
-	var types []*types.T
-	types = append(types, funcReturnType)
-	for _, arg := range cf.Args {
-		typ, err := tree.ResolveType(b.ctx, arg.Type, b.semaCtx.TypeResolver)
-		if err != nil {
-			panic(err)
-		}
-		types = append(types, typ)
-	}
-
-	for _, typ := range types {
-		typeIDs, err := typedesc.GetTypeDescriptorClosure(typ)
-		if err != nil {
-			panic(err)
-		}
-		for typeID := range typeIDs {
-			typeDeps.Add(int(typeID))
-		}
-	}
-
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateFunction(
 		&memo.CreateFunctionPrivate{
@@ -161,6 +179,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		},
 	)
 	return outScope
+}
+
+func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.Statement, newLine bool) {
+	if newLine {
+		fmtCtx.WriteString("\n")
+	}
+	fmtCtx.FormatNode(ast)
+	fmtCtx.WriteString(";")
 }
 
 func validateReturnType(expected *types.T, cols []scopeColumn) error {
