@@ -616,6 +616,152 @@ s4               {c,b}
 s4               {c,d}
 s8               {a}
 
+# Test deletion of old non-default stats.
+
+statement ok
+SET CLUSTER SETTING sql.stats.non_default_columns.min_retention_period = '0s'
+
+statement ok
+CREATE STATISTICS s9 ON e FROM data;
+ALTER TABLE data DROP COLUMN e
+
+# Collecting stats on a specific column should not cause deletion of other stats.
+statement ok
+CREATE STATISTICS s10 ON a FROM data
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+s10              {a}
+s4               {c,b}
+s4               {c,d}
+
+# Stats for column e still exist. (We cannot use SHOW STATISTICS to see them
+# since stats from deleted columns are filtered out.)
+query T
+SELECT name
+FROM system.table_statistics
+  WHERE NOT EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND "columnIDs" @> array[column_id]
+    AND descriptor_name = 'data'
+  )
+  AND EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND descriptor_name = 'data'
+  )
+  ORDER BY name
+----
+__auto__
+__auto__
+__auto__
+__auto__
+s9
+
+# Collecting stats on default columns should cause deletion of other stats.
+statement ok
+ANALYZE data
+
+# Stats for column e no longer exist.
+query T
+SELECT name
+FROM system.table_statistics
+  WHERE NOT EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND "columnIDs" @> array[column_id]
+    AND descriptor_name = 'data'
+  )
+  AND EXISTS (
+    SELECT * FROM crdb_internal.table_columns
+    WHERE "tableID" = descriptor_id
+    AND descriptor_name = 'data'
+  )
+----
+
+# Stats on {c,b} and {c,d} are also deleted.
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+NULL             {a,b,c,d}
+NULL             {a,b,c}
+NULL             {a,b}
+NULL             {a}
+NULL             {b}
+NULL             {c}
+NULL             {d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+
+statement ok
+RESET CLUSTER SETTING sql.stats.non_default_columns.min_retention_period
+
 # Regression test for #33195.
 statement ok
 CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x

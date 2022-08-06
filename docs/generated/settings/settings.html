@@ -188,6 +188,7 @@
 <tr><td><code>sql.stats.flush.interval</code></td><td>duration</td><td><code>10m0s</code></td><td>the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to sql.stats.aggregation.interval</td></tr>
 <tr><td><code>sql.stats.histogram_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>histogram collection mode</td></tr>
 <tr><td><code>sql.stats.multi_column_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>multi-column statistics collection mode</td></tr>
+<tr><td><code>sql.stats.non_default_columns.min_retention_period</code></td><td>duration</td><td><code>24h0m0s</code></td><td>minimum retention period for table statistics collected on non-default columns</td></tr>
 <tr><td><code>sql.stats.persisted_rows.max</code></td><td>integer</td><td><code>1000000</code></td><td>maximum number of rows of statement and transaction statistics that will be persisted in the system tables</td></tr>
 <tr><td><code>sql.stats.post_events.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, an event is logged for every CREATE STATISTICS job</td></tr>
 <tr><td><code>sql.stats.response.max</code></td><td>integer</td><td><code>20000</code></td><td>the maximum number of statements and transaction stats returned in a CombinedStatements request</td></tr>
