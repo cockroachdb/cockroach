@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -240,8 +241,11 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   + ignore-notice: does not print out the notice that is buffered during
 //   query execution.
 //
-// - "query-sql [server=<name>] [user=<name>]"
+// - "query-sql [server=<name>] [user=<name>] [regex=<regex pattern>]"
 //   Executes the input SQL query and print the results.
+//
+//   + regex: return true if the query result matches the regex pattern and
+//   false otherwise.
 //
 // - "reset"
 //    Clear all state associated with the test.
@@ -472,6 +476,16 @@ func TestDataDriven(t *testing.T) {
 				}
 				output, err := sqlutils.RowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
+				if d.HasArg("regex") {
+					var pattern string
+					d.ScanArgs(t, "regex", &pattern)
+					matched, err := regexp.MatchString(pattern, output)
+					require.NoError(t, err)
+					if matched {
+						return "true"
+					}
+					return "false"
+				}
 				return output
 
 			case "let":
@@ -505,6 +519,30 @@ func TestDataDriven(t *testing.T) {
 				server := lastCreatedServer
 				user := "root"
 				jobType := "BACKUP"
+
+				// First, run the backup.
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					tagJob(t, server, user, jobType, ds, d)
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					expectPausepoint(t, err, jobType, server, user, ds)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+
+			case "import":
+				server := lastCreatedServer
+				user := "root"
+				jobType := "IMPORT"
 
 				// First, run the backup.
 				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
