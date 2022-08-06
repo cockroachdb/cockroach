@@ -23,88 +23,96 @@ import "github.com/cockroachdb/pebble"
 // should rightfully consume, based on models that are "trained" on actual
 // resource consumption observed, and reported work sizes, in the past.
 //
-// The token estimation is complicated by the fact that many writes do not
-// integrate with admission control. Specifically, even if they did not ask to
-// be admitted, it would be beneficial for them to provide the information at
-// (b), so we could subtract tokens for the work they did. The list of
-// significant non-integrated writes is:
+// We use models in which the "actual tokens" are computed as a linear
+// function of the bytes claimed in StoreWorkDoneInfo (which we call
+// accounted_bytes), i.e. actual_tokens = a*accounted_bytes + b, and the result
+// of this computation (which can only be done after completion of the work)
+// is used to acquire (without blocking) additional tokens. The model thus
+// tries to make sure that one token reflects one byte of work. For example,
+// if the model is initially (a=1, b=0) and each incoming request acquires
+// 1000 tokens but ends up writing 2000 bytes, the model should update to
+// roughly (a=2, b=0), and future requests will, upon completion, acquire an
+// additional 1000 tokens to even the score. The actual fitting is performed
+// on aggregates over recent requests, and the more work is done "outside" of
+// admission control, the less useful the multiplier becomes; the model will
+// degrade into one with a larger constant term and is expected to perform
+// poorly.
 //
-// 1. Range snapshot application (does ingestion).
+// We now justify the use of a linear model. A model with only a constant term
+// (the b term above) is not able to handle multiple simultaneous workloads
+// executing on a node, since they can have very different work sizes. We
+// desire workload agnostic token estimation so a mix of various workloads can
+// share the same token estimation model. A model with
+// actual_tokens=accounted_bytes is also not suitable for 2 reasons:
+// - For writes (that are accomplished via the memtable) we only have the size
+//   of the raft log entry in accounted_bytes and not the size of the later
+//   state machine application.
 //
-// 2. State machine application for regular writes: StoreWorkDoneInfo,
-//    WriteBytes only accounts for the write to the raft log.
+// - For ingests, we also need to fit a model where accounted_bytes is the
+//   size of the ingest, and actual_tokens is the size that landed in L0.
 //
-// 3. Follower writes, to the raft log and to the state machine, both regular
-//    and ingests.
+// We note that a multiplier term (the a term above) can accomplish both goals.
+// The first bullet can be handled by a multiplier that is approximately 2.
+// Ingests have some fraction that get ingested into L0, i.e., a multiplier
+// <= 1.
 //
-// Over time, we should change the code to perform step (b) for (1) and for
-// the raft log for (3). This will require noticing under raft that a write is
-// at the leaseholder, so that we don't account for the raft log write a
-// second time (since it has already been accounted for at proposal
-// evaluation). The current code here is designed to fit that future world,
-// while also attempting to deal with the limitations of this lack of
-// integration.
+// One complication with ingests is range snapshot application. They happen
+// infrequently and can add a very large number of bytes, which are often
+// ingested below L0. We don't want to skew our ingest models based on these
+// range snapshots, so we explicitly ignore them in modeling.
 //
-// Specifically, in such a future world, even though we have the raft log
-// writes for regular writes, and ingest bytes for ingestion requests, we have
-// a mix of workloads that are concurrently doing writes. These could be
-// multiple SQL-originating workloads with different size writes, and bulk
-// workloads that are doing index backfills. We desire workload agnostic token
-// estimation so a mix of various workloads can share the same token
-// estimation model.
+// So now that we've justified the a term, one question arises is whether we
+// need a b term. Historically we have had sources of error that are due to
+// lack of integration with admission control, and we do not want to skew the
+// a term significantly. So the fitting approach has a b term, but attempts to
+// minimize the b term while keeping the a term within some configured bounds.
+// The [min,max] bounds on the a term prevent wild fluctuations and are set
+// based on what we know about the system.
 //
-// We also have the immediate practical requirement that if there are bytes
-// added to L0 (based on Pebble stats) that are unaccounted for by
-// StoreWorkDoneInfo, we should compensate for that by adjusting our
-// estimates. This may lead to per-work over-estimation, but that is better
-// than an unhealthy LSM. A consequence of this is that we are willing to add
-// tokens based on unaccounted write bytes to work that only did ingestion and
-// willing to add tokens based on unaccounted ingested bytes to work that only
-// did regular writes.
+// The estimation of a and b is done by tokensLinearModelFitter. It is used
+// to fit 3 models.
+// - [l0WriteLM] Mapping the write accounted bytes to bytes added to L0: We
+//   expect the multiplier a to be close to 2, due to the subsequent
+//   application to the state machine. So it would be reasonable to constrain
+//   a to [1, 2]. However, in experiments we've seen inconsistencies between
+//   Pebble stats and admission control stats, due to choppiness in work
+//   getting done, which is better modeled by allowing multiplier a to be less
+//   constrained. So we use [0.5, 3].
 //
-// We observe:
-// - The lack of integration of state machine application can be mostly
-//   handled by a multiplier on the bytes written to the raft log. Say a
-//   multiplier of ~2.
-//
-// - We expect that most range snapshot applications will ingest into levels
-//   below L0, so if we limit our attention to Pebble stats relating to
-//   ingestion into L0, we may not see the effect of these unaccounted bytes,
-//   which will result in more accurate estimation.
-//
-// - Ingests have some fraction that get ingested into L0, i.e., a multiplier
-//   <= 1.
-//
-// Based on these observations we adopt a linear model for estimating the
-// actual bytes (y), given the accounted bytes (x): y = a.x + b. The
-// estimation of a and b is done by tokensLinearModelFitter. We constrain the
-// interval of a to be [min,max] to prevent wild fluctuations and to account
-// for what we know about the system:
-// - For writes, we expect the multiplier a to be close to 2, due to the
-//   subsequent application to the state machine. So it would be reasonable to
-//   constrain a to [1, 2]. However, in experiments we've seen inconsistencies
-//   between Pebble stats and admission control stats, due to choppiness in
-//   work getting done, which is better modeled by allowing multiplier a to be
-//   less constrained. So we use [0.5, 3].
-//
-// - For ingests, we expect the multiplier a to be <= 1, since some fraction
-//   of the ingest goes into L0. So it would be reasonable to constrain a to
-//   [0, 1]. For the same reason as the previous bullet, we use [0.001, 1.5].
-//   This lower-bound of 0.001 is debatable, since it will cause some token
-//   consumption even if all ingested bytes are going to levels below L0.
+// - [l0IngestLM] Mapping the ingest accounted bytes (which is the total bytes
+//   in the ingest, and not just to L0), to the bytes added to L0: We expect
+//   the multiplier a to be <= 1, since some fraction of the ingest goes into
+//   L0. So it would be reasonable to constrain a to [0, 1]. For the same
+//   reason as the previous bullet, we use [0.001, 1.5]. This lower-bound of
+//   0.001 is debatable, since it will cause some token consumption even if
+//   all ingested bytes are going to levels below L0.
 //   TODO(sumeer): consider lowering the lower bound, after experimentation.
 //
-// In both the writes and ingests case, y is the bytes being added to L0.
+// - [ingestLM] Mapping the ingest accounted bytes to the total ingested bytes
+//   added to the LSM. We can expect a multiplier of 1. For now, we use bounds
+//   of [0.5, 1.5].
 //
 // NB: these linear models will be workload agnostic if most of the bytes are
 // modeled via the a.x term, and not via the b term, since workloads are
 // likely (at least for regular writes) to vary significantly in x.
+
+// See the comment above for the justification of these constants.
+const l0WriteMultiplierMin = 0.5
+const l0WriteMultiplierMax = 3.0
+const l0IngestMultiplierMin = 0.001
+const l0IngestMultiplierMax = 1.5
+const ingestMultiplierMin = 0.5
+const ingestMultiplierMax = 1.5
 
 // tokensLinearModel represents a model y = multiplier.x + constant.
 type tokensLinearModel struct {
 	multiplier float64
 	// constant >= 0
 	constant int64
+}
+
+func (m tokensLinearModel) applyLinearModel(b int64) int64 {
+	return int64(float64(b)*m.multiplier) + m.constant
 }
 
 // tokensLinearModelFitter fits y = multiplier.x + constant, based on the
@@ -129,14 +137,14 @@ type tokensLinearModelFitter struct {
 	smoothedLinearModel           tokensLinearModel
 	smoothedPerWorkAccountedBytes int64
 
-	// Should be set to true for the ingested bytes model: if all bytes are
+	// Should be set to true for the L0 ingested bytes model: if all bytes are
 	// ingested below L0, the actual bytes will be zero and the accounted bytes
 	// non-zero. We need to update the model in this case.
-	updateWithZeroActualNonZeroAccountedForIngestedModel bool
+	updateWithZeroActualNonZeroAccountedForL0IngestedModel bool
 }
 
 func makeTokensLinearModelFitter(
-	multMin float64, multMax float64, updateWithZeroActualNonZeroAccountedForIngestedModel bool,
+	multMin float64, multMax float64, updateWithZeroActualNonZeroAccountedForL0IngestedModel bool,
 ) tokensLinearModelFitter {
 	return tokensLinearModelFitter{
 		multiplierMin: multMin,
@@ -145,8 +153,8 @@ func makeTokensLinearModelFitter(
 			multiplier: (multMin + multMax) / 2,
 			constant:   1,
 		},
-		smoothedPerWorkAccountedBytes:                        1,
-		updateWithZeroActualNonZeroAccountedForIngestedModel: updateWithZeroActualNonZeroAccountedForIngestedModel,
+		smoothedPerWorkAccountedBytes:                          1,
+		updateWithZeroActualNonZeroAccountedForL0IngestedModel: updateWithZeroActualNonZeroAccountedForL0IngestedModel,
 	}
 }
 
@@ -178,7 +186,7 @@ func (f *tokensLinearModelFitter) updateModelUsingIntervalStats(
 	accountedBytes int64, actualBytes int64, workCount int64,
 ) {
 	if workCount <= 1 || (actualBytes <= 0 &&
-		(!f.updateWithZeroActualNonZeroAccountedForIngestedModel || accountedBytes <= 0)) {
+		(!f.updateWithZeroActualNonZeroAccountedForL0IngestedModel || accountedBytes <= 0)) {
 		// Don't want to update the model if workCount is very low or actual bytes
 		// is zero (except for the exceptions in the if-condition above).
 		//
@@ -249,13 +257,17 @@ func (f *tokensLinearModelFitter) updateModelUsingIntervalStats(
 }
 
 type storePerWorkTokenEstimator struct {
-	atAdmissionWorkTokens         int64
-	atDoneWriteTokensLinearModel  tokensLinearModelFitter
+	atAdmissionWorkTokens           int64
+	atDoneL0WriteTokensLinearModel  tokensLinearModelFitter
+	atDoneL0IngestTokensLinearModel tokensLinearModelFitter
+	// Unlike the models above that model bytes into L0, this model computes all
+	// ingested bytes into the LSM.
 	atDoneIngestTokensLinearModel tokensLinearModelFitter
 
 	cumStoreAdmissionStats storeAdmissionStats
 	cumL0WriteBytes        uint64
 	cumL0IngestedBytes     uint64
+	cumLSMIngestedBytes    uint64
 
 	// Tracked for logging and copied out of here.
 	aux perWorkTokensAux
@@ -264,41 +276,49 @@ type storePerWorkTokenEstimator struct {
 // perWorkTokensAux encapsulates auxiliary (informative) numerical state that
 // helps in understanding the behavior of storePerWorkTokenEstimator.
 type perWorkTokensAux struct {
-	intWorkCount                int64
-	intL0WriteBytes             int64
-	intL0IngestedBytes          int64
-	intL0WriteAccountedBytes    int64
-	intL0IngestedAccountedBytes int64
-	intWriteLinearModel         tokensLinearModel
-	intIngestedLinearModel      tokensLinearModel
+	intWorkCount              int64
+	intL0WriteBytes           int64
+	intL0IngestedBytes        int64
+	intLSMIngestedBytes       int64
+	intL0WriteAccountedBytes  int64
+	intIngestedAccountedBytes int64
+	intL0WriteLinearModel     tokensLinearModel
+	intL0IngestedLinearModel  tokensLinearModel
+	intIngestedLinearModel    tokensLinearModel
 
 	// The bypassed count and bytes are also included in the overall interval
 	// stats.
-	intBypassedWorkCount                int64
-	intL0WriteBypassedAccountedBytes    int64
-	intL0IngestedBypassedAccountedBytes int64
+	intBypassedWorkCount              int64
+	intL0WriteBypassedAccountedBytes  int64
+	intIngestedBypassedAccountedBytes int64
 
-	// The ignored bytes are included in intL0IngestedBytes, and may even be
-	// higher than that value because these are from a different source.
+	// The ignored bytes are included in intL0IngestedBytes, and in
+	// intLSMWriteAndIngestedBytes, and may even be higher than that value
+	// because these are from a different source.
 	intL0IgnoredIngestedBytes int64
 }
 
 func makeStorePerWorkTokenEstimator() storePerWorkTokenEstimator {
 	return storePerWorkTokenEstimator{
-		atAdmissionWorkTokens:         1,
-		atDoneWriteTokensLinearModel:  makeTokensLinearModelFitter(0.5, 3, false),
-		atDoneIngestTokensLinearModel: makeTokensLinearModelFitter(0.001, 1.5, true),
+		atAdmissionWorkTokens: 1,
+		atDoneL0WriteTokensLinearModel: makeTokensLinearModelFitter(
+			l0WriteMultiplierMin, l0WriteMultiplierMax, false),
+		atDoneL0IngestTokensLinearModel: makeTokensLinearModelFitter(
+			l0IngestMultiplierMin, l0IngestMultiplierMax, true),
+		atDoneIngestTokensLinearModel: makeTokensLinearModelFitter(
+			ingestMultiplierMin, ingestMultiplierMax, false),
 	}
 }
 
 // NB: first call to updateEstimates only initializes the cumulative values.
 func (e *storePerWorkTokenEstimator) updateEstimates(
-	l0Metrics pebble.LevelMetrics, admissionStats storeAdmissionStats,
+	l0Metrics pebble.LevelMetrics, cumLSMIngestedBytes uint64, admissionStats storeAdmissionStats,
 ) {
 	if e.cumL0WriteBytes == 0 {
 		e.cumStoreAdmissionStats = admissionStats
 		e.cumL0WriteBytes = l0Metrics.BytesFlushed
 		e.cumL0IngestedBytes = l0Metrics.BytesIngested
+		e.cumLSMIngestedBytes = cumLSMIngestedBytes
 		return
 	}
 	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
@@ -313,14 +333,24 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		int64(e.cumStoreAdmissionStats.admittedCount)
 	intL0WriteAccountedBytes :=
 		int64(admissionStats.writeAccountedBytes) - int64(e.cumStoreAdmissionStats.writeAccountedBytes)
-	// Note that these are not really L0 ingested bytes, since we don't know how
+	// Note that these are not L0 ingested bytes, since we don't know how
 	// many did go to L0.
-	intL0IngestedAccountedBytes := int64(admissionStats.ingestedAccountedBytes) -
+	intIngestedAccountedBytes := int64(admissionStats.ingestedAccountedBytes) -
 		int64(e.cumStoreAdmissionStats.ingestedAccountedBytes)
-	e.atDoneWriteTokensLinearModel.updateModelUsingIntervalStats(
+	e.atDoneL0WriteTokensLinearModel.updateModelUsingIntervalStats(
 		intL0WriteAccountedBytes, intL0WriteBytes, intWorkCount)
+	e.atDoneL0IngestTokensLinearModel.updateModelUsingIntervalStats(
+		intIngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
+	// Ingest across all levels model.
+	intLSMIngestedBytes := int64(cumLSMIngestedBytes) - int64(e.cumLSMIngestedBytes)
+	intIgnoredIngestedBytes :=
+		int64(admissionStats.statsToIgnore.Bytes) - int64(e.cumStoreAdmissionStats.statsToIgnore.Bytes)
+	adjustedIntLSMIngestedBytes := intLSMIngestedBytes - intIgnoredIngestedBytes
+	if adjustedIntLSMIngestedBytes < 0 {
+		adjustedIntLSMIngestedBytes = 0
+	}
 	e.atDoneIngestTokensLinearModel.updateModelUsingIntervalStats(
-		intL0IngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
+		intIngestedAccountedBytes, adjustedIntLSMIngestedBytes, intWorkCount)
 
 	intL0TotalBytes := intL0WriteBytes + adjustedIntL0IngestedBytes
 	if intWorkCount > 1 && intL0TotalBytes > 0 {
@@ -332,18 +362,20 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		e.atAdmissionWorkTokens = max(1, e.atAdmissionWorkTokens)
 	}
 	e.aux = perWorkTokensAux{
-		intWorkCount:                intWorkCount,
-		intL0WriteBytes:             intL0WriteBytes,
-		intL0IngestedBytes:          intL0IngestedBytes,
-		intL0WriteAccountedBytes:    intL0WriteAccountedBytes,
-		intL0IngestedAccountedBytes: intL0IngestedAccountedBytes,
-		intWriteLinearModel:         e.atDoneWriteTokensLinearModel.intLinearModel,
-		intIngestedLinearModel:      e.atDoneIngestTokensLinearModel.intLinearModel,
+		intWorkCount:              intWorkCount,
+		intL0WriteBytes:           intL0WriteBytes,
+		intL0IngestedBytes:        intL0IngestedBytes,
+		intLSMIngestedBytes:       intLSMIngestedBytes,
+		intL0WriteAccountedBytes:  intL0WriteAccountedBytes,
+		intIngestedAccountedBytes: intIngestedAccountedBytes,
+		intL0WriteLinearModel:     e.atDoneL0WriteTokensLinearModel.intLinearModel,
+		intL0IngestedLinearModel:  e.atDoneL0IngestTokensLinearModel.intLinearModel,
+		intIngestedLinearModel:    e.atDoneIngestTokensLinearModel.intLinearModel,
 		intBypassedWorkCount: int64(admissionStats.aux.bypassedCount) -
 			int64(e.cumStoreAdmissionStats.aux.bypassedCount),
 		intL0WriteBypassedAccountedBytes: int64(admissionStats.aux.writeBypassedAccountedBytes) -
 			int64(e.cumStoreAdmissionStats.aux.writeBypassedAccountedBytes),
-		intL0IngestedBypassedAccountedBytes: int64(admissionStats.aux.ingestedBypassedAccountedBytes) -
+		intIngestedBypassedAccountedBytes: int64(admissionStats.aux.ingestedBypassedAccountedBytes) -
 			int64(e.cumStoreAdmissionStats.aux.ingestedBypassedAccountedBytes),
 		intL0IgnoredIngestedBytes: intL0IgnoredIngestedBytes,
 	}
@@ -351,6 +383,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	e.cumStoreAdmissionStats = admissionStats
 	e.cumL0WriteBytes = l0Metrics.BytesFlushed
 	e.cumL0IngestedBytes = l0Metrics.BytesIngested
+	e.cumLSMIngestedBytes = cumLSMIngestedBytes
 }
 
 func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() storeRequestEstimates {
@@ -358,9 +391,11 @@ func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() store
 }
 
 func (e *storePerWorkTokenEstimator) getModelsAtAdmittedDone() (
-	writeLM tokensLinearModel,
-	ingestedLM tokensLinearModel,
+	l0WriteLM tokensLinearModel,
+	l0IngestLM tokensLinearModel,
+	ingestLM tokensLinearModel,
 ) {
-	return e.atDoneWriteTokensLinearModel.smoothedLinearModel,
+	return e.atDoneL0WriteTokensLinearModel.smoothedLinearModel,
+		e.atDoneL0IngestTokensLinearModel.smoothedLinearModel,
 		e.atDoneIngestTokensLinearModel.smoothedLinearModel
 }

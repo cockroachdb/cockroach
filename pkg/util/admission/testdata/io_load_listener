@@ -12,67 +12,67 @@ prep-admission-stats admitted=0
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=21 l0-sublevels=21
 ----
 compaction score 0.000 (21 ssts, 21 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈0 B], flushed 0 B [≈0 B]; admitting all
-{ioLoadListenerState:{cumL0AddedBytes:1000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
-tick: 0, setAvailableIOTokens: unlimited
-tick: 1, setAvailableIOTokens: unlimited
-tick: 2, setAvailableIOTokens: unlimited
-tick: 3, setAvailableIOTokens: unlimited
-tick: 4, setAvailableIOTokens: unlimited
-tick: 5, setAvailableIOTokens: unlimited
-tick: 6, setAvailableIOTokens: unlimited
-tick: 7, setAvailableIOTokens: unlimited
-tick: 8, setAvailableIOTokens: unlimited
-tick: 9, setAvailableIOTokens: unlimited
-tick: 10, setAvailableIOTokens: unlimited
-tick: 11, setAvailableIOTokens: unlimited
-tick: 12, setAvailableIOTokens: unlimited
-tick: 13, setAvailableIOTokens: unlimited
-tick: 14, setAvailableIOTokens: unlimited
-tick: 15, setAvailableIOTokens: unlimited
-tick: 16, setAvailableIOTokens: unlimited
-tick: 17, setAvailableIOTokens: unlimited
-tick: 18, setAvailableIOTokens: unlimited
-tick: 19, setAvailableIOTokens: unlimited
-tick: 20, setAvailableIOTokens: unlimited
-tick: 21, setAvailableIOTokens: unlimited
-tick: 22, setAvailableIOTokens: unlimited
-tick: 23, setAvailableIOTokens: unlimited
-tick: 24, setAvailableIOTokens: unlimited
-tick: 25, setAvailableIOTokens: unlimited
-tick: 26, setAvailableIOTokens: unlimited
-tick: 27, setAvailableIOTokens: unlimited
-tick: 28, setAvailableIOTokens: unlimited
-tick: 29, setAvailableIOTokens: unlimited
-tick: 30, setAvailableIOTokens: unlimited
-tick: 31, setAvailableIOTokens: unlimited
-tick: 32, setAvailableIOTokens: unlimited
-tick: 33, setAvailableIOTokens: unlimited
-tick: 34, setAvailableIOTokens: unlimited
-tick: 35, setAvailableIOTokens: unlimited
-tick: 36, setAvailableIOTokens: unlimited
-tick: 37, setAvailableIOTokens: unlimited
-tick: 38, setAvailableIOTokens: unlimited
-tick: 39, setAvailableIOTokens: unlimited
-tick: 40, setAvailableIOTokens: unlimited
-tick: 41, setAvailableIOTokens: unlimited
-tick: 42, setAvailableIOTokens: unlimited
-tick: 43, setAvailableIOTokens: unlimited
-tick: 44, setAvailableIOTokens: unlimited
-tick: 45, setAvailableIOTokens: unlimited
-tick: 46, setAvailableIOTokens: unlimited
-tick: 47, setAvailableIOTokens: unlimited
-tick: 48, setAvailableIOTokens: unlimited
-tick: 49, setAvailableIOTokens: unlimited
-tick: 50, setAvailableIOTokens: unlimited
-tick: 51, setAvailableIOTokens: unlimited
-tick: 52, setAvailableIOTokens: unlimited
-tick: 53, setAvailableIOTokens: unlimited
-tick: 54, setAvailableIOTokens: unlimited
-tick: 55, setAvailableIOTokens: unlimited
-tick: 56, setAvailableIOTokens: unlimited
-tick: 57, setAvailableIOTokens: unlimited
-tick: 58, setAvailableIOTokens: unlimited
-tick: 59, setAvailableIOTokens: unlimited
+{ioLoadListenerState:{cumL0AddedBytes:1000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:1000} smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:0 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
+tick: 0, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 1, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 2, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 3, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 4, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 5, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 6, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 7, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 8, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 9, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 10, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 11, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 12, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 13, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 14, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 15, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 16, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 17, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 18, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 19, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 20, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 21, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 22, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 23, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 24, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 25, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 26, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 27, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 28, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 29, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 30, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 31, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 32, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 33, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 34, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 35, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 36, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 37, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 38, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 39, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 40, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 41, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 42, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 43, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 44, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 45, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 46, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 47, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 48, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 49, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 50, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 51, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 52, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 53, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 54, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 55, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 56, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 57, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 58, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+tick: 59, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
 
 prep-admission-stats admitted=10000 write-bytes=40000
 ----
@@ -85,69 +85,69 @@ prep-admission-stats admitted=10000 write-bytes=40000
 set-state l0-bytes=10000 l0-added-write=101000 l0-files=21 l0-sublevels=21
 ----
 compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 98 KiB (write 98 KiB ingest 0 B ignored 0 B): requests 10000 (0 bypassed) with 39 KiB acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 2.25x+1 B (smoothed 2.00x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 5 B, compacted 98 KiB [≈49 KiB], flushed 0 B [≈0 B]; admitting 12 KiB (rate 833 B/s) due to L0 growth (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:101000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:50000 smoothedCompactionByteTokens:12500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:12500 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:5} writeLM:{multiplier:2 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10000 intL0WriteBytes:100000 intL0IngestedBytes:0 intL0WriteAccountedBytes:40000 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:2.25 constant:1} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:101000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:101000} smoothedIntL0CompactedBytes:50000 smoothedCompactionByteTokens:12500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:12500 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:5} l0WriteLM:{multiplier:2 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10000 intL0WriteBytes:100000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:40000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:2.25 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:101000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 5
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 2.00x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 209
-tick: 1, setAvailableIOTokens: 209
-tick: 2, setAvailableIOTokens: 209
-tick: 3, setAvailableIOTokens: 209
-tick: 4, setAvailableIOTokens: 209
-tick: 5, setAvailableIOTokens: 209
-tick: 6, setAvailableIOTokens: 209
-tick: 7, setAvailableIOTokens: 209
-tick: 8, setAvailableIOTokens: 209
-tick: 9, setAvailableIOTokens: 209
-tick: 10, setAvailableIOTokens: 209
-tick: 11, setAvailableIOTokens: 209
-tick: 12, setAvailableIOTokens: 209
-tick: 13, setAvailableIOTokens: 209
-tick: 14, setAvailableIOTokens: 209
-tick: 15, setAvailableIOTokens: 209
-tick: 16, setAvailableIOTokens: 209
-tick: 17, setAvailableIOTokens: 209
-tick: 18, setAvailableIOTokens: 209
-tick: 19, setAvailableIOTokens: 209
-tick: 20, setAvailableIOTokens: 209
-tick: 21, setAvailableIOTokens: 209
-tick: 22, setAvailableIOTokens: 209
-tick: 23, setAvailableIOTokens: 209
-tick: 24, setAvailableIOTokens: 209
-tick: 25, setAvailableIOTokens: 209
-tick: 26, setAvailableIOTokens: 209
-tick: 27, setAvailableIOTokens: 209
-tick: 28, setAvailableIOTokens: 209
-tick: 29, setAvailableIOTokens: 209
-tick: 30, setAvailableIOTokens: 209
-tick: 31, setAvailableIOTokens: 209
-tick: 32, setAvailableIOTokens: 209
-tick: 33, setAvailableIOTokens: 209
-tick: 34, setAvailableIOTokens: 209
-tick: 35, setAvailableIOTokens: 209
-tick: 36, setAvailableIOTokens: 209
-tick: 37, setAvailableIOTokens: 209
-tick: 38, setAvailableIOTokens: 209
-tick: 39, setAvailableIOTokens: 209
-tick: 40, setAvailableIOTokens: 209
-tick: 41, setAvailableIOTokens: 209
-tick: 42, setAvailableIOTokens: 209
-tick: 43, setAvailableIOTokens: 209
-tick: 44, setAvailableIOTokens: 209
-tick: 45, setAvailableIOTokens: 209
-tick: 46, setAvailableIOTokens: 209
-tick: 47, setAvailableIOTokens: 209
-tick: 48, setAvailableIOTokens: 209
-tick: 49, setAvailableIOTokens: 209
-tick: 50, setAvailableIOTokens: 209
-tick: 51, setAvailableIOTokens: 209
-tick: 52, setAvailableIOTokens: 209
-tick: 53, setAvailableIOTokens: 209
-tick: 54, setAvailableIOTokens: 209
-tick: 55, setAvailableIOTokens: 209
-tick: 56, setAvailableIOTokens: 209
-tick: 57, setAvailableIOTokens: 209
-tick: 58, setAvailableIOTokens: 209
-tick: 59, setAvailableIOTokens: 169
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 2.00x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 1, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 2, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 3, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 4, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 5, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 6, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 7, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 8, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 9, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 10, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 11, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 12, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 13, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 14, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 15, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 16, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 17, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 18, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 19, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 20, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 21, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 22, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 23, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 24, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 25, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 26, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 27, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 28, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 29, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 30, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 31, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 32, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 33, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 34, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 35, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 36, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 37, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 38, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 39, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 40, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 41, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 42, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 43, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 44, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 45, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 46, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 47, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 48, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 49, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 50, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 51, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 52, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 53, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 54, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 55, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 56, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 57, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 58, setAvailableIOTokens: 209 setAvailableElasticDiskTokens: unlimited
+tick: 59, setAvailableIOTokens: 169 setAvailableElasticDiskTokens: unlimited
 
 prep-admission-stats admitted=20000 write-bytes=80000
 ----
@@ -157,78 +157,78 @@ prep-admission-stats admitted=20000 write-bytes=80000
 set-state l0-bytes=10000 l0-added-write=201000 l0-files=21 l0-sublevels=21
 ----
 compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 98 KiB (write 98 KiB ingest 0 B ignored 0 B): requests 10000 (0 bypassed) with 39 KiB acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 2.25x+1 B (smoothed 2.12x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 7 B, compacted 98 KiB [≈73 KiB], flushed 0 B [≈0 B]; admitting 24 KiB (rate 1.6 KiB/s) due to L0 growth (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:201000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:75000 smoothedCompactionByteTokens:25000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:25000 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:7} writeLM:{multiplier:2.125 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10000 intL0WriteBytes:100000 intL0IngestedBytes:0 intL0WriteAccountedBytes:40000 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:2.25 constant:1} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:201000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:201000} smoothedIntL0CompactedBytes:75000 smoothedCompactionByteTokens:25000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:25000 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:7} l0WriteLM:{multiplier:2.125 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10000 intL0WriteBytes:100000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:40000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:2.25 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:201000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 7
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 2.12x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 417
-tick: 1, setAvailableIOTokens: 417
-tick: 2, setAvailableIOTokens: 417
-tick: 3, setAvailableIOTokens: 417
-tick: 4, setAvailableIOTokens: 417
-tick: 5, setAvailableIOTokens: 417
-tick: 6, setAvailableIOTokens: 417
-tick: 7, setAvailableIOTokens: 417
-tick: 8, setAvailableIOTokens: 417
-tick: 9, setAvailableIOTokens: 417
-tick: 10, setAvailableIOTokens: 417
-tick: 11, setAvailableIOTokens: 417
-tick: 12, setAvailableIOTokens: 417
-tick: 13, setAvailableIOTokens: 417
-tick: 14, setAvailableIOTokens: 417
-tick: 15, setAvailableIOTokens: 417
-tick: 16, setAvailableIOTokens: 417
-tick: 17, setAvailableIOTokens: 417
-tick: 18, setAvailableIOTokens: 417
-tick: 19, setAvailableIOTokens: 417
-tick: 20, setAvailableIOTokens: 417
-tick: 21, setAvailableIOTokens: 417
-tick: 22, setAvailableIOTokens: 417
-tick: 23, setAvailableIOTokens: 417
-tick: 24, setAvailableIOTokens: 417
-tick: 25, setAvailableIOTokens: 417
-tick: 26, setAvailableIOTokens: 417
-tick: 27, setAvailableIOTokens: 417
-tick: 28, setAvailableIOTokens: 417
-tick: 29, setAvailableIOTokens: 417
-tick: 30, setAvailableIOTokens: 417
-tick: 31, setAvailableIOTokens: 417
-tick: 32, setAvailableIOTokens: 417
-tick: 33, setAvailableIOTokens: 417
-tick: 34, setAvailableIOTokens: 417
-tick: 35, setAvailableIOTokens: 417
-tick: 36, setAvailableIOTokens: 417
-tick: 37, setAvailableIOTokens: 417
-tick: 38, setAvailableIOTokens: 417
-tick: 39, setAvailableIOTokens: 417
-tick: 40, setAvailableIOTokens: 417
-tick: 41, setAvailableIOTokens: 417
-tick: 42, setAvailableIOTokens: 417
-tick: 43, setAvailableIOTokens: 417
-tick: 44, setAvailableIOTokens: 417
-tick: 45, setAvailableIOTokens: 417
-tick: 46, setAvailableIOTokens: 417
-tick: 47, setAvailableIOTokens: 417
-tick: 48, setAvailableIOTokens: 417
-tick: 49, setAvailableIOTokens: 417
-tick: 50, setAvailableIOTokens: 417
-tick: 51, setAvailableIOTokens: 417
-tick: 52, setAvailableIOTokens: 417
-tick: 53, setAvailableIOTokens: 417
-tick: 54, setAvailableIOTokens: 417
-tick: 55, setAvailableIOTokens: 417
-tick: 56, setAvailableIOTokens: 417
-tick: 57, setAvailableIOTokens: 417
-tick: 58, setAvailableIOTokens: 417
-tick: 59, setAvailableIOTokens: 397
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 2.12x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 1, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 2, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 3, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 4, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 5, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 6, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 7, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 8, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 9, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 10, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 11, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 12, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 13, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 14, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 15, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 16, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 17, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 18, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 19, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 20, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 21, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 22, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 23, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 24, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 25, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 26, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 27, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 28, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 29, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 30, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 31, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 32, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 33, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 34, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 35, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 36, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 37, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 38, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 39, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 40, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 41, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 42, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 43, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 44, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 45, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 46, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 47, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 48, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 49, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 50, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 51, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 52, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 53, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 54, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 55, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 56, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 57, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 58, setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
+tick: 59, setAvailableIOTokens: 397 setAvailableElasticDiskTokens: unlimited
 
 # No delta. This used to trigger an overflow bug.
 set-state l0-bytes=10000 l0-added-write=201000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
 compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 2.12x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 7 B, compacted 0 B [≈37 KiB], flushed 0 B [≈0 B]; admitting 21 KiB (rate 1.4 KiB/s) due to L0 growth (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:201000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:37500 smoothedCompactionByteTokens:21875 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:21875 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:7} writeLM:{multiplier:2.125 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:201000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:201000} smoothedIntL0CompactedBytes:37500 smoothedCompactionByteTokens:21875 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:21875 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:7} l0WriteLM:{multiplier:2.125 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:201000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 7
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 2.12x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 365
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 2.12x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 365 setAvailableElasticDiskTokens: unlimited
 
 prep-admission-stats admitted=30000 write-bytes=120000
 ----
@@ -239,10 +239,10 @@ prep-admission-stats admitted=30000 write-bytes=120000
 set-state l0-bytes=10000 l0-added-write=501000 l0-files=21 l0-sublevels=20 print-only-first-tick=true
 ----
 compaction score 1.000 (21 ssts, 20 sub-levels), L0 growth 293 KiB (write 293 KiB ingest 0 B ignored 0 B): requests 10000 (0 bypassed) with 39 KiB acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 3.00x+18 B (smoothed 2.56x+9 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 18 B, compacted 293 KiB [≈165 KiB], flushed 0 B [≈0 B]; admitting all
-{ioLoadListenerState:{cumL0AddedBytes:501000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:168750 smoothedCompactionByteTokens:160937.5 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:18} writeLM:{multiplier:2.5625 constant:9} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:300000 intL0CompactedBytes:300000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10000 intL0WriteBytes:300000 intL0IngestedBytes:0 intL0WriteAccountedBytes:40000 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:3 constant:18} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:501000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:501000} smoothedIntL0CompactedBytes:168750 smoothedCompactionByteTokens:160937.5 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:18} l0WriteLM:{multiplier:2.5625 constant:9} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:300000 intL0CompactedBytes:300000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10000 intL0WriteBytes:300000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:40000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:3 constant:18} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:501000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 18
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 2.56x+9 ingested-lm: 0.75x+1
-setAvailableIOTokens: unlimited
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 2.56x+9 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
 
 # Test cases with more information in storeAdmissionStats.
 init
@@ -255,8 +255,8 @@ prep-admission-stats admitted=0
 set-state l0-bytes=1000 l0-added-write=1000 l0-added-ingested=0 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
 compaction score 0.000 (21 ssts, 21 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈0 B], flushed 0 B [≈0 B]; admitting all
-{ioLoadListenerState:{cumL0AddedBytes:1000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
-tick: 0, setAvailableIOTokens: unlimited
+{ioLoadListenerState:{cumL0AddedBytes:1000 curL0Bytes:1000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:1000} smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:0 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
+tick: 0, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
 
 # L0 will see an addition of 200,000 bytes. 150,000 bytes were mentioned by
 # the admitted requests.
@@ -264,13 +264,18 @@ prep-admission-stats admitted=10 write-bytes=130000 ingested-bytes=20000
 ----
 {admittedCount:10 writeAccountedBytes:130000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
+# The ingested model can be fit with a multiplier of ~1.5 for the interval,
+# but since the l0-ingest-lm model had a previous multiplier of 0.75 and the
+# ingest-model had a previous multiplier of 1.0 and we do exponential
+# smoothing with alpha=0.5, we end up the multipliers
+# of 1.12 and 1.25 respectively.
 set-state l0-bytes=1000 l0-added-write=171000 l0-added-ingested=30000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
 compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 195 KiB (write 166 KiB ingest 29 KiB ignored 0 B): requests 10 (0 bypassed) with 127 KiB acc-write (0 B bypassed) + 20 KiB acc-ingest (0 B bypassed) + write-model 1.31x+1 B (smoothed 1.53x+1 B) + ingested-model 1.50x+1 B (smoothed 1.12x+1 B) + at-admission-tokens 9.8 KiB, compacted 195 KiB [≈98 KiB], flushed 0 B [≈0 B]; admitting 24 KiB (rate 1.6 KiB/s) due to L0 growth (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:201000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:100000 smoothedCompactionByteTokens:25000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:25000 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:10000} writeLM:{multiplier:1.5288076923076923 constant:1} ingestedLM:{multiplier:1.125 constant:1} aux:{intL0AddedBytes:200000 intL0CompactedBytes:200000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10 intL0WriteBytes:170000 intL0IngestedBytes:30000 intL0WriteAccountedBytes:130000 intL0IngestedAccountedBytes:20000 intWriteLinearModel:{multiplier:1.3076153846153846 constant:1} intIngestedLinearModel:{multiplier:1.4995 constant:1} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:201000 curL0Bytes:1000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:201000} smoothedIntL0CompactedBytes:100000 smoothedCompactionByteTokens:25000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:25000 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:10000} l0WriteLM:{multiplier:1.5288076923076923 constant:1} l0IngestLM:{multiplier:1.125 constant:1} ingestLM:{multiplier:1.2497500000000001 constant:1} aux:{intL0AddedBytes:200000 intL0CompactedBytes:200000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10 intL0WriteBytes:170000 intL0IngestedBytes:30000 intLSMIngestedBytes:30000 intL0WriteAccountedBytes:130000 intIngestedAccountedBytes:20000 intL0WriteLinearModel:{multiplier:1.3076153846153846 constant:1} intL0IngestedLinearModel:{multiplier:1.4995 constant:1} intIngestedLinearModel:{multiplier:1.4995 constant:1} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:201000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 10000
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.53x+1 ingested-lm: 1.12x+1
-setAvailableIOTokens: 417
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.53x+1 l0-ingest-lm: 1.12x+1 ingest-lm: 1.25x+1
+setAvailableIOTokens: 417 setAvailableElasticDiskTokens: unlimited
 
 # L0 will see an addition of 20,000 bytes, all of which are accounted for.
 # Since the ingested bytes in this interval are 0, the constant for the
@@ -282,15 +287,13 @@ prep-admission-stats admitted=20 write-bytes=150000 ingested-bytes=20000
 set-state l0-bytes=1000 l0-added-write=191000 l0-added-ingested=30000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
 compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 20 KiB (write 20 KiB ingest 0 B ignored 0 B): requests 10 (0 bypassed) with 20 KiB acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 1.00x+1 B (smoothed 1.26x+1 B) + ingested-model 0.00x+0 B (smoothed 1.12x+1 B) + at-admission-tokens 5.9 KiB, compacted 20 KiB [≈59 KiB], flushed 0 B [≈0 B]; admitting 27 KiB (rate 1.8 KiB/s) due to L0 growth (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:221000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:60000 smoothedCompactionByteTokens:27500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:27500 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:6000} writeLM:{multiplier:1.2641538461538462 constant:1} ingestedLM:{multiplier:1.125 constant:1} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10 intL0WriteBytes:20000 intL0IngestedBytes:0 intL0WriteAccountedBytes:20000 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0.9995 constant:1} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:221000 curL0Bytes:1000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:221000} smoothedIntL0CompactedBytes:60000 smoothedCompactionByteTokens:27500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:27500 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:6000} l0WriteLM:{multiplier:1.2641538461538462 constant:1} l0IngestLM:{multiplier:1.125 constant:1} ingestLM:{multiplier:1.2497500000000001 constant:1} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10 intL0WriteBytes:20000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:20000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0.9995 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:221000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 6000
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.26x+1 ingested-lm: 1.12x+1
-setAvailableIOTokens: 459
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.26x+1 l0-ingest-lm: 1.12x+1 ingest-lm: 1.25x+1
+setAvailableIOTokens: 459 setAvailableElasticDiskTokens: unlimited
 
 # L0 will see an addition of 20,000 bytes, but we think we have added 100,000
 # bytes to L0. We don't let unaccounted bytes become negative.
-# Since the ingested bytes in this interval are 0, the constant for the
-# ingested model is decayed by a factor of 2.
 prep-admission-stats admitted=30 write-bytes=250000 ingested-bytes=20000 ingested-into-l0=20000
 ----
 {admittedCount:30 writeAccountedBytes:250000 ingestedAccountedBytes:20000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
@@ -298,10 +301,10 @@ prep-admission-stats admitted=30 write-bytes=250000 ingested-bytes=20000 ingeste
 set-state l0-bytes=1000 l0-added-write=211000 l0-added-ingested=30000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
 compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 20 KiB (write 20 KiB ingest 0 B ignored 0 B): requests 10 (0 bypassed) with 98 KiB acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.50x+1 B (smoothed 0.88x+1 B) + ingested-model 0.00x+0 B (smoothed 1.12x+1 B) + at-admission-tokens 3.9 KiB, compacted 20 KiB [≈39 KiB], flushed 0 B [≈0 B]; admitting 23 KiB (rate 1.5 KiB/s) due to L0 growth (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:241000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:40000 smoothedCompactionByteTokens:23750 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:23750 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:4000} writeLM:{multiplier:0.8820769230769231 constant:1} ingestedLM:{multiplier:1.125 constant:1} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10 intL0WriteBytes:20000 intL0IngestedBytes:0 intL0WriteAccountedBytes:100000 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0.5 constant:1} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:241000 curL0Bytes:1000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:241000} smoothedIntL0CompactedBytes:40000 smoothedCompactionByteTokens:23750 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:23750 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:4000} l0WriteLM:{multiplier:0.8820769230769231 constant:1} l0IngestLM:{multiplier:1.125 constant:1} ingestLM:{multiplier:1.2497500000000001 constant:1} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:10 intL0WriteBytes:20000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:100000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0.5 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:241000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 4000
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 0.88x+1 ingested-lm: 1.12x+1
-setAvailableIOTokens: 396
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 0.88x+1 l0-ingest-lm: 1.12x+1 ingest-lm: 1.25x+1
+setAvailableIOTokens: 396 setAvailableElasticDiskTokens: unlimited
 
 # Test case with flush tokens.
 init
@@ -314,27 +317,27 @@ prep-admission-stats admitted=0
 set-state l0-bytes=10000 l0-added-write=1000 l0-files=1 l0-sublevels=1 print-only-first-tick=true
 ----
 compaction score 0.000 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈0 B], flushed 0 B [≈0 B]; admitting all
-{ioLoadListenerState:{cumL0AddedBytes:1000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
-tick: 0, setAvailableIOTokens: unlimited
+{ioLoadListenerState:{cumL0AddedBytes:1000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:1000} smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:0 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
+tick: 0, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
 
 # Flush loop utilization is too low for the interval flush tokens to
 # contribute to the smoothed value, or for tokens to become limited.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=1000 flush-work-sec=2 flush-idle-sec=100 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 9.8 KiB (write 9.8 KiB ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 9.8 KiB [≈4.9 KiB], flushed 7.3 KiB [≈0 B]; admitting all
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:5000 smoothedCompactionByteTokens:5000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:10000 intL0CompactedBytes:10000 intFlushTokens:7500 intFlushUtilization:0.0196078431372549 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:10000 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:5000 smoothedCompactionByteTokens:5000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:10000 intL0CompactedBytes:10000 intFlushTokens:7500 intFlushUtilization:0.0196078431372549 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:10000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: unlimited
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
 
 # Flush loop utilization is high enough, so we compute flush tokens for limiting admission.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=1000 flush-work-sec=2 flush-idle-sec=10 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈2.4 KiB], flushed 7.3 KiB [≈7.3 KiB]; admitting 11 KiB (rate 750 B/s) due to memtable flush (multiplier 1.500) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:2500 smoothedCompactionByteTokens:2500 smoothedNumFlushTokens:7500 flushUtilTargetFraction:1.5 totalNumByteTokens:11250 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:7500 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:2500 smoothedCompactionByteTokens:2500 smoothedNumFlushTokens:7500 flushUtilTargetFraction:1.5 totalNumByteTokens:11250 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:7500 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 188
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 188 setAvailableElasticDiskTokens: unlimited
 
 # Write stalls are happening, so decrease the flush utilization target
 # fraction from 1.5 to 1.475. But the peak flush rate has also increased since
@@ -342,10 +345,10 @@ setAvailableIOTokens: 188
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=1 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈1.2 KiB], flushed 73 KiB [≈40 KiB]; admitting 59 KiB (rate 4.0 KiB/s) due to memtable flush (multiplier 1.475) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:1 smoothedIntL0CompactedBytes:1250 smoothedCompactionByteTokens:1250 smoothedNumFlushTokens:41250 flushUtilTargetFraction:1.475 totalNumByteTokens:60843 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:1 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:1250 smoothedCompactionByteTokens:1250 smoothedNumFlushTokens:41250 flushUtilTargetFraction:1.475 totalNumByteTokens:60843 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1015
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1015 setAvailableElasticDiskTokens: unlimited
 
 # Two write stalls happened, so decrease the flush utilization target fraction
 # by a bigger step, from 1.475 to 1.425. Since the smoothed peak flush rate is
@@ -353,29 +356,29 @@ setAvailableIOTokens: 1015
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=3 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈625 B], flushed 73 KiB [≈57 KiB]; admitting 81 KiB (rate 5.4 KiB/s) due to memtable flush (multiplier 1.425) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:3 smoothedIntL0CompactedBytes:625 smoothedCompactionByteTokens:625 smoothedNumFlushTokens:58125 flushUtilTargetFraction:1.4250000000000003 totalNumByteTokens:82828 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:2 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:3 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:625 smoothedCompactionByteTokens:625 smoothedNumFlushTokens:58125 flushUtilTargetFraction:1.4250000000000003 totalNumByteTokens:82828 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:2 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1381
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1381 setAvailableElasticDiskTokens: unlimited
 
 # Five more write stalls, so the the flush utilization target fraction is
 # decreased to 1.35. The smoothed peak flush rate continues to increase.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=8 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈312 B], flushed 73 KiB [≈65 KiB]; admitting 88 KiB (rate 5.8 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:8 smoothedIntL0CompactedBytes:312 smoothedCompactionByteTokens:312.5 smoothedNumFlushTokens:66562.5 flushUtilTargetFraction:1.3500000000000005 totalNumByteTokens:89859 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:5 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:8 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:312 smoothedCompactionByteTokens:312.5 smoothedNumFlushTokens:66562.5 flushUtilTargetFraction:1.3500000000000005 totalNumByteTokens:89859 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:5 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1498
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1498 setAvailableElasticDiskTokens: unlimited
 
 # Another write stall, and the flush utilization target fraction drops to 1.325.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=9 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈156 B], flushed 73 KiB [≈69 KiB]; admitting 92 KiB (rate 6.1 KiB/s) due to memtable flush (multiplier 1.325) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:9 smoothedIntL0CompactedBytes:156 smoothedCompactionByteTokens:156.25 smoothedNumFlushTokens:70781.25 flushUtilTargetFraction:1.3250000000000006 totalNumByteTokens:93785 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:9 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:156 smoothedCompactionByteTokens:156.25 smoothedNumFlushTokens:70781.25 flushUtilTargetFraction:1.3250000000000006 totalNumByteTokens:93785 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1564
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1564 setAvailableElasticDiskTokens: unlimited
 
 # Set a lower bound of 1.3 on the flush utilization target fraction.
 set-min-flush-util percent=130
@@ -386,20 +389,20 @@ set-min-flush-util percent=130
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=10 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈78 B], flushed 73 KiB [≈71 KiB]; admitting 92 KiB (rate 6.2 KiB/s) due to memtable flush (multiplier 1.300) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:10 smoothedIntL0CompactedBytes:78 smoothedCompactionByteTokens:78.125 smoothedNumFlushTokens:72890.625 flushUtilTargetFraction:1.3000000000000007 totalNumByteTokens:94757 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:10 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:78 smoothedCompactionByteTokens:78.125 smoothedNumFlushTokens:72890.625 flushUtilTargetFraction:1.3000000000000007 totalNumByteTokens:94757 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1580
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1580 setAvailableElasticDiskTokens: unlimited
 
 # Despite another write stall, the flush utilization target fraction does not
 # decrease since it is already at the lower bound.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=11 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈39 B], flushed 73 KiB [≈72 KiB]; admitting 94 KiB (rate 6.3 KiB/s) due to memtable flush (multiplier 1.300) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:11 smoothedIntL0CompactedBytes:39 smoothedCompactionByteTokens:39.0625 smoothedNumFlushTokens:73945.3125 flushUtilTargetFraction:1.3000000000000007 totalNumByteTokens:96128 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:11 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:39 smoothedCompactionByteTokens:39.0625 smoothedNumFlushTokens:73945.3125 flushUtilTargetFraction:1.3000000000000007 totalNumByteTokens:96128 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1603
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1603 setAvailableElasticDiskTokens: unlimited
 
 # Bump up the lower bound to 1.35, which is greater than the current flush
 # utilization target fraction.
@@ -411,65 +414,107 @@ set-min-flush-util percent=135
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=12 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈19 B], flushed 73 KiB [≈73 KiB]; admitting 98 KiB (rate 6.5 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:12 smoothedIntL0CompactedBytes:19 smoothedCompactionByteTokens:19.53125 smoothedNumFlushTokens:74472.65625 flushUtilTargetFraction:1.35 totalNumByteTokens:100538 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:12 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:19 smoothedCompactionByteTokens:19.53125 smoothedNumFlushTokens:74472.65625 flushUtilTargetFraction:1.35 totalNumByteTokens:100538 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1676
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1676 setAvailableElasticDiskTokens: unlimited
 
 # The flush utilization is too low, so there is no limit on flush tokens.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=100 write-stall-count=13 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈9 B], flushed 73 KiB [≈73 KiB]; admitting all
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:9 smoothedCompactionByteTokens:9.765625 smoothedNumFlushTokens:74472.65625 flushUtilTargetFraction:1.35 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.0196078431372549 intWriteStalls:1 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:9 smoothedCompactionByteTokens:9.765625 smoothedNumFlushTokens:74472.65625 flushUtilTargetFraction:1.35 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.0196078431372549 intWriteStalls:1 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: unlimited
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
 
 # Flush utilization is high enough, so flush tokens are again limited.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈4 B], flushed 73 KiB [≈73 KiB]; admitting 98 KiB (rate 6.6 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:4 smoothedCompactionByteTokens:4.8828125 smoothedNumFlushTokens:74736.328125 flushUtilTargetFraction:1.35 totalNumByteTokens:100894 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:4 smoothedCompactionByteTokens:4.8828125 smoothedNumFlushTokens:74736.328125 flushUtilTargetFraction:1.35 totalNumByteTokens:100894 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1682
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1682 setAvailableElasticDiskTokens: unlimited
 
 # No write stalls, and token utilization is high, which will have an effect
 # in the next pebbleMetricsTick.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 all-tokens-used=true print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈2 B], flushed 73 KiB [≈73 KiB]; admitting 99 KiB (rate 6.6 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:2 smoothedCompactionByteTokens:2.44140625 smoothedNumFlushTokens:74868.1640625 flushUtilTargetFraction:1.35 totalNumByteTokens:101072 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:2 smoothedCompactionByteTokens:2.44140625 smoothedNumFlushTokens:74868.1640625 flushUtilTargetFraction:1.35 totalNumByteTokens:101072 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1685
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1685 setAvailableElasticDiskTokens: unlimited
 
 # No write stalls, and token utilization was high, so flush utilization
 # target fraction is increased to 1.375.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 all-tokens-used=true print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈1 B], flushed 73 KiB [≈73 KiB]; admitting 101 KiB (rate 6.7 KiB/s) due to memtable flush (multiplier 1.375) (used 197 KiB)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:1 smoothedCompactionByteTokens:1.220703125 smoothedNumFlushTokens:74934.08203125 flushUtilTargetFraction:1.375 totalNumByteTokens:103034 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:202144 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:1 smoothedCompactionByteTokens:1.220703125 smoothedNumFlushTokens:74934.08203125 flushUtilTargetFraction:1.375 totalNumByteTokens:103034 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:202144 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1718
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1718 setAvailableElasticDiskTokens: unlimited
 
 # No write stalls, and token utilization was high, so flush utilization
 # target fraction is increased to 1.4.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 all-tokens-used=true print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈0 B], flushed 73 KiB [≈73 KiB]; admitting 102 KiB (rate 6.8 KiB/s) due to memtable flush (multiplier 1.400) (used 201 KiB)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0.6103515625 smoothedNumFlushTokens:74967.041015625 flushUtilTargetFraction:1.4 totalNumByteTokens:104953 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:206068 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0.6103515625 smoothedNumFlushTokens:74967.041015625 flushUtilTargetFraction:1.4 totalNumByteTokens:104953 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:206068 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1750
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1750 setAvailableElasticDiskTokens: unlimited
 
 # There is a write stall, so even though token utilization is high, we
 # decrease flush utilization target fraction to 1.375.
 set-state l0-bytes=10000 l0-added-write=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=14 all-tokens-used=true print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈0 B], flushed 73 KiB [≈73 KiB]; admitting 101 KiB (rate 6.7 KiB/s) due to memtable flush (multiplier 1.375) (used 205 KiB)
-{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:14 smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0.30517578125 smoothedNumFlushTokens:74983.5205078125 flushUtilTargetFraction:1.375 totalNumByteTokens:103102 tokensAllocated:0 tokensUsed:0} requestEstimates:{writeTokens:1} writeLM:{multiplier:1.75 constant:1} ingestedLM:{multiplier:0.7505 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:209906 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intL0WriteAccountedBytes:0 intL0IngestedAccountedBytes:0 intWriteLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intL0IngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true} ioThreshold:<nil>}
+{ioLoadListenerState:{cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:14 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:11000} smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0.30517578125 smoothedNumFlushTokens:74983.5205078125 flushUtilTargetFraction:1.375 totalNumByteTokens:103102 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:209906 tokenKind:1 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:true diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:11000 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
 store-request-estimates: writeTokens: 1
-tick: 0, setAdmittedDoneModelsLocked: write-lm: 1.75x+1 ingested-lm: 0.75x+1
-setAvailableIOTokens: 1719
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: 1719 setAvailableElasticDiskTokens: unlimited
+
+# Test disk bandwidth tokens.
+init
+----
+
+set-state l0-bytes=100 l0-added-write=0 bytes-read=0 bytes-written=0 provisioned-bandwidth=10 l0-files=1 l0-sublevels=1 print-only-first-tick=true
+----
+compaction score 0.000 (1 ssts, 1 sub-levels), L0 growth 0 B (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈0 B], flushed 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumL0AddedBytes:0 curL0Bytes:100 cumWriteStallCount:0 diskBW:{bytesRead:0 bytesWritten:0 incomingLSMBytes:0} smoothedIntL0CompactedBytes:0 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:0 writeBandwidth:0 provisionedBandwidth:0} intervalLSMInfo:{incomingBytes:0 regularTokensUsed:0 elasticTokensUsed:0}}} ioThreshold:<nil>}
+tick: 0, setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
+
+set-state l0-bytes=100 l0-added-write=100000 bytes-read=1000000 bytes-written=2000000 provisioned-bandwidth=10 disk-bw-tokens-used=(100,100) l0-files=1 l0-sublevels=1 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 98 KiB (write 0 B ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 98 KiB [≈49 KiB], flushed 0 B [≈0 B]; admitting all; elastic tokens 6.1 KiB (used 100 B, regular used 100 B): write model 1.75x+1 B ingest model 1.00x+1 B, disk bw read 65 KiB write 130 KiB provisioned 10 B
+{ioLoadListenerState:{cumL0AddedBytes:100000 curL0Bytes:100 cumWriteStallCount:0 diskBW:{bytesRead:1000000 bytesWritten:2000000 incomingLSMBytes:100000} smoothedIntL0CompactedBytes:50000 smoothedCompactionByteTokens:50000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:6250 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:66666 writeBandwidth:133333 provisionedBandwidth:10} intervalLSMInfo:{incomingBytes:100000 regularTokensUsed:100 elasticTokensUsed:100}}} ioThreshold:<nil>}
+store-request-estimates: writeTokens: 1
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: 105
+
+set-state l0-bytes=100 l0-added-write=200000 bytes-read=2000000 bytes-written=4000000 provisioned-bandwidth=4000000 disk-bw-tokens-used=(100,100) l0-files=1 l0-sublevels=1 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 98 KiB (write 98 KiB ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 98 KiB [≈73 KiB], flushed 0 B [≈0 B]; admitting all; elastic tokens 6.1 KiB (used 100 B, regular used 100 B): write model 1.75x+1 B ingest model 1.00x+1 B, disk bw read 130 KiB write 260 KiB provisioned 3.8 MiB
+{ioLoadListenerState:{cumL0AddedBytes:200000 curL0Bytes:100 cumWriteStallCount:0 diskBW:{bytesRead:2000000 bytesWritten:4000000 incomingLSMBytes:200000} smoothedIntL0CompactedBytes:75000 smoothedCompactionByteTokens:75000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:6250 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:100000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:133333 writeBandwidth:266666 provisionedBandwidth:4000000} intervalLSMInfo:{incomingBytes:200000 regularTokensUsed:100 elasticTokensUsed:100}}} ioThreshold:<nil>}
+store-request-estimates: writeTokens: 1
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: 105
+
+set-state l0-bytes=100 l0-added-write=300000 bytes-read=3000000 bytes-written=6000000 provisioned-bandwidth=4000000 disk-bw-tokens-used=(100,100) l0-files=1 l0-sublevels=1 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 98 KiB (write 98 KiB ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 98 KiB [≈85 KiB], flushed 0 B [≈0 B]; admitting all; elastic tokens 6.1 KiB (used 100 B, regular used 100 B): write model 1.75x+1 B ingest model 1.00x+1 B, disk bw read 195 KiB write 391 KiB provisioned 3.8 MiB
+{ioLoadListenerState:{cumL0AddedBytes:300000 curL0Bytes:100 cumWriteStallCount:0 diskBW:{bytesRead:3000000 bytesWritten:6000000 incomingLSMBytes:300000} smoothedIntL0CompactedBytes:87500 smoothedCompactionByteTokens:87500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:6250 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:100000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:200000 writeBandwidth:400000 provisionedBandwidth:4000000} intervalLSMInfo:{incomingBytes:300000 regularTokensUsed:100 elasticTokensUsed:100}}} ioThreshold:<nil>}
+store-request-estimates: writeTokens: 1
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: 105
+
+set-state l0-bytes=100 l0-added-write=400000 bytes-read=4000000 bytes-written=8000000 provisioned-bandwidth=5000000 disk-bw-tokens-used=(100,100) l0-files=1 l0-sublevels=1 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 98 KiB (write 98 KiB ingest 0 B ignored 0 B): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + write-model 0.00x+0 B (smoothed 1.75x+1 B) + ingested-model 0.00x+0 B (smoothed 0.75x+1 B) + at-admission-tokens 1 B, compacted 98 KiB [≈92 KiB], flushed 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumL0AddedBytes:400000 curL0Bytes:100 cumWriteStallCount:0 diskBW:{bytesRead:4000000 bytesWritten:8000000 incomingLSMBytes:400000} smoothedIntL0CompactedBytes:93750 smoothedCompactionByteTokens:93750 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 byteTokensAllocated:0 byteTokensUsed:0 elasticDiskBWTokens:9223372036854775807 elasticDiskBWTokensAllocated:0} requestEstimates:{writeTokens:1} l0WriteLM:{multiplier:1.75 constant:1} l0IngestLM:{multiplier:0.7505 constant:1} ingestLM:{multiplier:1 constant:1} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 perWorkTokensAux:{intWorkCount:0 intL0WriteBytes:100000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredIngestedBytes:0} doLogFlush:false diskBW:{intervalDiskLoadInfo:{readBandwidth:266666 writeBandwidth:533333 provisionedBandwidth:5000000} intervalLSMInfo:{incomingBytes:400000 regularTokensUsed:100 elasticTokensUsed:100}}} ioThreshold:<nil>}
+store-request-estimates: writeTokens: 1
+tick: 0, setAdmittedDoneModelsLocked: l0-write-lm: 1.75x+1 l0-ingest-lm: 0.75x+1 ingest-lm: 1.00x+1
+setAvailableIOTokens: unlimited setAvailableElasticDiskTokens: unlimited
