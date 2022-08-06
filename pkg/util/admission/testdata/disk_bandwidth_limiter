@@ -1,0 +1,41 @@
+init
+----
+diskBandwidthLimiter low (disk bandwidth: read: 0 B/s, write: 0 B/s, provisioned: 0 B/s, util: 0.00): elastic-frac: 0.00, incoming: 0 B, elastic-tokens (used 0 B): 8.0 EiB
+
+# Elastic fraction for the interval is 0.25, and exponential smoothing causes
+# it to rise to 0.12. elastic-tokens is 22 since the max logic picks the
+# interval incoming bytes and a multiplier of elastic-fr+0.1, which means
+# 100*(0.12+0.1)=22
+compute read-bw=100 write-bw=300 provisioned-bw=1000 incoming-bytes=100 regular-tokens-used=30 elastic-tokens-used=10
+----
+diskBandwidthLimiter moderate (disk bandwidth: read: 100 B/s, write: 300 B/s, provisioned: 1000 B/s, util: 0.40): elastic-frac: 0.12, incoming: 50 B, elastic-tokens (used 10 B): 22 B
+
+# Repeat. No change in elastic tokens since the 22B of elastic tokens were
+# underutilized.
+compute read-bw=100 write-bw=300 provisioned-bw=1000 incoming-bytes=100 regular-tokens-used=30 elastic-tokens-used=10
+----
+diskBandwidthLimiter moderate (disk bandwidth: read: 100 B/s, write: 300 B/s, provisioned: 1000 B/s, util: 0.40): elastic-frac: 0.19, incoming: 75 B, elastic-tokens (used 10 B): 22 B
+
+compute read-bw=100 write-bw=300 provisioned-bw=1000 incoming-bytes=100 regular-tokens-used=30 elastic-tokens-used=21
+----
+diskBandwidthLimiter moderate (disk bandwidth: read: 100 B/s, write: 300 B/s, provisioned: 1000 B/s, util: 0.40): elastic-frac: 0.30, incoming: 87 B, elastic-tokens (used 21 B): 39 B
+
+# No change in elastic tokens because again underutilized.
+compute read-bw=100 write-bw=300 provisioned-bw=2000 incoming-bytes=100 regular-tokens-used=30 elastic-tokens-used=21
+----
+diskBandwidthLimiter moderate (disk bandwidth: read: 100 B/s, write: 300 B/s, provisioned: 2.0 KiB/s, util: 0.20): elastic-frac: 0.36, incoming: 93 B, elastic-tokens (used 21 B): 39 B
+
+# Disk load is low, so unlimited tokens.
+compute read-bw=100 write-bw=300 provisioned-bw=2000 incoming-bytes=100 regular-tokens-used=30 elastic-tokens-used=21
+----
+diskBandwidthLimiter low (disk bandwidth: read: 100 B/s, write: 300 B/s, provisioned: 2.0 KiB/s, util: 0.20): elastic-frac: 0.38, incoming: 96 B, elastic-tokens (used 21 B): 8.0 EiB
+
+# Overloaded. Note that the min logic makes the elastic tokens much lower than 1000*0.5=500.
+compute read-bw=100 write-bw=2000 provisioned-bw=2000 incoming-bytes=1000 regular-tokens-used=30 elastic-tokens-used=1000
+----
+diskBandwidthLimiter overload (disk bandwidth: read: 100 B/s, write: 2.0 KiB/s, provisioned: 2.0 KiB/s, util: 1.05): elastic-frac: 0.68, incoming: 548 B, elastic-tokens (used 1000 B): 185 B
+
+# Disk load is high, so no change to tokens.
+compute read-bw=100 write-bw=1600 provisioned-bw=2000 incoming-bytes=1000 regular-tokens-used=30 elastic-tokens-used=1000
+----
+diskBandwidthLimiter high (disk bandwidth: read: 100 B/s, write: 1.6 KiB/s, provisioned: 2.0 KiB/s, util: 0.85): elastic-frac: 0.82, incoming: 774 B, elastic-tokens (used 1000 B): 185 B

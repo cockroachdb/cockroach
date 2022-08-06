@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "admission",
     srcs = [
+        "disk_bandwidth.go",
         "doc.go",
         "granter.go",
         "store_token_estimation.go",
@@ -32,6 +33,7 @@ go_library(
 go_test(
     name = "admission_test",
     srcs = [
+        "disk_bandwidth_test.go",
         "granter_test.go",
         "store_token_estimation_test.go",
         "work_queue_test.go",
