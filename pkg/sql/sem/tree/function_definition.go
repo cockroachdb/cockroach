@@ -316,7 +316,7 @@ func GetBuiltinFuncDefinitionOrFail(
 		return nil, err
 	}
 	if def == nil {
-		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s()", ErrString(fName))
+		return nil, errors.Wrapf(ErrFunctionUndefined, "unknown function: %s()", ErrString(fName))
 	}
 	return def, nil
 }
