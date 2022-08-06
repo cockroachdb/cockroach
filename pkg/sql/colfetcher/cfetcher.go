@@ -117,6 +117,7 @@ func (c *cTableInfo) Release() {
 	// reset them since all of the slices are of Go native types.
 	c.orderedColIdxMap.ords = c.orderedColIdxMap.ords[:0]
 	c.orderedColIdxMap.vals = c.orderedColIdxMap.vals[:0]
+	c.orderedColIdxMap.rowOrds = c.orderedColIdxMap.rowOrds[:0]
 	*c = cTableInfo{
 		orderedColIdxMap:    c.orderedColIdxMap,
 		indexColOrdinals:    c.indexColOrdinals[:0],
@@ -142,6 +143,11 @@ type colIdxMap struct {
 	// column in vals. The ith entry in ords is the ordinal among all columns of
 	// the table for the ith column in vals.
 	ords []int
+
+	// ords is the list of ordinals into the value-encoding of the table for each
+	// column in vals. The ith entry in ords is the ordinal among all columns of
+	// the table for the ith column in vals.
+	rowOrds []int
 }
 
 // Len implements sort.Interface.
@@ -158,6 +164,7 @@ func (m colIdxMap) Less(i, j int) bool {
 func (m colIdxMap) Swap(i, j int) {
 	m.vals[i], m.vals[j] = m.vals[j], m.vals[i]
 	m.ords[i], m.ords[j] = m.ords[j], m.ords[i]
+	m.rowOrds[i], m.rowOrds[j] = m.rowOrds[j], m.rowOrds[i]
 }
 
 type cFetcherArgs struct {
@@ -330,7 +337,10 @@ func (cf *cFetcher) resetBatch() {
 // Init sets up the cFetcher based on the table args. Only columns present in
 // tableArgs.cols will be fetched.
 func (cf *cFetcher) Init(
-	allocator *colmem.Allocator, kvFetcher *row.KVFetcher, tableArgs *cFetcherTableArgs,
+	ctx context.Context,
+	allocator *colmem.Allocator,
+	kvFetcher *row.KVFetcher,
+	tableArgs *cFetcherTableArgs,
 ) error {
 	if tableArgs.spec.Version != descpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
@@ -340,11 +350,29 @@ func (cf *cFetcher) Init(
 	if cap(table.orderedColIdxMap.vals) < nCols {
 		table.orderedColIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
 		table.orderedColIdxMap.ords = make([]int, 0, nCols)
+		table.orderedColIdxMap.rowOrds = make([]int, 0, nCols)
+	}
+	doHack := false
+	if ctx.Value(row.HackNewEncoding) != nil {
+		doHack = true
 	}
 	for i := range tableArgs.spec.FetchedColumns {
 		id := tableArgs.spec.FetchedColumns[i].ColumnID
 		table.orderedColIdxMap.vals = append(table.orderedColIdxMap.vals, id)
 		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
+
+		if doHack {
+			n := len(tableArgs.spec.AllColumns)
+			ret := sort.Search(n, func(i int) bool {
+				return tableArgs.spec.AllColumns[i].ColumnID >= id
+			})
+			if ret > n || tableArgs.spec.AllColumns[ret].ColumnID != id {
+				return errors.AssertionFailedf("unexpected missing col %d", id)
+			}
+			table.orderedColIdxMap.rowOrds = append(table.orderedColIdxMap.rowOrds, ret)
+		} else {
+			table.orderedColIdxMap.rowOrds = table.orderedColIdxMap.rowOrds[:nCols]
+		}
 	}
 	sort.Sort(table.orderedColIdxMap)
 	*table = cTableInfo{
@@ -994,7 +1022,11 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = cf.processValueBytes(ctx, table, tupleBytes, prettyKey)
+			if ctx.Value(row.HackNewEncoding) != nil {
+				prettyKey, prettyValue, err = cf.processValueBytesHackNewEncoding(ctx, table, tupleBytes, prettyKey)
+			} else {
+				prettyKey, prettyValue, err = cf.processValueBytes(ctx, table, tupleBytes, prettyKey)
+			}
 
 		default:
 			// If familyID is 0, this is the row sentinel (in the legacy pre-family format),
@@ -1121,6 +1153,57 @@ func (cf *cFetcher) processValueSingle(
 	if row.DebugRowFetch {
 		log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
 	}
+	return prettyKey, prettyValue, nil
+}
+
+func (cf *cFetcher) processValueBytesHackNewEncoding(
+	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
+) (prettyKey string, prettyValue string, err error) {
+	prettyKey = prettyKeyPrefix
+	if cf.traceKV {
+		if cf.machine.prettyValueBuf == nil {
+			cf.machine.prettyValueBuf = &bytes.Buffer{}
+		}
+		cf.machine.prettyValueBuf.Reset()
+	}
+
+	// Composite columns that are key encoded in the value (like the pk columns
+	// in a unique secondary index) have gotten removed from the set of
+	// remaining value columns. So, we need to add them back in here in case
+	// they have full value encoded composite values.
+	cf.machine.remainingValueColsByIdx.UnionWith(cf.table.compositeIndexColOrdinals)
+
+	var (
+		dataOffset int
+		typ        encoding.Type
+	)
+
+	for i, colID := range cf.table.orderedColIdxMap.vals {
+		vecIdx := cf.table.orderedColIdxMap.ords[i]
+		// Skip non-needed or non-value columns.
+		if !cf.table.neededValueColsByIdx.Contains(vecIdx) {
+			continue
+		}
+
+		encodedRowOrd := cf.table.orderedColIdxMap.rowOrds[i]
+
+		pos := encodedRowOrd * (8 + 4 + 4)
+		//fmt.Printf("Attempting to read colID %d at ordinal %d at value ordinal %d (pos %d)\n", colID, vecIdx, ret, pos)
+
+		// Ret is now equal to the ordinal position within the list of columns
+		// stored in the value component that our desired value is at. So, we can
+		// skip directly to it and read its value!!!
+
+		_, err = colencoding.DecodeTableValueToCol2(
+			&table.da, colID, &cf.machine.colvecs, vecIdx, cf.machine.rowIdx, typ,
+			dataOffset, cf.table.typs[vecIdx], valueBytes[pos:],
+		)
+		cf.machine.remainingValueColsByIdx.Remove(vecIdx)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
 	return prettyKey, prettyValue, nil
 }
 

@@ -157,7 +157,11 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, rowVals, pm, r.traceKV); err != nil {
+	ctx := params.ctx
+	if params.SessionData().HackNewEncoding {
+		ctx = context.WithValue(params.ctx, row.HackNewEncoding, "true")
+	}
+	if err := r.ti.row(ctx, rowVals, pm, r.traceKV); err != nil {
 		return err
 	}
 

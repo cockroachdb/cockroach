@@ -61,7 +61,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 		err, ok := panicObj.(error)
 		if !ok {
 			// Not an error object. Definitely unexpected.
-			retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", panicObj)
+			retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v (%s)", panicObj, panicEmittedFrom)
 			return
 		}
 		retErr = err
@@ -85,7 +85,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			// Any error without a code already is "surprising" and
 			// needs to be annotated to indicate that it was
 			// unexpected.
-			retErr = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from the vectorized engine")
+			retErr = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from the vectorized engine (%s)", panicEmittedFrom)
 		}
 	}()
 	operation()

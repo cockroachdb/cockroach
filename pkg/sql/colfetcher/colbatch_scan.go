@@ -104,7 +104,11 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 
 // Next is part of the Operator interface.
 func (s *ColBatchScan) Next() coldata.Batch {
-	bat, err := s.cf.NextBatch(s.Ctx)
+	ctx := s.Ctx
+	if s.flowCtx.EvalCtx.SessionData().HackNewEncoding {
+		ctx = context.WithValue(ctx, row.HackNewEncoding, true)
+	}
+	bat, err := s.cf.NextBatch(ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -236,8 +240,11 @@ func NewColBatchScan(
 		true, /* singleUse */
 	}
 
+	if flowCtx.EvalCtx.SessionData().HackNewEncoding {
+		ctx = context.WithValue(ctx, row.HackNewEncoding, true)
+	}
 	if err = fetcher.Init(
-		allocator, kvFetcher, tableArgs,
+		ctx, allocator, kvFetcher, tableArgs,
 	); err != nil {
 		fetcher.Release()
 		return nil, err

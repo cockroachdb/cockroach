@@ -1177,6 +1177,22 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	`hack_new_encoding`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`hack_new_encoding`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("hack_new_encoding", s)
+			if err != nil {
+				return err
+			}
+			m.SetHackNewEncodingEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().HackNewEncoding), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// This is read-only in Postgres also.
 	// See https://www.postgresql.org/docs/14/sql-show.html and
 	// https://www.postgresql.org/docs/14/locale.html

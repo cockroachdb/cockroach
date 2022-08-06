@@ -131,4 +131,6 @@ message IndexFetchSpec {
   //
   // Any other column IDs present in the fetched KVs will be ignored.
   repeated Column fetched_columns = 15 [(gogoproto.nullable) = false];
+
+  repeated Column all_columns = 17  [(gogoproto.nullable) = false];
 }

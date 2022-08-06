@@ -538,7 +538,7 @@ func NewColIndexJoin(
 		false, /* singleUse */
 	}
 	if err = fetcher.Init(
-		fetcherAllocator, kvFetcher, tableArgs,
+		ctx, fetcherAllocator, kvFetcher, tableArgs,
 	); err != nil {
 		fetcher.Release()
 		return nil, err
