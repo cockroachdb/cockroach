@@ -103,7 +103,7 @@ func normalizeBinaryExpr(v *Visitor, expr *tree.BinaryExpr) tree.TypedExpr {
 	right := expr.TypedRight()
 	expectedType := expr.ResolvedType()
 
-	if !expr.Op.NullableArgs && (left == tree.DNull || right == tree.DNull) {
+	if !expr.Op.CalledOnNullInput && (left == tree.DNull || right == tree.DNull) {
 		return tree.DNull
 	}
 

@@ -131,21 +131,21 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 		_outNulls := projVec.Nulls()
 
 		// {{/*
-		// If nullableArgs is true, the function’s definition can handle null
+		// If calledOnNullInput is true, the function’s definition can handle null
 		// arguments. We would still want to perform the projection, and there is no
 		// need to call projVec.SetNulls(). The behaviour will just be the same as
 		// _HAS_NULLS is false. Since currently only ConcatDatumDatum needs this
-		// nullableArgs == true behaviour, logic for nullableArgs is only added to
+		// calledOnNullInput == true behaviour, logic for calledOnNullInput is only added to
 		// the if statement for function with Datum, Datum. If we later introduce
-		// another projection operation that has nullableArgs == true, we should
+		// another projection operation that has calledOnNullInput == true, we should
 		// update this code accordingly.
 		// */}}
 		// {{if and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum")}}
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls() && !p.nullableArgs
+		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls() && !p.calledOnNullInput
 		// {{else}}
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
+		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
 		// {{end}}
-		if hasNullsAndNotNullable {
+		if hasNullsAndNotCalledOnNullInput {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
@@ -281,15 +281,15 @@ func GetProjection_CONST_SIDEConstOperator(
 	evalCtx *eval.Context,
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
-	nullableArgs bool,
+	calledOnNullInput bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
-		OneInputHelper: colexecop.MakeOneInputHelper(input),
-		allocator:      allocator,
-		colIdx:         colIdx,
-		outputIdx:      outputIdx,
-		nullableArgs:   nullableArgs,
+		OneInputHelper:    colexecop.MakeOneInputHelper(input),
+		allocator:         allocator,
+		colIdx:            colIdx,
+		outputIdx:         outputIdx,
+		calledOnNullInput: calledOnNullInput,
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
