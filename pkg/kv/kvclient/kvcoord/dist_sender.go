@@ -671,7 +671,7 @@ func (ds *DistSender) initAndVerifyBatch(
 		// Verify that the batch contains only specific range requests or the
 		// EndTxnRequest. Verify that a batch with a ReverseScan only contains
 		// ReverseScan range requests.
-		isReverse := ba.IsReverse()
+		var foundForward, foundReverse bool
 		for _, req := range ba.Requests {
 			inner := req.GetInner()
 			switch inner.(type) {
@@ -679,12 +679,11 @@ func (ds *DistSender) initAndVerifyBatch(
 				*roachpb.DeleteRangeRequest, *roachpb.RevertRangeRequest,
 				*roachpb.ExportRequest, *roachpb.QueryLocksRequest:
 				// Accepted forward range requests.
-				if isReverse {
-					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
-				}
+				foundForward = true
 
 			case *roachpb.ReverseScanRequest:
 				// Accepted reverse range requests.
+				foundReverse = true
 
 			case *roachpb.QueryIntentRequest, *roachpb.EndTxnRequest, *roachpb.GetRequest:
 				// Accepted point requests that can be in batches with limit.
@@ -692,6 +691,9 @@ func (ds *DistSender) initAndVerifyBatch(
 			default:
 				return roachpb.NewErrorf("batch with limit contains %s request", inner.Method())
 			}
+		}
+		if foundForward && foundReverse {
+			return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
 		}
 	}
 
@@ -969,7 +971,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	if err != nil {
 		return br, roachpb.NewError(err)
 	}
-	qiIsReverse := qiBa.IsReverse()
+	qiIsReverse := false // QueryIntentRequests do not carry the isReverse flag
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
 	qiBaCopy := qiBa // avoids escape to heap
@@ -1013,7 +1015,9 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	isReverse = ba.IsReverse()
+	// Note that we don't need to recompute isReverse for the updated batch
+	// since we only separated out QueryIntentRequests which don't carry the
+	// isReverse flag.
 	br, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, true /* withCommit */, batchIdx)
 
 	// Wait for the QueryIntent-only batch to complete and stitch
@@ -1315,7 +1319,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 
 		if pErr == nil && couldHaveSkippedResponses {
-			fillSkippedResponses(ba, br, seekKey, resumeReason)
+			fillSkippedResponses(ba, br, seekKey, resumeReason, isReverse)
 		}
 	}()
 
@@ -1757,6 +1761,7 @@ func fillSkippedResponses(
 	br *roachpb.BatchResponse,
 	nextKey roachpb.RKey,
 	resumeReason roachpb.ResumeReason,
+	isReverse bool,
 ) {
 	// Some requests might have no response at all if we used a batch-wide
 	// limit; simply create trivial responses for those. Note that any type
@@ -1783,7 +1788,6 @@ func fillSkippedResponses(
 	}
 
 	// Set or correct the ResumeSpan as necessary.
-	isReverse := ba.IsReverse()
 	for i, resp := range br.Responses {
 		req := ba.Requests[i].GetInner()
 		hdr := resp.GetInner().Header()
