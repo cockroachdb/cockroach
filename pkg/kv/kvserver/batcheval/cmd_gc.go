@@ -54,6 +54,18 @@ func declareKeysGC(
 			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 		})
 	}
+	// For clear subrange operations we only need to obtain locks if we are
+	// removing multiple keys and not when we remove multiple versions.
+	// Versions case is not different from points deletions as we never remove
+	// data above gc threshold.
+	// Multiple keys versions is similar to ClearRangeKey case below where we
+	// must prevent writers adding any keys in the middle of this range.
+	if rk := gcr.ClearSubRangeKey; rk != nil {
+		if rk.EndKey != nil {
+			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: rk.StartKey, EndKey: rk.EndKey},
+				hlc.MaxTimestamp)
+		}
+	}
 	// For ClearRangeKey request we still obtain a wide write lock as we don't
 	// expect any operations running on the range.
 	if rk := gcr.ClearRangeKey; rk != nil {
@@ -143,7 +155,7 @@ func GC(
 	//    GC request's effect from the raft log. Latches held on the leaseholder
 	//    would have no impact on a follower read.
 	if !args.Threshold.IsEmpty() &&
-		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil) &&
+		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil || args.ClearSubRangeKey != nil) &&
 		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
@@ -151,7 +163,8 @@ func GC(
 
 	// We do not allow removal of point or range keys combined with clear range
 	// operation as they could cover the same set of keys.
-	if (len(args.Keys) != 0 || len(args.RangeKeys) != 0) && args.ClearRangeKey != nil {
+	if (len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearSubRangeKey != nil) &&
+		args.ClearRangeKey != nil {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can remove point and range keys or clear entire range, but it is unsafe for it to do both")
 	}
@@ -180,6 +193,23 @@ func GC(
 		if err := storage.MVCCGarbageCollect(
 			ctx, readWriter, cArgs.Stats, gcKeys, h.Timestamp,
 		); err != nil {
+			return result.Result{}, err
+		}
+	}
+
+	// Garbage collect specified keys defined by clear range subranges i.e. parts
+	// of the whole range containing no more data.
+	if rk := args.ClearSubRangeKey; rk != nil {
+		// To avoid unnecessary write locks if we only remove part of history for
+		// the single key we pass it as range without end bound. Then we can create
+		// a safe range that only spans from particular timestamp up to the next
+		// key.
+		endKey := rk.EndKey
+		if endKey == nil {
+			endKey = rk.StartKey.Next()
+		}
+		if err := storage.MVCCGarbageCollectPointsWithClearRange(ctx, readWriter, cArgs.Stats,
+			rk.StartKey, endKey, rk.StartKeyTimestamp, cArgs.EvalCtx.GetGCThreshold()); err != nil {
 			return result.Result{}, err
 		}
 	}
