@@ -672,11 +672,12 @@ func (b *Builder) buildUDF(
 	out = b.factory.ConstructUDF(
 		input,
 		&memo.UDFPrivate{
-			Name:       def.Name,
-			Body:       rels,
-			Typ:        f.ResolvedType(),
-			Volatility: o.Volatility,
-			ArgCols:    argCols,
+			Name:              def.Name,
+			ArgCols:           argCols,
+			Body:              rels,
+			Typ:               f.ResolvedType(),
+			Volatility:        o.Volatility,
+			CalledOnNullInput: o.CalledOnNullInput,
 		},
 	)
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)

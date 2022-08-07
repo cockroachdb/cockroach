@@ -1245,6 +1245,11 @@ define UDFPrivate {
     # Volatility is the user-provided volatility of the function given during
     # CREATE FUNCTION.
     Volatility Volatility
+
+    # CalledOnNullInput is true if the function should be called when any of its
+    # inputs are NULL. If false, the function will not be evaluated in the
+    # presence of NULL inputs, and will instead evaluate directly to NULL.
+    CalledOnNullInput bool
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values
