@@ -13,6 +13,7 @@ package sql_test
 import (
 	"context"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -180,4 +181,224 @@ SELECT nextval(105:::REGCLASS);`,
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+func TestDropFailOnDependentFunction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, `
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE TABLE t2(a INT PRIMARY KEY);
+CREATE VIEW v AS SELECT a FROM t2;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE SCHEMA test_sc;
+CREATE FUNCTION test_sc.f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+CREATE DATABASE test_udf_db;
+USE test_udf_db;
+CREATE FUNCTION test_udf_db.public.f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+	SELECT 1;
+$$;
+USE defaultdb;
+`,
+	)
+
+	// Test drop/rename behavior in legacy schema changer.
+	tDB.Exec(t, "SET use_declarative_schema_changer = off;")
+
+	testCases := []struct {
+		stmt        string
+		expectedErr string
+	}{
+		{
+			stmt:        "DROP SEQUENCE sq1",
+			expectedErr: "pq: cannot drop sequence sq1 because other objects depend on it",
+		},
+		{
+			stmt:        "DROP TABLE t",
+			expectedErr: `pq: cannot drop relation "t" because function "f" depends on it`,
+		},
+		{
+			stmt:        "DROP VIEW v",
+			expectedErr: `pq: cannot drop relation "v" because function "f" depends on it`,
+		},
+		{
+			stmt:        "ALTER TABLE t RENAME TO t_new",
+			expectedErr: `pq: cannot rename relation "t" because function "f" depends on it`,
+		},
+		{
+			stmt:        "ALTER TABLE t SET SCHEMA test_sc",
+			expectedErr: `pq: cannot set schema on relation "t" because function "f" depends on it`,
+		},
+		{
+			stmt:        "ALTER TABLE t DROP COLUMN b",
+			expectedErr: `pq: cannot drop column "b" because function "f" depends on it`,
+		},
+		{
+			stmt:        "ALTER TABLE t RENAME COLUMN b TO bb",
+			expectedErr: `pq: cannot rename column "b" because function "f" depends on it`,
+		},
+		{
+			stmt:        "ALTER TABLE t ALTER COLUMN b TYPE STRING",
+			expectedErr: `pq: cannot alter type of column "b" because function "f" depends on it`,
+		},
+		{
+			stmt:        "DROP INDEX t@t_idx_b",
+			expectedErr: `pq: cannot drop index "t_idx_b" because function "f" depends on it`,
+		},
+		{
+			stmt:        "ALTER INDEX t@t_idx_b RENAME TO t_idx_b_new",
+			expectedErr: `pq: cannot rename index "t_idx_b" because function "f" depends on it`,
+		},
+		{
+			stmt:        "DROP SCHEMA test_sc",
+			expectedErr: `pq: schema "test_sc" is not empty and CASCADE was not specified`,
+		},
+		{
+			stmt:        "DROP DATABASE test_udf_db RESTRICT",
+			expectedErr: `pq: database "test_udf_db" is not empty and RESTRICT was specified`,
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			_, err := sqlDB.Exec(tc.stmt)
+			require.Equal(t, tc.expectedErr, err.Error())
+		})
+	}
+
+	// Test drop behavior in declarative schema changer.
+	tDB.Exec(t, "SET use_declarative_schema_changer = on")
+
+	dropStmts := []string{
+		"DROP TABLE t",
+		"DROP TABLE t CASCADE",
+		"DROP SEQUENCE sq1",
+		"DROP SEQUENCE sq1 CASCADE",
+		"DROP TABLE t2 CASCADE",
+		"DROP VIEW v",
+		"DROP VIEW v CASCADE",
+		"DROP TYPE notmyworkday",
+		"DROP SCHEMA test_sc CASCADE",
+		"DROP SCHEMA test_sc CASCADE",
+		"DROP DATABASE test_udf_db CASCADE",
+		"DROP DATABASE test_udf_db CASCADE",
+		"ALTER TABLE t DROP COLUMN b",
+		"ALTER TABLE t DROP COLUMN b CASCADE",
+	}
+
+	for _, stmt := range dropStmts {
+		t.Run(stmt, func(t *testing.T) {
+			_, err := sqlDB.Exec(stmt)
+			require.Equal(t, "pq: unimplemented: function descriptor not supported in declarative schema changer", err.Error())
+		})
+	}
+}
+
+func TestDropCascadeRemoveFunction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	setupQuery := `
+CREATE DATABASE test_db;
+USE test_db;
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE TABLE t2(a INT PRIMARY KEY);
+CREATE VIEW v AS SELECT a FROM t2;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE SCHEMA test_sc;
+CREATE FUNCTION test_sc.f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+`
+
+	testCases := []struct {
+		testName string
+		stmt     string
+	}{
+		{
+			testName: "drop sequence",
+			stmt:     "DROP SEQUENCE sq1 CASCADE",
+		},
+		{
+			testName: "drop table",
+			stmt:     "DROP TABLE t CASCADE",
+		},
+		{
+			testName: "drop view",
+			stmt:     "DROP VIEW v CASCADE",
+		},
+		{
+			testName: "drop column",
+			stmt:     "ALTER TABLE t DROP COLUMN b CASCADE",
+		},
+		{
+			testName: "drop index",
+			stmt:     "DROP INDEX t@t_idx_b CASCADE",
+		},
+		{
+			testName: "drop database",
+			stmt:     "DROP DATABASE test_db CASCADE",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			tDB := sqlutils.MakeSQLRunner(sqlDB)
+			tDB.Exec(t, setupQuery)
+			// Test drop/rename behavior in legacy schema changer.
+			tDB.Exec(t, "SET use_declarative_schema_changer = off;")
+
+			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				require.NoError(t, err)
+				require.Equal(t, "f", fnDesc.GetName())
+				require.True(t, fnDesc.Public())
+				return nil
+			})
+			require.NoError(t, err)
+
+			tDB.Exec(t, tc.stmt)
+
+			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				_, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				require.Error(t, err)
+				require.Regexp(t, "descriptor is being dropped", err.Error())
+				return nil
+			})
+			require.NoError(t, err)
+		})
+	}
 }

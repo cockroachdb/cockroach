@@ -95,7 +95,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		}
 	}
 
-	if len(d.objectNamesToDelete) > 0 {
+	if len(d.objectNamesToDelete) > 0 || len(d.functionsToDelete) > 0 {
 		switch n.DropBehavior {
 		case tree.DropRestrict:
 			return nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
@@ -111,7 +111,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		}
 	}
 
-	if err := d.resolveCollectedObjects(ctx, p, dbDesc); err != nil {
+	if err := d.resolveCollectedObjects(ctx, p); err != nil {
 		return nil, err
 	}
 
@@ -292,13 +292,16 @@ func (p *planner) accumulateCascadingViews(
 	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
-		if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
-			return err
-		}
-		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
+		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, ref.ID)
 		if err != nil {
 			return err
 		}
+
+		dependentDesc, ok := desc.(*tabledesc.Mutable)
+		if !ok {
+			continue
+		}
+
 		if !dependentDesc.IsView() {
 			continue
 		}
