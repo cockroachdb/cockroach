@@ -75,6 +75,10 @@ func (p *planner) EvalRoutineExpr(
 	if err != nil {
 		return nil, err
 	}
+	if res == nil {
+		// Return NULL if there are no results.
+		return tree.DNull, nil
+	}
 	return res[0], nil
 }
 
