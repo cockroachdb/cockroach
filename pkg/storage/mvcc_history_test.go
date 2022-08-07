@@ -75,9 +75,10 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
 // del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key>
-// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
+// del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>, max=<int>,maxBytes=<int>,rangeThreshold=<int>,importEpoch=<uint64>]
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
+// importput      ts=<int>[,<int>] k=<key> v=<string> epoch=<uint64>
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
@@ -650,6 +651,7 @@ var commands = map[string]cmd{
 	"clear_range":    {typDataUpdate, cmdClearRange},
 	"clear_rangekey": {typDataUpdate, cmdClearRangeKey},
 	"cput":           {typDataUpdate, cmdCPut},
+	"importput":      {typDataUpdate, cmdImportPut},
 	"del":            {typDataUpdate, cmdDelete},
 	"del_range":      {typDataUpdate, cmdDeleteRange},
 	"del_range_ts":   {typDataUpdate, cmdDeleteRangeTombstone},
@@ -954,6 +956,36 @@ func cmdInitPut(e *evalCtx) error {
 	})
 }
 
+// cmdImportPut puts a MVCC key with an importEpoch. Note that using PutRawMVCC
+// means that stats are not updated.
+func cmdImportPut(e *evalCtx) error {
+	txn := e.getTxn(optional)
+	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
+
+	key := e.getKey()
+	val := e.getVal()
+
+	var importEpoch uint64
+	e.scanArg("epoch", &importEpoch)
+	return e.withWriter("importPut", func(rw ReadWriter) error {
+		mvccKey := MVCCKey{
+			Key:       key,
+			Timestamp: ts}
+		mvccValueHeader := enginepb.MVCCValueHeader{
+			LocalTimestamp: localTs,
+			ImportEpoch:    uint32(importEpoch)}
+		mvccValue := MVCCValue{
+			MVCCValueHeader: mvccValueHeader,
+			Value:           val}
+		encodedMVCCValue, err := EncodeMVCCValue(mvccValue)
+		if err != nil {
+			return err
+		}
+		return rw.PutRawMVCC(mvccKey, encodedMVCCValue)
+	})
+}
+
 func cmdDelete(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	key := e.getKey()
@@ -1028,8 +1060,18 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	if e.hasArg("maxBytes") {
 		e.scanArg("maxBytes", &maxBytes)
 	}
+
+	var startTime hlc.Timestamp
+	if e.hasArg("startTime") {
+		startTime = e.getTsWithName("startTime")
+	}
+	var importEpoch uint64
+	if e.hasArg("importEpoch") {
+		e.scanArg("importEpoch", &importEpoch)
+	}
 	predicates := roachpb.DeleteRangePredicates{
-		StartTime: e.getTsWithName("startTime"),
+		StartTime:   startTime,
+		ImportEpoch: uint32(importEpoch),
 	}
 	rangeThreshold := 64
 	if e.hasArg("rangeThreshold") {

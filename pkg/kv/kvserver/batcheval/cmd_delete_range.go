@@ -110,10 +110,14 @@ func DeleteRange(
 			// flag in roachpb.api.proto, ensuring the requests do not intermingle with
 			// other types of requests, preventing further resume span muddling.
 			return result.Result{}, errors.AssertionFailedf(
-				"MaxSpanRequestKeys must be greater than zero when using predicated based DeleteRange")
+				"MaxSpanRequestKeys must be greater than zero when using predicate based DeleteRange")
 		}
 		// TODO (msbutler): Tune the threshold once DeleteRange and DeleteRangeUsingTombstone have
 		// been further optimized.
+		if args.Predicates.ImportEpoch != 0 && !args.Predicates.StartTime.IsEmpty() {
+			return result.Result{}, errors.AssertionFailedf(
+				"Cannot pass both an ImportEpoch predicate and a StartTime predicate")
+		}
 		defaultRangeTombstoneThreshold := int64(64)
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,

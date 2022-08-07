@@ -384,6 +384,43 @@ message DeleteRangePredicates {
   //  - t must be < endTime
   //  - if t in (startTime, endTime), then there is no other k@t' where t' <= startTime.
   util.hlc.Timestamp start_time = 6 [(gogoproto.nullable) = false];
+
+  //  ImportEpoch specifies the import epoch of the versioned keys which Delete
+  //  Range will match and delete. In other words, if the caller specifies an
+  //  ImportEpoch, predicate based delete range will only issue tombstones on
+  //  versioned keys with the matching import epoch in its MVCCValueHeader.
+  //  NOTE: the importEpoch filter cannot be passed with a startTime filter.
+  //
+  // The main application for this is a rollback of IMPORT INTO on a non-empty
+  // table, where the table was backed up and restored during the import job.
+  // Consider the following example:
+  //
+  //  t0: user begins IMPORT INTO on _non-empty_ table foo in cluster A
+  //
+  //  t1: user backs up table foo, part way through IMPORT job
+  //
+  //  t2: user restores table foo into cluster B, which rewrites all keys in
+  //  table foo to new timestamps.
+  //
+  //  t3: user rolls back IMPORT job on table foo, in cluster B, using the
+  //  ImportEpoch predicate filter, as the StartTime predicate filter does not
+  //  accurately partition imported and non-imported keys in the table.
+  //
+  // ImportEpoch based delete range assumes the client is passing an ImportEpoch
+  // for an in-progress Import INTO on a single table. This implies that the
+  // ImportEpoch predicate must be the highest ImportEpoch in the MVCC history
+  // for the table. These invariants cause the cmd to fail if:
+  //
+  //  1. The client passes a span that covers more than one table.
+  // (CURRENTLY, I DONT CHECK THIS, BUT I'D LIKE TO)
+  //
+  //  2. An MVCC Value is encountered that contains a higher importEpoch than
+  //  the predicate.
+  //
+  // Because IMPORT INTO takes a table offline and does not allow masking an
+  // existing key, this operation _assumes_ that any key encountered with the
+  // matching ImportEpoch does not collide with any pre-import data.
+  uint32 import_epoch = 2;
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()

@@ -2601,10 +2601,21 @@ func MVCCPredicateDeleteRange(
 			return false, false, false, nil
 		}
 
-		// TODO (msbutler): use MVCCValueHeader to match on job ID predicate
-		_, err = DecodeMVCCValue(vRaw)
-		if err != nil {
-			return false, false, false, err
+		if predicates.ImportEpoch != 0 {
+			// Conduct filtering based on ImportEpoch
+			mvccValue, err := DecodeMVCCValue(vRaw)
+			if err != nil {
+				return false, false, false, err
+			}
+			if mvccValue.ImportEpoch > predicates.ImportEpoch {
+				return false, false, false,
+					errors.AssertionFailedf("Encountered MVCCValue with newer ImportEpoch (%v) "+
+						"than the predicate filter (%v)", mvccValue.ImportEpoch, predicates.ImportEpoch)
+			} else if mvccValue.ImportEpoch != predicates.ImportEpoch {
+				// The latest key was not imported during the target ImportEpoch.
+				// Conduct predicate filtering.
+				return false, false, false, nil
+			}
 		}
 		return true, false, false, nil
 	}

@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDeleteRangeTombstone tests DeleteRange range tombstones and predicated based DeleteRange
+// TestDeleteRangeTombstone tests DeleteRange range tombstones and predicate based DeleteRange
 // directly, using only a Pebble engine.
 //
 // MVCC range tombstone logic is tested exhaustively in the MVCC history tests,
@@ -164,7 +164,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 			ts:                 10e9,
 			predicateStartTime: 1,
 			maxBatchSize:       0,
-			expectErr:          "MaxSpanRequestKeys must be greater than zero when using predicated based DeleteRange",
+			expectErr:          "MaxSpanRequestKeys must be greater than zero when using predicate based DeleteRange",
 		},
 	}
 	for name, tc := range testcases {
