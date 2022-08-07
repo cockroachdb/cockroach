@@ -546,6 +546,7 @@ go_test(
         "distsql_plan_bulk_test.go",
         "distsql_plan_set_op_test.go",
         "distsql_running_test.go",
+        "drop_function_test.go",
         "drop_helpers_test.go",
         "drop_test.go",
         "err_count_test.go",

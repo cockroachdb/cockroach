@@ -15,8 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,6 +84,125 @@ func TestBuiltinFunctionResolver(t *testing.T) {
 			for _, o := range funcDef.Overloads {
 				require.Equal(t, tc.expectedSchema, o.Schema)
 			}
+		})
+	}
+}
+
+func TestMatchOverload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fd := &tree.ResolvedFunctionDefinition{
+		Name: "f",
+		Overloads: []tree.QualifiedOverload{
+			{
+				Schema:   "pg_catalog",
+				Overload: &tree.Overload{Oid: 1, IsUDF: false, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
+			},
+			{
+				Schema:   "sc1",
+				Overload: &tree.Overload{Oid: 2, IsUDF: true, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
+			},
+			{
+				Schema:   "sc1",
+				Overload: &tree.Overload{Oid: 3, IsUDF: true, Types: tree.ArgTypes{}},
+			},
+			{
+				Schema:   "sc2",
+				Overload: &tree.Overload{Oid: 4, IsUDF: true, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
+			},
+		},
+	}
+
+	testCase := []struct {
+		testName       string
+		argTypes       []*types.T
+		explicitSchema string
+		path           []string
+		expectedOid    oid.Oid
+		expectedErr    string
+	}{
+		{
+			testName:    "nil arg types implicit pg_catalog in path",
+			argTypes:    nil,
+			path:        []string{"sc1", "sc2"},
+			expectedOid: 1,
+		},
+		{
+			testName:    "nil arg types explicit pg_catalog in path",
+			argTypes:    nil,
+			path:        []string{"sc2", "sc1", "pg_catalog"},
+			expectedOid: 4,
+		},
+		{
+			testName:    "nil arg types explicit pg_catalog in path not unique",
+			argTypes:    nil,
+			path:        []string{"sc1", "sc2", "pg_catalog"},
+			expectedErr: `function name "f" is not unique`,
+		},
+		{
+			testName:    "int arg type implicit pg_catalog in path",
+			argTypes:    []*types.T{types.Int},
+			path:        []string{"sc1", "sc2"},
+			expectedOid: 1,
+		},
+		{
+			testName:    "empty arg type implicit pg_catalog in path",
+			argTypes:    []*types.T{},
+			path:        []string{"sc1", "sc2"},
+			expectedOid: 3,
+		},
+		{
+			testName:    "int arg types explicit pg_catalog in path",
+			argTypes:    []*types.T{types.Int},
+			path:        []string{"sc1", "sc2", "pg_catalog"},
+			expectedOid: 2,
+		},
+		{
+			testName:    "int arg types explicit pg_catalog in path schema order matters",
+			argTypes:    []*types.T{types.Int},
+			path:        []string{"sc2", "sc1", "pg_catalog"},
+			expectedOid: 4,
+		},
+		{
+			testName:       "explicit schema in search path",
+			argTypes:       []*types.T{types.Int},
+			explicitSchema: "sc2",
+			path:           []string{"sc2", "sc1", "pg_catalog"},
+			expectedOid:    4,
+		},
+		{
+			testName:       "explicit schema not in search path",
+			argTypes:       []*types.T{types.Int},
+			explicitSchema: "sc2",
+			path:           []string{"sc1", "pg_catalog"},
+			expectedOid:    4,
+		},
+		{
+			testName:       "explicit schema not in search path not found",
+			argTypes:       []*types.T{types.Int},
+			explicitSchema: "sc3",
+			path:           []string{"s2", "sc1", "pg_catalog"},
+			expectedErr:    `function f\(int\) does not exist`,
+		},
+		{
+			testName:    "signature not found",
+			argTypes:    []*types.T{types.String},
+			path:        []string{"sc2", "sc1", "pg_catalog"},
+			expectedErr: `function f\(string\) does not exist`,
+		},
+	}
+
+	for _, tc := range testCase {
+		t.Run(tc.testName, func(t *testing.T) {
+			path := sessiondata.MakeSearchPath(tc.path)
+			ol, err := fd.MatchOverload(tc.argTypes, tc.explicitSchema, &path)
+			if tc.expectedErr != "" {
+				require.Regexp(t, tc.expectedErr, err.Error())
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOid, ol.Oid)
 		})
 	}
 }

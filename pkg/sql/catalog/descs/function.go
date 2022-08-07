@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -30,6 +31,18 @@ func (tc *Collection) GetImmutableFunctionByID(
 		return nil, err
 	}
 	return desc, nil
+}
+
+// GetMutableFunctionByID returns a mutable function descriptor.
+func (tc *Collection) GetMutableFunctionByID(
+	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
+) (*funcdesc.Mutable, error) {
+	flags.RequireMutable = true
+	desc, err := tc.getFunctionByID(ctx, txn, fnID, flags)
+	if err != nil {
+		return nil, err
+	}
+	return desc.(*funcdesc.Mutable), nil
 }
 
 func (tc *Collection) getFunctionByID(
