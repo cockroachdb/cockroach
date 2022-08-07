@@ -930,6 +930,12 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		for _, objectID := range objectIDs {
 			c.backrefs.Add(objectID)
 		}
+		if err := d.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+			c.backrefs.Add(overload.ID)
+			return nil
+		}); err != nil {
+			panic(err)
+		}
 	default:
 		b.ensureDescriptor(c.desc.GetParentID())
 		db := b.descCache[c.desc.GetParentID()].desc

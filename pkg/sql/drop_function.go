@@ -14,8 +14,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -130,18 +132,28 @@ func (p *planner) checkPrivilegesForDropFunction(
 	if err != nil {
 		return nil, err
 	}
-	hasOwernship, err := p.HasOwnershipOnSchema(ctx, mutable.GetParentSchemaID(), mutable.GetParentID())
-	if err != nil {
+	if err := p.canDropFunction(ctx, mutable); err != nil {
 		return nil, err
-	}
-	hasOwernship, err = p.HasOwnership(ctx, mutable)
-	if err != nil {
-		return nil, err
-	}
-	if !hasOwernship {
-		return nil, errors.Errorf("must be owner of function %s", mutable.GetName())
 	}
 	return mutable, nil
+}
+
+func (p *planner) canDropFunction(ctx context.Context, fnDesc catalog.FunctionDescriptor) error {
+	hasOwernship, err := p.HasOwnershipOnSchema(ctx, fnDesc.GetParentSchemaID(), fnDesc.GetParentID())
+	if err != nil {
+		return err
+	}
+	if hasOwernship {
+		return nil
+	}
+	hasOwernship, err = p.HasOwnership(ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	if !hasOwernship {
+		return errors.Errorf("must be owner of function %s", fnDesc.GetName())
+	}
+	return nil
 }
 
 func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Mutable) error {
@@ -224,4 +236,14 @@ func (p *planner) writeFuncDesc(ctx context.Context, funcDesc *funcdesc.Mutable)
 
 func (p *planner) writeFuncSchemaChange(ctx context.Context, funcDesc *funcdesc.Mutable) error {
 	return p.writeFuncDesc(ctx, funcDesc)
+}
+
+func (p *planner) removeDependentFunction(
+	ctx context.Context, tbl *tabledesc.Mutable, fn *funcdesc.Mutable,
+) error {
+	// In the table whose index is being removed, filter out all back-references
+	// that refer to the view that's being removed.
+	tbl.DependedOnBy = removeMatchingReferences(tbl.DependedOnBy, fn.ID)
+	// Then proceed to actually drop the view and log an event for it.
+	return p.dropFunctionImpl(ctx, fn)
 }

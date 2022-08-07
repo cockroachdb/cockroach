@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,10 +84,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 		}
 		for _, ref := range droppedDesc.DependedOnBy {
 			if _, ok := td[ref.ID]; !ok {
-				if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
-					return nil, err
-				}
-				if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
+				if err := p.canRemoveDependentFromTable(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
 					return nil, err
 				}
 			}
@@ -275,28 +272,36 @@ func (p *planner) dropTableImpl(
 	// Copy out the set of dependencies as it may be overwritten in the loop.
 	dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), tableDesc.DependedOnBy...)
 	for _, ref := range dependedOnBy {
-		viewDesc, err := p.getViewDescForCascade(
+		depDesc, err := p.getDescForCascade(
 			ctx, string(tableDesc.DescriptorType()), tableDesc.Name, tableDesc.ParentID, ref.ID, tree.DropCascade,
 		)
 		if err != nil {
 			return droppedViews, err
 		}
 		// This view is already getting dropped. Don't do it twice.
-		if viewDesc.Dropped() {
+		if depDesc.Dropped() {
 			continue
 		}
-		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, !droppingParent, "dropping dependent view", tree.DropCascade)
-		if err != nil {
-			return droppedViews, err
-		}
 
-		qualifiedView, err := p.getQualifiedTableName(ctx, viewDesc)
-		if err != nil {
-			return droppedViews, err
-		}
+		switch t := depDesc.(type) {
+		case *tabledesc.Mutable:
+			cascadedViews, err := p.dropViewImpl(ctx, t, !droppingParent, "dropping dependent view", tree.DropCascade)
+			if err != nil {
+				return droppedViews, err
+			}
 
-		droppedViews = append(droppedViews, cascadedViews...)
-		droppedViews = append(droppedViews, qualifiedView.FQString())
+			qualifiedView, err := p.getQualifiedTableName(ctx, t)
+			if err != nil {
+				return droppedViews, err
+			}
+
+			droppedViews = append(droppedViews, cascadedViews...)
+			droppedViews = append(droppedViews, qualifiedView.FQString())
+		case *funcdesc.Mutable:
+			if err := p.dropFunctionImpl(ctx, t); err != nil {
+				return droppedViews, err
+			}
+		}
 	}
 
 	err := p.removeTableComments(ctx, tableDesc)
@@ -587,20 +592,4 @@ func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.
 		p.txn,
 		p.SessionData(),
 	).DeleteAllCommentsForTables(catalog.MakeDescriptorIDSet(tableDesc.GetID()))
-}
-
-// This is a guard to prevent cascade dropping an object if it's referenced by a function.
-// This is because we don't support drop function at the moment. However, we'll
-// add the support pretty soon.
-func (p *planner) maybeFailOnDroppingFunction(ctx context.Context, id descpb.ID) error {
-	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, id)
-	if err != nil {
-		return err
-	}
-	// TODO (Chengxiong): support dropping function.
-	if desc.DescriptorType() == catalog.Function {
-		return unimplemented.NewWithIssue(83235, "drop function not supported")
-	}
-
-	return nil
 }

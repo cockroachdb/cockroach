@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -36,6 +37,7 @@ type dropCascadeState struct {
 	toDeleteByID            map[descpb.ID]*toDelete
 	allTableObjectsToDelete []*tabledesc.Mutable
 	typesToDelete           []*typedesc.Mutable
+	functionsToDelete       []*funcdesc.Mutable
 
 	droppedNames []string
 }
@@ -67,15 +69,32 @@ func (d *dropCascadeState) collectObjectsInSchema(
 		d.objectNamesToDelete = append(d.objectNamesToDelete, &names[i])
 	}
 	d.schemasToDelete = append(d.schemasToDelete, schemaWithDbDesc{schema: schema, dbDesc: db})
+
+	// Collect functions to delete. Function is a bit special because it doesn't
+	// have namespace records. So function names are not included in
+	// objectNamesToDelete. Instead, we need to go through each schema descriptor
+	// to collect function descriptors by function ids.
+	err = schema.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+		fnDesc, err := p.Descriptors().GetMutableFunctionByID(
+			ctx, p.txn, overload.ID, tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		d.functionsToDelete = append(d.functionsToDelete, fnDesc)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // This resolves objects for DROP SCHEMA and DROP DATABASE ops.
 // db is used to generate a useful error message in the case
 // of DROP DATABASE; otherwise, db is nil.
-func (d *dropCascadeState) resolveCollectedObjects(
-	ctx context.Context, p *planner, db *dbdesc.Mutable,
-) error {
+func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *planner) error {
 	d.td = make([]toDelete, 0, len(d.objectNamesToDelete))
 	// Resolve each of the collected names.
 	for i := range d.objectNamesToDelete {
@@ -131,10 +150,7 @@ func (d *dropCascadeState) resolveCollectedObjects(
 			// Recursively check permissions on all dependent views, since some may
 			// be in different databases.
 			for _, ref := range tbDesc.DependedOnBy {
-				if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
-					return err
-				}
-				if err := p.canRemoveDependentView(ctx, tbDesc, ref, tree.DropCascade); err != nil {
+				if err := p.canRemoveDependentFromTable(ctx, tbDesc, ref, tree.DropCascade); err != nil {
 					return err
 				}
 			}
@@ -198,6 +214,20 @@ func (d *dropCascadeState) resolveCollectedObjects(
 }
 
 func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *planner) error {
+	// Delete all of the function first since we don't allow function references
+	// from other objects yet.
+	// TODO(chengxiong): rework dropCascadeState logic to add function into the
+	// table/view dependency graph. This is needed when we start allowing using
+	// functions from other objects.
+	for _, fn := range d.functionsToDelete {
+		if err := p.canDropFunction(ctx, fn); err != nil {
+			return err
+		}
+		if err := p.dropFunctionImpl(ctx, fn); err != nil {
+			return err
+		}
+	}
+
 	// Delete all of the collected tables.
 	for _, toDel := range d.td {
 		desc := toDel.desc

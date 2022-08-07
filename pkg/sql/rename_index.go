@@ -81,13 +81,10 @@ func (n *renameIndexNode) startExec(params runParams) error {
 	idx := n.idx
 
 	for _, tableRef := range tableDesc.DependedOnBy {
-		if err := params.p.maybeFailOnDroppingFunction(params.ctx, tableRef.ID); err != nil {
-			return err
-		}
 		if tableRef.IndexID != idx.GetID() {
 			continue
 		}
-		return p.dependentViewError(
+		return p.dependentError(
 			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID, "rename",
 		)
 	}

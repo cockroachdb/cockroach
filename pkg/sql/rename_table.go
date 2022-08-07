@@ -82,10 +82,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// If so, then we disallow renaming, otherwise we allow it.
 	for _, dependent := range tableDesc.DependedOnBy {
 		if !dependent.ByID {
-			if err := p.maybeFailOnDroppingFunction(ctx, dependent.ID); err != nil {
-				return nil, err
-			}
-			return nil, p.dependentViewError(
+			return nil, p.dependentError(
 				ctx, string(tableDesc.DescriptorType()), oldTn.String(),
 				tableDesc.ParentID, dependent.ID, "rename",
 			)
@@ -278,18 +275,51 @@ func (n *renameTableNode) Close(context.Context)        {}
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
-func (p *planner) dependentViewError(
-	ctx context.Context, typeName, objName string, parentID, viewID descpb.ID, op string,
+func (p *planner) dependentError(
+	ctx context.Context, typeName string, objName string, parentID descpb.ID, id descpb.ID, op string,
 ) error {
-	viewDesc, err := p.Descriptors().Direct().MustGetTableDescByID(ctx, p.txn, viewID)
+	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, id, tree.CommonLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
+	switch desc.DescriptorType() {
+	case catalog.Table:
+		return p.dependentViewError(ctx, typeName, objName, parentID, desc.(catalog.TableDescriptor), op)
+	case catalog.Function:
+		return p.dependentFunctionError(typeName, objName, desc.(catalog.FunctionDescriptor), op)
+	default:
+		return errors.AssertionFailedf(
+			"unexpected dependent %s %s on %s %s",
+			desc.DescriptorType(), desc.GetName(), typeName, objName,
+		)
+	}
+}
+
+func (p *planner) dependentFunctionError(
+	typeName, objName string, fnDesc catalog.FunctionDescriptor, op string,
+) error {
+	return errors.WithHintf(
+		sqlerrors.NewDependentObjectErrorf(
+			"cannot %s %s %q because function %q depends on it",
+			op, typeName, objName, fnDesc.GetName(),
+		),
+		"you can drop %s instead.",
+		fnDesc.GetName(),
+	)
+}
+
+func (p *planner) dependentViewError(
+	ctx context.Context,
+	typeName, objName string,
+	parentID descpb.ID,
+	viewDesc catalog.TableDescriptor,
+	op string,
+) error {
 	viewName := viewDesc.GetName()
 	if viewDesc.GetParentID() != parentID {
 		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 		if err != nil {
-			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
+			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewDesc.GetID(), err)
 			return sqlerrors.NewDependentObjectErrorf(
 				"cannot %s %s %q because a view depends on it",
 				op, typeName, objName)
