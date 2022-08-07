@@ -391,7 +391,7 @@ func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error
 
 // EvalRoutineExpr is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EvalRoutineExpr(
-	ctx context.Context, expr *tree.RoutineExpr,
+	ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
 ) (tree.Datum, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
