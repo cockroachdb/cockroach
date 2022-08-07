@@ -55,3 +55,13 @@ SHOW CREATE FUNCTION e
 ----
 FUNCTION e(i: int) -> int [immutable, called-on-null-input=false]
  └── SELECT i
+
+exec-ddl
+CREATE FUNCTION f() RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS 'SELECT 1'
+----
+
+exec-ddl
+SHOW CREATE FUNCTION f
+----
+FUNCTION f() -> int [volatile, called-on-null-input=false]
+ └── SELECT 1
