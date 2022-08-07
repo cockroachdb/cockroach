@@ -858,3 +858,91 @@ query I
 SELECT empty_result()
 ----
 NULL
+
+statement ok
+CREATE FUNCTION int_identity(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i';
+
+query I
+SELECT int_identity(1)
+----
+1
+
+query I
+SELECT int_identity(10 + int_identity(1))
+----
+11
+
+query II
+SELECT a+b, int_identity(a+b) FROM ab WHERE a = int_identity(a) AND b = int_identity(b)
+----
+2  2
+4  4
+6  6
+5  5
+6  6
+
+# Define some custom arithmetic functions that we can write interesting tests
+# with that use builtin operators as oracles.
+statement ok
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x+y';
+
+statement ok
+CREATE FUNCTION sub(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x-y';
+
+statement ok
+CREATE FUNCTION mult(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x*y';
+
+query II
+SELECT a + a + a + b + b + b, add(a, add(a, add(a, add(b, add(b, b))))) FROM ab
+----
+6   6
+12  12
+18  18
+15  15
+18  18
+
+query II
+SELECT (a * (a + b)) - b, sub(mult(a, add(a, b)), b) FROM ab
+----
+1   1
+6   6
+15  15
+19  19
+29  29
+
+query II
+SELECT a * (3 + b - a) + a * b * a, add(mult(a, add(3, sub(b, a))), mult(a, mult(b, a))) FROM ab
+----
+4   4
+14  14
+36  36
+16  16
+20  20
+
+statement ok
+CREATE FUNCTION fetch_b(arg_a INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b FROM ab WHERE a = arg_a
+$$
+
+query II
+SELECT b, fetch_b(a) FROM ab
+----
+1  1
+2  2
+3  3
+1  1
+1  1
+
+query II
+SELECT b + (a * 7) - (a * b), add(fetch_b(a), sub(mult(a, 7), mult(a, fetch_b(a)))) FROM ab
+----
+7   7
+12  12
+15  15
+25  25
+31  31
+
+query I
+SELECT fetch_b(99999999)
+----
+NULL
