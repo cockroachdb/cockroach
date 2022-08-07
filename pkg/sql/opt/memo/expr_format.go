@@ -352,7 +352,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		*UpsertDistinctOnExpr, *EnsureUpsertDistinctOnExpr:
 		private := e.Private().(*GroupingPrivate)
 		if !f.HasFlags(ExprFmtHideColumns) && !private.GroupingCols.Empty() {
-			f.formatColList(e, tp, "grouping columns:", private.GroupingCols.ToList())
+			f.formatRelColList(e, tp, "grouping columns:", private.GroupingCols.ToList())
 		}
 		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
@@ -388,8 +388,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr, *LocalityOptimizedSearchExpr:
 		private := e.Private().(*SetPrivate)
 		if !f.HasFlags(ExprFmtHideColumns) {
-			f.formatColList(e, tp, "left columns:", private.LeftCols)
-			f.formatColList(e, tp, "right columns:", private.RightCols)
+			f.formatRelColList(e, tp, "left columns:", private.LeftCols)
+			f.formatRelColList(e, tp, "right columns:", private.RightCols)
 		}
 		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
@@ -550,7 +550,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("lookup columns are key")
 		}
 		if t.IsFirstJoinInPairedJoiner {
-			f.formatColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
+			f.formatRelColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
 		}
 		if t.IsSecondJoinInPairedJoiner {
 			tp.Childf("second join in paired joiner")
@@ -570,7 +570,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("prefix key columns: %v = %v", t.PrefixKeyCols, idxCols)
 		}
 		if t.IsFirstJoinInPairedJoiner {
-			f.formatColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
+			f.formatRelColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
 		}
 		n := tp.Child("inverted-expr")
 		f.formatExpr(t.InvertedExpr, n)
@@ -638,7 +638,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			if t.CanaryCol != 0 {
-				f.formatColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
+				f.formatRelColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
 				f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 				f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
@@ -731,8 +731,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Childf("deduplicate")
 			}
 			tp.Childf("working table binding: &%d", t.WithID)
-			f.formatColList(e, tp, "initial columns:", t.InitialCols)
-			f.formatColList(e, tp, "recursive columns:", t.RecursiveCols)
+			f.formatRelColList(e, tp, "initial columns:", t.InitialCols)
+			f.formatRelColList(e, tp, "recursive columns:", t.RecursiveCols)
 		}
 
 	default:
@@ -897,9 +897,18 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatScalarWithLabel(
 	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
 ) {
-	formatUDFBody := func(udf *UDFExpr, tp treeprinter.Node) {
+	formatUDFInputAndBody := func(udf *UDFExpr, tp treeprinter.Node) {
+		var n treeprinter.Node
+		if len(udf.ArgCols) > 0 {
+			f.formatColList(tp, "args:", udf.ArgCols, opt.ColSet{} /* notNullCols */)
+			n = tp.Child("input")
+			for i := range udf.Input {
+				f.formatExpr(udf.Input[i], n)
+			}
+		}
+		n = tp.Child("body")
 		for i := range udf.Body {
-			f.formatExpr(udf.Body[i], tp)
+			f.formatExpr(udf.Body[i], n)
 		}
 	}
 
@@ -962,7 +971,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
 		f.FormatScalarProps(scalar)
 		tp = tp.Child(f.Buffer.String())
-		formatUDFBody(udf, tp)
+		formatUDFInputAndBody(udf, tp)
 		return
 	}
 
@@ -1014,18 +1023,18 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 
 	var intercepted bool
-	if f.HasFlags(ExprFmtHideScalars) && ScalarFmtInterceptor != nil {
-		if str := ScalarFmtInterceptor(f, scalar); str != "" {
-			f.Buffer.WriteString(str)
-			intercepted = true
-		}
-	}
-	if udf, ok := scalar.(*UDFExpr); ok {
+	if udf, ok := scalar.(*UDFExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
 		// A UDF function body will be printed after the scalar props, so
 		// pre-emptively set intercepted=true to avoid the default
 		// formatScalarPrivate formatting below.
 		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
 		intercepted = true
+	}
+	if !intercepted && f.HasFlags(ExprFmtHideScalars) && ScalarFmtInterceptor != nil {
+		if str := ScalarFmtInterceptor(f, scalar); str != "" {
+			f.Buffer.WriteString(str)
+			intercepted = true
+		}
 	}
 	if !intercepted {
 		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
@@ -1038,9 +1047,8 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 	tp = tp.Child(f.Buffer.String())
 
-	if udf, ok := scalar.(*UDFExpr); ok {
-		// Always print UDF function body.
-		formatUDFBody(udf, tp)
+	if udf, ok := scalar.(*UDFExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
+		formatUDFInputAndBody(udf, tp)
 	}
 
 	if !intercepted {
@@ -1282,7 +1290,7 @@ func (f *ExprFmtCtx) formatColumns(
 		return
 	}
 	if presentation.Any() {
-		f.formatColList(nd, tp, "columns:", cols)
+		f.formatRelColList(nd, tp, "columns:", cols)
 		return
 	}
 
@@ -1311,13 +1319,20 @@ func (f *ExprFmtCtx) formatColumns(
 	tp.Child(f.Buffer.String())
 }
 
+// formatRelColList constructs a new treeprinter child containing the specified
+// list of columns formatted using the formatCol method.
+func (f *ExprFmtCtx) formatRelColList(
+	nd RelExpr, tp treeprinter.Node, heading string, colList opt.ColList,
+) {
+	f.formatColList(tp, heading, colList, nd.Relational().NotNullCols)
+}
+
 // formatColList constructs a new treeprinter child containing the specified
 // list of columns formatted using the formatCol method.
 func (f *ExprFmtCtx) formatColList(
-	nd RelExpr, tp treeprinter.Node, heading string, colList opt.ColList,
+	tp treeprinter.Node, heading string, colList opt.ColList, notNullCols opt.ColSet,
 ) {
 	if len(colList) > 0 {
-		notNullCols := nd.Relational().NotNullCols
 		f.Buffer.Reset()
 		f.Buffer.WriteString(heading)
 		for _, col := range colList {
