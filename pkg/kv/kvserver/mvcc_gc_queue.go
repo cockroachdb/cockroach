@@ -489,7 +489,7 @@ func (r *replicaGCer) GC(
 	rangeKeys []roachpb.GCRequest_GCRangeKey,
 	clearRangeKeys []roachpb.GCRequest_GCClearRangeKey,
 ) error {
-	if len(keys) == 0 && len(rangeKeys) == 0 {
+	if len(keys) == 0 && len(rangeKeys) == 0 && len(clearRangeKeys) == 0 {
 		return nil
 	}
 	req := r.template()
