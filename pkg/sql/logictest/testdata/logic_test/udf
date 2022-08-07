@@ -380,3 +380,14 @@ SELECT * FROM fetch_one_then_two()
 ----
 fetch_one_then_two
 2
+
+statement ok
+CREATE TABLE empty (e INT);
+CREATE FUNCTION empty_result() RETURNS INT LANGUAGE SQL AS $$
+  SELECT e FROM empty
+$$
+
+query I
+SELECT empty_result()
+----
+NULL
