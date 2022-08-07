@@ -86,6 +86,32 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 	}
 }
 
+func BenchmarkMVCCScanGarbage_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	ctx := context.Background()
+	for _, numRows := range []int{1, 10, 100, 1000, 10000, 50000} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			for _, numVersions := range []int{1, 2, 10, 100, 1000} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, numRangeKeys := range []int{0, 1, 100} {
+						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+							runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+								benchDataOptions: benchDataOptions{
+									numVersions:  numVersions,
+									numRangeKeys: numRangeKeys,
+									garbage:      true,
+								},
+								numRows: numRows,
+								reverse: false,
+							})
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkMVCCScanSQLRows_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
