@@ -543,11 +543,21 @@ func (s MVCCRangeKeyStack) CanMergeRight(r MVCCRangeKeyStack) bool {
 
 // Clone clones the stack.
 func (s MVCCRangeKeyStack) Clone() MVCCRangeKeyStack {
-	// TODO(erikgrinaker): We can optimize this by using a single memory
-	// allocation for all byte slices in the entire stack.
 	s.Bounds = s.Bounds.Clone()
 	s.Versions = s.Versions.Clone()
 	return s
+}
+
+// CloneInto clones the stack into the given stack reference, reusing its byte
+// and version slices where possible.
+//
+// TODO(erikgrinaker): Consider using a single allocation for all byte slices.
+// However, we currently expect the majority of range keys to have to have no
+// value, so we'll typically only make two allocations for the key bounds.
+func (s MVCCRangeKeyStack) CloneInto(c *MVCCRangeKeyStack) {
+	c.Bounds.Key = append(c.Bounds.Key[:0], s.Bounds.Key...)
+	c.Bounds.EndKey = append(c.Bounds.EndKey[:0], s.Bounds.EndKey...)
+	s.Versions.CloneInto(&c.Versions)
 }
 
 // Covers returns true if any range key in the stack covers the given point key.
@@ -628,6 +638,22 @@ func (v MVCCRangeKeyVersions) Clone() MVCCRangeKeyVersions {
 		c[i] = version.Clone()
 	}
 	return c
+}
+
+// CloneInto clones the versions, reusing the byte slices and backing array of
+// the given slice.
+func (v MVCCRangeKeyVersions) CloneInto(c *MVCCRangeKeyVersions) {
+	if length, capacity := len(v), cap(*c); length > capacity {
+		// Extend the slice, keeping the existing versions to reuse their Value byte
+		// slices. The compiler optimizes away the intermediate, appended slice.
+		(*c) = append(*c, make(MVCCRangeKeyVersions, length-capacity)...)
+	} else {
+		*c = (*c)[:length]
+	}
+	for i := range v {
+		(*c)[i].Timestamp = v[i].Timestamp
+		(*c)[i].Value = append((*c)[i].Value[:0], v[i].Value...)
+	}
 }
 
 // Covers returns true if any version in the stack is above the given timestamp.
