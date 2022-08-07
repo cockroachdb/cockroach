@@ -6,6 +6,10 @@ CREATE TABLE abc (
 )
 ----
 
+# --------------------------------------------------
+# UDFs without arguments.
+# --------------------------------------------------
+
 build
 SELECT foo()
 ----
@@ -31,12 +35,13 @@ project
  │    └── tuple
  └── projections
       └── udf: one [as=one:2]
-           └── project
-                ├── columns: "?column?":1!null
-                ├── values
-                │    └── tuple
-                └── projections
-                     └── const: 1 [as="?column?":1]
+           └── body
+                └── project
+                     ├── columns: "?column?":1!null
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── const: 1 [as="?column?":1]
 
 build format=show-scalars
 SELECT *, one() FROM abc
@@ -47,12 +52,13 @@ project
  │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
       └── udf: one [as=one:7]
-           └── project
-                ├── columns: "?column?":6!null
-                ├── values
-                │    └── tuple
-                └── projections
-                     └── const: 1 [as="?column?":6]
+           └── body
+                └── project
+                     ├── columns: "?column?":6!null
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── const: 1 [as="?column?":6]
 
 build format=show-scalars
 SELECT * FROM abc WHERE one() = c
@@ -66,12 +72,13 @@ project
       └── filters
            └── eq
                 ├── udf: one
-                │    └── project
-                │         ├── columns: "?column?":6!null
-                │         ├── values
-                │         │    └── tuple
-                │         └── projections
-                │              └── const: 1 [as="?column?":6]
+                │    └── body
+                │         └── project
+                │              ├── columns: "?column?":6!null
+                │              ├── values
+                │              │    └── tuple
+                │              └── projections
+                │                   └── const: 1 [as="?column?":6]
                 └── variable: c:3
 
 build format=show-scalars
@@ -87,40 +94,329 @@ project
  │         └── eq
  │              ├── variable: c:3
  │              └── udf: two
- │                   ├── project
- │                   │    ├── columns: "?column?":6!null
- │                   │    ├── values
- │                   │    │    └── tuple
- │                   │    └── projections
- │                   │         └── const: 1 [as="?column?":6]
- │                   └── project
- │                        ├── columns: "?column?":7!null
- │                        ├── values
- │                        │    └── tuple
- │                        └── projections
- │                             └── const: 2 [as="?column?":7]
+ │                   └── body
+ │                        ├── project
+ │                        │    ├── columns: "?column?":6!null
+ │                        │    ├── values
+ │                        │    │    └── tuple
+ │                        │    └── projections
+ │                        │         └── const: 1 [as="?column?":6]
+ │                        └── project
+ │                             ├── columns: "?column?":7!null
+ │                             ├── values
+ │                             │    └── tuple
+ │                             └── projections
+ │                                  └── const: 2 [as="?column?":7]
  └── projections
       ├── plus [as="?column?":9]
       │    ├── variable: a:1
       │    └── udf: one
-      │         └── project
-      │              ├── columns: "?column?":8!null
-      │              ├── values
-      │              │    └── tuple
-      │              └── projections
-      │                   └── const: 1 [as="?column?":8]
+      │         └── body
+      │              └── project
+      │                   ├── columns: "?column?":8!null
+      │                   ├── values
+      │                   │    └── tuple
+      │                   └── projections
+      │                        └── const: 1 [as="?column?":8]
       └── plus [as="?column?":12]
            ├── variable: b:2
            └── udf: two
-                ├── project
-                │    ├── columns: "?column?":10!null
-                │    ├── values
-                │    │    └── tuple
-                │    └── projections
-                │         └── const: 1 [as="?column?":10]
+                └── body
+                     ├── project
+                     │    ├── columns: "?column?":10!null
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── const: 1 [as="?column?":10]
+                     └── project
+                          ├── columns: "?column?":11!null
+                          ├── values
+                          │    └── tuple
+                          └── projections
+                               └── const: 2 [as="?column?":11]
+
+
+# --------------------------------------------------
+# UDFs with named arguments.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT x+y;
+$$;
+----
+
+build format=show-scalars
+SELECT add(1, 2)
+----
+project
+ ├── columns: add:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: add [as=add:4]
+           ├── args: x:1 y:2
+           ├── input
+           │    ├── const: 1
+           │    └── const: 2
+           └── body
                 └── project
-                     ├── columns: "?column?":11!null
+                     ├── columns: "?column?":3
                      ├── values
                      │    └── tuple
                      └── projections
-                          └── const: 2 [as="?column?":11]
+                          └── plus [as="?column?":3]
+                               ├── variable: x:1
+                               └── variable: y:2
+
+build format=show-scalars
+SELECT add(add(1, 2), 3)
+----
+project
+ ├── columns: add:7
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: add [as=add:7]
+           ├── args: x:4 y:5
+           ├── input
+           │    ├── udf: add
+           │    │    ├── args: x:1 y:2
+           │    │    ├── input
+           │    │    │    ├── const: 1
+           │    │    │    └── const: 2
+           │    │    └── body
+           │    │         └── project
+           │    │              ├── columns: "?column?":3
+           │    │              ├── values
+           │    │              │    └── tuple
+           │    │              └── projections
+           │    │                   └── plus [as="?column?":3]
+           │    │                        ├── variable: x:1
+           │    │                        └── variable: y:2
+           │    └── const: 3
+           └── body
+                └── project
+                     ├── columns: "?column?":6
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":6]
+                               ├── variable: x:4
+                               └── variable: y:5
+
+build format=show-scalars
+SELECT add(a, b) FROM abc
+----
+project
+ ├── columns: add:9
+ ├── scan abc
+ │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ └── projections
+      └── udf: add [as=add:9]
+           ├── args: x:6 y:7
+           ├── input
+           │    ├── variable: a:1
+           │    └── variable: b:2
+           └── body
+                └── project
+                     ├── columns: "?column?":8
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":8]
+                               ├── variable: x:6
+                               └── variable: y:7
+
+build format=show-scalars
+SELECT * FROM abc WHERE a = add(b, c)
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── variable: a:1
+                └── udf: add
+                     ├── args: x:6 y:7
+                     ├── input
+                     │    ├── variable: b:2
+                     │    └── variable: c:3
+                     └── body
+                          └── project
+                               ├── columns: "?column?":8
+                               ├── values
+                               │    └── tuple
+                               └── projections
+                                    └── plus [as="?column?":8]
+                                         ├── variable: x:6
+                                         └── variable: y:7
+
+build format=show-scalars
+SELECT * FROM abc WHERE a = add(add(b, c), 3)
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── variable: a:1
+                └── udf: add
+                     ├── args: x:9 y:10
+                     ├── input
+                     │    ├── udf: add
+                     │    │    ├── args: x:6 y:7
+                     │    │    ├── input
+                     │    │    │    ├── variable: b:2
+                     │    │    │    └── variable: c:3
+                     │    │    └── body
+                     │    │         └── project
+                     │    │              ├── columns: "?column?":8
+                     │    │              ├── values
+                     │    │              │    └── tuple
+                     │    │              └── projections
+                     │    │                   └── plus [as="?column?":8]
+                     │    │                        ├── variable: x:6
+                     │    │                        └── variable: y:7
+                     │    └── const: 3
+                     └── body
+                          └── project
+                               ├── columns: "?column?":11
+                               ├── values
+                               │    └── tuple
+                               └── projections
+                                    └── plus [as="?column?":11]
+                                         ├── variable: x:9
+                                         └── variable: y:10
+
+exec-ddl
+CREATE FUNCTION fetch_b(a_arg INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b FROM abc WHERE a = a_arg
+$$;
+----
+
+build format=show-scalars
+SELECT fetch_b(1)
+----
+project
+ ├── columns: fetch_b:7
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: fetch_b [as=fetch_b:7]
+           ├── args: a_arg:1
+           ├── input
+           │    └── const: 1
+           └── body
+                └── project
+                     ├── columns: b:3
+                     └── select
+                          ├── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          ├── scan abc
+                          │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          └── filters
+                               └── eq
+                                    ├── variable: a:2
+                                    └── variable: a_arg:1
+
+build format=show-scalars
+SELECT fetch_b(add(1, 2))
+----
+project
+ ├── columns: fetch_b:10
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: fetch_b [as=fetch_b:10]
+           ├── args: a_arg:4
+           ├── input
+           │    └── udf: add
+           │         ├── args: x:1 y:2
+           │         ├── input
+           │         │    ├── const: 1
+           │         │    └── const: 2
+           │         └── body
+           │              └── project
+           │                   ├── columns: "?column?":3
+           │                   ├── values
+           │                   │    └── tuple
+           │                   └── projections
+           │                        └── plus [as="?column?":3]
+           │                             ├── variable: x:1
+           │                             └── variable: y:2
+           └── body
+                └── project
+                     ├── columns: b:6
+                     └── select
+                          ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+                          ├── scan abc
+                          │    └── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+                          └── filters
+                               └── eq
+                                    ├── variable: a:5
+                                    └── variable: a_arg:4
+
+build format=show-scalars
+SELECT * FROM abc WHERE b = fetch_b(a)
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ └── select
+      ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── variable: b:2
+                └── udf: fetch_b
+                     ├── args: a_arg:6
+                     ├── input
+                     │    └── variable: a:1
+                     └── body
+                          └── project
+                               ├── columns: b:8
+                               └── select
+                                    ├── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+                                    ├── scan abc
+                                    │    └── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+                                    └── filters
+                                         └── eq
+                                              ├── variable: a:7
+                                              └── variable: a_arg:6
+
+exec-ddl
+CREATE FUNCTION shadowed_a(a INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT c FROM abc WHERE abc.b = a
+$$;
+----
+
+# The column "a" from the table takes precedence over the argument "a".
+build format=show-scalars
+SELECT shadowed_a(1)
+----
+project
+ ├── columns: shadowed_a:7
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: shadowed_a [as=shadowed_a:7]
+           ├── args: a:1
+           ├── input
+           │    └── const: 1
+           └── body
+                └── project
+                     ├── columns: c:4
+                     └── select
+                          ├── columns: abc.a:2!null b:3!null c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          ├── scan abc
+                          │    └── columns: abc.a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          └── filters
+                               └── eq
+                                    ├── variable: b:3
+                                    └── variable: abc.a:2

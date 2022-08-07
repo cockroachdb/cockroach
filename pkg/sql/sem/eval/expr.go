@@ -596,7 +596,21 @@ func (e *evaluator) EvalSubquery(subquery *tree.Subquery) (tree.Datum, error) {
 }
 
 func (e *evaluator) EvalRoutineExpr(routine *tree.RoutineExpr) (tree.Datum, error) {
-	return e.Planner.EvalRoutineExpr(e.Context, routine)
+	var err error
+	var input tree.Datums
+	if len(routine.Input) > 0 {
+		// Evaluate each input expression.
+		// TODO(mgartner): Use a scratch tree.Datums to avoid allocation on
+		// every invocation.
+		input = make(tree.Datums, len(routine.Input))
+		for i := range routine.Input {
+			input[i], err = routine.Input[i].Eval(e)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return e.Planner.EvalRoutineExpr(e.Context, routine, input)
 }
 
 func (e *evaluator) EvalTuple(t *tree.Tuple) (tree.Datum, error) {

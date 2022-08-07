@@ -1219,14 +1219,31 @@ define NthValue {
 # function body, and a pointer to its type.
 [Scalar]
 define UDF {
+    # Input contains the scalar expressions given as input to the UDF.
+    Input ScalarListExpr
     _ UDFPrivate
 }
 
 [Private]
 define UDFPrivate {
+    # Name is the name of the function.
     Name string
+
+    # Body contains a relational expression for each statement in the function
+    # body.
     Body RelListExpr
+
+    # ArgCols is a list of columns that are references to arguments of the
+    # function. The i-th column in the list corresponds to the i-th argument of
+    # the function. During execution of the UDF, these columns are replaced with
+    # the constant value inputs to the function.
+    ArgCols ColList
+
+    # Typ is the return type of the function.
     Typ Type
+
+    # Volatility is the user-provided volatility of the function given during
+    # CREATE FUNCTION.
     Volatility Volatility
 }
 
