@@ -56,6 +56,19 @@ func declareKeysGC(
 		latchSpans.AddMVCC(spanset.SpanReadWrite, span,
 			header.Timestamp)
 	}
+	// Extend clear range requests to include latches for clear range requests.
+	// We also need to hold a read latch for GC threshold since we must verify
+	// there's no data visible above threshold already set.
+	if len(gcr.ClearRangeKeys) > 0 {
+		if gcr.Threshold.IsEmpty() {
+			latchSpans.AddNonMVCC(spanset.SpanReadOnly,
+				roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
+		}
+		for _, span := range mergeAdjacentSpans(makeLookupBoundariesForGCClearRanges(rs.GetStartKey().AsRawKey(),
+			nil, gcr.ClearRangeKeys)) {
+			latchSpans.AddMVCC(spanset.SpanReadWrite, span, header.Timestamp)
+		}
+	}
 	// Be smart here about blocking on the threshold keys. The MVCC GC queue can
 	// send an empty request first to bump the thresholds, and then another one
 	// that actually does work but can avoid declaring these keys below.
@@ -117,7 +130,7 @@ func GC(
 	//    GC request's effect from the raft log. Latches held on the leaseholder
 	//    would have no impact on a follower read.
 	if !args.Threshold.IsEmpty() &&
-		(len(args.Keys) != 0 || len(args.RangeKeys) != 0) &&
+		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || len(args.ClearRangeKeys) != 0) &&
 		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
@@ -151,10 +164,17 @@ func GC(
 		}
 	}
 
+	desc := cArgs.EvalCtx.Desc()
+	clearRangeKeys := makeCollectableGCClearRangesFromGCRequests(desc.StartKey.AsRawKey(),
+		desc.EndKey.AsRawKey(), args.ClearRangeKeys)
+	if err := storage.MVCCGarbageCollectWithClearRange(ctx, readWriter, cArgs.Stats,
+		cArgs.EvalCtx.GetGCThreshold(), clearRangeKeys); err != nil {
+		return result.Result{}, err
+	}
+
 	// Garbage collect range keys. Note that we pass latch range boundaries for
 	// each key as we may need to merge range keys with adjacent ones, but we
 	// are restricted on how far we are allowed to read.
-	desc := cArgs.EvalCtx.Desc()
 	rangeKeys := makeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
 		desc.EndKey.AsRawKey(), args.RangeKeys)
 	if err := storage.MVCCGarbageCollectRangeKeys(ctx, readWriter, cArgs.Stats, rangeKeys); err != nil {
@@ -223,6 +243,39 @@ func makeCollectableGCRangesFromGCRequests(
 				StartKey:  rk.StartKey,
 				EndKey:    rk.EndKey,
 				Timestamp: rk.Timestamp,
+			},
+			LatchSpan: latches[i],
+		}
+	}
+	return collectableKeys
+}
+
+// Same as makeLookupBoundariesForGCRanges but for ClearRange request fields
+func makeLookupBoundariesForGCClearRanges(
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCClearRangeKey,
+) []roachpb.Span {
+	spans := make([]roachpb.Span, len(rangeKeys))
+	for i := range rangeKeys {
+		l, r := rangeTombstonePeekBounds(rangeKeys[i].StartKey, rangeKeys[i].EndKey, rangeStart, rangeEnd)
+		spans[i] = roachpb.Span{
+			Key:    l,
+			EndKey: r,
+		}
+	}
+	return spans
+}
+
+// Same as makeCollectableGCClearRangesFromGCRequests but for ClearRange request fields
+func makeCollectableGCClearRangesFromGCRequests(
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCClearRangeKey,
+) []storage.CollectableGCClearRangeKey {
+	latches := makeLookupBoundariesForGCClearRanges(rangeStart, rangeEnd, rangeKeys)
+	collectableKeys := make([]storage.CollectableGCClearRangeKey, len(rangeKeys))
+	for i, rk := range rangeKeys {
+		collectableKeys[i] = storage.CollectableGCClearRangeKey{
+			Span: roachpb.Span{
+				Key:    rk.StartKey,
+				EndKey: rk.EndKey,
 			},
 			LatchSpan: latches[i],
 		}
