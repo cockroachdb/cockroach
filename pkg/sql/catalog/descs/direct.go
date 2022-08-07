@@ -46,6 +46,12 @@ type Direct interface {
 		ctx context.Context, txn *kv.Txn,
 	) (nstree.Catalog, error)
 
+	// MustGetDescByID looks up a descriptor (of any type) given its ID, returning
+	// an error if the descriptor is not found.
+	MustGetDescByID(
+		ctx context.Context, txn *kv.Txn, id descpb.ID,
+	) (catalog.Descriptor, error)
+
 	// MustGetDatabaseDescByID looks up the database descriptor given its ID,
 	// returning an error if the descriptor is not found.
 	MustGetDatabaseDescByID(
@@ -140,6 +146,12 @@ func makeDirect(ctx context.Context, codec keys.SQLCodec, s *cluster.Settings) d
 
 func (d *direct) GetCatalogUnvalidated(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	return catkv.GetCatalogUnvalidated(ctx, d.codec, txn)
+}
+
+func (d *direct) MustGetDescByID(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (catalog.Descriptor, error) {
+	return catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil, id, catalog.Any)
 }
 
 func (d *direct) MustGetDatabaseDescByID(
