@@ -737,5 +737,12 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 		return plan, nil
 	}
-	return tree.NewTypedRoutineExpr(udf.Name, inputExprs, planFn, len(udf.Body), udf.Typ), nil
+	return tree.NewTypedRoutineExpr(
+		udf.Name,
+		inputExprs,
+		planFn,
+		len(udf.Body),
+		udf.Typ,
+		udf.CalledOnNullInput,
+	), nil
 }
