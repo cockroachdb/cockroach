@@ -21,24 +21,24 @@ import (
 // routine's PlanFn to generate a plan for each statement in the routine, then
 // runs the plans. The resulting value of the last statement in the routine is
 // returned.
-// TODO(mgartner): Support executing multi-statement routines.
 func (p *planner) EvalRoutineExpr(
-	ctx context.Context, expr *tree.RoutineExpr,
+	ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
 ) (result tree.Datum, err error) {
-	typs := []*types.T{expr.ResolvedType()}
+	retTypes := []*types.T{expr.ResolvedType()}
 
 	// The result of the routine is the result of the last statement. The result
 	// of any preceding statements is ignored. We set up a rowResultWriter that
 	// can store the results of the final statement here.
 	var rch rowContainerHelper
-	rch.Init(typs, p.ExtendedEvalContext(), "routine" /* opName */)
+	rch.Init(retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
 	defer rch.Close(ctx)
 	rrw := NewRowResultWriter(&rch)
 
 	// Execute each statement in the routine sequentially.
+	ef := newExecFactory(p)
 	for i := 0; i < expr.NumStmts; i++ {
 		// Generate a plan for executing the ith statement.
-		plan, err := expr.PlanFn(ctx, newExecFactory(p), i)
+		plan, err := expr.PlanFn(ctx, ef, i, input)
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +69,7 @@ func (p *planner) EvalRoutineExpr(
 	// Adding the limit would be valid because any other rows after the
 	// first can simply be ignored. The limit could also be beneficial
 	// because it could allow additional query plan optimizations.
-	rightRowsIterator := newRowContainerIterator(ctx, rch, typs)
+	rightRowsIterator := newRowContainerIterator(ctx, rch, retTypes)
 	defer rightRowsIterator.Close()
 	res, err := rightRowsIterator.Next()
 	if err != nil {

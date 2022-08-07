@@ -38,17 +38,18 @@ project
       └── plus [as="?column?":6, type=int, outer=(1), volatile]
            ├── variable: a:1 [type=int]
            └── udf: fn_volatile [type=int]
-                └── project
-                     ├── columns: "?column?":5(int!null)
-                     ├── cardinality: [1 - 1]
-                     ├── key: ()
-                     ├── fd: ()-->(5)
-                     ├── values
-                     │    ├── cardinality: [1 - 1]
-                     │    ├── key: ()
-                     │    └── tuple [type=tuple]
-                     └── projections
-                          └── const: 1 [as="?column?":5, type=int]
+                └── body
+                     └── project
+                          ├── columns: "?column?":5(int!null)
+                          ├── cardinality: [1 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(5)
+                          ├── values
+                          │    ├── cardinality: [1 - 1]
+                          │    ├── key: ()
+                          │    └── tuple [type=tuple]
+                          └── projections
+                               └── const: 1 [as="?column?":5, type=int]
 
 build
 SELECT a FROM ab WHERE b = fn_immutable()
@@ -76,17 +77,18 @@ project
            └── eq [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ]), fd=()-->(2)]
                 ├── variable: b:2 [type=int]
                 └── udf: fn_immutable [type=int]
-                     └── project
-                          ├── columns: "?column?":5(int!null)
-                          ├── cardinality: [1 - 1]
-                          ├── key: ()
-                          ├── fd: ()-->(5)
-                          ├── values
-                          │    ├── cardinality: [1 - 1]
-                          │    ├── key: ()
-                          │    └── tuple [type=tuple]
-                          └── projections
-                               └── const: 1 [as="?column?":5, type=int]
+                     └── body
+                          └── project
+                               ├── columns: "?column?":5(int!null)
+                               ├── cardinality: [1 - 1]
+                               ├── key: ()
+                               ├── fd: ()-->(5)
+                               ├── values
+                               │    ├── cardinality: [1 - 1]
+                               │    ├── key: ()
+                               │    └── tuple [type=tuple]
+                               └── projections
+                                    └── const: 1 [as="?column?":5, type=int]
 
 build
 SELECT a FROM ab WHERE b = fn_immutable() + fn_stable()
@@ -115,29 +117,31 @@ project
                 ├── variable: b:2 [type=int]
                 └── plus [type=int]
                      ├── udf: fn_immutable [type=int]
-                     │    └── project
-                     │         ├── columns: "?column?":5(int!null)
-                     │         ├── cardinality: [1 - 1]
-                     │         ├── key: ()
-                     │         ├── fd: ()-->(5)
-                     │         ├── values
-                     │         │    ├── cardinality: [1 - 1]
-                     │         │    ├── key: ()
-                     │         │    └── tuple [type=tuple]
-                     │         └── projections
-                     │              └── const: 1 [as="?column?":5, type=int]
+                     │    └── body
+                     │         └── project
+                     │              ├── columns: "?column?":5(int!null)
+                     │              ├── cardinality: [1 - 1]
+                     │              ├── key: ()
+                     │              ├── fd: ()-->(5)
+                     │              ├── values
+                     │              │    ├── cardinality: [1 - 1]
+                     │              │    ├── key: ()
+                     │              │    └── tuple [type=tuple]
+                     │              └── projections
+                     │                   └── const: 1 [as="?column?":5, type=int]
                      └── udf: fn_stable [type=int]
-                          └── project
-                               ├── columns: "?column?":6(int!null)
-                               ├── cardinality: [1 - 1]
-                               ├── key: ()
-                               ├── fd: ()-->(6)
-                               ├── values
-                               │    ├── cardinality: [1 - 1]
-                               │    ├── key: ()
-                               │    └── tuple [type=tuple]
-                               └── projections
-                                    └── const: 1 [as="?column?":6, type=int]
+                          └── body
+                               └── project
+                                    ├── columns: "?column?":6(int!null)
+                                    ├── cardinality: [1 - 1]
+                                    ├── key: ()
+                                    ├── fd: ()-->(6)
+                                    ├── values
+                                    │    ├── cardinality: [1 - 1]
+                                    │    ├── key: ()
+                                    │    └── tuple [type=tuple]
+                                    └── projections
+                                         └── const: 1 [as="?column?":6, type=int]
 
 build
 SELECT a FROM ab WHERE b = fn_leakproof()
@@ -163,14 +167,15 @@ project
            └── eq [type=bool, outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
                 ├── variable: b:2 [type=int]
                 └── udf: fn_leakproof [type=int]
-                     └── project
-                          ├── columns: "?column?":5(int!null)
-                          ├── cardinality: [1 - 1]
-                          ├── key: ()
-                          ├── fd: ()-->(5)
-                          ├── values
-                          │    ├── cardinality: [1 - 1]
-                          │    ├── key: ()
-                          │    └── tuple [type=tuple]
-                          └── projections
-                               └── const: 1 [as="?column?":5, type=int]
+                     └── body
+                          └── project
+                               ├── columns: "?column?":5(int!null)
+                               ├── cardinality: [1 - 1]
+                               ├── key: ()
+                               ├── fd: ()-->(5)
+                               ├── values
+                               │    ├── cardinality: [1 - 1]
+                               │    ├── key: ()
+                               │    └── tuple [type=tuple]
+                               └── projections
+                                    └── const: 1 [as="?column?":5, type=int]
