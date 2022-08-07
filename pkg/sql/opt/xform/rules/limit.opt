@@ -42,7 +42,7 @@
 [PushLimitIntoIndexJoin, Explore]
 (Limit
     (IndexJoin $input:* $indexJoinPrivate:*) &
-        (IndexJoinPreservesRows $input)
+        (IndexJoinPreservesRows $indexJoinPrivate)
     $limitExpr:(Const $limit:* & (IsPositiveInt $limit))
     $ordering:* &
         (OrderingCanProjectCols

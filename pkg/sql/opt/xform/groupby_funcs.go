@@ -389,11 +389,9 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 	}
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
+	var iter scanIndexIter
 	var sb indexScanBuilder
 	sb.Init(c, sp.Table)
-	tabMeta := c.e.mem.Metadata().TableMeta(sp.Table)
-
-	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// The iterator only produces pseudo-partial indexes (the predicate is
@@ -415,7 +413,7 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 
 		// Otherwise, try to construct an IndexJoin operator that provides the
 		// columns missing from the index.
-		if sp.Flags.NoIndexJoin || tabMeta.IgnorePreservedConsistency {
+		if sp.Flags.NoIndexJoin {
 			return
 		}
 

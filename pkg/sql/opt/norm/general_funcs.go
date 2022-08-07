@@ -933,8 +933,10 @@ func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
 	return mult.JoinPreservesRightRows(join.Op())
 }
 
-func (c *CustomFuncs) IndexJoinPreservesRows(expr memo.RelExpr) bool {
-	return !memo.CheckIgnorePreservedConsistency(c.mem.Metadata(), expr)
+// IndexJoinPreservesRows returns true if the index join is guaranteed to
+// produce the same number of rows as its input.
+func (c *CustomFuncs) IndexJoinPreservesRows(p *memo.IndexJoinPrivate) bool {
+	return p.Locking.WaitPolicy != tree.LockWaitSkipLocked
 }
 
 // NoJoinHints returns true if no hints were specified for this join.

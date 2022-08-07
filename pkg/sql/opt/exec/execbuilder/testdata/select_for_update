@@ -7,7 +7,7 @@ let $t_id
 SELECT id FROM system.namespace WHERE name='t'
 
 statement ok
-CREATE TABLE u (a INT PRIMARY KEY, c INT, FAMILY (a, c))
+CREATE TABLE u (a INT PRIMARY KEY, b INT, c INT, INDEX (b), FAMILY (a, b, c))
 
 statement ok
 CREATE VIEW v AS SELECT a FROM t AS t2
@@ -1018,11 +1018,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1038,7 +1038,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1052,11 +1052,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1072,7 +1072,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1085,11 +1085,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1104,7 +1104,7 @@ vectorized: true
     │     spans: FULL SCAN
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1118,11 +1118,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1138,7 +1138,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1152,11 +1152,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1172,7 +1172,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1189,11 +1189,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1209,7 +1209,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1223,11 +1223,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1243,7 +1243,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1257,11 +1257,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1277,7 +1277,7 @@ vectorized: true
     │     locking strength: for no key update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1291,11 +1291,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1311,7 +1311,7 @@ vectorized: true
     │     locking strength: for no key update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1329,11 +1329,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1349,7 +1349,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1372,11 +1372,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1392,7 +1392,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1405,11 +1405,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1424,7 +1424,7 @@ vectorized: true
     │     spans: FULL SCAN
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1438,11 +1438,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1458,7 +1458,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1476,11 +1476,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1496,7 +1496,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1519,11 +1519,11 @@ distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c)
+│ columns: (a, b, b, c)
 │ estimated row count: 1,000 (missing stats)
 │
 └── • merge join (inner)
-    │ columns: (a, b, a, c)
+    │ columns: (a, b, a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a) = (a)
     │ left cols are key
@@ -1539,7 +1539,7 @@ vectorized: true
     │     locking strength: for update
     │
     └── • scan
-          columns: (a, c)
+          columns: (a, b, c)
           ordering: +a
           estimated row count: 1,000 (missing stats)
           table: u@u_pkey
@@ -1557,7 +1557,7 @@ distribution: local
 vectorized: true
 ·
 • cross join (inner)
-│ columns: (a, b, a, c)
+│ columns: (a, b, a, b, c)
 │ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
@@ -1568,7 +1568,7 @@ vectorized: true
 │     locking strength: for update
 │
 └── • scan
-      columns: (a, c)
+      columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
       table: u@u_pkey
       spans: FULL SCAN
@@ -1581,7 +1581,7 @@ distribution: local
 vectorized: true
 ·
 • cross join (inner)
-│ columns: (a, b, a, c)
+│ columns: (a, b, a, b, c)
 │ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
@@ -1592,7 +1592,7 @@ vectorized: true
 │     locking strength: for update
 │
 └── • scan
-      columns: (a, c)
+      columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
       table: u@u_pkey
       spans: FULL SCAN
@@ -1604,7 +1604,7 @@ distribution: local
 vectorized: true
 ·
 • cross join (inner)
-│ columns: (a, b, a, c)
+│ columns: (a, b, a, b, c)
 │ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
@@ -1615,7 +1615,7 @@ vectorized: true
 │     locking strength: for share
 │
 └── • scan
-      columns: (a, c)
+      columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
       table: u@u_pkey
       spans: FULL SCAN
@@ -1628,7 +1628,7 @@ distribution: local
 vectorized: true
 ·
 • cross join (inner)
-│ columns: (a, b, a, c)
+│ columns: (a, b, a, b, c)
 │ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
@@ -1639,7 +1639,7 @@ vectorized: true
 │     locking strength: for update
 │
 └── • scan
-      columns: (a, c)
+      columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
       table: u@u_pkey
       spans: FULL SCAN
@@ -1655,7 +1655,7 @@ distribution: local
 vectorized: true
 ·
 • cross join (inner)
-│ columns: (a, b, a, c)
+│ columns: (a, b, a, b, c)
 │ estimated row count: 1,000,000 (missing stats)
 │
 ├── • scan
@@ -1665,7 +1665,7 @@ vectorized: true
 │     spans: FULL SCAN
 │
 └── • scan
-      columns: (a, c)
+      columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
       table: u@u_pkey
       spans: FULL SCAN
@@ -2527,3 +2527,68 @@ vectorized: true
       spans: /1/0
       locking strength: for update
       locking wait policy: skip locked
+
+# Tests with a secondary index.
+
+query T
+EXPLAIN (VERBOSE) SELECT a, b FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 10 (missing stats)
+  table: u@u_b_idx
+  spans: /2-/3
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ key columns: a
+│ locking strength: for update
+│ locking wait policy: skip locked
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /2-/3
+      locking strength: for update
+      locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 LIMIT 1 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ columns: (a, b, c)
+│ estimated row count: 1 (missing stats)
+│ count: 1
+│
+└── • index join
+    │ columns: (a, b, c)
+    │ estimated row count: 10 (missing stats)
+    │ table: u@u_pkey
+    │ key columns: a
+    │ locking strength: for update
+    │ locking wait policy: skip locked
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 10 (missing stats)
+          table: u@u_b_idx
+          spans: /2-/3
+          locking strength: for update
+          locking wait policy: skip locked

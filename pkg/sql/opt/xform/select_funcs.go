@@ -102,13 +102,11 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 ) {
 	// Iterate over all partial indexes.
 	var pkCols opt.ColSet
-	var sb indexScanBuilder
-	sb.Init(c, scanPrivate.Table)
-	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
-
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		var sb indexScanBuilder
+		sb.Init(c, scanPrivate.Table)
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
@@ -125,7 +123,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 
 		// Otherwise, try to construct an IndexJoin operator that provides the
 		// columns missing from the index.
-		if scanPrivate.Flags.NoIndexJoin || tabMeta.IgnorePreservedConsistency {
+		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
 
@@ -473,7 +471,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Otherwise, construct an IndexJoin operator that provides the columns
 		// missing from the index.
-		if scanPrivate.Flags.NoIndexJoin || tabMeta.IgnorePreservedConsistency {
+		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
 
@@ -901,7 +899,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead
 
-		if scanPrivate.Flags.NoIndexJoin || tabMeta.IgnorePreservedConsistency {
+		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
 

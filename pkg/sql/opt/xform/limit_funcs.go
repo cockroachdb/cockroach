@@ -68,7 +68,7 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 	if scanPrivate.IsVirtualTable(md) && !required.Any() {
 		return false
 	}
-	ok, _ := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
+	ok, _ := ordering.ScanPrivateCanProvide(md, scanPrivate, &required)
 	return ok
 }
 
@@ -107,7 +107,6 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	var pkCols opt.ColSet
 	var sb indexScanBuilder
 	sb.Init(c, scanPrivate.Table)
-	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 
 	// Iterate over all non-inverted, non-partial indexes, looking for those
 	// that can be limited.
@@ -146,7 +145,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 
 		// Otherwise, try to construct an IndexJoin operator that provides the
 		// columns missing from the index.
-		if scanPrivate.Flags.NoIndexJoin || tabMeta.IgnorePreservedConsistency {
+		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
 
@@ -277,11 +276,9 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 	}
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
+	var iter scanIndexIter
 	var sb indexScanBuilder
 	sb.Init(c, sp.Table)
-	tabMeta := c.e.mem.Metadata().TableMeta(sp.Table)
-
-	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// The iterator only produces pseudo-partial indexes (the predicate is
@@ -303,7 +300,7 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 
 		// Otherwise, try to construct an IndexJoin operator that provides the
 		// columns missing from the index.
-		if sp.Flags.NoIndexJoin || tabMeta.IgnorePreservedConsistency {
+		if sp.Flags.NoIndexJoin {
 			return
 		}
 
