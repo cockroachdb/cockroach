@@ -252,9 +252,6 @@ WHERE id = $max_desc_id;
     }
 }
 
-statement error pq: unimplemented: drop function not supported.*
-DROP FUNCTION f
-
 statement error pq: unimplemented: alter function not supported.*
 ALTER FUNCTION f() IMMUTABLE
 
@@ -437,3 +434,58 @@ query T
 SELECT 999999::regproc;
 ----
 999999
+
+subtest drop_function
+
+statement ok
+CREATE FUNCTION f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_drop(int) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_drop];
+----
+CREATE FUNCTION public.f_test_drop()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+CREATE FUNCTION public.f_test_drop(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement error pq: function name \"f_test_drop\" is not unique
+DROP FUNCTION f_test_drop;
+
+statement ok
+DROP FUNCTION f_test_drop();
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_drop];
+----
+CREATE FUNCTION public.f_test_drop(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement ok
+DROP FUNCTION f_test_drop(INT);
+
+statement error pq: function f_test_drop does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_drop];
