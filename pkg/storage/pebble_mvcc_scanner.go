@@ -312,10 +312,6 @@ type pebbleMVCCScanner struct {
 	// pointIter is a point synthesizing iterator that wraps and replaces parent
 	// when an MVCC range tombstone is encountered. A separate reference to it is
 	// kept in order to release it back to its pool when the scanner is done.
-	//
-	// TODO(erikgrinaker): pooling and reusing this together with the
-	// pebbleMVCCScanner would be more efficient, but only if MVCC range
-	// tombstones are frequent. We expect them to be rare, so we don't for now.
 	pointIter *pointSynthesizingIter
 	// memAccount is used to account for the size of the scan results.
 	memAccount *mon.BoundAccount
@@ -1188,15 +1184,7 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 // iterator was valid when called and returns true if there is no change.
 func (p *pebbleMVCCScanner) maybeEnablePointSynthesis() bool {
 	if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-		// TODO(erikgrinaker): We have to seek to the current iterator position to
-		// correctly initialize pointSynthesizingIter, but we could just load the
-		// underlying iterator state instead. We'll optimize this later.
-		//
-		// NB: The seek must use a cloned key, because it repositions the underlying
-		// iterator and then uses the given seek key for comparisons, which is not
-		// safe with UnsafeKey().
-		p.pointIter = newPointSynthesizingIter(p.parent, p.isGet)
-		p.pointIter.SeekGE(p.parent.Key())
+		p.pointIter = newPointSynthesizingIterAtParent(p.parent, p.isGet)
 		p.parent = p.pointIter
 		return p.iterValid()
 	}
