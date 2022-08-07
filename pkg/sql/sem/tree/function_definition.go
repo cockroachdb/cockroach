@@ -11,9 +11,12 @@
 package tree
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -236,6 +239,63 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 		Name:      fd.Name,
 		Overloads: combineOverloads(fd.Overloads, another.Overloads),
 	}, nil
+}
+
+// MatchOverload searches an overload which takes exactly the same input
+// argument types. The overload from the most significant schema is returned. If
+// argTypes==nil, an error is returned if the function name is not unique in the
+// most significant schema. If argTypes is not nil, an error with
+// ErrFunctionUndefined cause is returned if not matched found.
+func (fd *ResolvedFunctionDefinition) MatchOverload(
+	argTypes []*types.T, explicitSchema string, searchPath SearchPath,
+) (QualifiedOverload, error) {
+	matched := func(ol QualifiedOverload, schema string) bool {
+		return schema == ol.Schema && (argTypes == nil || ol.params().Match(argTypes))
+	}
+	typeNames := func() string {
+		ns := make([]string, len(argTypes))
+		for i, t := range argTypes {
+			ns[i] = t.Name()
+		}
+		return strings.Join(ns, ",")
+	}
+
+	found := false
+	ret := make([]QualifiedOverload, 0, len(fd.Overloads))
+
+	findMatches := func(schema string) {
+		for i := range fd.Overloads {
+			if matched(fd.Overloads[i], schema) {
+				found = true
+				ret = append(ret, fd.Overloads[i])
+			}
+		}
+	}
+
+	if explicitSchema != "" {
+		findMatches(explicitSchema)
+	} else {
+		err := searchPath.IterateSearchPath(func(schema string) error {
+			findMatches(schema)
+			if found {
+				return iterutil.StopIteration()
+			}
+			return nil
+		})
+		if err != nil {
+			return QualifiedOverload{}, err
+		}
+	}
+
+	if len(ret) == 0 {
+		return QualifiedOverload{}, errors.Wrapf(
+			ErrFunctionUndefined, "function %s(%s) does not exist", fd.Name, typeNames(),
+		)
+	}
+	if len(ret) > 1 {
+		return QualifiedOverload{}, errors.Errorf("function name %q is not unique", fd.Name)
+	}
+	return ret[0], nil
 }
 
 func combineOverloads(a, b []QualifiedOverload) []QualifiedOverload {

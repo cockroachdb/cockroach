@@ -11,10 +11,12 @@
 package tree
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -354,6 +356,27 @@ func (node FuncObj) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Args)
 		ctx.WriteString(")")
 	}
+}
+
+// InputArgTypes returns a slice of argument types of the function.
+func (node FuncObj) InputArgTypes(
+	ctx context.Context, res TypeReferenceResolver,
+) ([]*types.T, error) {
+	// TODO(chengxiong): handle INOUT, OUT and VARIADIC argument classes when we
+	// support them. This is because only IN and INOUT arg types need to be
+	// considered to match a overload.
+	var argTypes []*types.T
+	if node.Args != nil {
+		argTypes = make([]*types.T, len(node.Args))
+		for i, arg := range node.Args {
+			typ, err := ResolveType(ctx, arg.Type, res)
+			if err != nil {
+				return nil, err
+			}
+			argTypes[i] = typ
+		}
+	}
+	return argTypes, nil
 }
 
 // AlterFunctionOptions represents a ALTER FUNCTION...action statement.
