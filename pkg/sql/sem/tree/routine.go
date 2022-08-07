@@ -50,19 +50,30 @@ type RoutineExpr struct {
 	// Typ is the type of the routine's result.
 	Typ *types.T
 
+	// CalledOnNullInput is true if the function should be called when any of
+	// its inputs are NULL. If false, the function will not be evaluated in the
+	// presence of null inputs, and will instead evaluate directly to NULL.
+	CalledOnNullInput bool
+
 	name string
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
 func NewTypedRoutineExpr(
-	name string, input TypedExprs, planFn RoutinePlanFn, numStmts int, typ *types.T,
+	name string,
+	input TypedExprs,
+	planFn RoutinePlanFn,
+	numStmts int,
+	typ *types.T,
+	calledOnNullInput bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
-		Input:    input,
-		PlanFn:   planFn,
-		NumStmts: numStmts,
-		Typ:      typ,
-		name:     name,
+		Input:             input,
+		PlanFn:            planFn,
+		NumStmts:          numStmts,
+		Typ:               typ,
+		CalledOnNullInput: calledOnNullInput,
+		name:              name,
 	}
 }
 
