@@ -63,7 +63,6 @@ func registerAcceptance(r registry.Registry) {
 		registry.OwnerMultiTenant: {
 			{
 				name: "multitenant",
-				skip: "https://github.com/cockroachdb/cockroach/issues/81506",
 				fn:   runAcceptanceMultitenant,
 			},
 		},
