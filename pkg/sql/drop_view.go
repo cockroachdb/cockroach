@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -68,15 +69,12 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	for _, toDel := range td {
 		droppedDesc := toDel.desc
 		for _, ref := range droppedDesc.DependedOnBy {
-			if err := p.maybeFailOnDroppingFunction(ctx, ref.ID); err != nil {
-				return nil, err
-			}
 			// Don't verify that we can remove a dependent view if that dependent
 			// view was explicitly specified in the DROP VIEW command.
 			if descInSlice(ref.ID, td) {
 				continue
 			}
-			if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
+			if err := p.canRemoveDependentFromTable(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
 				return nil, err
 			}
 		}
@@ -138,16 +136,7 @@ func descInSlice(descID descpb.ID, td []toDelete) bool {
 	return false
 }
 
-func (p *planner) canRemoveDependentView(
-	ctx context.Context,
-	from *tabledesc.Mutable,
-	ref descpb.TableDescriptor_Reference,
-	behavior tree.DropBehavior,
-) error {
-	return p.canRemoveDependentViewGeneric(ctx, string(from.DescriptorType()), from.Name, from.ParentID, ref, behavior)
-}
-
-func (p *planner) canRemoveDependentViewGeneric(
+func (p *planner) canRemoveDependent(
 	ctx context.Context,
 	typeName string,
 	objName string,
@@ -155,20 +144,70 @@ func (p *planner) canRemoveDependentViewGeneric(
 	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
-	viewDesc, err := p.getViewDescForCascade(ctx, typeName, objName, parentID, ref.ID, behavior)
+	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, ref.ID)
 	if err != nil {
 		return err
 	}
+
+	switch t := desc.(type) {
+	case *tabledesc.Mutable:
+		return p.canRemoveDependentViewGeneric(ctx, typeName, objName, parentID, t, behavior)
+	case *funcdesc.Mutable:
+		return p.canRemoveDependentFunctionGeneric(ctx, typeName, objName, t, behavior)
+	default:
+		return errors.AssertionFailedf(
+			"unexpected dependent %s %s on %s %s",
+			desc.DescriptorType(), desc.GetName(), typeName, objName,
+		)
+	}
+}
+
+func (p *planner) canRemoveDependentFromTable(
+	ctx context.Context,
+	from *tabledesc.Mutable,
+	ref descpb.TableDescriptor_Reference,
+	behavior tree.DropBehavior,
+) error {
+	return p.canRemoveDependent(ctx, string(from.DescriptorType()), from.Name, from.ParentID, ref, behavior)
+}
+
+func (p *planner) canRemoveDependentViewGeneric(
+	ctx context.Context,
+	typeName string,
+	objName string,
+	parentID descpb.ID,
+	viewDesc *tabledesc.Mutable,
+	behavior tree.DropBehavior,
+) error {
+	if behavior != tree.DropCascade {
+		return p.dependentViewError(ctx, typeName, objName, parentID, viewDesc, "drop")
+	}
+
 	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {
 		return err
 	}
 	// If this view is depended on by other views, we have to check them as well.
 	for _, ref := range viewDesc.DependedOnBy {
-		if err := p.canRemoveDependentView(ctx, viewDesc, ref, behavior); err != nil {
+		if err := p.canRemoveDependentFromTable(ctx, viewDesc, ref, behavior); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (p *planner) canRemoveDependentFunctionGeneric(
+	ctx context.Context,
+	typeName string,
+	objName string,
+	fnDesc *funcdesc.Mutable,
+	behavior tree.DropBehavior,
+) error {
+	if behavior != tree.DropCascade {
+		return p.dependentFunctionError(typeName, objName, fnDesc, "drop")
+	}
+	// TODO(chengxiong): check backreference dependents for drop cascade. This is
+	// needed when we start allowing references on UDFs.
+	return p.canDropFunction(ctx, fnDesc)
 }
 
 // Drops the view and any additional views that depend on it.
@@ -231,26 +270,35 @@ func (p *planner) dropViewImpl(
 	if behavior == tree.DropCascade {
 		dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
 		for _, ref := range dependedOnBy {
-			dependentDesc, err := p.getViewDescForCascade(
+			depDesc, err := p.getDescForCascade(
 				ctx, string(viewDesc.DescriptorType()), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
 			)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
 
-			qualifiedView, err := p.getQualifiedTableName(ctx, dependentDesc)
-			if err != nil {
-				return cascadeDroppedViews, err
+			if depDesc.Dropped() {
+				continue
 			}
-			// Check if the dependency was already marked as dropped,
-			// while dealing with any earlier dependent views.
-			if !dependentDesc.Dropped() {
-				cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
+
+			switch t := depDesc.(type) {
+			case *tabledesc.Mutable:
+				qualifiedView, err := p.getQualifiedTableName(ctx, t)
+				if err != nil {
+					return cascadeDroppedViews, err
+				}
+				// Check if the dependency was already marked as dropped,
+				// while dealing with any earlier dependent views.
+				cascadedViews, err := p.dropViewImpl(ctx, t, queueJob, "dropping dependent view", behavior)
 				if err != nil {
 					return cascadeDroppedViews, err
 				}
 				cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
 				cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.FQString())
+			case *funcdesc.Mutable:
+				if err := p.dropFunctionImpl(ctx, t); err != nil {
+					return cascadeDroppedViews, err
+				}
 			}
 		}
 	}
@@ -267,34 +315,20 @@ func (p *planner) dropViewImpl(
 	return cascadeDroppedViews, nil
 }
 
-func (p *planner) getViewDescForCascade(
+func (p *planner) getDescForCascade(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID, viewID descpb.ID,
+	parentID, descID descpb.ID,
 	behavior tree.DropBehavior,
-) (*tabledesc.Mutable, error) {
-	viewDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, viewID, p.txn)
+) (catalog.MutableDescriptor, error) {
+	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, descID)
 	if err != nil {
-		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
-		return nil, errors.Wrapf(err, "error resolving dependent view ID %d", viewID)
+		log.Warningf(ctx, "unable to retrieve descriptor for %d: %v", descID, err)
+		return nil, errors.Wrapf(err, "error resolving dependent ID %d", descID)
 	}
 	if behavior != tree.DropCascade {
-		viewName := viewDesc.Name
-		if viewDesc.ParentID != parentID {
-			var err error
-			viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
-			if err != nil {
-				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
-				return nil, sqlerrors.NewDependentObjectErrorf(
-					"cannot drop %s %q because a view depends on it", typeName, objName)
-			}
-			viewName = viewFQName.FQString()
-		}
-		return nil, errors.WithHintf(
-			sqlerrors.NewDependentObjectErrorf("cannot drop %s %q because view %q depends on it",
-				typeName, objName, viewName),
-			"you can drop %s instead.", viewName)
+		return nil, p.dependentError(ctx, typeName, objName, parentID, descID, "drop")
 	}
-	return viewDesc, nil
+	return desc, nil
 }

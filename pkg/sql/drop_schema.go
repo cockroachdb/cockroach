@@ -104,12 +104,15 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 					"must be owner of schema %s", tree.Name(sc.GetName()))
 			}
 			namesBefore := len(d.objectNamesToDelete)
+			fnsBefore := len(d.functionsToDelete)
 			if err := d.collectObjectsInSchema(ctx, p, db, sc); err != nil {
 				return nil, err
 			}
 			// We added some new objects to delete. Ensure that we have the correct
 			// drop behavior to be doing this.
-			if namesBefore != len(d.objectNamesToDelete) && n.DropBehavior != tree.DropCascade {
+			if (namesBefore != len(d.objectNamesToDelete) || fnsBefore != len(d.functionsToDelete)) &&
+				n.DropBehavior != tree.DropCascade {
+
 				return nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
 					"schema %q is not empty and CASCADE was not specified", scName)
 			}
@@ -120,12 +123,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 
 	}
 
-	// The database descriptor is used to generate specific error messages when
-	// a database cannot be collected for dropping. The database descriptor is nil here
-	// because dropping a schema will never result in a database being collected and dropped.
-	// Also, schemas can belong to different databases, so it does not make sense to pass a single
-	// database descriptor.
-	if err := d.resolveCollectedObjects(ctx, p, nil /* db */); err != nil {
+	if err := d.resolveCollectedObjects(ctx, p); err != nil {
 		return nil, err
 	}
 
