@@ -265,6 +265,18 @@ func (i *pointSynthesizingIter) clearRangeKeys() {
 	}
 }
 
+// loadParentPosition fetches the position from the underlying iterator and
+// reconfigures the point synthesizing iterator for it. The parent iterator must
+// be valid. If emitOnSeekGE is enabled, the current key will be considered a
+// seek key.
+//
+// This is a specialized method for use when the pebbleMVCCScanner encounters a
+// range key and switches to using a pointSynthesizingIter.
+func (i *pointSynthesizingIter) loadParentPosition() {
+	i.iterValid = true
+	i.updateSeekGEPosition(i.iter.UnsafeKey())
+}
+
 // SeekGE implements MVCCIterator.
 func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 	i.reverse = false
@@ -273,6 +285,23 @@ func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 		i.updatePosition()
 		return
 	}
+	i.updateSeekGEPosition(seekKey)
+}
+
+// SeekIntentGE implements MVCCIterator.
+func (i *pointSynthesizingIter) SeekIntentGE(seekKey roachpb.Key, txnUUID uuid.UUID) {
+	i.reverse = false
+	i.iter.SeekIntentGE(seekKey, txnUUID)
+	if ok, _ := i.updateValid(); !ok {
+		i.updatePosition()
+		return
+	}
+	i.updateSeekGEPosition(MVCCKey{Key: seekKey})
+}
+
+// updateSeekGEPosition updates the iterator state following a SeekGE call, and
+// when loading the parent iterator's position in loadParentPosition().
+func (i *pointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
 
 	// Fast path: no range key, so just reset the iterator and bail out.
 	hasPoint, hasRange := i.iter.HasPointAndRange()
@@ -349,35 +378,6 @@ func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 	if !i.atPoint && i.rangeKeysIdx >= len(i.rangeKeys) {
 		i.updatePosition()
 	}
-}
-
-// SeekIntentGE implements MVCCIterator.
-func (i *pointSynthesizingIter) SeekIntentGE(seekKey roachpb.Key, txnUUID uuid.UUID) {
-	i.reverse = false
-	i.iter.SeekIntentGE(seekKey, txnUUID)
-	if ok, _ := i.updateValid(); !ok {
-		i.updatePosition()
-		return
-	}
-
-	// Fast path: no range key, so just reset the iterator and bail out.
-	hasPoint, hasRange := i.iter.HasPointAndRange()
-	if !hasRange {
-		i.atPoint = hasPoint
-		i.clearRangeKeys()
-		return
-	}
-
-	// If we land in the middle of a bare range key and emitOnSeekGE is disabled,
-	// then skip over it to the next point/range key.
-	if !i.emitOnSeekGE && hasRange && !hasPoint &&
-		!i.iter.RangeBounds().Key.Equal(i.iter.UnsafeKey().Key) {
-		if _, err := i.iterNext(); err != nil {
-			return
-		}
-	}
-
-	i.updatePosition()
 }
 
 // Next implements MVCCIterator.
