@@ -268,6 +268,9 @@ type Info struct {
 	// ClearRangeKeyFailures reports 1 if GC identified a possibility to collect
 	// with ClearRange operation, but request failed.
 	ClearRangeKeyFailures int
+	// ClearConsecutiveKeysOperations is a number of clear range requests used to
+	// remove consecutive keys.
+	ClearConsecutiveKeysOperations int
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
@@ -510,7 +513,7 @@ func processReplicatedKeyRange(
 		}
 
 		for ; ; it.step() {
-			var upd gcBatchCounters
+			var upd gcInfoUpdate
 			var err error
 
 			s, ok := it.state()
@@ -581,10 +584,18 @@ type gcBatchCounters struct {
 	versionsAffected int
 }
 
-func (c gcBatchCounters) updateGcInfo(info *Info) {
-	info.AffectedVersionsKeyBytes += c.keyBytes
-	info.AffectedVersionsValBytes += c.valBytes
-	info.NumKeysAffected += c.keysAffected
+// gcInfoUpdate accumulates changes to gcInfo when processing a single key
+// version.
+type gcInfoUpdate struct {
+	gcBatchCounters
+	clearRangeOps int
+}
+
+func (u gcInfoUpdate) updateGcInfo(info *Info) {
+	info.AffectedVersionsKeyBytes += u.keyBytes
+	info.AffectedVersionsValBytes += u.valBytes
+	info.NumKeysAffected += u.keysAffected
+	info.ClearConsecutiveKeysOperations += u.clearRangeOps
 }
 
 func (c *gcBatchCounters) add(o gcBatchCounters) {
@@ -676,7 +687,7 @@ func (b *gcKeyBatcher) String() string {
 
 func (b *gcKeyBatcher) foundNonGCableData(
 	ctx context.Context, cur *mvccKeyValue, isNewestPoint bool,
-) (counterUpdate gcBatchCounters, err error) {
+) (counterUpdate gcInfoUpdate, err error) {
 	b.prevWasNewest = isNewestPoint
 	if !b.clearRangeEnabled {
 		return counterUpdate, nil
@@ -686,7 +697,7 @@ func (b *gcKeyBatcher) foundNonGCableData(
 	// and flush them as we reached end of current consecutive key span.
 	counterUpdate, err = b.maybeFlushPendingBatches(ctx)
 	if err != nil {
-		return gcBatchCounters{}, err
+		return gcInfoUpdate{}, err
 	}
 	b.clearRangeCounters = gcBatchCounters{}
 
@@ -698,7 +709,7 @@ func (b *gcKeyBatcher) foundNonGCableData(
 
 func (b *gcKeyBatcher) foundGarbage(
 	ctx context.Context, cur *mvccKeyValue, isNewestPoint bool,
-) (counterUpdate gcBatchCounters, err error) {
+) (counterUpdate gcInfoUpdate, err error) {
 	// If we are restarting clear range collection, then last points batch might
 	// be reverted to partial at the time of flush. We will save its
 	// pre-clear-range state and use for GC stats update.
@@ -717,9 +728,11 @@ func (b *gcKeyBatcher) foundGarbage(
 			// If clear range is disabled, flush batches immediately as they are
 			// formed.
 			if !b.clearRangeEnabled {
-				if counterUpdate, err = b.flushPointsBatch(ctx, &b.pointsBatches[i]); err != nil {
-					return gcBatchCounters{}, err
+				upd, err := b.flushPointsBatch(ctx, &b.pointsBatches[i])
+				if err != nil {
+					return gcInfoUpdate{}, err
 				}
+				counterUpdate.add(upd)
 			} else {
 				b.pointsBatches = append(b.pointsBatches, pointsBatch{})
 				i++
@@ -752,7 +765,7 @@ func (b *gcKeyBatcher) foundGarbage(
 			// to flush oldest batch to protect node from exhausting memory.
 			lastKey, update, err := b.flushOldestPointBatches(ctx, 1)
 			if err != nil {
-				return gcBatchCounters{}, err
+				return gcInfoUpdate{}, err
 			}
 			counterUpdate.add(update)
 			// If oldest batch intersected with currently tracked clear range request
@@ -804,7 +817,7 @@ func (b *gcKeyBatcher) foundGarbage(
 //     except for last are flushed
 func (b *gcKeyBatcher) maybeFlushPendingBatches(
 	ctx context.Context,
-) (counterUpdate gcBatchCounters, err error) {
+) (counterUpdate gcInfoUpdate, err error) {
 	// Find where in first points batch is start key and flush "prefix".
 	if b.clearRangeEnabled && b.clearRangeCounters.versionsAffected >= b.clearRangeMinKeys {
 		// Optionally flush parts of the first batch if it doesn't match
@@ -824,7 +837,7 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(
 			b.pointsBatches[0].gcBatchCounters = b.partialPointBatchCounters
 			upd, err := b.flushPointsBatch(ctx, &b.pointsBatches[0])
 			if err != nil {
-				return gcBatchCounters{}, err
+				return gcInfoUpdate{}, err
 			}
 			counterUpdate.add(upd)
 		}
@@ -847,7 +860,7 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(
 			EndKey:            endRange,
 		}); err != nil {
 			if errors.Is(err, ctx.Err()) {
-				return gcBatchCounters{}, err
+				return gcInfoUpdate{}, err
 			}
 			// Even though we are batching the GC process, it's
 			// safe to continue because we bumped the GC
@@ -856,11 +869,12 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(
 			log.Warningf(ctx, "failed to GC keys with clear range: %v", err)
 		}
 		counterUpdate.add(b.clearRangeCounters)
+		counterUpdate.clearRangeOps++
 		b.totalMemUsed = 0
 	} else if flushTo := len(b.pointsBatches) - 1; flushTo > 0 {
 		_, update, err := b.flushOldestPointBatches(ctx, flushTo)
 		if err != nil {
-			return gcBatchCounters{}, err
+			return gcInfoUpdate{}, err
 		}
 		counterUpdate.add(update)
 	}
@@ -912,11 +926,9 @@ func (b *gcKeyBatcher) flushPointsBatch(
 	return counters, nil
 }
 
-func (b *gcKeyBatcher) flushLastBatch(
-	ctx context.Context,
-) (counterUpdate gcBatchCounters, err error) {
+func (b *gcKeyBatcher) flushLastBatch(ctx context.Context) (counterUpdate gcInfoUpdate, err error) {
 	if len(b.pointsBatches[0].batchGCKeys) == 0 {
-		return gcBatchCounters{}, nil
+		return gcInfoUpdate{}, nil
 	}
 	b.pointsBatches = append(b.pointsBatches, pointsBatch{})
 	return b.maybeFlushPendingBatches(ctx)

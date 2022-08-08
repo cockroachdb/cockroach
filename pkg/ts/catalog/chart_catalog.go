@@ -924,6 +924,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"queue.gc.info.clearrangesuccess",
 					"queue.gc.info.clearrangefailed",
+					"queue.gc.info.numclearconsecutivekeys",
 				},
 			},
 			{
