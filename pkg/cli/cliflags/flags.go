@@ -1490,6 +1490,15 @@ confidential data or PII.
 `,
 	}
 
+	ZipRedact = FlagInfo{
+		Name: "redact",
+		Description: `
+Redact anything that may contain confidential data or PII from retrieved
+debug data. An exception is made for range key data, as this data is
+necessary to support CockroachDB.
+`,
+	}
+
 	ZipCPUProfileDuration = FlagInfo{
 		Name: "cpu-profile-duration",
 		Description: `

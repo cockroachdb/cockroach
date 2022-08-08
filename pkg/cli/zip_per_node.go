@@ -493,7 +493,7 @@ func (zc *debugZipContext) collectPerNodeData(
 					var err error
 					entries, err = zc.status.LogFile(
 						ctx, &serverpb.LogFileRequest{
-							NodeId: id, File: file.Name, Redact: zipCtx.redactLogs,
+							NodeId: id, File: file.Name, Redact: zipCtx.redact || zipCtx.redactLogs,
 						})
 					return err
 				}); requestErr != nil {
@@ -525,7 +525,7 @@ func (zc *debugZipContext) collectPerNodeData(
 					// most conservative way possible. (It's not great that
 					// possibly confidential data flew over the network, but
 					// at least it stops here.)
-					if zipCtx.redactLogs && !e.Redactable {
+					if (zipCtx.redact || zipCtx.redactLogs) && !e.Redactable {
 						e.Message = "REDACTEDBYZIP"
 						// We're also going to print a warning at the end.
 						warnRedactLeak = true
@@ -543,7 +543,7 @@ func (zc *debugZipContext) collectPerNodeData(
 				// Defer the warning, so that it does not get "drowned" as
 				// part of the main zip output.
 				defer func(fileName string) {
-					fmt.Fprintf(stderr, "WARNING: server-side redaction failed for %s, completed client-side (--redact-logs=true)\n", fileName)
+					fmt.Fprintf(stderr, "WARNING: server-side redaction failed for %s, completed client-side (--redact=true)\n", fileName)
 				}(file.Name)
 			}
 		}
