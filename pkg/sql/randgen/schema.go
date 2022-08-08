@@ -544,6 +544,11 @@ func randIndexTableDefFromCols(
 			}
 		}
 
+		// Last column for inverted indexes must always be ascending.
+		if i == nCols-1 && def.Inverted {
+			elem.Direction = tree.Ascending
+		}
+
 		if !stopPrefix {
 			prefix = append(prefix, cols[i].Name)
 		}
