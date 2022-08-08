@@ -24,7 +24,7 @@ import (
 )
 
 // commit contains details about each formatted commit
-type commit struct {
+type issue struct {
 	sha         string
 	title       string
 	releaseNote string
@@ -34,7 +34,7 @@ type commit struct {
 type pr struct {
 	number      int
 	mergeBranch string
-	commits     []commit
+	issues      []issue
 }
 
 // ghSearch contains a list of search items (in this case, PRs) from the GitHub API
@@ -95,7 +95,7 @@ func docsIssueGeneration(params parameters) {
 		if err := httpGet("https://api.github.com/repos/cockroachdb/cockroach/pulls/"+strconv.Itoa(pr.number)+"/commits?per_page:250", params.Token, &commits); err != nil {
 			log.Fatal(err)
 		}
-		pr.commits = getCommits(commits, pr.number)
+		pr.issues = getIssues(commits, pr.number)
 		pr.createDocsIssues(params.Token)
 	}
 }
@@ -132,53 +132,100 @@ func prNums(search ghSearch) []pr {
 	return result // return a slice of prs
 }
 
-// getCommits takes a list of commits from GitHub as well as the PR associated with those commits and outputs a formatted list of commits with valid release notes on that PR
-func getCommits(pullCommit []ghPullCommit, prNumber int) []commit {
-	var result []commit
+// getIssues takes a list of commits from GitHub as well as the PR associated with those commits and outputs a formatted list of commits with valid release notes on that PR
+func getIssues(pullCommit []ghPullCommit, prNumber int) []issue {
+	var result []issue
 	for _, c := range pullCommit {
 		message := c.Commit.Message
-		rn := formatReleaseNote(message, prNumber, c.Sha) // return a slice of data that locates every instance of the phrase "release note (", case insensitive
-		if rn != "" {                                     // checks to make sure a match was returned
-			x := commit{ // declare a new commit object
-				sha:         c.Sha,
-				title:       formatTitle(message),
-				releaseNote: rn,
+		rns := formatReleaseNotes(message, prNumber, c.Sha) // return a slice of data that locates every instance of the phrase "release note (", case insensitive
+		for i, rn := range rns {
+			{ // checks to make sure a match was returned
+				x := issue{ // declare a new commit object
+					sha:         c.Sha,
+					title:       formatTitle(message, prNumber, i+1, len(rns)),
+					releaseNote: rn,
+				}
+				result = append(result, x)
 			}
-			result = append(result, x)
 		}
 	}
 	return result
 }
 
-func formatReleaseNote(message string, prNumber int, sha string) string {
-	re := regexp.MustCompile(`(?s)[rR]elease [nN]ote \(.*`)                                       // this regex checks to make sure there's a release note within the commit
-	reNeg := regexp.MustCompile(`([rR]elease [nN]ote \(bug fix.*)|([rR]elease [nN]ote: [nN]one)`) // this regex is used to exclude bug fixes or releases without release notes
-	rn := re.FindString(message)                                                                  // return the first instance of the phrase "release note (", case insensitive
-	if len(rn) > 0 && !reNeg.MatchString(message) {                                               // checks to make sure the desired release note is not null and doesn't match the negating string.
-		return fmt.Sprintf(
-			"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\nCommit: https://github.com/cockroachdb/cockroach/commit/%s\n\n---\n\n%s",
-			strconv.Itoa(prNumber),
-			sha,
-			rn,
-		)
+func formatReleaseNotes(message string, prNumber int, sha string) []string {
+	result := []string{}                                      // each array in this string is a different release note
+	noRN := regexp.MustCompile(`[rR]elease [nN]ote: [nN]one`) // this regex is used to exclude PRs without release notes
+	if !noRN.MatchString(message) {
+		splitString := strings.Split(message, "\n")                                    // split based on \n character
+		allRNRE := regexp.MustCompile(`[rR]elease [nN]ote \(.*`)                       // this regex checks to make sure there's a release note within the commit
+		bugFixRNRE := regexp.MustCompile(`([rR]elease [nN]ote \(bug fix\):.*)`)        // this regex is used to exclude bug fixes
+		releaseJustificationRE := regexp.MustCompile(`[rR]elease [jJ]ustification:.*`) // this regex is used to exclude lines for a release justification
+		buffer := ""                                                                   // the buffer collects the text for all valid release notes and then writes it to the result
+		for _, x := range splitString {
+			validRn := allRNRE.MatchString(x)
+			bufferNotEmpty := buffer != "" // if the buffer contains text, it means that it is in the process of collecting a release note
+			bugFixRn := bugFixRNRE.MatchString(x)
+			releaseJustification := releaseJustificationRE.MatchString(x)
+			// the above 4 variables are booleans to identify each line's purpose
+			if bufferNotEmpty && (validRn || releaseJustification) { // if the buffer contains a release note and it finds a new release note or a release justification, we write and flush the buffer
+				result = append(result, strings.TrimSuffix(fmt.Sprintf(
+					"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\nCommit: https://github.com/cockroachdb/cockroach/commit/%s\n\n---\n\n%s",
+					strconv.Itoa(prNumber),
+					sha,
+					buffer,
+				),
+					"\n",
+				),
+				) // add a new item to result slice with the formatted release text
+				buffer = "" // flush the buffer
+			}
+			if (validRn && !bugFixRn) || (bufferNotEmpty && !bugFixRn && !releaseJustification) { // if the row is a valid, non bug fix RN or the buffer has a release note in progress and the line isn't a new bug fix RN or release justification, write the line to the buffer
+				buffer += x + "\n"
+			}
+		}
+		if buffer != "" { // commit whatever is left in the buffer to the result set
+			result = append(result, strings.TrimSuffix(fmt.Sprintf(
+				"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\nCommit: https://github.com/cockroachdb/cockroach/commit/%s\n\n---\n\n%s",
+				strconv.Itoa(prNumber),
+				sha,
+				buffer,
+			),
+				"\n",
+			),
+			)
+		}
 	}
-	return ""
+	return result
 }
 
-func formatTitle(message string) string {
-	if i := strings.IndexRune(message, '\n'); i > 0 {
-		return message[:i]
+func formatTitle(message string, prNumber int, index int, totalLength int) string {
+	var result string
+	if i := strings.IndexRune(message, '\n'); i > 0 { //
+		result = message[:i]
+	} else {
+		result = message
 	}
-	return message
+	result = fmt.Sprintf("PR #%d - %s",
+		prNumber,
+		result,
+	)
+	if totalLength > 1 {
+		result += fmt.Sprintf(
+			" (%d of %d)",
+			index,
+			totalLength,
+		)
+	}
+	return result
 }
 
 func (p pr) createDocsIssues(token string) {
 	postURL := "https://api.github.com/repos/cockroachdb/docs/issues"
-	for _, commit := range p.commits {
+	for _, issue := range p.issues {
 		reqBody, err := json.Marshal(map[string]interface{}{
-			"title":  commit.title,
+			"title":  issue.title,
 			"labels": []string{"C-product-change", p.mergeBranch},
-			"body":   commit.releaseNote,
+			"body":   issue.releaseNote,
 		})
 		if err != nil {
 			log.Fatal(err)
