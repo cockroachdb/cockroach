@@ -977,10 +977,10 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
-	ex.extraTxnState.schemaChangerState = SchemaChangerState{
+	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
 		mode: ex.sessionData().NewSchemaChangerMode,
 	}
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
@@ -1284,8 +1284,15 @@ type connExecutor struct {
 	// the field is accessed in connExecutor's serialize function, it should be
 	// added to txnState behind the mutex.
 	extraTxnState struct {
+		// fromOuterTxn should be set true if the conn executor is run under an
+		// internal executor with an outer txn, which means when the conn executor
+		// closes, it should not release the leases of descriptor collections or
+		// delete schema change job records. Instead, we leave the caller of the
+		// internal executor to release them.
+		fromOuterTxn bool
+
 		// descCollection collects descriptors used by the current transaction.
-		descCollection descs.Collection
+		descCollection *descs.Collection
 
 		// jobs accumulates jobs staged for execution inside the transaction.
 		// Staging happens when executing statements that are implemented with a
@@ -1408,7 +1415,7 @@ type connExecutor struct {
 		// statements.
 		transactionStatementsHash util.FNV64
 
-		schemaChangerState SchemaChangerState
+		schemaChangerState *SchemaChangerState
 
 		// shouldCollectTxnExecutionStats specifies whether the statements in
 		// this transaction should collect execution stats.
@@ -1695,18 +1702,21 @@ func (ns *prepStmtNamespace) resetTo(
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
-	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	ex.extraTxnState.schemaChangerState = SchemaChangerState{
-		mode: ex.sessionData().NewSchemaChangerMode,
-	}
 
-	for k := range ex.extraTxnState.schemaChangeJobRecords {
-		delete(ex.extraTxnState.schemaChangeJobRecords, k)
+	if ex.extraTxnState.fromOuterTxn {
+		ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
+	} else {
+		ex.extraTxnState.descCollection.ReleaseAll(ctx)
+		for k := range ex.extraTxnState.schemaChangeJobRecords {
+			delete(ex.extraTxnState.schemaChangeJobRecords, k)
+		}
+		ex.extraTxnState.jobs = nil
+		ex.extraTxnState.schemaChangerState = &SchemaChangerState{
+			mode: ex.sessionData().NewSchemaChangerMode,
+		}
 	}
-
-	ex.extraTxnState.descCollection.ReleaseAll(ctx)
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -2744,7 +2754,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
-		Descs:                  &ex.extraTxnState.descCollection,
+		Descs:                  ex.extraTxnState.descCollection,
 		TxnModesSetter:         ex,
 		Jobs:                   &ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
@@ -2783,7 +2793,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
-	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
+	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 
 	// If we are retrying due to an unsatisfiable timestamp bound which is
 	// retriable, it means we were unable to serve the previous minimum timestamp
@@ -3035,7 +3045,7 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	ctx context.Context, descID descpb.ID,
 ) error {
 	if err := ex.planner.waitForDescriptorSchemaChanges(
-		ctx, descID, ex.extraTxnState.schemaChangerState,
+		ctx, descID, *ex.extraTxnState.schemaChangerState,
 	); err != nil {
 		return err
 	}
@@ -3271,7 +3281,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // runPreCommitStages is part of the new schema changer infrastructure to
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	scs := &ex.extraTxnState.schemaChangerState
+	scs := ex.extraTxnState.schemaChangerState
 	if len(scs.state.Targets) == 0 {
 		return nil
 	}
@@ -3280,7 +3290,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.planner.User(),
 		ex.server.cfg,
 		ex.planner.txn,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollection,
 		ex.planner.EvalContext(),
 		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		scs.jobID,
