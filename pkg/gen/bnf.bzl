@@ -16,6 +16,7 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:alter_database_owner.bnf",
   "//docs/generated/sql/bnf:alter_database_primary_region.bnf",
   "//docs/generated/sql/bnf:alter_database_set_secondary_region_stmt.bnf",
+  "//docs/generated/sql/bnf:alter_database_set_zone_config_extension_stmt.bnf",
   "//docs/generated/sql/bnf:alter_database_stmt.bnf",
   "//docs/generated/sql/bnf:alter_database_survival_goal_stmt.bnf",
   "//docs/generated/sql/bnf:alter_database_to_schema_stmt.bnf",

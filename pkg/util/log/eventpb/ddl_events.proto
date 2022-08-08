@@ -14,6 +14,7 @@ option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
+import "util/log/eventpb/zone_events.proto";
 import "util/log/logpb/event.proto";
 
 // Category: SQL Logical Schema Changes
@@ -538,5 +539,12 @@ message ForceDeleteTableDataEntry {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   uint32 desc_id = 3 [(gogoproto.customname) = "DescriptorID", (gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterDatabaseSetZoneConfigExtension is recorded when a zone config extension is changed.
+message AlterDatabaseSetZoneConfigExtension {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
