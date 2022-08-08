@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -89,7 +90,7 @@ func TestRotateCerts(t *testing.T) {
 
 	// Create a client by calling sql.Open which loads the certificates but do not use it yet.
 	createTestClient := func() *gosql.DB {
-		pgUrl := makeSecurePGUrl(s.ServingSQLAddr(), username.RootUser, certsDir, security.EmbeddedCACert, security.EmbeddedRootCert, security.EmbeddedRootKey)
+		pgUrl := makeSecurePGUrl(s.ServingSQLAddr(), username.RootUser, certsDir, certnames.EmbeddedCACert, certnames.EmbeddedRootCert, certnames.EmbeddedRootKey)
 		goDB, err := gosql.Open("postgres", pgUrl)
 		if err != nil {
 			t.Fatal(err)
@@ -233,7 +234,7 @@ func TestRotateCerts(t *testing.T) {
 	// Now regenerate certs, but keep the CA cert around.
 	// We still need to delete the key.
 	// New clients with certs will fail with bad certificate (CA not yet loaded).
-	if err := os.Remove(filepath.Join(certsDir, security.EmbeddedCAKey)); err != nil {
+	if err := os.Remove(filepath.Join(certsDir, certnames.EmbeddedCAKey)); err != nil {
 		t.Fatal(err)
 	}
 	if err := generateBaseCerts(certsDir); err != nil {

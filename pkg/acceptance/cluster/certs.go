@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 )
 
@@ -53,7 +54,7 @@ func GenerateCerts(ctx context.Context) func() {
 	maybePanic(os.RemoveAll(certsDir))
 
 	maybePanic(security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		keyLen, 96*time.Hour, false, false))
 
 	// Root user.
@@ -61,19 +62,19 @@ func GenerateCerts(ctx context.Context) func() {
 	// tests.
 	userScopes := []roachpb.TenantID{roachpb.SystemTenantID, roachpb.MakeTenantID(5)}
 	maybePanic(security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		keyLen, 48*time.Hour, false, username.RootUserName(), userScopes, true /* generate pk8 key */))
 
 	// Test user.
 	// Scope test user to system tenant and tenant ID 5 which is what we use by default for acceptance
 	// tests.
 	maybePanic(security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		keyLen, 48*time.Hour, false, username.TestUserName(), userScopes, true /* generate pk8 key */))
 
 	// Certs for starting a cockroach server. Key size is from cli/cert.go:defaultKeySize.
 	maybePanic(security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		keyLen, 48*time.Hour, false, []string{"localhost", "cockroach"}))
 
 	// Store a copy of the client certificate and private key in a PKCS#12
