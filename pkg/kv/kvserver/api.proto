@@ -85,3 +85,14 @@ message CompactEngineSpanRequest {
 
 message CompactEngineSpanResponse {
 }
+
+// CompactionConcurrencyRequest increases the  compaction concurrency of the store
+// until it is compacted to a satisfying amount.
+message CompactionConcurrencyRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  uint64 compaction_concurrency = 2;
+}
+
+message CompactionConcurrencyResponse {
+  uint64 old_compaction_concurrency = 1;
+}
