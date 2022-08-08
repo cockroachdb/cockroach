@@ -45,11 +45,10 @@ func NewTupleProjOp(
 
 type tupleProjOp struct {
 	colexecop.OneInputHelper
-
 	allocator         *colmem.Allocator
 	converter         *colconv.VecToDatumConverter
-	tupleContentsIdxs []int
 	outputType        *types.T
+	tupleContentsIdxs []int
 	outputIdx         int
 }
 

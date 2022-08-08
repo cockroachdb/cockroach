@@ -1122,13 +1122,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 }
 
 type castOpBase struct {
-	colexecop.OneInputInitCloserHelper
-
 	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
 	evalCtx   *eval.Context
 	buf       bytes.Buffer
+	colexecop.OneInputInitCloserHelper
+	colIdx    int
+	outputIdx int
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {

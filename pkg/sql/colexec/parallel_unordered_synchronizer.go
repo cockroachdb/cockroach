@@ -34,9 +34,9 @@ import (
 // message originated from.
 // Note that either a batch or metadata must be sent, but not both.
 type unorderedSynchronizerMsg struct {
-	inputIdx int
 	b        coldata.Batch
 	meta     []execinfrapb.ProducerMetadata
+	inputIdx int
 }
 
 var _ colexecop.Operator = &ParallelUnorderedSynchronizer{}

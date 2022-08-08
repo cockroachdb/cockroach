@@ -9,9 +9,11 @@
 package sqlproxyccl
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"net"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -118,6 +120,8 @@ type ProxyOptions struct {
 
 		// balancerOpts is used to customize the balancer created by the proxy.
 		balancerOpts []balancer.Option
+
+		httpCancelErrHandler func(err error)
 	}
 }
 
@@ -149,6 +153,9 @@ type proxyHandler struct {
 
 	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
+
+	// cancelInfoMap keeps track of all the cancel request keys for this proxy.
+	cancelInfoMap *cancelInfoMap
 }
 
 const throttledErrorHint string = `Connection throttling is triggered by repeated authentication failure. Make
@@ -171,10 +178,11 @@ func newProxyHandler(
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	handler := proxyHandler{
-		stopper:      stopper,
-		metrics:      proxyMetrics,
-		ProxyOptions: options,
-		certManager:  certmgr.NewCertManager(ctx),
+		stopper:       stopper,
+		metrics:       proxyMetrics,
+		ProxyOptions:  options,
+		certManager:   certmgr.NewCertManager(ctx),
+		cancelInfoMap: makeCancelInfoMap(),
 	}
 
 	err := handler.setupIncomingCert(ctx)
@@ -299,8 +307,24 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		return fe.Err
 	}
 
-	// This currently only happens for CancelRequest type of startup messages
-	// that we don't support. Return nil to the server, which simply closes the
+	// Cancel requests are sent on a separate connection, and have no response,
+	// so we can close the connection immediately, then handle the request. This
+	// prevents the client from using latency to learn if we are processing the
+	// request or not.
+	if cr := fe.CancelRequest; cr != nil {
+		_ = incomingConn.Close()
+		if err := handler.handleCancelRequest(cr, true /* allowForward */); err != nil {
+			// Lots of noise from this log indicates that somebody is spamming
+			// fake cancel requests.
+			log.Warningf(
+				ctx, "could not handle cancel request from client %s: %v",
+				incomingConn.RemoteAddr().String(), err,
+			)
+		}
+		return nil
+	}
+
+	// This should not happen. Return nil to the server, which simply closes the
 	// connection.
 	if fe.Msg == nil {
 		return nil
@@ -366,6 +390,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		StartupMsg:        backendStartupMsg,
 		DialTenantLatency: handler.metrics.DialTenantLatency,
 		DialTenantRetries: handler.metrics.DialTenantRetries,
+		CancelInfo:        makeCancelInfo(incomingConn.LocalAddr(), incomingConn.RemoteAddr()),
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.
@@ -403,6 +428,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	}
 	defer func() { _ = crdbConn.Close() }()
 
+	// Update the cancel info.
+	handler.cancelInfoMap.addCancelInfo(connector.CancelInfo.proxySecretID(), connector.CancelInfo)
+
 	// Record the connection success and how long it took.
 	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connRecievedTime).Nanoseconds())
 	handler.metrics.SuccessfulConnCount.Inc(1)
@@ -411,6 +439,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	connBegin := timeutil.Now()
 	defer func() {
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
+		handler.cancelInfoMap.deleteCancelInfo(connector.CancelInfo.proxySecretID())
 	}()
 
 	// Wrap the client connection with an error annotater. WARNING: The TLS
@@ -459,6 +488,51 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		handler.metrics.updateForError(err)
 		return err
 	}
+}
+
+// handleCancelRequest handles a pgwire query cancel request by either
+// forwarding it to a SQL node or to another proxy.
+func (handler *proxyHandler) handleCancelRequest(
+	cr *proxyCancelRequest, allowForward bool,
+) (retErr error) {
+	if allowForward {
+		handler.metrics.QueryCancelReceivedPGWire.Inc(1)
+	} else {
+		handler.metrics.QueryCancelReceivedHTTP.Inc(1)
+	}
+	var triedForward bool
+	defer func() {
+		if retErr != nil {
+			handler.metrics.QueryCancelIgnored.Inc(1)
+		} else if triedForward {
+			handler.metrics.QueryCancelForwarded.Inc(1)
+		} else {
+			handler.metrics.QueryCancelSuccessful.Inc(1)
+		}
+	}()
+	if ci, ok := handler.cancelInfoMap.getCancelInfo(cr.SecretKey); ok {
+		return ci.sendCancelToBackend(cr.ClientIP)
+	}
+	// Only forward the request if it hasn't already been sent to the correct proxy.
+	if !allowForward {
+		return errors.Newf("ignoring cancel request with unfamiliar key: %d", cr.SecretKey)
+	}
+	triedForward = true
+	u := "http://" + cr.ProxyIP.String() + ":8080/_status/cancel/"
+	reqBody := bytes.NewReader(cr.Encode())
+	return forwardCancelRequest(u, reqBody)
+}
+
+var forwardCancelRequest = func(url string, reqBody *bytes.Reader) error {
+	const timeout = 2 * time.Second
+	client := http.Client{
+		Timeout: timeout,
+	}
+
+	if _, err := client.Post(url, "application/octet-stream", reqBody); err != nil {
+		return err
+	}
+	return nil
 }
 
 // startPodWatcher runs on a background goroutine and listens to pod change

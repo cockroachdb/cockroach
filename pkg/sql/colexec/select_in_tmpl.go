@@ -146,8 +146,8 @@ func GetInOperator(
 
 type selectInOp_TYPE struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []_GOTYPE
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -157,9 +157,9 @@ var _ colexecop.Operator = &selectInOp_TYPE{}
 type projectInOp_TYPE struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []_GOTYPE
 	colIdx    int
 	outputIdx int
-	filterRow []_GOTYPE
 	hasNulls  bool
 	negate    bool
 }

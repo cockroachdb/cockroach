@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/stretchr/testify/require"
 )
@@ -380,6 +381,124 @@ func BenchmarkDecodeMVCCKey(b *testing.B) {
 		}
 	}
 	benchmarkDecodeMVCCKeyResult = mvccKey // avoid compiler optimizing away function call
+}
+
+func TestMVCCRangeKeyClone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	orig := MVCCRangeKeyStack{
+		Bounds: roachpb.Span{Key: roachpb.Key("abc"), EndKey: roachpb.Key("def")},
+		Versions: MVCCRangeKeyVersions{
+			{Timestamp: hlc.Timestamp{WallTime: 3, Logical: 4}, Value: []byte{1, 2, 3}},
+			{Timestamp: hlc.Timestamp{WallTime: 1, Logical: 2}, Value: nil},
+		},
+	}
+
+	clone := orig.Clone()
+	require.Equal(t, orig, clone)
+
+	// Assert that the slices are actual clones, by asserting the location of the
+	// backing array at [0].
+	require.NotSame(t, &orig.Bounds.Key[0], &clone.Bounds.Key[0])
+	require.NotSame(t, &orig.Bounds.EndKey[0], &clone.Bounds.EndKey[0])
+	for i := range orig.Versions {
+		if len(orig.Versions[i].Value) > 0 {
+			require.NotSame(t, &orig.Versions[i].Value[0], &clone.Versions[i].Value[0])
+		}
+	}
+}
+
+func TestMVCCRangeKeyCloneInto(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	orig := MVCCRangeKeyStack{
+		Bounds: roachpb.Span{Key: roachpb.Key("abc"), EndKey: roachpb.Key("def")},
+		Versions: MVCCRangeKeyVersions{
+			{Timestamp: hlc.Timestamp{WallTime: 3, Logical: 4}, Value: []byte{1, 2, 3}},
+			{Timestamp: hlc.Timestamp{WallTime: 1, Logical: 2}, Value: nil},
+		},
+	}
+
+	targetEmpty := MVCCRangeKeyStack{}
+	targetSmall := MVCCRangeKeyStack{
+		Bounds: roachpb.Span{Key: make(roachpb.Key, 1), EndKey: make(roachpb.Key, 1)},
+		Versions: MVCCRangeKeyVersions{
+			{Value: make([]byte, 1)},
+		},
+	}
+	targetSame := MVCCRangeKeyStack{
+		Bounds: roachpb.Span{
+			Key:    make(roachpb.Key, len(orig.Bounds.Key)),
+			EndKey: make(roachpb.Key, len(orig.Bounds.EndKey))},
+		Versions: MVCCRangeKeyVersions{
+			{Value: make([]byte, len(orig.Versions[0].Value))},
+			{},
+		},
+	}
+	targetLarge := MVCCRangeKeyStack{
+		Bounds: roachpb.Span{
+			Key:    make(roachpb.Key, len(orig.Bounds.Key)+1),
+			EndKey: make(roachpb.Key, len(orig.Bounds.EndKey)+1)},
+		Versions: MVCCRangeKeyVersions{
+			{Value: make([]byte, len(orig.Versions[0].Value)+1)},
+			{Value: make([]byte, len(orig.Versions[1].Value)+1)},
+			{Value: make([]byte, 100)},
+		},
+	}
+
+	testcases := map[string]struct {
+		target       MVCCRangeKeyStack
+		expectReused bool
+	}{
+		"empty": {targetEmpty, false},
+		"small": {targetSmall, false},
+		"same":  {targetSame, true},
+		"large": {targetLarge, true},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			clone := tc.target
+			orig.CloneInto(&clone)
+
+			// We don't discard empty byte slices when cloning a nil value, so we have
+			// to normalize these back to nil for the purpose of comparison.
+			for i := range clone.Versions {
+				if orig.Versions[i].Value == nil && len(clone.Versions[i].Value) == 0 {
+					clone.Versions[i].Value = nil
+				}
+			}
+			require.Equal(t, orig, clone)
+
+			requireSliceIdentity := func(t *testing.T, a, b []byte, expectSame bool) {
+				t.Helper()
+				a, b = a[:cap(a)], b[:cap(b)]
+				if len(a) > 0 {
+					if expectSame {
+						require.Same(t, &a[0], &b[0])
+					} else {
+						require.NotSame(t, &a[0], &b[0])
+					}
+				}
+			}
+
+			// Assert that slices are actual clones, by asserting the address of the
+			// backing array at [0].
+			requireSliceIdentity(t, orig.Bounds.Key, clone.Bounds.Key, false)
+			requireSliceIdentity(t, orig.Bounds.EndKey, clone.Bounds.EndKey, false)
+			for i := range orig.Versions {
+				requireSliceIdentity(t, orig.Versions[i].Value, clone.Versions[i].Value, false)
+			}
+
+			// Assert whether the clone is reusing byte slices from the target.
+			requireSliceIdentity(t, tc.target.Bounds.Key, clone.Bounds.Key, tc.expectReused)
+			requireSliceIdentity(t, tc.target.Bounds.EndKey, clone.Bounds.EndKey, tc.expectReused)
+			for i := range tc.target.Versions {
+				if i < len(clone.Versions) {
+					requireSliceIdentity(t, tc.target.Versions[i].Value, clone.Versions[i].Value, tc.expectReused)
+				}
+			}
+		})
+	}
 }
 
 func TestMVCCRangeKeyString(t *testing.T) {
@@ -774,6 +893,57 @@ func TestMVCCRangeKeyStackTrim(t *testing.T) {
 			rangeKeys := initialRangeKeys.Clone()
 			require.Equal(t, tc.expect, rangeKeys.Trim(wallTS(tc.from), wallTS(tc.to)))
 			require.Equal(t, expect, rangeKeys)
+		})
+	}
+}
+
+var mvccRangeKeyStackClone MVCCRangeKeyStack
+
+func BenchmarkMVCCRangeKeyStack_Clone(b *testing.B) {
+	makeStack := func(keySize, versions, withValues int) MVCCRangeKeyStack {
+		const valueSize = 8
+		r := randutil.NewTestRandWithSeed(4829418876581)
+
+		var stack MVCCRangeKeyStack
+		stack.Bounds.Key = randutil.RandBytes(r, keySize)
+		for stack.Bounds.EndKey.Compare(stack.Bounds.Key) <= 0 {
+			stack.Bounds.EndKey = randutil.RandBytes(r, keySize)
+		}
+
+		for i := 0; i < versions; i++ {
+			version := MVCCRangeKeyVersion{Timestamp: hlc.Timestamp{WallTime: r.Int63()}}
+			if i < withValues {
+				version.Value = randutil.RandBytes(r, valueSize)
+			}
+			stack.Versions = append(stack.Versions, version)
+		}
+		sort.Slice(stack.Versions, func(i, j int) bool {
+			return stack.Versions[i].Timestamp.Less(stack.Versions[j].Timestamp)
+		})
+		return stack
+	}
+
+	for _, keySize := range []int{16} {
+		b.Run(fmt.Sprintf("keySize=%d", keySize), func(b *testing.B) {
+			for _, numVersions := range []int{1, 3, 10, 100} {
+				b.Run(fmt.Sprintf("numVersions=%d", numVersions), func(b *testing.B) {
+					for _, withValues := range []int{0, 1} {
+						b.Run(fmt.Sprintf("withValues=%d", withValues), func(b *testing.B) {
+							stack := makeStack(keySize, numVersions, withValues)
+							b.Run("Clone", func(b *testing.B) {
+								for i := 0; i < b.N; i++ {
+									mvccRangeKeyStackClone = stack.Clone()
+								}
+							})
+							b.Run("CloneInto", func(b *testing.B) {
+								for i := 0; i < b.N; i++ {
+									stack.CloneInto(&mvccRangeKeyStackClone)
+								}
+							})
+						})
+					}
+				})
+			}
 		})
 	}
 }

@@ -987,11 +987,24 @@ message AutoSQLStatsCompactionProgress {
 }
 
 message RowLevelTTLDetails {
+
+  // TableID is the ID of the table that the TTL job removes records from.
   uint32 table_id = 1 [
     (gogoproto.customname) = "TableID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
+
+  // Cutoff is compared against execinfrapb.TTLSpec.TTLExpr by the
+  // ttlProcessor to determine what records to delete. Records are deleted
+  // if TTLExpr <= Cutoff.
   google.protobuf.Timestamp cutoff = 2 [(gogoproto.nullable)=false, (gogoproto.stdtime) = true];
+
+  // TableVersion is the table descriptor version of the table when the TTLJob
+  // started.
+  uint64 table_version = 3 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.DescriptorVersion"
+  ];
+
 }
 
 message RowLevelTTLProgress {

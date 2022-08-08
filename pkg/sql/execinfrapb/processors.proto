@@ -22,6 +22,7 @@ option go_package = "execinfrapb";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "sql/execinfrapb/processors_sql.proto";
+import "sql/execinfrapb/processors_ttl.proto";
 import "sql/execinfrapb/processors_bulk_io.proto";
 import "sql/execinfrapb/processors_changefeeds.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
@@ -120,6 +121,7 @@ message ProcessorCoreUnion {
   optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
   optional ExportSpec exporter = 37;
   optional IndexBackfillMergerSpec indexBackfillMerger = 38;
+  optional TTLSpec ttl = 39;
 
   reserved 6, 12, 14, 17, 18, 19, 20;
 }
