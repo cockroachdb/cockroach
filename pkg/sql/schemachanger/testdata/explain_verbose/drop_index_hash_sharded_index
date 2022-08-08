@@ -130,10 +130,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │   │     VALIDATED → DELETE_ONLY
     │   │   │
-    │   │   ├── • CheckConstraint:{DescID: 104, ConstraintID: 4}
+    │   │   ├── • CheckConstraint:{DescID: 104, ConstraintID: 2}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   └── • ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 4}
+    │   │   └── • ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
     │   │         PUBLIC → ABSENT
     │   │
     │   └── • 9 Mutation operations
@@ -143,7 +143,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │       │     TableID: 104
     │       │
     │       ├── • RemoveCheckConstraint
-    │       │     ConstraintID: 4
+    │       │     ConstraintID: 2
     │       │     TableID: 104
     │       │
     │       ├── • NotImplemented

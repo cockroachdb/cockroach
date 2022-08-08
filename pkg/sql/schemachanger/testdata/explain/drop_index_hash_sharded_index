@@ -32,11 +32,11 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-      │    │    ├── PUBLIC     → ABSENT      CheckConstraint:{DescID: 104, ConstraintID: 4}
-      │    │    └── PUBLIC     → ABSENT      ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 4}
+      │    │    ├── PUBLIC     → ABSENT      CheckConstraint:{DescID: 104, ConstraintID: 2}
+      │    │    └── PUBLIC     → ABSENT      ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
       │    └── 9 Mutation operations
       │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":3,"TableID":104}
-      │         ├── RemoveCheckConstraint {"ConstraintID":4,"TableID":104}
+      │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
       │         ├── NotImplemented {"ElementType":"scpb.ConstraintN..."}
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"TableID":104}
