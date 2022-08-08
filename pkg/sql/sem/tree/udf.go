@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -453,4 +454,37 @@ func (node *AlterFunctionDepExtension) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString(" DEPENDS ON EXTENSION ")
 	ctx.WriteString(string(node.Extension))
+}
+
+// UDFDisallowanceVisitor is used to determine if a type checked expression
+// contains any UDF function sub-expression. It's needed only temporarily to
+// disallow any usage of UDF from relation objects.
+type UDFDisallowanceVisitor struct {
+	FoundUDF bool
+}
+
+// VisitPre implements the Visitor interface.
+func (v *UDFDisallowanceVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if funcExpr, ok := expr.(*FuncExpr); ok && funcExpr.ResolvedOverload().IsUDF {
+		v.FoundUDF = true
+		return false, expr
+	}
+	return true, expr
+}
+
+// VisitPost implements the Visitor interface.
+func (v *UDFDisallowanceVisitor) VisitPost(expr Expr) (newNode Expr) {
+	return expr
+}
+
+// MaybeFailOnUDFUsage returns an error if the given expression or any
+// sub-expression used a UDF.
+// TODO(chengxiong): remove this function when we start allowing UDF references.
+func MaybeFailOnUDFUsage(expr TypedExpr) error {
+	visitor := &UDFDisallowanceVisitor{}
+	WalkExpr(visitor, expr)
+	if visitor.FoundUDF {
+		return unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
+	}
+	return nil
 }
