@@ -1316,6 +1316,12 @@ sub-level and file counts.`,
 		Measurement: "Range Keys",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaGCClearConsecutiveKeys = metric.Metadata{
+		Name:        "queue.gc.info.numclearconsecutivekeys",
+		Help:        "Number of clear range requests to remove consecutive keys issued by GC",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaGCIntentsConsidered = metric.Metadata{
 		Name:        "queue.gc.info.intentsconsidered",
 		Help:        "Number of 'old' intents",
@@ -1889,6 +1895,7 @@ type StoreMetrics struct {
 	// GCInfo cumulative totals.
 	GCNumKeysAffected            *metric.Counter
 	GCNumRangeKeysAffected       *metric.Counter
+	GCClearConsecutiveKeys       *metric.Counter
 	GCIntentsConsidered          *metric.Counter
 	GCIntentTxns                 *metric.Counter
 	GCTransactionSpanScanned     *metric.Counter
@@ -2426,6 +2433,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// GCInfo cumulative totals.
 		GCNumKeysAffected:            metric.NewCounter(metaGCNumKeysAffected),
 		GCNumRangeKeysAffected:       metric.NewCounter(metaGCNumRangeKeysAffected),
+		GCClearConsecutiveKeys:       metric.NewCounter(metaGCClearConsecutiveKeys),
 		GCIntentsConsidered:          metric.NewCounter(metaGCIntentsConsidered),
 		GCIntentTxns:                 metric.NewCounter(metaGCIntentTxns),
 		GCTransactionSpanScanned:     metric.NewCounter(metaGCTransactionSpanScanned),

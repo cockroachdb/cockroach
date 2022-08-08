@@ -2339,7 +2339,7 @@ func TestGcKeyBatcher(t *testing.T) {
 				prevWasNewest:    true,
 			}
 
-			assertBatcher := func(cnt gcBatchCounters) {
+			assertBatcher := func(cnt gcInfoUpdate) {
 				// Assert used memory invariants.
 				totalMem := 0
 				for _, b := range b.pointsBatches {
@@ -2355,7 +2355,7 @@ func TestGcKeyBatcher(t *testing.T) {
 
 			process := func(k gcData, newest bool) {
 				var (
-					upd gcBatchCounters
+					upd gcInfoUpdate
 					err error
 				)
 				if k.garbage {

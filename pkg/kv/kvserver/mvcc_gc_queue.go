@@ -785,6 +785,7 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCResolveTotal.Inc(int64(info.ResolveTotal))
 	metrics.GCUsedClearRange.Inc(int64(info.ClearRangeKeyOperations))
 	metrics.GCFailedClearRange.Inc(int64(info.ClearRangeKeyFailures))
+	metrics.GCClearConsecutiveKeys.Inc(int64(info.ClearConsecutiveKeysOperations))
 }
 
 func (mgcq *mvccGCQueue) postProcessScheduled(
