@@ -23,7 +23,7 @@ type NodeIterator func(n *screl.Node) error
 // ForEachNode iterates the nodes in the graph.
 func (g *Graph) ForEachNode(it NodeIterator) error {
 	for _, m := range g.targetNodes {
-		for i := 0; i < scpb.NumStatus; i++ {
+		for i := range scpb.Status_name {
 			if ts, ok := m[scpb.Status(i)]; ok {
 				if err := it(ts); err != nil {
 					return iterutil.Map(err)
