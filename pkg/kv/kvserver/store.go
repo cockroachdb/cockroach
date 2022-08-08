@@ -930,10 +930,10 @@ type Store struct {
 	// liveness. It is updated periodically in raftTickLoop()
 	// and reactively in nodeIsLiveCallback() on liveness updates.
 	livenessMap atomic.Value
-	// ioOverloadedStores is analogous to livenessMap, but stores a
-	// map[StoreID]*IOThreshold. It is gossip-backed but is not updated
+	// ioThresholds is analogous to livenessMap, but stores the *IOThresholds for
+	// the stores in the cluster . It is gossip-backed but is not updated
 	// reactively, i.e. will refresh on each tick loop iteration only.
-	ioOverloadedStores overloadedStoresMap
+	ioThresholds ioThresholds
 
 	// cachedCapacity caches information on store capacity to prevent
 	// expensive recomputations in case leases or replicas are rapidly
