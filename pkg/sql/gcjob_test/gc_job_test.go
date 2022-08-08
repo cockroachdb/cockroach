@@ -405,7 +405,7 @@ func TestGCResumer(t *testing.T) {
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
-		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
+		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
 	})
 
 	t.Run("tenant GC job soon", func(t *testing.T) {
@@ -433,7 +433,7 @@ func TestGCResumer(t *testing.T) {
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
-		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
+		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
 	})
 
 	t.Run("no tenant and tables in same GC job", func(t *testing.T) {
@@ -495,7 +495,7 @@ func TestGCTenant(t *testing.T) {
 	t.Run("unexpected progress state", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{
 			Tenant: &jobspb.SchemaChangeGCProgress_TenantProgress{
-				Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC,
+				Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR,
 			},
 		}
 		require.EqualError(
@@ -503,23 +503,23 @@ func TestGCTenant(t *testing.T) {
 			gcClosure(10, progress),
 			"Tenant id 10 is expired and should not be in state WAITING_FOR_GC",
 		)
-		require.Equal(t, jobspb.SchemaChangeGCProgress_WAITING_FOR_GC, progress.Tenant.Status)
+		require.Equal(t, jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR, progress.Tenant.Status)
 	})
 
 	t.Run("non-existent tenant deleting progress", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{
 			Tenant: &jobspb.SchemaChangeGCProgress_TenantProgress{
-				Status: jobspb.SchemaChangeGCProgress_DELETING,
+				Status: jobspb.SchemaChangeGCProgress_CLEARING,
 			},
 		}
 		require.NoError(t, gcClosure(nonexistentTenID, progress))
-		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.Tenant.Status)
+		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.Tenant.Status)
 	})
 
 	t.Run("existent tenant deleted progress", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{
 			Tenant: &jobspb.SchemaChangeGCProgress_TenantProgress{
-				Status: jobspb.SchemaChangeGCProgress_DELETED,
+				Status: jobspb.SchemaChangeGCProgress_CLEARED,
 			},
 		}
 		require.EqualError(
@@ -532,7 +532,7 @@ func TestGCTenant(t *testing.T) {
 	t.Run("active tenant GC", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{
 			Tenant: &jobspb.SchemaChangeGCProgress_TenantProgress{
-				Status: jobspb.SchemaChangeGCProgress_DELETING,
+				Status: jobspb.SchemaChangeGCProgress_CLEARING,
 			},
 		}
 		require.EqualError(
@@ -545,7 +545,7 @@ func TestGCTenant(t *testing.T) {
 	t.Run("drop tenant GC", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{
 			Tenant: &jobspb.SchemaChangeGCProgress_TenantProgress{
-				Status: jobspb.SchemaChangeGCProgress_DELETING,
+				Status: jobspb.SchemaChangeGCProgress_CLEARING,
 			},
 		}
 
@@ -561,7 +561,7 @@ func TestGCTenant(t *testing.T) {
 		require.Equal(t, []byte("foo"), val)
 
 		require.NoError(t, gcClosure(dropTenID, progress))
-		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.Tenant.Status)
+		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.Tenant.Status)
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, dropTenID)
 		require.EqualError(t, err, `tenant "11" does not exist`)
 		require.NoError(t, gcClosure(dropTenID, progress))

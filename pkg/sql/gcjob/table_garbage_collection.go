@@ -40,7 +40,7 @@ func gcTables(
 		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
 	for _, droppedTable := range progress.Tables {
-		if droppedTable.Status != jobspb.SchemaChangeGCProgress_DELETING {
+		if droppedTable.Status != jobspb.SchemaChangeGCProgress_CLEARING {
 			// Table is not ready to be dropped, or has already been dropped.
 			continue
 		}

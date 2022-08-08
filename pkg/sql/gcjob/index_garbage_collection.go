@@ -53,7 +53,7 @@ func gcIndexes(
 		return errors.AssertionFailedf("expected descriptor %d to be a table, not %T", parentID, parentDesc)
 	}
 	for _, index := range droppedIndexes {
-		if index.Status != jobspb.SchemaChangeGCProgress_DELETING {
+		if index.Status != jobspb.SchemaChangeGCProgress_CLEARING {
 			continue
 		}
 
