@@ -897,3 +897,42 @@ query I
 SELECT fetch_b(99999999)
 ----
 NULL
+
+subtest volatility
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3);
+CREATE FUNCTION get_l(i INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_i(i INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_s(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION int_identity_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT i;
+$$;
+
+# Only the volatile functions should see the changes made by the UPDATE in the
+# CTE.
+query IIIIIIII colnames
+WITH u AS (
+    UPDATE kv SET v = v + 10 RETURNING k
+)
+SELECT
+  get_l(k) l1, get_l(int_identity_v(k)) l2,
+  get_i(k) i1, get_i(int_identity_v(k)) i2,
+  get_s(k) s1, get_s(int_identity_v(k)) s2,
+  get_v(k) v1, get_v(int_identity_v(k)) v2
+FROM u;
+----
+l1  l2  i1  i2  s1  s2  v1  v2
+1   1   1   1   1   1   11  11
+2   2   2   2   2   2   12  12
+3   3   3   3   3   3   13  13
