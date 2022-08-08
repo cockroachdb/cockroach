@@ -168,7 +168,6 @@ go_test(
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
         "//pkg/util/log/channel",
-        "//pkg/util/log/eventpb",
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",

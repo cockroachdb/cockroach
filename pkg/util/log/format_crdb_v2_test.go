@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/datadriven"
@@ -53,13 +52,13 @@ func TestFormatCrdbV2(t *testing.T) {
 		return e
 	}
 
-	ev := &eventpb.RenameDatabase{
+	ev := &logpb.TestingStructuredLogEvent{
 		CommonEventDetails: logpb.CommonEventDetails{
 			Timestamp: 123,
 			EventType: "rename_database",
 		},
-		DatabaseName:    "hello",
-		NewDatabaseName: "world",
+		Channel: logpb.Channel_SQL_SCHEMA,
+		Event:   "rename from `hello` to `world`",
 	}
 
 	testCases := []logEntry{
@@ -102,12 +101,13 @@ func TestFormatCrdbV2(t *testing.T) {
 		// Many-byte unstructured.
 		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, false, "%s", longLine),
 		// Many-byte structured.
-		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &eventpb.RenameDatabase{
+		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
 			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,
 				EventType: "rename_database",
 			},
-			DatabaseName: longLine,
+			Channel: logpb.Channel_SQL_SCHEMA,
+			Event:   longLine,
 		}),
 		// Unstructured with long stack trace.
 		withBigStack(makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
