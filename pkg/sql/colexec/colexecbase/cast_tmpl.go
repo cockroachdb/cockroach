@@ -22,6 +22,7 @@
 package colexecbase
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -81,7 +82,7 @@ const _TYPE_WIDTH = 0
 // "castOp" template in the scope of this value's "callsite".
 const _GENERATE_CAST_OP = 0
 
-func _CAST(to, from, evalCtx, toType interface{}) {
+func _CAST(to, from, evalCtx, toType, buf interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
@@ -235,6 +236,7 @@ type castOpBase struct {
 	colIdx    int
 	outputIdx int
 	evalCtx   *eval.Context
+	buf       bytes.Buffer
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {
@@ -448,15 +450,15 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, true, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, &c.buf, true, true)
 				} else {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, true, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, &c.buf, true, false)
 				}
 			} else {
 				if sel != nil {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, false, true)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, &c.buf, false, true)
 				} else {
-					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, false, false)
+					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, &c.buf, false, false)
 				}
 			}
 		},
@@ -516,11 +518,13 @@ func castTuples(
 	n int,
 	sel []int,
 	evalCtx *eval.Context,
+	buf *bytes.Buffer,
 	hasNulls bool,
 	hasSel bool,
 ) {
-	// Silence unused warning.
+	// Silence unused warnings.
 	_ = evalCtx
+	_ = buf
 	if !hasSel {
 		// {{if $fromInfo.Sliceable}}
 		_ = inputCol.Get(n - 1)
@@ -546,7 +550,7 @@ func castTuples(
 		}
 		v := inputCol.Get(tupleIdx)
 		var r _TO_GO_TYPE
-		_CAST(r, v, evalCtx, toType)
+		_CAST(r, v, evalCtx, toType, buf)
 		if !hasSel {
 			// {{if .Sliceable}}
 			//gcassert:bce

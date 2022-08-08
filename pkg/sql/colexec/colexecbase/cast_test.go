@@ -61,7 +61,7 @@ func TestRandomizedCast(t *testing.T) {
 			}
 		}
 	}
-	const numTypePairs = 5
+	var numTypePairs = rng.Intn(10) + 1
 	numRows := 1 + rng.Intn(coldata.BatchSize()) + rng.Intn(3)*coldata.BatchSize()
 	log.Infof(ctx, "num rows = %d", numRows)
 	for run := 0; run < numTypePairs; run++ {
