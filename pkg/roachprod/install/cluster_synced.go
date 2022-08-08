@@ -297,6 +297,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 			dirs := []string{"data", "logs"}
 			if !preserveCerts {
 				dirs = append(dirs, "certs*")
+				dirs = append(dirs, "tenant-certs*")
 			}
 			for _, dir := range dirs {
 				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(c.Nodes[i]), dir)
@@ -308,6 +309,7 @@ sudo rm -fr logs &&
 `
 			if !preserveCerts {
 				cmd += "sudo rm -fr certs* ;\n"
+				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
 		return sess.CombinedOutput(ctx, cmd)
@@ -1023,79 +1025,32 @@ fi
 	return nil
 }
 
+const (
+	certsTarName       = "certs.tar"
+	tenantCertsTarName = "tenant-certs.tar"
+)
+
 // DistributeCerts will generate and distribute certificates to all of the
 // nodes.
 func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) error {
-	dir := ""
-	if c.IsLocal() {
-		dir = c.localVMDir(1)
-	}
-
-	// Check to see if the certs have already been initialized.
-	var existsErr error
-	display := fmt.Sprintf("%s: checking certs", c.Name)
-	if err := c.Parallel(l, display, 1, 0, func(i int) ([]byte, error) {
-		sess, err := c.newSession(1)
-		if err != nil {
-			return nil, err
-		}
-		defer sess.Close()
-		_, existsErr = sess.CombinedOutput(ctx, `test -e `+filepath.Join(dir, `certs.tar`))
-		return nil, nil
-	}); err != nil {
-		return err
-	}
-	if existsErr == nil {
+	if c.checkForCertificates(ctx, l) {
 		return nil
 	}
 
-	// Gather the internal IP addresses for every node in the cluster, even
-	// if it won't be added to the cluster itself we still add the IP address
-	// to the node cert.
-	var msg string
-	display = fmt.Sprintf("%s: initializing certs", c.Name)
-	nodes := allNodes(len(c.VMs))
-	var ips []string
-	if !c.IsLocal() {
-		ips = make([]string, len(nodes))
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) ([]byte, error) {
-			var err error
-			ips[i], err = c.GetInternalIP(ctx, nodes[i])
-			return nil, errors.Wrapf(err, "IPs")
-		}); err != nil {
-			return err
-		}
+	nodeNames, err := c.createNodeCertArguments(ctx, l)
+	if err != nil {
+		return err
 	}
 
 	// Generate the ca, client and node certificates on the first node.
+	var msg string
+	display := fmt.Sprintf("%s: initializing certs", c.Name)
 	if err := c.Parallel(l, display, 1, 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(1)
 		if err != nil {
 			return nil, err
 		}
 		defer sess.Close()
-
-		var nodeNames []string
-		if c.IsLocal() {
-			// For local clusters, we only need to add one of the VM IP addresses.
-			nodeNames = append(nodeNames, "$(hostname)", c.VMs[0].PublicIP)
-		} else {
-			// Add both the local and external IP addresses, as well as the
-			// hostnames to the node certificate.
-			nodeNames = append(nodeNames, ips...)
-			for i := range c.VMs {
-				nodeNames = append(nodeNames, c.VMs[i].PublicIP)
-			}
-			for i := range c.VMs {
-				nodeNames = append(nodeNames, fmt.Sprintf("%s-%04d", c.Name, i+1))
-				// On AWS nodes internally have a DNS name in the form ip-<ip address>
-				// where dots have been replaces with dashes.
-				// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
-				if c.VMs[i].Provider == aws.ProviderName {
-					nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ips[i], ".", "-"))
-				}
-			}
-		}
 
 		var cmd string
 		if c.IsLocal() {
@@ -1107,9 +1062,9 @@ mkdir -p certs
 %[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
 %[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key
 %[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-node localhost %[2]s --certs-dir=certs --ca-key=certs/ca.key
-tar cvf certs.tar certs
-`, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "))
+%[1]s cert create-node %[2]s --certs-dir=certs --ca-key=certs/ca.key
+tar cvf %[3]s certs
+`, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 		if out, err := sess.CombinedOutput(ctx, cmd); err != nil {
 			msg = fmt.Sprintf("%s: %v", out, err)
 		}
@@ -1123,42 +1078,243 @@ tar cvf certs.tar certs
 		exit.WithCode(exit.UnspecifiedError())
 	}
 
-	var tmpfileName string
-	if c.IsLocal() {
-		tmpfileName = os.ExpandEnv(filepath.Join(dir, "certs.tar"))
-	} else {
-		// Retrieve the certs.tar that was created on the first node.
-		tmpfile, err := ioutil.TempFile("", "certs")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exit.WithCode(exit.UnspecifiedError())
-		}
-		_ = tmpfile.Close()
-		defer func() {
-			_ = os.Remove(tmpfile.Name()) // clean up
-		}()
-
-		if err := func() error {
-			return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.Host(1)), tmpfile.Name())
-		}(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exit.WithCode(exit.UnspecifiedError())
-		}
-
-		tmpfileName = tmpfile.Name()
-	}
-
-	// Read the certs.tar file we just downloaded. We'll be piping it to the
-	// other nodes in the cluster.
-	certsTar, err := ioutil.ReadFile(tmpfileName)
+	tarfile, cleanup, err := c.getFileFromFirstNode(certsTarName)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		exit.WithCode(exit.UnspecifiedError())
+		return err
 	}
+	defer cleanup()
 
 	// Skip the first node which is where we generated the certs.
-	display = c.Name + ": distributing certs"
-	nodes = nodes[1:]
+	nodes := allNodes(len(c.VMs))[1:]
+	return c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0)
+}
+
+// DistributeTenantCerts will generate and distribute certificates to all of the
+// nodes, using the host cluster to generate tenant certificates.
+func (c *SyncedCluster) DistributeTenantCerts(
+	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
+) error {
+	if hostCluster.checkForTenantCertificates(ctx, l) {
+		return nil
+	}
+
+	if !hostCluster.checkForCertificates(ctx, l) {
+		return errors.New("host cluster missing certificate bundle")
+	}
+
+	nodeNames, err := c.createNodeCertArguments(ctx, l)
+	if err != nil {
+		return err
+	}
+
+	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, tenantID, nodeNames); err != nil {
+		return err
+	}
+
+	tarfile, cleanup, err := hostCluster.getFileFromFirstNode(tenantCertsTarName)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	return c.distributeLocalCertsTar(ctx, l, tarfile, allNodes(len(c.VMs)), 1)
+}
+
+// createTenantCertBundle creates a client cert bundle with the given name using
+// the first node in the cluster. The nodeNames provided are added to all node
+// and tenant-client certs.
+//
+// This function assumes it is running on a host cluster node that already has
+// had the main cert bundle created.
+func (c *SyncedCluster) createTenantCertBundle(
+	ctx context.Context, l *logger.Logger, bundleName string, tenantID int, nodeNames []string,
+) error {
+	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
+	return c.Parallel(l, display, 1, 0, func(i int) ([]byte, error) {
+		node := c.Nodes[i]
+		sess, err := c.newSession(node)
+		if err != nil {
+			return nil, err
+		}
+		defer sess.Close()
+
+		var tenantScopeArg string
+		if c.cockroachBinSupportsTenantScope(ctx, node) {
+			tenantScopeArg = fmt.Sprintf("--tenant-scope %d", tenantID)
+		}
+
+		cmd := "set -e;"
+		if c.IsLocal() {
+			cmd += fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
+		}
+		cmd += fmt.Sprintf(`
+CERT_DIR=tenant-certs/certs
+CA_KEY=certs/ca.key
+
+rm -fr $CERT_DIR
+mkdir -p $CERT_DIR
+cp certs/ca.crt $CERT_DIR
+SHARED_ARGS="--certs-dir=$CERT_DIR --ca-key=$CA_KEY"
+%[1]s cert create-node %[2]s $SHARED_ARGS
+%[1]s cert create-tenant-client %[3]d %[2]s $SHARED_ARGS
+%[1]s cert create-client root %[4]s $SHARED_ARGS
+%[1]s cert create-client testuser %[4]s $SHARED_ARGS
+tar cvf %[5]s $CERT_DIR
+`,
+			cockroachNodeBinary(c, node),
+			strings.Join(nodeNames, " "),
+			tenantID,
+			tenantScopeArg,
+			bundleName,
+		)
+
+		if out, err := sess.CombinedOutput(ctx, cmd); err != nil {
+			return nil, errors.Wrapf(err, "certificate creation error: %s", out)
+		}
+		return nil, nil
+	})
+}
+
+// cockroachBinSupportsTenantScope is a hack to figure out if the version of
+// cockroach on the node supports tenant scoped certificates. We can't use a
+// version comparison here because we need to compare alpha build versions which
+// are compared lexicographically. This is a problem because our alpha versions
+// contain an integer count of commits, which does not sort correctly.  Once
+// this feature ships in a release, it will be easier to do a version comparison
+// on whether this command line flag is supported.
+func (c *SyncedCluster) cockroachBinSupportsTenantScope(ctx context.Context, node Node) bool {
+	sess, err := c.newSession(node)
+	if err != nil {
+		return false
+	}
+	defer sess.Close()
+
+	cmd := fmt.Sprintf("%s cert create-client --help | grep '\\--tenant-scope'", cockroachNodeBinary(c, node))
+	return sess.Run(ctx, cmd) == nil
+}
+
+// getFile retrieves the given file from the first node in the cluster. The
+// filename is assumed to be relative from the home directory of the node's
+// user.
+func (c *SyncedCluster) getFileFromFirstNode(name string) (string, func(), error) {
+	var tmpfileName string
+	cleanup := func() {}
+	if c.IsLocal() {
+		tmpfileName = os.ExpandEnv(filepath.Join(c.localVMDir(1), name))
+	} else {
+		tmpfile, err := ioutil.TempFile("", name)
+		if err != nil {
+			return "", nil, err
+		}
+		_ = tmpfile.Close()
+		cleanup = func() {
+			_ = os.Remove(tmpfile.Name()) // clean up
+		}
+
+		srcFileName := fmt.Sprintf("%s@%s:%s", c.user(1), c.Host(1), name)
+		if err := c.scp(srcFileName, tmpfile.Name()); err != nil {
+			cleanup()
+			return "", nil, err
+		}
+		tmpfileName = tmpfile.Name()
+	}
+	return tmpfileName, cleanup, nil
+}
+
+// checkForCertificates checks if the cluster already has a certs bundle created
+// on the first node.
+func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logger) bool {
+	dir := ""
+	if c.IsLocal() {
+		dir = c.localVMDir(1)
+	}
+	return c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, certsTarName))
+}
+
+// checkForTenantCertificates checks if the cluster already has a tenant-certs bundle created
+// on the first node.
+func (c *SyncedCluster) checkForTenantCertificates(ctx context.Context, l *logger.Logger) bool {
+	dir := ""
+	if c.IsLocal() {
+		dir = c.localVMDir(1)
+	}
+	return c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, tenantCertsTarName))
+}
+
+func (c *SyncedCluster) fileExistsOnFirstNode(
+	ctx context.Context, l *logger.Logger, path string,
+) bool {
+	var existsErr error
+	display := fmt.Sprintf("%s: checking %s", c.Name, path)
+	if err := c.Parallel(l, display, 1, 0, func(i int) ([]byte, error) {
+		sess, err := c.newSession(c.Nodes[i])
+		if err != nil {
+			return nil, err
+		}
+		defer sess.Close()
+		_, existsErr = sess.CombinedOutput(ctx, `test -e `+path)
+		return nil, nil
+	}); err != nil {
+		return false
+	}
+	return existsErr == nil
+}
+
+// createNodeCertArguments returns a list of strings appropriate for use as
+// SubjectAlternativeName arguments to the ./cockroach cert create-node command.
+func (c *SyncedCluster) createNodeCertArguments(
+	ctx context.Context, l *logger.Logger,
+) ([]string, error) {
+	// Gather the internal IP addresses for every node in the cluster, even
+	// if it won't be added to the cluster itself we still add the IP address
+	// to the node cert.
+	var ips []string
+	nodes := allNodes(len(c.VMs))
+	if !c.IsLocal() {
+		ips = make([]string, len(nodes))
+		if err := c.Parallel(l, "", len(nodes), 0, func(i int) ([]byte, error) {
+			var err error
+			ips[i], err = c.GetInternalIP(ctx, nodes[i])
+			return nil, errors.Wrapf(err, "IPs")
+		}); err != nil {
+			return nil, err
+		}
+	}
+	nodeNames := []string{"localhost"}
+	if c.IsLocal() {
+		// For local clusters, we only need to add one of the VM IP addresses.
+		nodeNames = append(nodeNames, "$(hostname)", c.VMs[0].PublicIP)
+	} else {
+		// Add both the local and external IP addresses, as well as the
+		// hostnames to the node certificate.
+		nodeNames = append(nodeNames, ips...)
+		for i := range c.VMs {
+			nodeNames = append(nodeNames, c.VMs[i].PublicIP)
+		}
+		for i := range c.VMs {
+			nodeNames = append(nodeNames, fmt.Sprintf("%s-%04d", c.Name, i+1))
+			// On AWS nodes internally have a DNS name in the form ip-<ip address>
+			// where dots have been replaces with dashes.
+			// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
+			if c.VMs[i].Provider == aws.ProviderName {
+				nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ips[i], ".", "-"))
+			}
+		}
+	}
+	return nodeNames, nil
+}
+
+// distributeLocalTar distributes the given file to the given nodes and untars it.
+func (c *SyncedCluster) distributeLocalCertsTar(
+	ctx context.Context, l *logger.Logger, filename string, nodes Nodes, stripComponents int,
+) error {
+	// Read the certs.tar file we just downloaded. We'll be piping it to the
+	// other nodes in the cluster.
+	certsTar, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	display := c.Name + ": distributing certs"
 	return c.Parallel(l, display, len(nodes), 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(nodes[i])
 		if err != nil {
@@ -1169,9 +1325,13 @@ tar cvf certs.tar certs
 		sess.SetStdin(bytes.NewReader(certsTar))
 		var cmd string
 		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(nodes[i]))
+			cmd = fmt.Sprintf("cd %s ; ", c.localVMDir(nodes[i]))
 		}
-		cmd += `tar xf -`
+		if stripComponents > 0 {
+			cmd += fmt.Sprintf("tar --strip-components=%d -xf -", stripComponents)
+		} else {
+			cmd += "tar xf -"
+		}
 		if out, err := sess.CombinedOutput(ctx, cmd); err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
