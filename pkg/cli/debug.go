@@ -773,6 +773,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	gcTTL := 24 * time.Hour
 	intentAgeThreshold := gc.IntentAgeThreshold.Default()
 	intentBatchSize := gc.MaxIntentsPerCleanupBatch.Default()
+	txnCleanupThreshold := gc.TxnCleanupThreshold.Default()
 
 	if len(args) > 3 {
 		var err error
@@ -841,7 +842,11 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			context.Background(),
 			&desc, snap,
 			now, thresh,
-			gc.RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: intentBatchSize},
+			gc.RunOptions{
+				IntentAgeThreshold:              intentAgeThreshold,
+				MaxIntentsPerIntentCleanupBatch: intentBatchSize,
+				TxnCleanupThreshold:             txnCleanupThreshold,
+			},
 			gcTTL, gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
