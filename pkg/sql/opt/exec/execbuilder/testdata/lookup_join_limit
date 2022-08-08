@@ -8,6 +8,8 @@ CREATE TABLE a (x INT PRIMARY KEY, y INT, z INT, INDEX (y));
 CREATE TABLE b (x INT PRIMARY KEY);
 INSERT INTO a VALUES (1, 1, 1), (2, 1, 1), (3, 2, 2), (4, 2, 2);
 INSERT INTO b VALUES (1), (2), (3), (4);
+CREATE TABLE xy (x INT, y INT, PRIMARY KEY(x, y));
+INSERT INTO xy VALUES (1, 1), (1, 2), (1, 3), (2, 1);
 
 # Query with an index join and a limit hint.
 query T
@@ -340,6 +342,96 @@ regions: <hidden>
           KV rows read: 1
           KV bytes read: 8 B
           KV gRPC calls: 1
+          estimated max memory allocated: 0 B
+          estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+          table: a@a_y_idx
+          spans: FULL SCAN (SOFT LIMIT)
+
+# Query with a lookup join and a limit. The lookup join has to preserve the
+# input ordering.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT a.x, a.y, xy.x, xy.y FROM a INNER LOOKUP JOIN xy ON xy.x = a.x ORDER BY a.y, a.x LIMIT 2
+----
+limit
+ ├── columns: x:1 y:2 x:6 y:7
+ ├── internal-ordering: +2,+(1|6)
+ ├── cardinality: [0 - 2]
+ ├── stats: [rows=2]
+ ├── cost: 55.99
+ ├── key: (6,7)
+ ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+ ├── ordering: +2,+(1|6) [actual: +2,+1]
+ ├── distribution: test
+ ├── prune: (7)
+ ├── interesting orderings: (+2,+1)
+ ├── inner-join (lookup xy)
+ │    ├── columns: a.x:1 a.y:2 xy.x:6 xy.y:7
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [6]
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=1, distinct(6)=1, null(6)=0, avgsize(6)=4]
+ │    ├── cost: 55.96
+ │    ├── key: (6,7)
+ │    ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+ │    ├── ordering: +2,+(1|6) [actual: +2,+1]
+ │    ├── limit hint: 2.00
+ │    ├── distribution: test
+ │    ├── prune: (2,7)
+ │    ├── interesting orderings: (+1) (+2,+1) (+6,+7)
+ │    ├── scan a@a_y_idx
+ │    │    ├── columns: a.x:1 a.y:2
+ │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=1]
+ │    │    ├── cost: 15.04
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +2,+1
+ │    │    ├── limit hint: 1.00
+ │    │    ├── distribution: test
+ │    │    ├── prune: (1,2)
+ │    │    ├── interesting orderings: (+1) (+2,+1)
+ │    │    └── unfiltered-cols: (1-5)
+ │    └── filters (true)
+ └── 2
+
+# Perform a lookup join that preserves its input ordering. Make sure that only
+# two rows are read from kv.
+query T
+EXPLAIN ANALYZE SELECT a.x, a.y, xy.x, xy.y FROM a INNER LOOKUP JOIN xy ON xy.x = a.x ORDER BY a.y, a.x LIMIT 2
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows read from KV: 5 (40 B, 5 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+·
+• limit
+│ count: 2
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 2
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows read: 2
+    │ KV bytes read: 16 B
+    │ KV gRPC calls: 2
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: xy@xy_pkey
+    │ equality: (x) = (x)
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 3
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows read: 3
+          KV bytes read: 24 B
+          KV gRPC calls: 3
           estimated max memory allocated: 0 B
           estimated row count: 1 (100% of the table; stats collected <hidden> ago)
           table: a@a_y_idx
