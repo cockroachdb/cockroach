@@ -1191,53 +1191,7 @@ func (r *Replica) tick(
 		return false, nil
 	}
 
-	if r.replicaID == r.mu.leaderID && len(ioOverloadMap) > 0 && quotaPoolEnabledForRange(*r.descRLocked()) {
-		// When multiple followers are overloaded, we may not be able to exclude all
-		// of them from replication traffic due to quorum constraints. We would like
-		// a given Range to deterministically exclude the same store (chosen
-		// randomly), so that across multiple Ranges we have a chance of removing
-		// load from all overloaded Stores in the cluster. (It would be a bad idea
-		// to roll a per-Range dice here on every tick, since that would rapidly
-		// include and exclude individual followers from replication traffic, which
-		// would be akin to a high rate of packet loss. Once we've decided to ignore
-		// a follower, this decision should be somewhat stable for at least a few
-		// seconds).
-		//
-		// Note that we don't enable this mechanism for the liveness range (see
-		// quotaPoolEnabledForRange), simply to play it safe, as we know that the
-		// liveness range is unlikely to be a major contributor to any follower's
-		// I/O and wish to reduce the likelihood of a problem in replication pausing
-		// contributing to an outage of that critical range.
-		seed := int64(r.RangeID)
-		now := r.store.Clock().Now().GoTime()
-		d := computeExpendableOverloadedFollowersInput{
-			replDescs:     r.descRLocked().Replicas(),
-			ioOverloadMap: ioOverloadMap,
-			getProgressMap: func(_ context.Context) map[uint64]tracker.Progress {
-				prs := r.mu.internalRaftGroup.Status().Progress
-				updateRaftProgressFromActivity(ctx, prs, r.descRLocked().Replicas().AsProto(), func(id roachpb.ReplicaID) bool {
-					return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, id, now, r.store.cfg.RangeLeaseActiveDuration())
-				})
-				return prs
-			},
-			minLiveMatchIndex: r.mu.proposalQuotaBaseIndex,
-			seed:              seed,
-		}
-		r.mu.pausedFollowers, _ = computeExpendableOverloadedFollowers(ctx, d)
-		for replicaID := range r.mu.pausedFollowers {
-			// We're dropping messages to those followers (see handleRaftReady) but
-			// it's a good idea to tell raft not to even bother sending in the first
-			// place. Raft will react to this by moving the follower to probing state
-			// where it will be contacted only sporadically until it responds to an
-			// MsgApp (which it can only do once we stop dropping messages). Something
-			// similar would result naturally if we didn't report as unreachable, but
-			// with more wasted work.
-			r.mu.internalRaftGroup.ReportUnreachable(uint64(replicaID))
-		}
-	} else if len(r.mu.pausedFollowers) > 0 {
-		// No store in the cluster is overloaded, or this replica is not raft leader.
-		r.mu.pausedFollowers = nil
-	}
+	r.updatePausedFollowersLocked(ctx, ioOverloadMap)
 
 	now := r.store.Clock().NowAsClockTimestamp()
 	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, now, livenessMap) {
