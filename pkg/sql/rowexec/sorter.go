@@ -237,8 +237,6 @@ func (s *sortAllProcessor) Start(ctx context.Context) {
 // drain if it's not recoverable. It is possible for ok to be false even if no
 // error is returned - in case an error metadata was received.
 func (s *sortAllProcessor) fill() (ok bool, _ error) {
-	ctx := s.EvalCtx.Ctx()
-
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -252,13 +250,13 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 			break
 		}
 
-		if err := s.rows.AddRow(ctx, row); err != nil {
+		if err := s.rows.AddRow(s.Ctx, row); err != nil {
 			return false, err
 		}
 	}
-	s.rows.Sort(ctx)
+	s.rows.Sort(s.Ctx)
 
-	s.i = s.rows.NewFinalIterator(ctx)
+	s.i = s.rows.NewFinalIterator(s.Ctx)
 	s.i.Rewind()
 	return true, nil
 }
