@@ -504,6 +504,16 @@ type joinReaderOrderingStrategy struct {
 		// outputRowIdx contains the index into the inputRowIdx'th row of
 		// inputRowIdxToLookedUpRowIndices that we're about to emit.
 		outputRowIdx int
+		// notBufferedRow, if non-nil, contains a looked-up row that matches the
+		// first input row of the batch. Since joinReaderOrderingStrategy returns
+		// results in input order, it is safe to return looked-up rows that match
+		// the first input row immediately.
+		// TODO(drewk): If we had a way of knowing when no more lookups will be
+		//  performed for a given span ID, it would be possible to start immediately
+		//  returning results for the second row once the first was finished, and so
+		//  on. This could significantly decrease the overhead of buffering looked
+		//  up rows.
+		notBufferedRow rowenc.EncDatumRow
 	}
 
 	groupingState *inputBatchGroupingState
@@ -527,6 +537,10 @@ type joinReaderOrderingStrategy struct {
 		// inputRowIdxToLookedUpRowIndices is a 1:1 mapping with the multimap
 		// with the same name, where each int64 indicates the memory usage of
 		// the corresponding []int that is currently registered with memAcc.
+		//
+		// Note that inputRowIdxToLookedUpRowIndices does not contain entries for
+		// the first input row, because matches to the first row are emitted
+		// immediately.
 		inputRowIdxToLookedUpRowIndices []int64
 	}
 
@@ -619,8 +633,11 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	ctx context.Context, row rowenc.EncDatumRow, spanID int,
 ) (joinReaderState, error) {
 	matchingInputRowIndices := s.getMatchingRowIndices(spanID)
+
+	// Avoid adding to the buffer if only the first input row was matched, since
+	// in this case we can just output the row immediately.
 	var containerIdx int
-	if !s.isPartialJoin {
+	if !s.isPartialJoin && (len(matchingInputRowIndices) != 1 || matchingInputRowIndices[0] != 0) {
 		// Replace missing values with nulls to appease the row container.
 		for i := range row {
 			if row[i].IsUnset() {
@@ -637,6 +654,12 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	// Update our map from input rows to looked up rows.
 	for _, inputRowIdx := range matchingInputRowIndices {
 		if !s.isPartialJoin {
+			if inputRowIdx == 0 {
+				// Don't add to inputRowIdxToLookedUpRowIndices in order to avoid
+				// emitting more than once.
+				s.emitCursor.notBufferedRow = row
+				continue
+			}
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = append(
 				s.inputRowIdxToLookedUpRowIndices[inputRowIdx], containerIdx)
 			continue
@@ -656,7 +679,14 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 				// We failed our on-condition.
 				continue
 			}
-			s.groupingState.setMatched(inputRowIdx)
+			wasMatched := s.groupingState.setMatched(inputRowIdx)
+			if !wasMatched && inputRowIdx == 0 {
+				// This looked up row matches the first row, and we haven't seen a match
+				// for the first row yet. Don't add to inputRowIdxToLookedUpRowIndices
+				// in order to avoid emitting more than once.
+				s.emitCursor.notBufferedRow = row
+				continue
+			}
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = partialJoinSentinel
 		}
 	}
@@ -671,6 +701,12 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	}
 	if err := s.growMemoryAccount(s.strategyMemAcc, delta); err != nil {
 		return jrStateUnknown, err
+	}
+
+	if s.emitCursor.notBufferedRow != nil {
+		// The looked up row matched the first input row. Render and emit them
+		// immediately, then return to performing lookups.
+		return jrEmittingRows, nil
 	}
 
 	return jrPerformingLookup, nil
@@ -699,7 +735,7 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 
 	inputRow := s.inputRows[s.emitCursor.inputRowIdx]
 	lookedUpRows := s.inputRowIdxToLookedUpRowIndices[s.emitCursor.inputRowIdx]
-	if s.emitCursor.outputRowIdx >= len(lookedUpRows) {
+	if s.emitCursor.notBufferedRow == nil && s.emitCursor.outputRowIdx >= len(lookedUpRows) {
 		// We have no more rows for the current input row. Emit an outer or anti
 		// row if we didn't see a match, and bump to the next input row.
 		inputRowIdx := s.emitCursor.inputRowIdx
@@ -725,20 +761,39 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 		return nil, jrEmittingRows, nil
 	}
 
-	lookedUpRowIdx := lookedUpRows[s.emitCursor.outputRowIdx]
-	s.emitCursor.outputRowIdx++
+	var nextState joinReaderState
+	if s.emitCursor.notBufferedRow != nil {
+		// Make sure we return to looking up rows after outputting one that matches
+		// the first input row.
+		nextState = jrPerformingLookup
+		defer func() { s.emitCursor.notBufferedRow = nil }()
+	} else {
+		// All lookups have finished, and we are currently iterating through the
+		// input rows and emitting them.
+		nextState = jrEmittingRows
+		defer func() { s.emitCursor.outputRowIdx++ }()
+	}
+
 	switch s.joinType {
 	case descpb.LeftSemiJoin:
 		// A semi-join match means we emit our input row. This is the case where
 		// we used the partialJoinSentinel.
-		return inputRow, jrEmittingRows, nil
+		return inputRow, nextState, nil
 	case descpb.LeftAntiJoin:
 		// An anti-join match means we emit nothing. This is the case where
 		// we used the partialJoinSentinel.
-		return nil, jrEmittingRows, nil
+		return nil, nextState, nil
 	}
 
-	lookedUpRow, err := s.lookedUpRows.GetRow(s.Ctx, lookedUpRowIdx, false /* skip */)
+	var err error
+	var lookedUpRow rowenc.EncDatumRow
+	if s.emitCursor.notBufferedRow != nil {
+		lookedUpRow = s.emitCursor.notBufferedRow
+	} else {
+		lookedUpRow, err = s.lookedUpRows.GetRow(
+			s.Ctx, lookedUpRows[s.emitCursor.outputRowIdx], false, /* skip */
+		)
+	}
 	if err != nil {
 		return nil, jrStateUnknown, err
 	}
@@ -758,7 +813,7 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 			}
 		}
 	}
-	return outputRow, jrEmittingRows, nil
+	return outputRow, nextState, nil
 }
 
 func (s *joinReaderOrderingStrategy) spilled() bool {
