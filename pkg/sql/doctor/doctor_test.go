@@ -570,9 +570,9 @@ func TestExamineJobs(t *testing.T) {
 					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(
 						jobspb.SchemaChangeGCProgress{
 							Tables: []jobspb.SchemaChangeGCProgress_TableProgress{
-								{ID: 1, Status: jobspb.SchemaChangeGCProgress_DELETED},
-								{ID: 2, Status: jobspb.SchemaChangeGCProgress_DELETING},
-								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+								{ID: 1, Status: jobspb.SchemaChangeGCProgress_CLEARED},
+								{ID: 2, Status: jobspb.SchemaChangeGCProgress_CLEARING},
+								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
 							},
 						})},
 					Status: jobs.StatusRunning,
@@ -583,8 +583,8 @@ func TestExamineJobs(t *testing.T) {
 					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(
 						jobspb.SchemaChangeGCProgress{
 							Tables: []jobspb.SchemaChangeGCProgress_TableProgress{
-								{ID: 1, Status: jobspb.SchemaChangeGCProgress_DELETED},
-								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+								{ID: 1, Status: jobspb.SchemaChangeGCProgress_CLEARED},
+								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
 							},
 						})},
 					Status: jobs.StatusPauseRequested,
@@ -595,11 +595,11 @@ func TestExamineJobs(t *testing.T) {
 					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(
 						jobspb.SchemaChangeGCProgress{
 							Tables: []jobspb.SchemaChangeGCProgress_TableProgress{
-								{ID: 1, Status: jobspb.SchemaChangeGCProgress_DELETED},
-								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+								{ID: 1, Status: jobspb.SchemaChangeGCProgress_CLEARED},
+								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
 							},
 							Indexes: []jobspb.SchemaChangeGCProgress_IndexProgress{
-								{IndexID: 10, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+								{IndexID: 10, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
 							},
 						})},
 					Status: jobs.StatusPaused,

@@ -32,7 +32,7 @@ func markTableGCed(
 	for i := range progress.Tables {
 		tableProgress := &progress.Tables[i]
 		if tableProgress.ID == tableID {
-			tableProgress.Status = jobspb.SchemaChangeGCProgress_DELETED
+			tableProgress.Status = jobspb.SchemaChangeGCProgress_CLEARED
 			if log.V(2) {
 				log.Infof(ctx, "determined table %d is GC'd", tableID)
 			}
@@ -50,7 +50,7 @@ func markIndexGCed(
 	for i := range progress.Indexes {
 		indexToUpdate := &progress.Indexes[i]
 		if indexToUpdate.IndexID == garbageCollectedIndexID {
-			indexToUpdate.Status = jobspb.SchemaChangeGCProgress_DELETED
+			indexToUpdate.Status = jobspb.SchemaChangeGCProgress_CLEARED
 			log.Infof(ctx, "marked index %d as GC'd", garbageCollectedIndexID)
 		}
 	}
@@ -98,7 +98,7 @@ func initializeProgress(
 	var update bool
 	if details.Tenant != nil && progress.Tenant == nil {
 		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
-			Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC,
+			Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR,
 		}
 		update = true
 	} else if len(progress.Tables) != len(details.Tables) || len(progress.Indexes) != len(details.Indexes) {
@@ -128,16 +128,16 @@ func initializeProgress(
 // Check if we are done GC'ing everything.
 func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 	for _, index := range progress.Indexes {
-		if index.Status != jobspb.SchemaChangeGCProgress_DELETED {
+		if index.Status != jobspb.SchemaChangeGCProgress_CLEARED {
 			return false
 		}
 	}
 	for _, table := range progress.Tables {
-		if table.Status != jobspb.SchemaChangeGCProgress_DELETED {
+		if table.Status != jobspb.SchemaChangeGCProgress_CLEARED {
 			return false
 		}
 	}
-	if progress.Tenant != nil && progress.Tenant.Status != jobspb.SchemaChangeGCProgress_DELETED {
+	if progress.Tenant != nil && progress.Tenant.Status != jobspb.SchemaChangeGCProgress_CLEARED {
 		return false
 	}
 
@@ -150,12 +150,12 @@ func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus
 	tableIDs := make([]string, 0, len(progress.Tables))
 	indexIDs := make([]string, 0, len(progress.Indexes))
 	for _, table := range progress.Tables {
-		if table.Status == jobspb.SchemaChangeGCProgress_DELETING {
+		if table.Status == jobspb.SchemaChangeGCProgress_CLEARING {
 			tableIDs = append(tableIDs, strconv.Itoa(int(table.ID)))
 		}
 	}
 	for _, index := range progress.Indexes {
-		if index.Status == jobspb.SchemaChangeGCProgress_DELETING {
+		if index.Status == jobspb.SchemaChangeGCProgress_CLEARING {
 			indexIDs = append(indexIDs, strconv.Itoa(int(index.IndexID)))
 		}
 	}
@@ -163,7 +163,7 @@ func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus
 	var b strings.Builder
 	b.WriteString("performing garbage collection on")
 	var flag bool
-	if progress.Tenant != nil && progress.Tenant.Status == jobspb.SchemaChangeGCProgress_DELETING {
+	if progress.Tenant != nil && progress.Tenant.Status == jobspb.SchemaChangeGCProgress_CLEARING {
 		b.WriteString(" tenant")
 		flag = true
 	}
@@ -221,7 +221,7 @@ func getAllTablesWaitingForGC(
 		allRemainingTableIDs = append(allRemainingTableIDs, details.ParentID)
 	}
 	for _, table := range progress.Tables {
-		if table.Status != jobspb.SchemaChangeGCProgress_DELETED {
+		if table.Status != jobspb.SchemaChangeGCProgress_CLEARED {
 			allRemainingTableIDs = append(allRemainingTableIDs, table.ID)
 		}
 	}
