@@ -19,19 +19,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CompactEngineSpanClient is used to request compaction for a span
-// of data on a store.
-type CompactEngineSpanClient struct {
+// StorageEngineClient is used to connect and make requests to a store.
+type StorageEngineClient struct {
 	nd *nodedialer.Dialer
 }
 
-// NewCompactEngineSpanClient constructs a new CompactEngineSpanClient.
-func NewCompactEngineSpanClient(nd *nodedialer.Dialer) *CompactEngineSpanClient {
-	return &CompactEngineSpanClient{nd: nd}
+// NewStorageEngineClient constructs a new StorageEngineClient.
+func NewStorageEngineClient(nd *nodedialer.Dialer) *StorageEngineClient {
+	return &StorageEngineClient{nd: nd}
 }
 
 // CompactEngineSpan is a tree.CompactEngineSpanFunc.
-func (c *CompactEngineSpanClient) CompactEngineSpan(
+func (c *StorageEngineClient) CompactEngineSpan(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) error {
 	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
@@ -48,4 +47,27 @@ func (c *CompactEngineSpanClient) CompactEngineSpan(
 	}
 	_, err = client.CompactEngineSpan(ctx, req)
 	return err
+}
+
+// SetCompactionConcurrency is a tree.CompactionConcurrencyFunc.
+func (c *StorageEngineClient) SetCompactionConcurrency(
+	ctx context.Context, nodeID, storeID int32, compactionConcurrency uint64,
+) error {
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
+	if err != nil {
+		return errors.Wrapf(err, "could not dial node ID %d", nodeID)
+	}
+	client := NewPerStoreClient(conn)
+	req := &CompactionConcurrencyRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			NodeID:  roachpb.NodeID(nodeID),
+			StoreID: roachpb.StoreID(storeID),
+		},
+		CompactionConcurrency: compactionConcurrency,
+	}
+	_, err = client.SetCompactionConcurrency(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
 }
