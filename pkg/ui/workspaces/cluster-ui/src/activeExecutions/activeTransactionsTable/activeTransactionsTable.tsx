@@ -18,14 +18,12 @@ import { SortSetting } from "../../sortedtable";
 import { ActiveTransaction, ExecutionType } from "../types";
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { Link } from "react-router-dom";
-import { StatusIcon } from "../statusIcon";
 import {
   getLabel,
   executionsTableTitles,
   ExecutionsColumn,
   activeTransactionColumnsFromCommon,
 } from "../execTableCommon";
-import { DATE_FORMAT, Duration } from "../../util";
 
 interface ActiveTransactionsTable {
   data: ActiveTransaction[];

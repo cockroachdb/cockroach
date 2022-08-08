@@ -75,3 +75,13 @@
     fill: $colors--neutral-4;
   }
 }
+
+.session-txn-fingerprints {
+  margin-top: 12px;
+  max-height: 300px;
+  overflow-y: scroll;
+
+  div {
+    margin-bottom: 8px;
+  }
+}
