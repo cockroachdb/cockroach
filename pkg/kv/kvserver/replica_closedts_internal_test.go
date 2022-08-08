@@ -728,7 +728,8 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	require.Nil(t, pErr)
 	require.True(t, intentExists())
 
-	// Inject a closed timestamp.
+	// Bump the clock and inject a closed timestamp.
+	tc.manualClock.AdvanceTo(ts20.GoTime())
 	tc.repl.mu.Lock()
 	tc.repl.mu.state.RaftClosedTimestamp = ts20
 	tc.repl.mu.Unlock()
