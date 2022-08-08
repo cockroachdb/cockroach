@@ -316,6 +316,7 @@ commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 2 ValidationType ops
 validate forward indexes [2] in table #104
+validate forward indexes [4] in table #104
 commit transaction #9
 begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
