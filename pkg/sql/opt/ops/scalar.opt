@@ -1244,6 +1244,13 @@ define UDFPrivate {
 
     # Volatility is the user-provided volatility of the function given during
     # CREATE FUNCTION.
+    #
+    # Volatility affects the visibility of mutations made by the statement
+    # calling the function. A volatile function will see these mutations. Also,
+    # statements within a volatile function's body will see changes made by
+    # previous statements in the function body. In contrast, a stable,
+    # immutable, or leakproof function will see a snapshot of the data as of the
+    # start of the statement calling the function.
     Volatility Volatility
 
     # CalledOnNullInput is true if the function should be called when any of its

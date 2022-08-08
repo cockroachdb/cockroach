@@ -743,6 +743,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		planFn,
 		len(udf.Body),
 		udf.Typ,
+		udf.Volatility,
 		udf.CalledOnNullInput,
 	), nil
 }
