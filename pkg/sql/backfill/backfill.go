@@ -108,6 +108,7 @@ func (cb *ColumnBackfiller) initCols(desc catalog.TableDescriptor) {
 //
 // txn might be nil, in which case it will need to be set on the fetcher later.
 func (cb *ColumnBackfiller) init(
+	ctx context.Context,
 	txn *kv.Txn,
 	evalCtx *eval.Context,
 	defaultExprs []tree.TypedExpr,
@@ -155,7 +156,7 @@ func (cb *ColumnBackfiller) init(
 	cb.rowMetrics = rowMetrics
 
 	return cb.fetcher.Init(
-		evalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			Txn:        txn,
 			Alloc:      &cb.alloc,
@@ -198,7 +199,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	return cb.init(txn, evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, traceKV)
+	return cb.init(ctx, txn, evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, traceKV)
 }
 
 // InitForDistributedUse initializes a ColumnBackfiller for use as part of a
@@ -256,7 +257,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 
 	rowMetrics := flowCtx.GetRowMetrics()
 	// The txn will be set on the fetcher in RunColumnBackfillChunk.
-	return cb.init(nil /* txn */, evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, flowCtx.TraceKV)
+	return cb.init(ctx, nil /* txn */, evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, flowCtx.TraceKV)
 }
 
 // Close frees the resources used by the ColumnBackfiller.
@@ -829,7 +830,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	}
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
-		ib.evalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			Txn:        txn,
 			Alloc:      &ib.alloc,

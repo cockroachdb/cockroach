@@ -587,7 +587,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				cfg, err := applyGeoindexConfigStorageParams(evalCtx, *startCfg, string(params))
+				cfg, err := applyGeoindexConfigStorageParams(evalCtx.Context, evalCtx, *startCfg, string(params))
 				if err != nil {
 					return nil, err
 				}
@@ -632,7 +632,7 @@ SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
 				params := tree.MustBeDString(args[1])
 
 				startCfg := geoindex.DefaultGeographyIndexConfig()
-				cfg, err := applyGeoindexConfigStorageParams(evalCtx, *startCfg, string(params))
+				cfg, err := applyGeoindexConfigStorageParams(evalCtx.Context, evalCtx, *startCfg, string(params))
 				if err != nil {
 					return nil, err
 				}
@@ -7665,7 +7665,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 }
 
 func applyGeoindexConfigStorageParams(
-	evalCtx *eval.Context, cfg geoindex.Config, params string,
+	ctx context.Context, evalCtx *eval.Context, cfg geoindex.Config, params string,
 ) (geoindex.Config, error) {
 	indexDesc := &descpb.IndexDescriptor{GeoConfig: cfg}
 	stmt, err := parser.ParseOne(
@@ -7676,6 +7676,7 @@ func applyGeoindexConfigStorageParams(
 	}
 	semaCtx := tree.MakeSemaContext()
 	if err := storageparam.Set(
+		ctx,
 		&semaCtx,
 		evalCtx,
 		stmt.AST.(*tree.CreateIndex).StorageParams,

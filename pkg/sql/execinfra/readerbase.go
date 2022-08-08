@@ -211,17 +211,17 @@ func CanUseStreamer(settings *cluster.Settings) bool {
 
 // UseStreamer returns whether the kvstreamer.Streamer API should be used as
 // well as the txn that should be used (regardless of the boolean return value).
-func (flowCtx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
-	useStreamer := CanUseStreamer(flowCtx.EvalCtx.Settings) && flowCtx.Txn != nil &&
-		flowCtx.Txn.Type() == kv.LeafTxn && flowCtx.MakeLeafTxn != nil
+func (ctx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
+	useStreamer := CanUseStreamer(ctx.EvalCtx.Settings) && ctx.Txn != nil &&
+		ctx.Txn.Type() == kv.LeafTxn && ctx.MakeLeafTxn != nil
 	if !useStreamer {
-		return false, flowCtx.Txn, nil
+		return false, ctx.Txn, nil
 	}
-	leafTxn, err := flowCtx.MakeLeafTxn()
+	leafTxn, err := ctx.MakeLeafTxn()
 	if leafTxn == nil || err != nil {
 		// leafTxn might be nil in some flows which run outside of the txn, the
 		// streamer should not be used in such cases.
-		return false, flowCtx.Txn, err
+		return false, ctx.Txn, err
 	}
 	return true, leafTxn, nil
 }

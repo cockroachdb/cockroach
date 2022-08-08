@@ -786,7 +786,7 @@ func TestAggregators(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range aggregatorsTestCases {
 		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
-			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+			ctx, &evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)
 		for _, agg := range aggTypes {
@@ -930,7 +930,7 @@ func TestAggregatorRandom(t *testing.T) {
 					}
 					require.NoError(t, tc.init())
 					constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
-						&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+						context.Background(), &evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 					)
 					require.NoError(t, err)
 					a := agg.new(&colexecagg.NewAggregatorArgs{
@@ -1093,7 +1093,7 @@ func benchmarkAggregateFunction(
 	}
 	require.NoError(b, tc.init())
 	constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
-		&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+		ctx, &evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 	)
 	require.NoError(b, err)
 	fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]

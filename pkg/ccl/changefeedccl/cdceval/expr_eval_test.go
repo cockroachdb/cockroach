@@ -614,7 +614,7 @@ func makeEvaluator(t *testing.T, st *cluster.Settings, selectStr string) (*Evalu
 	require.NoError(t, err)
 	slct := s.AST.(*tree.Select).Select.(*tree.SelectClause)
 	evalCtx := eval.MakeTestingEvalContext(st)
-	return NewEvaluator(&evalCtx, slct)
+	return NewEvaluator(context.Background(), &evalCtx, slct)
 }
 
 func makeExprEval(

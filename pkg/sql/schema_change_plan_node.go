@@ -213,6 +213,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	}
 
 	runDeps := newSchemaChangerTxnRunDependencies(
+		params.ctx,
 		p.SessionData(),
 		p.User(),
 		p.ExecCfg(),
@@ -235,6 +236,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 }
 
 func newSchemaChangerTxnRunDependencies(
+	ctx context.Context,
 	sessionData *sessiondata.SessionData,
 	user username.SQLUsername,
 	execCfg *ExecutorConfig,
@@ -246,7 +248,7 @@ func newSchemaChangerTxnRunDependencies(
 	stmts []string,
 ) scexec.Dependencies {
 	metaDataUpdater := descmetadata.NewMetadataUpdater(
-		evalContext.Context,
+		ctx,
 		execCfg.InternalExecutorFactory,
 		descriptors,
 		&execCfg.Settings.SV,
