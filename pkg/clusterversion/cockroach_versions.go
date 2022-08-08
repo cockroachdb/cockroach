@@ -337,8 +337,8 @@ const (
 	UsersHaveIDs
 	// SetUserIDNotNull sets the user_id column in system.users to not null.
 	SetUserIDNotNull
-	// DeleteRequestReturnKey is the version where the ReturnKey argument of the
-	// DeleteRequest is introduced.
+	// DeleteRequestReturnKey is the version where the DeleteRequest began
+	// populating the FoundKey value in the response.
 	DeleteRequestReturnKey
 
 	// *************************************************

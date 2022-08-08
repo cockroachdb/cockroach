@@ -535,19 +535,18 @@ func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
 
 // DelKey deletes one key.
 //
-// The returned roachpb.Key will contain the key deleted if the returnKey
-// parameter is true and the key was actually deleted, or will be nil if the
-// parameter is false of the key was already non-existent.
+// The returned roachpb.Key will contain the key if it was actually deleted.
 //
 // key can be either a byte slice or a string.
-func (db *DB) DelKey(ctx context.Context, key interface{}, returnKey bool) (roachpb.Key, error) {
+func (db *DB) DelKey(ctx context.Context, key interface{}) (roachpb.Key, error) {
 	b := &Batch{}
-	b.DelKey(key, returnKey)
+	b.DelKey(key)
 	r, err := getOneResult(db.Run(ctx, b), b)
-	if returnKey {
-		return r.Keys[0], err
+	var deletedKey roachpb.Key
+	if len(r.Keys) > 0 {
+		deletedKey = r.Keys[0]
 	}
-	return roachpb.Key{}, err
+	return deletedKey, err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).

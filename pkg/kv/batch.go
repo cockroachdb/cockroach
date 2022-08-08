@@ -242,12 +242,9 @@ func (b *Batch) fillResults(ctx context.Context) {
 				}
 			case *roachpb.DeleteRequest:
 				if result.Err == nil {
-					deleteRequest := args.(*roachpb.DeleteRequest)
-					if deleteRequest.ReturnKey {
-						resp := reply.(*roachpb.DeleteResponse)
-						if resp.FoundKey {
-							result.Keys = []roachpb.Key{deleteRequest.Key}
-						}
+					resp := reply.(*roachpb.DeleteResponse)
+					if resp.FoundKey {
+						result.Keys = []roachpb.Key{args.(*roachpb.DeleteRequest).Key}
 					}
 				}
 			case *roachpb.DeleteRangeRequest:
@@ -628,7 +625,7 @@ func (b *Batch) Del(keys ...interface{}) {
 			b.initResult(0, len(keys), notRaw, err)
 			return
 		}
-		reqs = append(reqs, roachpb.NewDelete(k, false /* returnKey */))
+		reqs = append(reqs, roachpb.NewDelete(k))
 		b.approxMutationReqBytes += len(k)
 	}
 	b.appendReqs(reqs...)
@@ -638,19 +635,18 @@ func (b *Batch) Del(keys ...interface{}) {
 // DelKey deletes one key.
 //
 // A new result will be appended to the batch which will contain 0 rows and
-// Result.Err will indicate success or failure. The returnKey argument
-// determines whether the key is included in Result.Keys to indicate that the
-// delete actually deleted something.
+// Result.Err will indicate success or failure. The key will be included in
+// Result.Keys if it was actually deleted.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) DelKey(key interface{}, returnKey bool) {
+func (b *Batch) DelKey(key interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
-		b.initResult(0, 1, notRaw, err)
+		b.initResult(0, 0, notRaw, err)
 		return
 	}
 	b.approxMutationReqBytes += len(k)
-	b.appendReqs(roachpb.NewDelete(k, returnKey))
+	b.appendReqs(roachpb.NewDelete(k))
 	b.initResult(1, 0, notRaw, nil)
 }
 
