@@ -30,7 +30,7 @@ import (
 )
 
 // DecorateErrorWithPlanDetails adds plan graphviz URLs as error details.
-func (p Plan) DecorateErrorWithPlanDetails(err error) error {
+func (p Plan) DecorateErrorWithPlanDetails(err error) (retErr error) {
 	if err == nil {
 		return nil
 	}
@@ -40,7 +40,7 @@ func (p Plan) DecorateErrorWithPlanDetails(err error) error {
 			if !ok {
 				rAsErr = errors.Errorf("panic during scplan.DecorateErrorWithPlanDetails: %v", r)
 			}
-			err = errors.CombineErrors(err, rAsErr)
+			retErr = errors.CombineErrors(err, rAsErr)
 		}
 	}()
 
