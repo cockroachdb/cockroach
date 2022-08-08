@@ -21,11 +21,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
@@ -47,7 +49,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 			var seed uint64
 			var replDescs roachpb.ReplicaSet
 			var self roachpb.ReplicaID
-			ioOverloadMap := map[roachpb.StoreID]*admissionpb.IOThreshold{}
+			ioOverloadMap := &ioThresholdMap{threshold: 1.0, m: map[roachpb.StoreID]*admissionpb.IOThreshold{}}
 			snapshotMap := map[roachpb.ReplicaID]struct{}{}
 			downMap := map[roachpb.ReplicaID]struct{}{}
 			match := map[roachpb.ReplicaID]uint64{}
@@ -87,7 +89,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 						}
 						replDescs.AddReplica(replDesc)
 					case "overloaded":
-						ioOverloadMap[roachpb.StoreID(id)] = &admissionpb.IOThreshold{
+						ioOverloadMap.m[roachpb.StoreID(id)] = &admissionpb.IOThreshold{
 							L0NumSubLevels:          1000,
 							L0NumSubLevelsThreshold: 20,
 							L0NumFiles:              1,
@@ -155,4 +157,29 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 			return buf.String()
 		})
 	})
+}
+
+func TestIoThresholdMap_SafeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	m := ioThresholdMap{threshold: 0.8, seq: 1, m: map[roachpb.StoreID]*admissionpb.IOThreshold{
+		1: { // score 0.7
+			L0NumSubLevels:          100,
+			L0NumSubLevelsThreshold: 1000,
+			L0NumFiles:              700,
+			L0NumFilesThreshold:     1000,
+		},
+		7: { // score 0.9
+			L0NumSubLevels:          90,
+			L0NumSubLevelsThreshold: 100,
+			L0NumFiles:              100,
+			L0NumFilesThreshold:     1000,
+		},
+		9: { // score 1.1
+			L0NumSubLevels:          110,
+			L0NumSubLevelsThreshold: 100,
+			L0NumFiles:              100,
+			L0NumFilesThreshold:     1000,
+		},
+	}}
+	echotest.Require(t, string(redact.Sprint(m)), testutils.TestDataPath(t, "io_threshold_map.txt"))
 }

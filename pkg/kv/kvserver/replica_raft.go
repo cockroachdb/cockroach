@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1164,9 +1163,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 // tick the Raft group, returning true if the raft group exists and should
 // be queued for Ready processing; false otherwise.
 func (r *Replica) tick(
-	ctx context.Context,
-	livenessMap liveness.IsLiveMap,
-	ioOverloadMap map[roachpb.StoreID]*admissionpb.IOThreshold,
+	ctx context.Context, livenessMap liveness.IsLiveMap, ioThresholdMap *ioThresholdMap,
 ) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
@@ -1191,7 +1188,7 @@ func (r *Replica) tick(
 		return false, nil
 	}
 
-	r.updatePausedFollowersLocked(ctx, ioOverloadMap)
+	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
 
 	now := r.store.Clock().NowAsClockTimestamp()
 	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, now, livenessMap) {
