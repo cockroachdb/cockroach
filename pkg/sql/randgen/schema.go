@@ -189,6 +189,10 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 			if foundOverlap {
 				continue
 			}
+			// Inverted indexes can only be ascending on the last column.
+			if col.Direction == tree.Descending {
+				continue
+			}
 		}
 		// Make forward indexes unique 50% of the time. Inverted indexes cannot
 		// be unique.
