@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,7 +89,19 @@ func (s *Store) SendWithWriteBytes(
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
-	if baClockTS, ok := ba.Timestamp.TryToClockTimestamp(); ok {
+	baClockTS := ba.Now
+	if baClockTS.IsEmpty() && !s.ClusterSettings().Version.IsActive(ctx, clusterversion.LocalTimestamps) {
+		// TODO(nvanbenschoten): remove this in v23.1. v21.2 nodes will still send
+		// requests without a Now field. This is not necessary for correctness now
+		// that local timestamps pulled from the leaseholder's own HLC are used in
+		// conjunction with observed timestamps to prevent stale reads, but using
+		// this timestamp when available can help stabilize HLCs.
+		//
+		// NOTE: we version gate this so that no test hits this branch and relies on
+		// this behavior.
+		baClockTS, _ = ba.Timestamp.DeprecatedTryToClockTimestamp()
+	}
+	if !baClockTS.IsEmpty() {
 		if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
 			s.cfg.Clock.Update(baClockTS)
 		} else {
