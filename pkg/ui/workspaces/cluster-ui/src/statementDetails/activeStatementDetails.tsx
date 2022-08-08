@@ -116,6 +116,10 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                         </>
                       }
                     />
+                    <SummaryCardItem
+                      label="Full Scan"
+                      value={statement.isFullScan.toString()}
+                    />
                   </Col>
                 </Row>
               </SummaryCard>
