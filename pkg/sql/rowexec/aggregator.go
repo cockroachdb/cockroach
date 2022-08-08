@@ -148,7 +148,7 @@ func (ag *aggregatorBase) init(
 	}
 
 	return ag.ProcessorBase.Init(
-		self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
+		ctx, self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
 		execinfra.ProcStateOpts{
 			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,

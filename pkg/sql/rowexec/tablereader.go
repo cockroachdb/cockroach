@@ -126,6 +126,7 @@ func newTableReader(
 
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
+		ctx,
 		tr,
 		post,
 		resultTypes,

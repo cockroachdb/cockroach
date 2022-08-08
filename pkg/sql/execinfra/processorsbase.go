@@ -109,6 +109,7 @@ func (h *ProcOutputHelper) Reset() {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
+	ctx context.Context,
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
 	semaCtx *tree.SemaContext,
@@ -154,7 +155,7 @@ func (h *ProcOutputHelper) Init(
 		}
 		for i, expr := range post.RenderExprs {
 			h.renderExprs[i] = execinfrapb.ExprHelper{}
-			if err := h.renderExprs[i].Init(evalCtx.Context, expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
+			if err := h.renderExprs[i].Init(ctx, expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
 				return err
 			}
 			h.OutputTypes[i] = h.renderExprs[i].Expr.ResolvedType()
@@ -740,6 +741,7 @@ type ProcStateOpts struct {
 // core (i.e. the "internal schema" of the processor, see
 // execinfrapb.ProcessorSpec for more details).
 func (pb *ProcessorBase) Init(
+	ctx context.Context,
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
@@ -750,7 +752,7 @@ func (pb *ProcessorBase) Init(
 	opts ProcStateOpts,
 ) error {
 	return pb.InitWithEvalCtx(
-		self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, output, memMonitor, opts,
+		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, output, memMonitor, opts,
 	)
 }
 
@@ -759,6 +761,7 @@ func (pb *ProcessorBase) Init(
 // core (i.e. the "internal schema" of the processor, see
 // execinfrapb.ProcessorSpec for more details).
 func (pb *ProcessorBase) InitWithEvalCtx(
+	ctx context.Context,
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
@@ -776,13 +779,13 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 
 	// Hydrate all types used in the processor.
 	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
-	if err := resolver.HydrateTypeSlice(evalCtx.Context, coreOutputTypes); err != nil {
+	if err := resolver.HydrateTypeSlice(ctx, coreOutputTypes); err != nil {
 		return err
 	}
 	pb.SemaCtx = tree.MakeSemaContext()
 	pb.SemaCtx.TypeResolver = &resolver
 
-	return pb.OutputHelper.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
+	return pb.OutputHelper.Init(ctx, post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
 }
 
 // Init initializes the ProcessorBaseNoHelper.
@@ -990,7 +993,7 @@ func NewLimitedMonitorNoFlowCtx(
 type LocalProcessor interface {
 	RowSourcedProcessor
 	// InitWithOutput initializes this processor.
-	InitWithOutput(flowCtx *FlowCtx, post *execinfrapb.PostProcessSpec, output RowReceiver) error
+	InitWithOutput(ctx context.Context, flowCtx *FlowCtx, post *execinfrapb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.

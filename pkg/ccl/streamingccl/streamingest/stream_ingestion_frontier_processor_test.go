@@ -237,7 +237,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			}
 			spec.StartTime = tc.frontierStartTime
 			spec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
-			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
+			proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, 0 /* processorID */, spec, &post, out)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)
 			if !ok {

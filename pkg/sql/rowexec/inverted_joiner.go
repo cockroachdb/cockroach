@@ -234,7 +234,7 @@ func newInvertedJoiner(
 	}
 
 	if err := ij.ProcessorBase.Init(
-		ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
+		ctx, ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

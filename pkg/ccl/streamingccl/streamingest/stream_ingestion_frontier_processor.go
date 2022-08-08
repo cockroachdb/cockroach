@@ -129,6 +129,7 @@ func newStreamIngestionFrontierProcessor(
 		persistedHighWater: spec.HighWaterAtStart,
 	}
 	if err := sf.Init(
+		ctx,
 		sf,
 		post,
 		input.OutputTypes(),

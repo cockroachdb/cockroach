@@ -47,6 +47,7 @@ func newFiltererProcessor(
 	f := &filtererProcessor{input: input}
 	types := input.OutputTypes()
 	if err := f.Init(
+		ctx,
 		f,
 		post,
 		types,

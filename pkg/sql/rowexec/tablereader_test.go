@@ -397,7 +397,6 @@ func TestLimitScans(t *testing.T) {
 	tracer := s.TracerI().(*tracing.Tracer)
 	sp := tracer.StartSpan("root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	ctx = tracing.ContextWithSpan(ctx, sp)
-	flowCtx.EvalCtx.Context = ctx
 	flowCtx.CollectStats = true
 
 	tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)

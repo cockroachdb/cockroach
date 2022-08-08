@@ -88,6 +88,7 @@ func newProjectSetProcessor(
 		done:        make([]bool, len(spec.Exprs)),
 	}
 	if err := ps.Init(
+		ctx,
 		ps,
 		post,
 		outputTypes,

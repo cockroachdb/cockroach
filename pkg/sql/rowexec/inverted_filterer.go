@@ -97,7 +97,7 @@ func newInvertedFilterer(
 
 	// Initialize ProcessorBase.
 	if err := ifr.ProcessorBase.Init(
-		ifr, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
+		ctx, ifr, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ifr.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

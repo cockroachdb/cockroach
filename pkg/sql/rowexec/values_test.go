@@ -51,7 +51,7 @@ func TestValuesProcessor(t *testing.T) {
 					EvalCtx: evalCtx,
 				}
 
-				v, err := newValuesProcessor(&flowCtx, 0 /* processorID */, &spec, &execinfrapb.PostProcessSpec{}, out)
+				v, err := newValuesProcessor(context.Background(), &flowCtx, 0 /* processorID */, &spec, &execinfrapb.PostProcessSpec{}, out)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -123,7 +123,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 				b.SetBytes(int64(8 * numRows * numCols))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					v, err := newValuesProcessor(&flowCtx, 0 /* processorID */, &spec, &post, &output)
+					v, err := newValuesProcessor(ctx, &flowCtx, 0 /* processorID */, &spec, &post, &output)
 					if err != nil {
 						b.Fatal(err)
 					}

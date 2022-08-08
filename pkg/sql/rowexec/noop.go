@@ -46,6 +46,7 @@ func newNoopProcessor(
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
 	if err := n.Init(
+		ctx,
 		n,
 		post,
 		input.OutputTypes(),

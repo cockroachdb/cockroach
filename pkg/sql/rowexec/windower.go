@@ -160,6 +160,7 @@ func newWindower(
 	limitedMon.StartNoReserved(ctx, evalCtx.Mon)
 
 	if err := w.InitWithEvalCtx(
+		ctx,
 		w,
 		post,
 		w.outputTypes,

@@ -144,6 +144,7 @@ func newChangeAggregatorProcessor(
 		memAcc:  memMonitor.MakeBoundAccount(),
 	}
 	if err := ca.Init(
+		ctx,
 		ca,
 		post,
 		changefeedResultTypes,
@@ -839,6 +840,7 @@ func newChangeFrontierProcessor(
 		slowLogEveryN: log.Every(slowSpanMaxFrequency),
 	}
 	if err := cf.Init(
+		ctx,
 		cf,
 		post,
 		input.OutputTypes(),

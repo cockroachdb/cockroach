@@ -191,7 +191,7 @@ func TestPostProcess(t *testing.T) {
 			semaCtx := tree.MakeSemaContext()
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			if err := out.Init(&tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx); err != nil {
+			if err := out.Init(context.Background(), &tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx); err != nil {
 				t.Fatal(err)
 			}
 

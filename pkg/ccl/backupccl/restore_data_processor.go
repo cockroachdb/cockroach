@@ -129,6 +129,7 @@ var restoreAtNow = settings.RegisterBoolSetting(
 )
 
 func newRestoreDataProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.RestoreDataSpec,
@@ -152,7 +153,7 @@ func newRestoreDataProcessor(
 		numWorkers: int(numRestoreWorkers.Get(sv)),
 	}
 
-	if err := rd.Init(rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := rd.Init(ctx, rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

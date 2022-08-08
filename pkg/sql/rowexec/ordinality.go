@@ -50,6 +50,7 @@ func newOrdinalityProcessor(
 	copy(colTypes, input.OutputTypes())
 	colTypes[len(colTypes)-1] = types.Int
 	if err := o.Init(
+		ctx,
 		o,
 		post,
 		colTypes,

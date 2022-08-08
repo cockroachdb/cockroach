@@ -429,6 +429,7 @@ func (ttl *ttlProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 }
 
 func newTTLProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.TTLSpec,
@@ -438,6 +439,7 @@ func newTTLProcessor(
 		ttlSpec: spec,
 	}
 	if err := ttlProcessor.Init(
+		ctx,
 		ttlProcessor,
 		&execinfrapb.PostProcessSpec{},
 		[]*types.T{},

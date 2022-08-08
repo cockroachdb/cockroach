@@ -101,7 +101,7 @@ func (b *backfiller) Run(ctx context.Context) {
 
 func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	semaCtx := tree.MakeSemaContext()
-	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx()); err != nil {
+	if err := b.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx()); err != nil {
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	finishedSpans, err := b.mainLoop(ctx)

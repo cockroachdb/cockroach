@@ -85,7 +85,7 @@ func (jb *joinerBase) init(
 	}
 
 	if err := jb.ProcessorBase.Init(
-		self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
+		ctx, self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
 	); err != nil {
 		return err
 	}

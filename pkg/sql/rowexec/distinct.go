@@ -118,7 +118,7 @@ func newDistinct(
 	}
 
 	if err := d.Init(
-		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
+		ctx, d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{d.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

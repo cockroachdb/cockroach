@@ -204,7 +204,7 @@ func newSamplerProcessor(
 	s.outTypes = outTypes
 
 	if err := s.Init(
-		nil, post, outTypes, flowCtx, processorID, output, memMonitor,
+		ctx, nil, post, outTypes, flowCtx, processorID, output, memMonitor,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				s.close()

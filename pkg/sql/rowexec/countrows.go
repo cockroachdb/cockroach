@@ -52,6 +52,7 @@ func newCountAggregator(
 	}
 
 	if err := ag.Init(
+		ctx,
 		ag,
 		post,
 		[]*types.T{types.Int},
