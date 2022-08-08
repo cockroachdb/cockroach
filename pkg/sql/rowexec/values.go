@@ -42,6 +42,7 @@ var _ execopnode.OpNode = &valuesProcessor{}
 const valuesProcName = "values"
 
 func newValuesProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.ValuesCoreSpec,
@@ -64,7 +65,7 @@ func newValuesProcessor(
 		v.typs[i] = spec.Columns[i].Type
 	}
 	if err := v.Init(
-		v, post, v.typs, flowCtx, processorID, output, nil /* memMonitor */, execinfra.ProcStateOpts{},
+		ctx, v, post, v.typs, flowCtx, processorID, output, nil /* memMonitor */, execinfra.ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}

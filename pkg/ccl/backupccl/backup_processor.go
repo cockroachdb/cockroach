@@ -119,6 +119,7 @@ var (
 )
 
 func newBackupDataProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackupDataSpec,
@@ -139,7 +140,7 @@ func newBackupDataProcessor(
 		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 		memAcc:  &ba,
 	}
-	if err := bp.Init(bp, post, backupOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := bp.Init(ctx, bp, post, backupOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,

@@ -100,6 +100,7 @@ const hashJoinerProcName = "hash joiner"
 
 // newHashJoiner creates a new hash join processor.
 func newHashJoiner(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.HashJoinerSpec,
@@ -119,6 +120,7 @@ func newHashJoiner(
 	}
 
 	if err := h.joinerBase.init(
+		ctx,
 		h,
 		flowCtx,
 		processorID,
@@ -140,7 +142,6 @@ func newHashJoiner(
 		return nil, err
 	}
 
-	ctx := h.FlowCtx.EvalCtx.Ctx()
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The hashJoiner will overflow to disk if this limit is not enough.
 	h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "hashjoiner-limited")

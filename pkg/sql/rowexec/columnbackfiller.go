@@ -66,7 +66,7 @@ func newColumnBackfiller(
 	columnBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"column-backfill-mon")
 	cb := &columnBackfiller{
-		desc: flowCtx.TableDescriptor(&spec.Table),
+		desc: flowCtx.TableDescriptor(ctx, &spec.Table),
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,

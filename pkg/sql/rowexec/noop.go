@@ -37,6 +37,7 @@ var _ execopnode.OpNode = &noopProcessor{}
 const noopProcName = "noop"
 
 func newNoopProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
@@ -45,6 +46,7 @@ func newNoopProcessor(
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
 	if err := n.Init(
+		ctx,
 		n,
 		post,
 		input.OutputTypes(),
@@ -56,7 +58,6 @@ func newNoopProcessor(
 	); err != nil {
 		return nil, err
 	}
-	ctx := flowCtx.EvalCtx.Ctx()
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		n.input = newInputStatCollector(n.input)
 		n.ExecStatsForTrace = n.execStatsForTrace

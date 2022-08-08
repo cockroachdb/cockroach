@@ -78,7 +78,7 @@ func newIndexBackfiller(
 	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
 	ib := &indexBackfiller{
-		desc:    flowCtx.TableDescriptor(&spec.Table),
+		desc:    flowCtx.TableDescriptor(ctx, &spec.Table),
 		spec:    spec,
 		flowCtx: flowCtx,
 		output:  output,
@@ -352,7 +352,7 @@ func (ib *indexBackfiller) Run(ctx context.Context) {
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	semaCtx := tree.MakeSemaContext()
-	if err := ib.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx()); err != nil {
+	if err := ib.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx()); err != nil {
 		ib.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}

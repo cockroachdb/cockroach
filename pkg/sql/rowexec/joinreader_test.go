@@ -1137,6 +1137,7 @@ func TestJoinReader(t *testing.T) {
 							splitter := span.MakeSplitter(td, index, neededOrds)
 
 							jr, err := newJoinReader(
+								ctx,
 								&flowCtx,
 								0, /* processorID */
 								&execinfrapb.JoinReaderSpec{
@@ -1307,6 +1308,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 
 	out := &distsqlutils.RowBuffer{}
 	jr, err := newJoinReader(
+		ctx,
 		&flowCtx,
 		0, /* processorID */
 		&execinfrapb.JoinReaderSpec{
@@ -1411,6 +1413,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
 		return newJoinReader(
+			ctx,
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.JoinReaderSpec{FetchSpec: fetchSpec},
@@ -1435,7 +1438,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		out.ConsumerDone()
 
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{
+			ctx, &flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{
 				FetchSpec: fetchSpec,
 			}, in, &execinfrapb.PostProcessSpec{},
 			out, lookupJoinReaderType)
@@ -1849,7 +1852,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 								for i := 0; i < b.N; i++ {
 									flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 									jr, err := newJoinReader(
-										&flowCtx, 0 /* processorID */, &spec, input, &execinfrapb.PostProcessSpec{}, &output, lookupJoinReaderType,
+										ctx, &flowCtx, 0 /* processorID */, &spec, input, &execinfrapb.PostProcessSpec{}, &output, lookupJoinReaderType,
 									)
 									if err != nil {
 										b.Fatal(err)
@@ -2053,7 +2056,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output, lookupJoinReaderType)
+				jr, err := newJoinReader(ctx, &flowCtx, 0 /* processorID */, &spec, input, &post, &output, lookupJoinReaderType)
 				if err != nil {
 					b.Fatal(err)
 				}
