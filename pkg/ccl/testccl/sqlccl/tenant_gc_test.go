@@ -120,11 +120,11 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	// Run GC on the tenant.
 	progress := &jobspb.SchemaChangeGCProgress{
 		Tenant: &jobspb.SchemaChangeGCProgress_TenantProgress{
-			Status: jobspb.SchemaChangeGCProgress_DELETING,
+			Status: jobspb.SchemaChangeGCProgress_CLEARING,
 		},
 	}
 	require.NoError(t, gcClosure(tenantID.ToUint64(), progress))
-	require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.Tenant.Status)
+	require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.Tenant.Status)
 
 	// Ensure the tenant's span configs and system span configs have been deleted.
 	records, err = scKVAccessor.GetSpanConfigRecords(
@@ -287,9 +287,9 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 		progress := job.Progress()
 
 		if gcIndex {
-			require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Indexes[0].Status)
+			require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Indexes[0].Status)
 		} else {
-			require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tables[0].Status)
+			require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tables[0].Status)
 		}
 
 		mu.Lock()
@@ -513,7 +513,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID.ToUint64())
 		require.EqualError(t, err, fmt.Sprintf(`tenant "%d" does not exist`, tenID.ToUint64()))
 		progress := job.Progress()
-		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tenant.Status)
+		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
 	}
 
 	// PTS record protecting secondary tenant should block tenant GC.
