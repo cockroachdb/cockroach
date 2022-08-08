@@ -959,20 +959,13 @@ func cmdDelete(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(txn)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
-	returnKey := e.hasArg("returnKey")
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw ReadWriter) error {
-		if returnKey {
-			key, err := MVCCDeleteReturningExistence(e.ctx, rw, e.ms, key, ts, localTs, txn)
-			if err != nil {
-				return err
-			}
-			e.results.buf.Printf("del: found key %v\n", key)
-		} else {
-			if err := MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn); err != nil {
-				return err
-			}
+		deletedKey, err := MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn)
+		if err != nil {
+			return err
 		}
+		e.results.buf.Printf("del: found key %v\n", deletedKey)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
