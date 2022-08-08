@@ -46,6 +46,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 			require.Equal(t, "run", d.Cmd)
 			var seed uint64
 			var replDescs roachpb.ReplicaSet
+			var self roachpb.ReplicaID
 			ioOverloadMap := map[roachpb.StoreID]*admissionpb.IOThreshold{}
 			snapshotMap := map[roachpb.ReplicaID]struct{}{}
 			downMap := map[roachpb.ReplicaID]struct{}{}
@@ -65,6 +66,8 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 					switch arg.Key {
 					case "min-live-match-index":
 						minLiveMatchIndex = id
+					case "self":
+						self = roachpb.ReplicaID(id)
 					case "voters", "learners":
 						replicaID := roachpb.ReplicaID(id)
 						if matchS != "" {
@@ -134,6 +137,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 			}
 
 			m, _ := computeExpendableOverloadedFollowers(ctx, computeExpendableOverloadedFollowersInput{
+				self:              self,
 				replDescs:         replDescs,
 				ioOverloadMap:     ioOverloadMap,
 				getProgressMap:    getProgressMap,

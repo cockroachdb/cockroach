@@ -43,6 +43,7 @@ var pauseReplicationIOThreshold = settings.RegisterFloatSetting(
 )
 
 type computeExpendableOverloadedFollowersInput struct {
+	self      roachpb.ReplicaID
 	replDescs roachpb.ReplicaSet
 	// TODO(tbg): all entries are overloaded, so consdier removing the IOThreshold here
 	// because it's confusing.
@@ -104,11 +105,10 @@ func computeExpendableOverloadedFollowers(
 	var nonLive map[roachpb.ReplicaID]nonLiveReason
 	var liveOverloadedVoterCandidates map[roachpb.ReplicaID]struct{}
 	var liveOverloadedNonVoterCandidates map[roachpb.ReplicaID]struct{}
-
 	var prs map[uint64]tracker.Progress
 
 	for _, replDesc := range d.replDescs.AsProto() {
-		if _, overloaded := d.ioOverloadMap[replDesc.StoreID]; !overloaded {
+		if _, overloaded := d.ioOverloadMap[replDesc.StoreID]; !overloaded || replDesc.ReplicaID == d.self {
 			continue
 		}
 		// There's at least one overloaded follower, so initialize
@@ -252,6 +252,7 @@ func (r *Replica) updatePausedFollowersLocked(
 	seed := int64(r.RangeID)
 	now := r.store.Clock().Now().GoTime()
 	d := computeExpendableOverloadedFollowersInput{
+		self:          r.replicaID,
 		replDescs:     r.descRLocked().Replicas(),
 		ioOverloadMap: ioOverloadMap,
 		getProgressMap: func(_ context.Context) map[uint64]tracker.Progress {
