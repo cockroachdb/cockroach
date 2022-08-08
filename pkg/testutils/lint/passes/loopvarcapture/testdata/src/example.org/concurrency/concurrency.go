@@ -21,9 +21,13 @@ func (g Group) Go(f func()) {
 	go f()
 }
 
+func (g Group) Wait() {}
+
 func Go(f func()) {
 	go f()
 }
+
+func Wait1() {}
 
 func GoWithError(f func()) error {
 	if rand.Float64() < 0.5 {
@@ -33,6 +37,8 @@ func GoWithError(f func()) error {
 	go f()
 	return nil
 }
+
+func Await() {}
 
 func SafeFunction(f func()) {
 	f()

@@ -15,3 +15,5 @@ type Group struct{}
 func (g *Group) Go(f func() error) {
 	go f()
 }
+
+func (g *Group) Wait() {}

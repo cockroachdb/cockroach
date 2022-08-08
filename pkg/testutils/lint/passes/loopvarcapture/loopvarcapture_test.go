@@ -20,10 +20,28 @@ import (
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-var extraGoRoutineFunctions = []loopvarcapture.Function{
-	{Pkg: "example.org/concurrency", Type: "Group", Name: "Go"}, // test non-pointer receiver
-	{Pkg: "example.org/concurrency", Name: "Go"},                // test a package-level function
-	{Pkg: "example.org/concurrency", Name: "GoWithError"},       // test a function with a return value
+var extraGoRoutineFunctions = []loopvarcapture.GoWrapper{
+	{
+		// test non-pointer receiver
+		Func: loopvarcapture.Function{
+			Pkg: "example.org/concurrency", Type: "Group", Name: "Go",
+		},
+		WaitFuncName: "Wait",
+	},
+	{
+		// test a package-level function
+		Func: loopvarcapture.Function{
+			Pkg: "example.org/concurrency", Name: "Go",
+		},
+		WaitFuncName: "Wait1",
+	},
+	{
+		// test a function with a return value
+		Func: loopvarcapture.Function{
+			Pkg: "example.org/concurrency", Name: "GoWithError",
+		},
+		WaitFuncName: "Await",
+	},
 }
 
 func init() {

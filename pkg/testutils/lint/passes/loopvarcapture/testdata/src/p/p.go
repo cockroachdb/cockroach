@@ -273,6 +273,27 @@ func Synchronization() {
 			intID(n) // want `loop variable 'n' captured by reference`
 		}()
 
+		synchronized := func() {
+			defer wg1.Done()
+			intID(n)
+			fmt.Printf("done")
+		}
+		notSynchronized := func() {
+			defer close(outerChan)
+			intID(n)
+		}
+		intProducer := func(msg string, f func()) int {
+			fmt.Printf("msg: %s\n", msg)
+			f()
+			return 42
+		}
+
+		go runFunc(synchronized)    // this is OK
+		go runFunc(notSynchronized) // want `'notSynchronized' function captures loop variable 'n' by reference`
+
+		go intID(intProducer("bad", notSynchronized)) // want `'notSynchronized' function captures loop variable 'n' by reference`
+		go intID(intProduder("ok", synchronized))     // this is OK
+
 		// reading from a channel in a `range` loop is also a way to
 		// provide synchronization
 		rangeChan := make(chan error)
@@ -293,6 +314,68 @@ func Synchronization() {
 	}
 
 	<-outerChan
+}
+
+// GoWrapperWait exercises functionality provided by wrapper objects
+// that manage multiple Go routines internally and provide some
+// mechanism to wait for them to finish (see `GoRoutineFunctions` in
+// the linter). Using them to synchronize access to loop variables
+// (making sure the loop variable doesn't change until the go routine
+// is finished) should be safe.
+func GoWrapperWait() {
+	var eg1 errgroup.Group    // properly used errgroup
+	var eg2 errgroup.Group    // never waited for
+	var cg1 concurrency.Group // waited for outside the loop
+	var cg2 concurrency.Group // waited for before the call to Go()
+
+	for _, n := range collection {
+		eg1.Go(func() error {
+			intID(n) // this is OK, as we call Wait() within the loop
+			return nil
+		})
+
+		f := func() {
+			intID(n)
+			fmt.Printf("done!\n")
+		}
+		eg2.Go(func() error {
+			if rand.Float64 < 0.5 {
+				// eg2 is not waited from within the loop
+				f() // want `'f' function captures loop variable 'n' by reference`
+			}
+
+			return nil
+		})
+
+		cg1.Go(func() error {
+			// cg1.Wait() is called outside the loop
+			intID(n) // want `loop variable 'n' captured by reference`
+			return nil
+		})
+
+		cg2.Wait()
+		cg2.Go(func() error {
+			// cg2.Wait() is called before this Go() call
+			intID(n) // want `loop variable 'n' captured by reference`
+			return nil
+		})
+
+		eg1.Wait()
+
+		// this is safe as we call the corresponding wait function below
+		concurrency.Go(func() { intID(n) })
+		concurrency.Wait1()
+
+		if err := concurrency.GoWithError(func() {
+			// not safe: corresponding wait call called outside the loop
+			intID(n) // want `loop variable 'n' captured by reference`
+		}); err != nil {
+			panic(err)
+		}
+	}
+
+	cg1.Wait()
+	concurrency.Await()
 }
 
 // Select tests for common patterns using `select`, inspired by real
@@ -354,6 +437,21 @@ func IndirectClosure() {
 
 		go badClosure() // want `'badClosure' function captures loop variable 'i' by reference`
 		go wrapper2()   // want `'wrapper2' function captures loop variable 'i' \(via 'wrapper1' -> 'badClosure'\)`
+
+		nonCapturing := func() {
+			fmt.Printf("doing some work...\n")
+			doWork()
+		}
+		intProducer := func(msg string, f func()) int {
+			fmt.Printf("msg: %s\n", msg)
+			f()
+			return 42
+		}
+
+		go runFunc(nonCapturing)                  // this is OK
+		go runFunc(badClosure)                    // want `'badClosure' function captures loop variable 'i' by reference`
+		go intID(intProducer("bad", badClosure))  // want `'badClosure' function captures loop variable 'i' by reference`
+		go intID(intProduder("ok", nonCapturing)) // this is OK
 	}
 
 	for j := 0; j < len(collection); j++ {

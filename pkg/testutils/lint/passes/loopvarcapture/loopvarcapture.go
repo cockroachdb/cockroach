@@ -36,6 +36,23 @@ type (
 		Type string // empty for package-level functions
 		Name string
 	}
+
+	// GoWrapper represents a function that wraps a call to `go`;
+	// generally these structs provide a way for the caller to spawn
+	// multiple go routines, wait for all of them, stop them, etc.
+	//
+	// This linter treats calls to these wrappers as if they were calls
+	// to the `go` keyword; in addition, `WaitFuncName`, if any,
+	// indicates that the struct also provides a way to wait for the go
+	// routine to finish, providing a synchronization mechanism.
+	GoWrapper struct {
+		Func         Function
+		WaitFuncName string
+	}
+
+	// GoWrappers is a convenience type so that we can get the list of
+	// Go wrapper functions and their corresponding wait functions.
+	GoWrappers []GoWrapper
 )
 
 const (
@@ -59,17 +76,49 @@ var (
 		Run:      run,
 	}
 
-	// GoRoutineFunctions is a collection of functions that are known to
-	// take closures as parameters and invoke them asynchronously (in a
-	// Go routine). Calling these functions should be equivalent to
-	// using the `go` keyword in this linter.
-	GoRoutineFunctions = []Function{
-		{Pkg: "golang.org/x/sync/errgroup", Type: "Group", Name: "Go"},
-		{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "Go"},
-		{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "GoCtx"},
-		{Pkg: "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster", Type: "Monitor", Name: "Go"},
+	// function definitions that wrap `go` calls
+	errgroupGo    = Function{Pkg: "golang.org/x/sync/errgroup", Type: "Group", Name: "Go"}
+	ctxgroupGo    = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "Go"}
+	ctxgroupGoCtx = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "GoCtx"}
+	monitorGo     = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster", Type: "Monitor", Name: "Go"}
+
+	// GoRoutineFunctions is a collection of `go` wrappers that are
+	// known to take closures as parameters and invoke them
+	// asynchronously (in a Go routine). Calling these functions should
+	// be equivalent to using the `go` keyword in this linter. In
+	// addition, they may optionally include a 'wait' function to wait
+	// for the Go routine to finish, providing synchronization.
+	GoRoutineFunctions = GoWrappers{
+		{Func: errgroupGo, WaitFuncName: "Wait"},
+		{Func: ctxgroupGo, WaitFuncName: "Wait"},
+		{Func: ctxgroupGoCtx, WaitFuncName: "Wait"},
+		{Func: monitorGo, WaitFuncName: "Wait"},
 	}
 )
+
+// Functions returns a list of function definitions for the target
+// GoWrappers.
+func (gw GoWrappers) Functions() []Function {
+	var fs []Function
+	for _, f := range gw {
+		fs = append(fs, f.Func)
+	}
+
+	return fs
+}
+
+// WaitFunctions returns a list of function definitions for the go
+// wrappers that provide a 'wait' mechanism.
+func (gw GoWrappers) WaitFunctions() []Function {
+	var fs []Function
+	for _, f := range gw {
+		if f.WaitFuncName != "" {
+			fs = append(fs, Function{Pkg: f.Func.Pkg, Type: f.Func.Type, Name: f.WaitFuncName})
+		}
+	}
+
+	return fs
+}
 
 // run is the linter entrypoint
 func run(pass *analysis.Pass) (interface{}, error) {
@@ -269,17 +318,26 @@ func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
 	return func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.GoStmt:
-			v.findLoopVarRefsInCall(goCall, pos, node.Call)
+			v.findLoopVarRefsInCall(goCall, pos, node.Call, false /* go routine wrapper */)
 			// no need to keep traversing the AST, the function above is
 			// already doing that.
 			return false
 
 		case *ast.CallExpr:
-			if v.matchFunctionCall(node, GoRoutineFunctions) {
-				v.findLoopVarRefsInCall(goCall, pos, node)
+			if v.matchFunctionCall(node, GoRoutineFunctions.Functions()) {
+				v.findLoopVarRefsInCall(goCall, pos, node, true /* go routine wrapper */)
 				// no need to keep traversing the AST, the function above is
 				// already doing that.
 				return false
+			}
+
+			// if this is a call to a go wrapper wait function, extract the
+			// identifier object from this call, and mark references guarded
+			// by this object as synchronized
+			if v.matchFunctionCall(node, GoRoutineFunctions.WaitFunctions()) {
+				if ident := objFromCall(node); ident != nil {
+					v.markSynchronized(ident, pos)
+				}
 			}
 
 			// if this is a call to Done() on a WaitGroup variable, mark
@@ -300,7 +358,7 @@ func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
 
 		case *ast.DeferStmt:
 			if !v.withinClosure {
-				v.findLoopVarRefsInCall(deferCall, pos, node.Call)
+				v.findLoopVarRefsInCall(deferCall, pos, node.Call, false /* go routine wrapper */)
 				// no need to keep traversing the AST, the function above is
 				// already doing that.
 				return false
@@ -350,27 +408,53 @@ func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
 // capture loop variables by reference in the body of the closure or
 // in any of the arguments passed to it. Any references are saved the
 // visitor's `suspects` field.
-func (v *Visitor) findLoopVarRefsInCall(stmtType statementType, stmtPos int, call *ast.CallExpr) {
-	switch fun := call.Fun.(type) {
-	case *ast.FuncLit:
-		for _, suspect := range v.funcLitSuspectRefs(stmtType, stmtPos, fun) {
-			v.maybeAddSuspect(suspect)
-		}
-
-	case *ast.Ident:
-		if _, ok := v.closures[fun.Obj]; ok {
-			suspect := suspectReference{stmtType: stmtType, stmtPos: stmtPos, ref: fun}
-			v.maybeAddSuspect(&suspect)
-		}
+func (v *Visitor) findLoopVarRefsInCall(
+	stmtType statementType, stmtPos int, call *ast.CallExpr, isWrapper bool,
+) {
+	var wrapperIdent *ast.Ident
+	if isWrapper {
+		wrapperIdent = objFromCall(call)
 	}
 
-	for _, arg := range call.Args {
-		if funcLit, ok := arg.(*ast.FuncLit); ok {
-			for _, suspect := range v.funcLitSuspectRefs(stmtType, stmtPos, funcLit) {
-				v.maybeAddSuspect(suspect)
+	// add suspect is a convenience function called in the ast.Inspect
+	// call below; other than calling the appropriate function in the
+	// visitor, it also ensures we add the go routine wrapper object to
+	// the list of synchronization objects if this function is being
+	// called in the context of a Go routine wrapper.
+	addSuspect := func(suspect *suspectReference) {
+		if wrapperIdent != nil {
+			suspect.synchronizationObjs = append(suspect.synchronizationObjs, wrapperIdent)
+		}
+		v.maybeAddSuspect(suspect)
+	}
+
+	// inspect the call itself
+	ast.Inspect(call, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.FuncLit:
+			// when a function literal is found, traverse it, and add any
+			// suspect references found in the body of the closure
+			for _, suspect := range v.funcLitSuspectRefs(stmtType, stmtPos, node) {
+				addSuspect(suspect)
+			}
+
+			// the function above already traverse the closure tree; we can
+			// stop traversal here
+			return false
+
+		case *ast.Ident:
+			// if this is an identifier (found in some expression in the
+			// function being called or in one of the call's arguments),
+			// check if it is known to capture a loop variable. If so, add
+			// the suspect reference accordingly
+			if _, ok := v.closures[node.Obj]; ok {
+				addSuspect(&suspectReference{stmtType: stmtType, stmtPos: stmtPos, ref: node})
 			}
 		}
-	}
+
+		// keep traversing AST
+		return true
+	})
 }
 
 // visitFuncLit inspects a closure's body. This function returns:
@@ -694,4 +778,25 @@ func matchFunctions(pkg, obj, name string, functions []Function) bool {
 	}
 
 	return false
+}
+
+// objFromCall is a convenience function to extract the identifier
+// (ast.Ident) object from a call expression.
+//
+// e.g., if the `call` parameter represents the `obj.Run("foo")` tree,
+// this function will return the AST node for `obj`.
+//
+// It will return `nil` if the call does not fit the pattern above.
+func objFromCall(call *ast.CallExpr) *ast.Ident {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return nil
+	}
+
+	ident, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+
+	return ident
 }
