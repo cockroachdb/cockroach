@@ -68,7 +68,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 
 	db := s0.DB()
 	descriptors := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		NewCollection(ctx, nil /* TemporarySchemaProvider */)
+		NewCollection(ctx, nil /* TemporarySchemaProvider */, nil /* Monitor */)
 
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
@@ -640,7 +640,7 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 
 	// Create a `Collection` with monitor hooked up.
 	col := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		MakeCollection(ctx, nil /* temporarySchemaProvider */, monitor)
+		NewCollection(ctx, nil /* temporarySchemaProvider */, monitor)
 	require.Equal(t, int64(0), monitor.AllocBytes())
 
 	// Read all the descriptors into `col` and assert this read will finish without error.
@@ -659,7 +659,7 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 
 	// Repeat the process again and assert this time memory allocation will err out.
 	col = tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		MakeCollection(ctx, nil /* temporarySchemaProvider */, monitor)
+		NewCollection(ctx, nil /* temporarySchemaProvider */, monitor)
 	_, err2 := col.GetAllDescriptors(ctx, txn)
 	require.Error(t, err2)
 
