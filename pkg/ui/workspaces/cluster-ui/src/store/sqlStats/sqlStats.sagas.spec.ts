@@ -20,7 +20,6 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { getCombinedStatements } from "src/api/statementsApi";
 import { resetSQLStats } from "src/api/sqlStatsApi";
 import {
-  receivedSQLStatsSaga,
   refreshSQLStatsSaga,
   requestSQLStatsSaga,
   resetSQLStatsSaga,
@@ -89,26 +88,6 @@ describe("SQLStats sagas", () => {
     });
   });
 
-  describe("receivedSQLStatsSaga", () => {
-    it("sets valid status to false after specified period of time", () => {
-      const timeout = 500;
-      return expectSaga(receivedSQLStatsSaga, timeout)
-        .delay(timeout)
-        .put(actions.invalidated())
-        .withReducer(reducer, {
-          data: sqlStatsResponse,
-          lastError: null,
-          valid: true,
-        })
-        .hasFinalState<SQLStatsState>({
-          data: sqlStatsResponse,
-          lastError: null,
-          valid: false,
-        })
-        .run(1000);
-    });
-  });
-
   describe("resetSQLStatsSaga", () => {
     const resetSQLStatsResponse =
       new cockroach.server.serverpb.ResetSQLStatsResponse();
@@ -116,14 +95,13 @@ describe("SQLStats sagas", () => {
     it("successfully resets SQL stats", () => {
       return expectSaga(resetSQLStatsSaga, payload)
         .provide([[matchers.call.fn(resetSQLStats), resetSQLStatsResponse]])
-        .put(actions.invalidated())
         .put(sqlDetailsStatsActions.invalidateAll())
         .put(actions.refresh())
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
           data: null,
           lastError: null,
-          valid: false,
+          valid: true,
         })
         .run();
     });
