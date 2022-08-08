@@ -285,6 +285,7 @@ export class StatementsPage extends React.Component<
     const req = statementsRequestFromProps(this.props);
     this.props.refreshStatements(req);
   };
+
   resetSQLStats = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.resetSQLStats(req);

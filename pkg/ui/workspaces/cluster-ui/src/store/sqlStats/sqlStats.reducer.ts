@@ -25,6 +25,7 @@ export type SQLStatsState = {
 const initialState: SQLStatsState = {
   data: null,
   lastError: null,
+  // Data is valid if not in flight and no error was encountered.
   valid: true,
 };
 

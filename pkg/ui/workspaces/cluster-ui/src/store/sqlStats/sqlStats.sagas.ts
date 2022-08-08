@@ -9,14 +9,7 @@
 // licenses/APL.txt.
 
 import { PayloadAction } from "@reduxjs/toolkit";
-import {
-  all,
-  call,
-  put,
-  delay,
-  takeLatest,
-  takeEvery,
-} from "redux-saga/effects";
+import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
@@ -30,8 +23,6 @@ import {
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
-import { rootActions } from "../reducers";
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 import { toDateRange } from "../../timeScaleDropdown";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
@@ -41,17 +32,13 @@ export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
 export function* requestSQLStatsSaga(
   action: PayloadAction<StatementsRequest>,
 ): any {
+  yield put(sqlStatsActions.invalidated());
   try {
     const result = yield call(getCombinedStatements, action.payload);
     yield put(sqlStatsActions.received(result));
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }
-}
-
-export function* receivedSQLStatsSaga(delayMs: number) {
-  yield delay(delayMs);
-  yield put(sqlStatsActions.invalidated());
 }
 
 export function* updateSQLStatsTimeScaleSaga(
@@ -64,7 +51,6 @@ export function* updateSQLStatsTimeScaleSaga(
       value: ts,
     }),
   );
-  yield put(sqlStatsActions.invalidated());
   const [start, end] = toDateRange(ts);
   const req = new cockroach.server.serverpb.StatementsRequest({
     combined: true,
@@ -77,7 +63,6 @@ export function* updateSQLStatsTimeScaleSaga(
 export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   try {
     yield call(resetSQLStats);
-    yield put(sqlStatsActions.invalidated());
     yield put(sqlDetailsStatsActions.invalidateAll());
     yield put(sqlStatsActions.refresh(action.payload));
   } catch (e) {
@@ -85,22 +70,10 @@ export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   }
 }
 
-export function* sqlStatsSaga(
-  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
-) {
+export function* sqlStatsSaga() {
   yield all([
-    throttleWithReset(
-      cacheInvalidationPeriod,
-      sqlStatsActions.refresh,
-      [sqlStatsActions.invalidated, rootActions.resetState],
-      refreshSQLStatsSaga,
-    ),
+    takeLatest(sqlStatsActions.refresh, refreshSQLStatsSaga),
     takeLatest(sqlStatsActions.request, requestSQLStatsSaga),
-    takeLatest(
-      sqlStatsActions.received,
-      receivedSQLStatsSaga,
-      cacheInvalidationPeriod,
-    ),
     takeLatest(sqlStatsActions.updateTimeScale, updateSQLStatsTimeScaleSaga),
     takeEvery(sqlStatsActions.reset, resetSQLStatsSaga),
   ]);
