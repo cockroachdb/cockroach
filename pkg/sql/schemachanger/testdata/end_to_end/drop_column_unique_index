@@ -58,7 +58,7 @@ upsert descriptor #106
   +    state: DELETE_AND_WRITE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 8
+  +      constraintId: 5
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -86,7 +86,7 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 9
+  +      constraintId: 6
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -115,8 +115,8 @@ upsert descriptor #106
   +    state: DELETE_ONLY
      name: test
      nextColumnId: 5
-  -  nextConstraintId: 8
-  +  nextConstraintId: 10
+  -  nextConstraintId: 5
+  +  nextConstraintId: 7
      nextFamilyId: 1
   -  nextIndexId: 4
   +  nextIndexId: 6
@@ -311,8 +311,8 @@ upsert descriptor #106
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-  -      constraintId: 8
-  +      constraintId: 9
+  -      constraintId: 5
+  +      constraintId: 6
          createdExplicitly: true
          encodingType: 1
          foreignKey: {}
@@ -339,7 +339,7 @@ upsert descriptor #106
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-  -      constraintId: 9
+  -      constraintId: 6
   -      createdExplicitly: true
   +      constraintId: 1
   +      createdAtNanos: "1640995200000000000"
@@ -374,7 +374,7 @@ upsert descriptor #106
      primaryIndex:
   -    constraintId: 1
   -    createdAtNanos: "1640995200000000000"
-  +    constraintId: 8
+  +    constraintId: 5
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
@@ -475,7 +475,7 @@ upsert descriptor #106
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 9
+  -      constraintId: 6
   -      createdExplicitly: true
   -      encodingType: 1
   -      foreignKey: {}
