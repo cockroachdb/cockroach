@@ -337,7 +337,7 @@ type FuncObjs []FuncObj
 func (node FuncObjs) Format(ctx *FmtCtx) {
 	for i, f := range node {
 		if i > 0 {
-			ctx.WriteString(" ,")
+			ctx.WriteString(", ")
 		}
 		ctx.FormatNode(f)
 	}
