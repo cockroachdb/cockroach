@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -92,13 +91,6 @@ var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 	)
 	return s
 }()
-
-var importAtNow = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.import_at_current_time.enabled",
-	"write imported data at the current timestamp, when each batch is flushed",
-	true,
-)
 
 var readerParallelismSetting = settings.RegisterIntSetting(
 	settings.TenantWritable,
@@ -344,11 +336,6 @@ func ingestKvs(
 	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-	writeAtBatchTimestamp := true
-	if !importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
-		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster setting")
-		writeAtBatchTimestamp = false
-	}
 
 	var pkAdderName, indexAdderName = "rows", "indexes"
 	if len(spec.Tables) == 1 {
@@ -381,7 +368,7 @@ func ingestKvs(
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+		WriteAtBatchTimestamp:    true,
 	})
 	if err != nil {
 		return nil, err
@@ -397,7 +384,7 @@ func ingestKvs(
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
+		WriteAtBatchTimestamp:    true,
 	})
 	if err != nil {
 		return nil, err
