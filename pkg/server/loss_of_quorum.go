@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -55,8 +54,6 @@ func publishPendingLossOfQuorumRecoveryEvents(
 ) {
 	_ = stopper.RunAsyncTask(ctx, "publish-loss-of-quorum-events", func(ctx context.Context) {
 		if err := stores.VisitStores(func(s *kvserver.Store) error {
-			recoveryEventsSupported := s.ClusterSettings().Version.IsActive(ctx,
-				clusterversion.UnsafeLossOfQuorumRecoveryRangeLog)
 			_, err := loqrecovery.RegisterOfflineRecoveryEvents(
 				ctx,
 				s.Engine(),
@@ -65,11 +62,9 @@ func publishPendingLossOfQuorumRecoveryEvents(
 						return s.GetStoreConfig().SQLExecutor.ExecEx(ctx, "", nil,
 							sessiondata.InternalExecutorOverride{User: username.RootUserName()}, stmt, args...)
 					}
-					if recoveryEventsSupported {
-						if err := loqrecovery.UpdateRangeLogWithRecovery(ctx, sqlExec, record); err != nil {
-							return false, errors.Wrap(err,
-								"loss of quorum recovery failed to write RangeLog entry")
-						}
+					if err := loqrecovery.UpdateRangeLogWithRecovery(ctx, sqlExec, record); err != nil {
+						return false, errors.Wrap(err,
+							"loss of quorum recovery failed to write RangeLog entry")
 					}
 					// We only bump metrics as the last step when all processing of events
 					// is finished. This is done to ensure that we don't increase metrics
