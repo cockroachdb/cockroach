@@ -246,7 +246,7 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 // related to the sequence which will be used when evaluating the default
 // expression using the sequence.
 func (c *DatumRowConverter) getSequenceAnnotation(
-	evalCtx *eval.Context, cols []catalog.Column,
+	ctx context.Context, evalCtx *eval.Context, cols []catalog.Column,
 ) (map[string]*SequenceMetadata, map[descpb.ID]*SequenceMetadata, error) {
 	// Identify the sequences used in all the columns.
 	sequenceIDs := make(map[descpb.ID]struct{})
@@ -266,8 +266,8 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	// TODO(postamar): give the eval.Context a useful interface
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
-	descsCol := cf.NewCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
-	err := c.db.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+	descsCol := cf.NewCollection(ctx, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
+	err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
 		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
@@ -374,7 +374,7 @@ func NewDatumRowConverter(
 	var cellInfoAnnot CellInfoAnnotation
 	// Currently, this is only true for an IMPORT INTO CSV.
 	if seqChunkProvider != nil {
-		seqNameToMetadata, seqIDToMetadata, err := c.getSequenceAnnotation(evalCtx, c.cols)
+		seqNameToMetadata, seqIDToMetadata, err := c.getSequenceAnnotation(ctx, evalCtx, c.cols)
 		if err != nil {
 			return nil, err
 		}

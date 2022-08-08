@@ -331,8 +331,9 @@ func newZigzagJoiner(
 	z.numTables = len(spec.Sides)
 	z.infos = make([]zigzagJoinerInfo, z.numTables)
 
+	ctx := flowCtx.EvalCtx.Ctx()
 	collectingStats := false
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		collectingStats = true
 		z.ExecStatsForTrace = z.execStatsForTrace
 	}
@@ -353,7 +354,7 @@ func newZigzagJoiner(
 				return nil, err
 			}
 		}
-		if err := z.setupInfo(flowCtx, &spec.Sides[i], &z.infos[i], collectingStats); err != nil {
+		if err := z.setupInfo(ctx, flowCtx, &spec.Sides[i], &z.infos[i], collectingStats); err != nil {
 			return nil, err
 		}
 	}
@@ -420,6 +421,7 @@ type zigzagJoinerInfo struct {
 // number of the curInfo to set up.
 // Side specifies which the spec is associated with.
 func (z *zigzagJoiner) setupInfo(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ZigzagJoinerSpec_Side,
 	info *zigzagJoinerInfo,
@@ -458,7 +460,7 @@ func (z *zigzagJoiner) setupInfo(
 	// Setup the Fetcher.
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
-		flowCtx.EvalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			Txn:                        flowCtx.Txn,
 			LockStrength:               spec.LockingStrength,

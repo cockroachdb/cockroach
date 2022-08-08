@@ -46,7 +46,6 @@ func distBackupPlanSpecs(
 ) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "backupccl.distBackupPlanSpecs")
-	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 	defer span.Finish()
 	user := execCtx.User()
 
@@ -78,8 +77,7 @@ func distBackupPlanSpecs(
 			}
 		}()
 
-		encryption.Key, err = kms.Decrypt(planCtx.EvalContext().Context,
-			encryption.KMSInfo.EncryptedDataKey)
+		encryption.Key, err = kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
 		if err != nil {
 			return nil, errors.Wrap(err,
 				"failed to decrypt data key before starting BackupDataProcessor")

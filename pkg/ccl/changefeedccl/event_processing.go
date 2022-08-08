@@ -166,7 +166,7 @@ func newKVEventToRowConsumer(
 			return nil, err
 		}
 		safeExpr = tree.AsString(expr)
-		evaluator, err = cdceval.NewEvaluator(evalCtx, expr)
+		evaluator, err = cdceval.NewEvaluator(ctx, evalCtx, expr)
 		if err != nil {
 			return nil, err
 		}

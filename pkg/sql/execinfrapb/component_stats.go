@@ -11,7 +11,6 @@
 package execinfrapb
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -411,7 +410,7 @@ func ExtractStatsFromSpans(
 
 // ExtractNodesFromSpans extracts a list of node ids from a set of tracing
 // spans.
-func ExtractNodesFromSpans(ctx context.Context, spans []tracingpb.RecordedSpan) util.FastIntSet {
+func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) util.FastIntSet {
 	var nodes util.FastIntSet
 	// componentStats is only used to check whether a structured payload item is
 	// of ComponentStats type.

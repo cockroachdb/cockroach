@@ -144,9 +144,11 @@ func newTableReader(
 		return nil, err
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
-		flowCtx.EvalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			Txn:                        flowCtx.Txn,
 			Reverse:                    spec.Reverse,
@@ -170,7 +172,7 @@ func newTableReader(
 		tr.MakeSpansCopy()
 	}
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.ExecStatsForTrace = tr.execStatsForTrace
 	} else {

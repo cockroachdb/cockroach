@@ -417,7 +417,7 @@ func TestHashAggregator(t *testing.T) {
 	for _, tc := range hashAggregatorTestCases {
 		log.Infof(context.Background(), "%s", tc.name)
 		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
-			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+			context.Background(), &evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)
 		var typs [][]*types.T

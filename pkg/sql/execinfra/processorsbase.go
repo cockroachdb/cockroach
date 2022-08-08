@@ -160,7 +160,7 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
-			if err := h.renderExprs[i].Init(expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
+			if err := h.renderExprs[i].Init(evalCtx.Context, expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
 				return err
 			}
 			h.OutputTypes[i] = h.renderExprs[i].Expr.ResolvedType()
