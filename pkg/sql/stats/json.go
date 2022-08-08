@@ -128,7 +128,7 @@ func (js *JSONStatistic) DecodeAndSetHistogram(
 
 // GetHistogram converts the json histogram into HistogramData.
 func (js *JSONStatistic) GetHistogram(
-	semaCtx *tree.SemaContext, evalCtx *eval.Context,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context,
 ) (*HistogramData, error) {
 	if js.HistogramColumnType == "" {
 		return nil, nil
@@ -138,7 +138,7 @@ func (js *JSONStatistic) GetHistogram(
 	if err != nil {
 		return nil, err
 	}
-	colType, err := tree.ResolveType(evalCtx.Context, colTypeRef, semaCtx.GetTypeResolver())
+	colType, err := tree.ResolveType(ctx, colTypeRef, semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, err
 	}

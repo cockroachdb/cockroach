@@ -349,12 +349,14 @@ func newJoinReader(
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
 	}
 
+	ctx := flowCtx.EvalCtx.Ctx()
+
 	// Make sure the key column types are hydrated. The fetched column types will
 	// be hydrated in ProcessorBase.Init (via joinerBase.init).
 	resolver := flowCtx.NewTypeResolver(jr.txn)
 	for i := range spec.FetchSpec.KeyAndSuffixColumns {
 		if err := typedesc.EnsureTypeIsHydrated(
-			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+			ctx, spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
 		); err != nil {
 			return nil, err
 		}
@@ -409,12 +411,12 @@ func newJoinReader(
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
 		semaCtx := flowCtx.NewSemaContext(jr.txn)
-		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
+		if err := jr.lookupExpr.Init(ctx, spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
 			return nil, err
 		}
 		if !spec.RemoteLookupExpr.Empty() {
 			if err := jr.remoteLookupExpr.Init(
-				spec.RemoteLookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx,
+				ctx, spec.RemoteLookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx,
 			); err != nil {
 				return nil, err
 			}
@@ -440,7 +442,7 @@ func newJoinReader(
 	jr.MemMonitor = mon.NewMonitorInheritWithLimit(
 		"joinreader-mem" /* name */, memoryLimit, flowCtx.EvalCtx.Mon,
 	)
-	jr.MemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
+	jr.MemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
 	if err := jr.initJoinReaderStrategy(flowCtx, rightTypes, readerType); err != nil {
@@ -536,7 +538,7 @@ func newJoinReader(
 
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
-		flowCtx.EvalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			StreamingKVFetcher:         streamingKVFetcher,
 			Txn:                        jr.txn,
@@ -554,7 +556,7 @@ func newJoinReader(
 		return nil, err
 	}
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
