@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "certnames.go",
         "doc.go",
+        "embedded.go",
         "locator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/security/certnames",

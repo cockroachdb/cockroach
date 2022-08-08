@@ -95,6 +95,7 @@ go_test(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/security/certnames",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

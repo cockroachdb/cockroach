@@ -20,6 +20,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/security/certnames",
         "//pkg/security/username",
         "//pkg/util/contextutil",
         "//pkg/util/log",

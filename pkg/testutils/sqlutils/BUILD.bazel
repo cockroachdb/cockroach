@@ -19,7 +19,7 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/certnames",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/lexbase",

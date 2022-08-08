@@ -17,33 +17,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// EmbeddedCertsDir is the certs directory inside embedded assets.
-// Embedded*{Cert,Key} are the filenames for embedded certs.
-const (
-	EmbeddedCertsDir     = "test_certs"
-	EmbeddedCACert       = "ca.crt"
-	EmbeddedCAKey        = "ca.key"
-	EmbeddedClientCACert = "ca-client.crt"
-	EmbeddedClientCAKey  = "ca-client.key"
-	EmbeddedUICACert     = "ca-ui.crt"
-	EmbeddedUICAKey      = "ca-ui.key"
-	EmbeddedNodeCert     = "node.crt"
-	EmbeddedNodeKey      = "node.key"
-	EmbeddedRootCert     = "client.root.crt"
-	EmbeddedRootKey      = "client.root.key"
-	EmbeddedTestUserCert = "client.testuser.crt"
-	EmbeddedTestUserKey  = "client.testuser.key"
-)
-
 // EmbeddedTenantIDs lists the tenants we embed certs for.
 // See 'securitytest/test_certs/regenerate.sh'.
 var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
-
-// Embedded certificates specific to multi-tenancy testing.
-const (
-	EmbeddedTenantCACert = "ca-client-tenant.crt" // CA for client connections
-	EmbeddedTenantCAKey  = "ca-client-tenant.key" // CA for client connections
-)
 
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
 // - the certificate of this node (should be signed by the CA),
