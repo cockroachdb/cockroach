@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -111,6 +112,10 @@ func DequalifyAndValidateExpr(
 
 	if err != nil {
 		return "", nil, colIDs, err
+	}
+
+	if err := tree.MaybeFailOnUDFUsage(typedExpr); err != nil {
+		return "", nil, colIDs, unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
 	}
 
 	return tree.Serialize(typedExpr), typedExpr.ResolvedType(), colIDs, nil
