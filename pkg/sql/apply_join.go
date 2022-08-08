@@ -114,7 +114,7 @@ func (a *applyJoinNode) startExec(params runParams) error {
 		}
 	}
 	a.run.out = make(tree.Datums, len(a.columns))
-	a.run.rightRows.Init(a.rightTypes, params.extendedEvalCtx, "apply-join" /* opName */)
+	a.run.rightRows.Init(params.ctx, a.rightTypes, params.extendedEvalCtx, "apply-join" /* opName */)
 	return nil
 }
 

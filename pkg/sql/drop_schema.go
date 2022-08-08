@@ -173,6 +173,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 
 	// Create the job to drop the schema.
 	if err := p.createDropSchemaJob(
+		params.ctx,
 		schemaIDs,
 		n.d.getDroppedTableDetails(),
 		n.d.typesToDelete,
@@ -238,6 +239,7 @@ func (p *planner) dropSchemaImpl(
 }
 
 func (p *planner) createDropSchemaJob(
+	ctx context.Context,
 	schemas []descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
 	typesToDrop []*typedesc.Mutable,
@@ -248,7 +250,7 @@ func (p *planner) createDropSchemaJob(
 		typeIDs = append(typeIDs, t.ID)
 	}
 
-	_, err := p.extendedEvalCtx.QueueJob(p.EvalContext().Ctx(), jobs.Record{
+	_, err := p.extendedEvalCtx.QueueJob(ctx, jobs.Record{
 		Description:   jobDesc,
 		Username:      p.User(),
 		DescriptorIDs: schemas,

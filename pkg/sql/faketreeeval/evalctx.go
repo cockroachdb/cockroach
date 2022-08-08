@@ -241,7 +241,9 @@ func (*DummyEvalPlanner) SerializeSessionState() (*tree.DBytes, error) {
 }
 
 // DeserializeSessionState is part of the Planner interface.
-func (*DummyEvalPlanner) DeserializeSessionState(token *tree.DBytes) (*tree.DBool, error) {
+func (*DummyEvalPlanner) DeserializeSessionState(
+	ctx context.Context, token *tree.DBytes,
+) (*tree.DBool, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

@@ -42,7 +42,7 @@ func (p *planner) EvalRoutineExpr(
 	// of any preceding statements is ignored. We set up a rowResultWriter that
 	// can store the results of the final statement here.
 	var rch rowContainerHelper
-	rch.Init(retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
+	rch.Init(ctx, retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
 	defer rch.Close(ctx)
 	rrw := NewRowResultWriter(&rch)
 

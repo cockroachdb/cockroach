@@ -237,7 +237,7 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 	case *tree.SetSessionAuthorizationDefault:
 		return p.SetSessionAuthorizationDefault()
 	case *tree.SetSessionCharacteristics:
-		return p.SetSessionCharacteristics(n)
+		return p.SetSessionCharacteristics(ctx, n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowTenantClusterSetting:

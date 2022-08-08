@@ -35,9 +35,12 @@ type rowContainerHelper struct {
 }
 
 func (c *rowContainerHelper) Init(
-	typs []*types.T, evalContext *extendedEvalContext, opName redact.RedactableString,
+	ctx context.Context,
+	typs []*types.T,
+	evalContext *extendedEvalContext,
+	opName redact.RedactableString,
 ) {
-	c.initMonitors(evalContext, opName)
+	c.initMonitors(ctx, evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
@@ -50,9 +53,12 @@ func (c *rowContainerHelper) Init(
 // InitWithDedup is a variant of init that is used if row deduplication
 // functionality is needed (see addRowWithDedup).
 func (c *rowContainerHelper) InitWithDedup(
-	typs []*types.T, evalContext *extendedEvalContext, opName redact.RedactableString,
+	ctx context.Context,
+	typs []*types.T,
+	evalContext *extendedEvalContext,
+	opName redact.RedactableString,
 ) {
-	c.initMonitors(evalContext, opName)
+	c.initMonitors(ctx, evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	// The DiskBackedRowContainer can be configured to deduplicate along the
@@ -72,15 +78,15 @@ func (c *rowContainerHelper) InitWithDedup(
 }
 
 func (c *rowContainerHelper) initMonitors(
-	evalContext *extendedEvalContext, opName redact.RedactableString,
+	ctx context.Context, evalContext *extendedEvalContext, opName redact.RedactableString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
-		evalContext.Ctx(), evalContext.Mon, distSQLCfg, evalContext.SessionData(),
+		ctx, evalContext.Mon, distSQLCfg, evalContext.SessionData(),
 		redact.Sprintf("%s-limited", opName),
 	)
 	c.diskMonitor = execinfra.NewMonitor(
-		evalContext.Ctx(), distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
+		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
 	)
 }
 
