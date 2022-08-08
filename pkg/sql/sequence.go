@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
@@ -770,20 +771,24 @@ func (p *planner) dropSequencesOwnedByCol(
 	return nil
 }
 
-// removeSequenceDependencies:
+// removeSequenceDependencies
 //   - removes the reference from the column descriptor to the sequence descriptor.
 //   - removes the reference from the sequence descriptor to the column descriptor.
-//   - writes the sequence descriptor and notifies a schema change.
-// The column descriptor is mutated but not saved to persistent storage; the caller must save it.
-func (p *planner) removeSequenceDependencies(
-	ctx context.Context, tableDesc *tabledesc.Mutable, col catalog.Column,
-) error {
+// Caller must create a schema change job.
+func removeSequenceDependencies(
+	ctx context.Context,
+	descCol *descs.Collection,
+	txn *kv.Txn,
+	tableDesc *tabledesc.Mutable,
+	col catalog.Column,
+) ([]*tabledesc.Mutable, error) {
+	var seqDescs []*tabledesc.Mutable
 	for i := 0; i < col.NumUsesSequences(); i++ {
 		sequenceID := col.GetUsesSequenceID(i)
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
+		seqDesc, err := descCol.GetMutableTableVersionByID(ctx, sequenceID, txn)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// If the sequence descriptor has been dropped, we do not need to unlink the
 		// dependency. This can happen during a `DROP DATABASE CASCADE` when both
@@ -819,7 +824,7 @@ func (p *planner) removeSequenceDependencies(
 			}
 		}
 		if refColIdx == -1 {
-			return errors.AssertionFailedf("couldn't find reference from sequence to this column")
+			return nil, errors.AssertionFailedf("couldn't find reference from sequence to this column")
 		}
 		// Remove the column ID from the sequence descriptors list of things that
 		// depend on it. If the column was the only column that depended on the
@@ -834,6 +839,26 @@ func (p *planner) removeSequenceDependencies(
 				seqDesc.DependedOnBy[refTableIdx+1:]...)
 		}
 
+		seqDescs = append(seqDescs, seqDesc)
+	}
+	// Remove the reference from the column descriptor to the sequence descriptor.
+	col.ColumnDesc().UsesSequenceIds = []descpb.ID{}
+	return seqDescs, nil
+}
+
+// removeSequenceDependencies:
+//   - removes the reference from the column descriptor to the sequence descriptor.
+//   - removes the reference from the sequence descriptor to the column descriptor.
+//   - writes the sequence descriptor and notifies a schema change.
+// The column descriptor is mutated but not saved to persistent storage; the caller must save it.
+func (p *planner) removeSequenceDependencies(
+	ctx context.Context, tableDesc *tabledesc.Mutable, col catalog.Column,
+) error {
+	seqDescs, err := removeSequenceDependencies(ctx, p.Descriptors(), p.Txn(), tableDesc, col)
+	if err != nil {
+		return err
+	}
+	for _, seqDesc := range seqDescs {
 		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
 			seqDesc.Name, col.ColName())
 		if err := p.writeSchemaChange(
@@ -842,7 +867,5 @@ func (p *planner) removeSequenceDependencies(
 			return err
 		}
 	}
-	// Remove the reference from the column descriptor to the sequence descriptor.
-	col.ColumnDesc().UsesSequenceIds = []descpb.ID{}
 	return nil
 }

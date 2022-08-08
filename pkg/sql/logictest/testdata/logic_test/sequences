@@ -2311,3 +2311,18 @@ SELECT nextval('customer_seq_check_cache_and_bounds_3')
 
 statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "customer_seq_check_cache_and_bounds_3" \(12\)
 SELECT nextval('customer_seq_check_cache_and_bounds_3')
+
+# Tests for issue #84673, which is linked to improper back reference clean up
+# for sequences when during add column rollback.
+subtest add_column_back_refs
+
+statement ok
+create table t_with_seq_back_ref(i int primary key);
+insert into t select generate_series(1 ,10);
+create sequence seq_for_back_ref_test;
+
+statement error pgcode 0A000 unimplemented: cannot evaluate scalar expressions containing sequence operations.*\nHINT.*\n.*42508
+alter table t add column j int not null default nextval('seq_for_back_ref_test');
+
+statement ok
+drop sequence seq_for_back_ref_test;

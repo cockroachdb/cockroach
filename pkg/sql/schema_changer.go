@@ -2024,7 +2024,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// by running a graph traversal of the mutations.
 		if len(columns) > 0 {
 			var err error
-			droppedMutations, err = sc.deleteIndexMutationsWithReversedColumns(ctx, scTable, columns)
+			droppedMutations, err = sc.deleteIndexMutationsWithReversedColumns(ctx, descsCol, txn, scTable, columns)
 			if err != nil {
 				return err
 			}
@@ -2179,7 +2179,11 @@ func (sc *SchemaChanger) startingStateForAddIndexMutations() descpb.DescriptorMu
 // references one of the reversed columns. Execute this as a breadth
 // first search graph traversal.
 func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
-	ctx context.Context, desc *tabledesc.Mutable, columns map[string]struct{},
+	ctx context.Context,
+	descsCol *descs.Collection,
+	txn *kv.Txn,
+	desc *tabledesc.Mutable,
+	columns map[string]struct{},
 ) (map[descpb.MutationID]struct{}, error) {
 	dropMutations := make(map[descpb.MutationID]struct{})
 	// Run breadth first search traversal that reverses mutations
@@ -2221,6 +2225,18 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 				// columns that have been purged. This mutation doesn't need
 				// a rollback because it was not started.
 				mutation, columns = sc.reverseMutation(mutation, true /*notStarted*/, columns)
+				// Remove any sequence back referneces related to columns, if we end up
+				// dropping a column
+				if colMut := mutation.GetColumn(); colMut != nil && mutation.Direction == descpb.DescriptorMutation_DROP {
+					col, err := desc.FindColumnWithID(colMut.ID)
+					if err != nil {
+						return nil, err
+					}
+					_, err = removeSequenceDependencies(ctx, descsCol, txn, desc, col)
+					if err != nil {
+						return nil, err
+					}
+				}
 				// Mark as complete because this mutation needs no backfill.
 				if err := desc.MakeMutationComplete(mutation); err != nil {
 					return nil, err
