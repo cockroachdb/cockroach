@@ -230,6 +230,15 @@ func (r *Replica) updatePausedFollowersLocked(
 		return
 	}
 
+	status := r.leaseStatusAtRLocked(ctx, r.Clock().NowAsClockTimestamp())
+	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
+		// If we're not the leaseholder (which includes the case in which we just
+		// transferred the lease away), leave all followers unpaused. Otherwise, the
+		// leaseholder won't learn that the entries it submitted were committed
+		// which effectively causes range unavailability.
+		return
+	}
+
 	// When multiple followers are overloaded, we may not be able to exclude all
 	// of them from replication traffic due to quorum constraints. We would like
 	// a given Range to deterministically exclude the same store (chosen
