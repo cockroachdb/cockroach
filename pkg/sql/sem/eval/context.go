@@ -153,6 +153,8 @@ type Context struct {
 
 	JoinTokenCreator JoinTokenCreator
 
+	Gossip GossipOperator
+
 	PreparedStatementState PreparedStatementState
 
 	// The transaction in which the statement is executing.
