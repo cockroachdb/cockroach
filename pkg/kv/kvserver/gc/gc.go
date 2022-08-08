@@ -219,9 +219,11 @@ type Info struct {
 	// AffectedVersionsRangeValBytes is the number of (fully encoded) bytes deleted from values that
 	// belong to removed range keys.
 	AffectedVersionsRangeValBytes int64
-	// FullRangeDeleteOperations is 1 if fast path delete range request was successfully used to
-	// remove all replicated data from a range.
-	FullRangeDeleteOperations int64
+	// ClearRangeRequestsOperations is a number of clear range operations issue by GC
+	ClearRangeRequestsOperations int
+	// ClearRangeRequestsAbandoned is a number of clear range operations which were abandoned because
+	// resulting clear range request is too small and point deletes would make more sense.
+	ClearRangeRequestsAbandoned int
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
@@ -508,20 +510,26 @@ func processReplicatedKeyRange(
 // gcBatchCounters contain statistics about garbage that is collected for the
 // range of keys.
 type gcBatchCounters struct {
-	keyBytes, valBytes int64
-	keysAffected       int
+	keyBytes, valBytes          int64
+	keysAffected                int
+	clearRangeRequests          int
+	clearRangeRequestsAbandoned int
 }
 
 func (c gcBatchCounters) updateGcInfo(info *Info) {
 	info.AffectedVersionsKeyBytes += c.keyBytes
 	info.AffectedVersionsValBytes += c.valBytes
 	info.NumKeysAffected += c.keysAffected
+	info.ClearRangeRequestsOperations += c.clearRangeRequests
+	info.ClearRangeRequestsAbandoned += c.clearRangeRequestsAbandoned
 }
 
 func (c *gcBatchCounters) merge(other gcBatchCounters) {
 	c.keyBytes += other.keyBytes
 	c.valBytes += other.valBytes
 	c.keysAffected += other.keysAffected
+	c.clearRangeRequests += other.clearRangeRequests
+	c.clearRangeRequestsAbandoned += other.clearRangeRequestsAbandoned
 }
 
 // batchingState contains transient information that allows GC to rollback its
@@ -801,6 +809,7 @@ func (b *gcKeyBatcher) maybeFlushPendingRange(
 		rewindKey = b.state.lastKey.lastProcessedKey
 		cnt, err := b.flushPointsBatch(ctx)
 		b.canDeleteRange = false
+		cnt.clearRangeRequestsAbandoned++
 		return rewindKey, cnt, err
 	}
 	return b.flushRangeBatch(ctx)
@@ -840,6 +849,7 @@ func (b *gcKeyBatcher) flushRangeBatch(
 	// prevWasNewest to true to allow for key capture for the next object.
 	b.state.prevWasNewest = true
 
+	counterUpdate.clearRangeRequests++
 	return rewindKey, counterUpdate, nil
 }
 

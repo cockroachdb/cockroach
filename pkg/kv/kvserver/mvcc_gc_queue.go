@@ -669,6 +669,8 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCAbortSpanGCNum.Inc(int64(info.AbortSpanGCNum))
 	metrics.GCPushTxn.Inc(int64(info.PushTxn))
 	metrics.GCResolveTotal.Inc(int64(info.ResolveTotal))
+	metrics.GCClearRangesIssued.Inc(int64(info.ClearRangeRequestsOperations))
+	metrics.GCClearRangeAbandoned.Inc(int64(info.ClearRangeRequestsAbandoned))
 }
 
 // timer returns a constant duration to space out GC processing
