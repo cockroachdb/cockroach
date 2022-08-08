@@ -67,6 +67,8 @@ export const filters: Filters = {
   nodes: "",
 };
 
+export const lastUpdated = moment();
+
 export const data: cockroach.server.serverpb.IStatementsResponse = {
   statements: [
     {

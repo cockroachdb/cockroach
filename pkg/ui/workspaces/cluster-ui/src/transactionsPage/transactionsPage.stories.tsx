@@ -20,6 +20,7 @@ import {
   timeScale,
   sortSetting,
   filters,
+  lastUpdated,
 } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
@@ -47,6 +48,7 @@ storiesOf("Transactions Page", module)
       resetSQLStats={noop}
       search={""}
       sortSetting={sortSetting}
+      lastUpdated={lastUpdated}
     />
   ))
   .add("without data", () => {
@@ -64,6 +66,7 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
       />
     );
   })
@@ -89,6 +92,7 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
       />
     );
   })
@@ -107,6 +111,7 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
       />
     );
   })
@@ -132,6 +137,7 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        lastUpdated={lastUpdated}
       />
     );
   });
