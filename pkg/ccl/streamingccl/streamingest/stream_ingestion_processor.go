@@ -210,6 +210,7 @@ var (
 const streamIngestionProcessorName = "stream-ingestion-processor"
 
 func newStreamIngestionDataProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.StreamIngestionDataSpec,
@@ -253,7 +254,7 @@ func newStreamIngestionDataProcessor(
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 	}
-	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
