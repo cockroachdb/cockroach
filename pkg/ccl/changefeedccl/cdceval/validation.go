@@ -109,7 +109,7 @@ func NormalizeAndValidateSelectForTarget(
 
 	// Construct and initialize evaluator.  This performs some static checks,
 	// and (importantly) type checks expressions.
-	evaluator, err := NewEvaluator(evalCtx, sc)
+	evaluator, err := NewEvaluator(ctx, evalCtx, sc)
 	if err != nil {
 		return n, target, err
 	}

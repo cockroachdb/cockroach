@@ -344,7 +344,7 @@ func (ih *instrumentationHelper) Finish(
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
-			p.EvalContext().Context,
+			ctx,
 			p.SessionData(),
 		)
 		phaseTimes := statsCollector.PhaseTimes()

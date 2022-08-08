@@ -135,7 +135,7 @@ func (ag *aggregatorBase) init(
 			}
 		}
 		constructor, arguments, outputType, err := execagg.GetAggregateConstructor(
-			flowCtx.EvalCtx, semaCtx, &aggInfo, ag.inputTypes,
+			ctx, flowCtx.EvalCtx, semaCtx, &aggInfo, ag.inputTypes,
 		)
 		if err != nil {
 			return err

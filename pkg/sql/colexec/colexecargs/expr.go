@@ -11,6 +11,7 @@
 package colexecargs
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -42,12 +43,12 @@ type ExprHelper struct {
 //
 // evalCtx will not be mutated.
 func (h *ExprHelper) ProcessExpr(
-	expr execinfrapb.Expression, evalCtx *eval.Context, typs []*types.T,
+	ctx context.Context, expr execinfrapb.Expression, evalCtx *eval.Context, typs []*types.T,
 ) (tree.TypedExpr, error) {
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
 	h.helper.Types = typs
 	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
-	return execinfrapb.DeserializeExpr(expr.Expr, h.SemaCtx, evalCtx, &tempVars)
+	return execinfrapb.DeserializeExpr(ctx, expr.Expr, h.SemaCtx, evalCtx, &tempVars)
 }

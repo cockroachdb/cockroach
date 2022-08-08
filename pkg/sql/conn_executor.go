@@ -3255,6 +3255,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		return nil
 	}
 	deps := newSchemaChangerTxnRunDependencies(
+		ctx,
 		ex.planner.SessionData(),
 		ex.planner.User(),
 		ex.server.cfg,
