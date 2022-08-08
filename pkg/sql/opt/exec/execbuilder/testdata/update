@@ -130,7 +130,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new, y_new)
-    │ estimated row count: 1,000 (missing stats)
     │ render x_new: 1
     │ render y_new: 2
     │ render x: x
@@ -185,7 +184,6 @@ vectorized: true
     │
     └── • render
         │ columns: (x_new, x, y, z)
-        │ estimated row count: 1,000 (missing stats)
         │ render x_new: 2
         │ render x: x
         │ render y: y
@@ -219,7 +217,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new)
-    │ estimated row count: 990 (missing stats)
     │ render x_new: 5
     │ render x: x
     │ render y: y
@@ -252,7 +249,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new)
-    │ estimated row count: 990 (missing stats)
     │ render x_new: 5
     │ render x: x
     │ render y: y
@@ -395,7 +391,6 @@ vectorized: true
         │
         └── • project
             │ columns: (a)
-            │ estimated row count: 1,000 (missing stats)
             │
             └── • update
                 │ columns: (a, rowid)
@@ -456,7 +451,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, c, c_new)
-    │ estimated row count: 1 (missing stats)
     │ render c_new: 2
     │ render a: a
     │ render b: b
@@ -662,7 +656,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new, y_new)
-    │ estimated row count: 1,000 (missing stats)
     │ render x_new: 1
     │ render y_new: 2
     │ render x: x
@@ -794,7 +787,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, c, d, c_new)
-    │ estimated row count: 1,000 (missing stats)
     │ render c_new: c + 1
     │ render a: a
     │ render c: c

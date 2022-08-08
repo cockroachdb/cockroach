@@ -419,6 +419,7 @@ regions: <hidden>
                       nodes: <hidden>
                       regions: <hidden>
                       actual row count: 1
+                      estimated row count: 1
                       label: buffer 1
 ·
 Diagram 1 (subquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJysU9Fq2zAUfd9XXO5TAiqxUwbDT-1CBqGpU5I0MEYoqnxxRW3Jk67XZCWftR_Ylw1b9VZTmm1sT7bOvUe65-joEf3nAhOcpavpcg2zdL0AdaeLDDbn8-vpCgaxgMFqOp9O1lBqM6iG8GG5uIRKOjI8HKJAYzNKZUkek08Yo8C3uBVYOavIe-sa-LFtmmU7TCKB2lQ1N_BWoLKOMHlE1lwQJpjaE1uNxigwI5a6aDelHamatTXAuqQEou_fPAq8lazuyIOtuao5gQgFOvvwC4hxexAYVk_neZY5YXJ6EM9mio_PtJa3BS1JZuRGUX-yYMNZ-NxU97RHgRNb1KXxCVQocFXJ5vcEBc51qRkahy42fSUXG1DWMJmXIi820GpyJLOkI9_umTroHbwPYL68moCSReFD3-VmMgHPVIGytWEY0I5H2vAwgajVERqI7l9rKOUOSiqt24MsCqskU5ZA1B74D-bHf2P-eZ47yiVbN4r73p-nH2_SxfomvZ7PB2dxE8X_H5Rxb9bfhHdJvrLGU2_O13aODluBlOUUHoi3tVN05axqjwnLRctrgYw8h-ppWMxMKDUDPifHR8nj4-TxUXLUJ7dSWlVoiB-su4dCMhm1_-l8hz9Izf07yciT07LQX-XLC-toT8lXpL_QU_q7UvcEulp4Bl21JO9l3muI_jQI28ObHwEAAP__GAys-A==

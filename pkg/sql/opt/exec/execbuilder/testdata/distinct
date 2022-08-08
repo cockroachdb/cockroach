@@ -199,7 +199,6 @@ vectorized: true
 • render
 │ columns: (z, d, b)
 │ ordering: +d,+b
-│ estimated row count: 1,000 (missing stats)
 │ render z: 1
 │ render b: b
 │ render d: d

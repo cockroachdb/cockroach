@@ -271,6 +271,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -287,6 +288,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # No need to plan checks for w since it's always null.
@@ -322,6 +324,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
@@ -475,6 +478,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -487,6 +491,7 @@ vectorized: true
 │           │ pred: column2 != b
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -593,7 +598,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -612,6 +616,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -628,6 +633,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Combine unique checks with foreign keys. There should be two foreign key
@@ -647,7 +653,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -666,6 +671,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -681,6 +687,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -696,6 +703,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Test that we use the index when available for the insert checks.
@@ -719,7 +727,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (column1, column2, column3, column4, check1)
-│           │ estimated row count: 2
 │           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
 │           │ render column1: column1
 │           │ render column2: column2
@@ -745,7 +752,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (column3)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (column1, column3)
@@ -756,10 +762,10 @@ vectorized: true
 │               │
 │               └── • project
 │                   │ columns: (column1, column3)
-│                   │ estimated row count: 2
 │                   │
 │                   └── • scan buffer
 │                         columns: (column1, column2, column3, column4, check1)
+│                         estimated row count: 2
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -769,7 +775,6 @@ vectorized: true
         │
         └── • project
             │ columns: (column2, column4)
-            │ estimated row count: 1 (missing stats)
             │
             └── • lookup join (semi)
                 │ columns: (column1, column2, column3, column4)
@@ -780,10 +785,10 @@ vectorized: true
                 │
                 └── • project
                     │ columns: (column1, column2, column3, column4)
-                    │ estimated row count: 2
                     │
                     └── • scan buffer
                           columns: (column1, column2, column3, column4, check1)
+                          estimated row count: 2
                           label: buffer 1
 
 # Test that we use the index when available for the insert checks. This uses
@@ -808,7 +813,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (r_default, column1, column2, j_default, check1)
-│           │ estimated row count: 2
 │           │ render check1: r_default IN ('us-east', 'us-west', 'eu-west')
 │           │ render column1: column1
 │           │ render column2: column2
@@ -817,7 +821,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (r_default, j_default, column1, column2)
-│               │ estimated row count: 2
 │               │ render r_default: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
 │               │ render j_default: CAST(NULL AS INT8)
 │               │ render column1: column1
@@ -838,7 +841,6 @@ vectorized: true
         │
         └── • project
             │ columns: (column2)
-            │ estimated row count: 1 (missing stats)
             │
             └── • lookup join (semi)
                 │ columns: (r_default, column2)
@@ -849,10 +851,10 @@ vectorized: true
                 │
                 └── • project
                     │ columns: (r_default, column2)
-                    │ estimated row count: 2
                     │
                     └── • scan buffer
                           columns: (r_default, column1, column2, j_default, check1)
+                          estimated row count: 2
                           label: buffer 1
 
 # Test that we use the index when available for de-duplicating INSERT ON
@@ -873,7 +875,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, column3, column4, check1)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
     │ render column1: column1
     │ render column2: column2
@@ -969,6 +970,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # No need to plan checks for a since it's always null.
@@ -1010,6 +1012,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
@@ -1030,7 +1033,6 @@ vectorized: true
 │
 └── • project
     │ columns: (column1, column2, column3)
-    │ estimated row count: 0 (missing stats)
     │
     └── • distinct
         │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
@@ -1040,7 +1042,6 @@ vectorized: true
         │
         └── • render
             │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
-            │ estimated row count: 0 (missing stats)
             │ render arbiter_unique_b_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
             │ render column1: column1
             │ render column2: column2
@@ -1054,7 +1055,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
-                    │ estimated row count: 0 (missing stats)
                     │ render arbiter_unique_a_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
                     │ render column1: column1
                     │ render column2: column2
@@ -1255,7 +1255,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (column1, column2, column3, column4, check1, partial_index_put1)
-│           │ estimated row count: 2
 │           │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
 │           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
 │           │ render column1: column1
@@ -1282,7 +1281,6 @@ vectorized: true
         │
         └── • project
             │ columns: (column3)
-            │ estimated row count: 1
             │
             └── • lookup join (semi)
                 │ columns: (column1, column2, column3, column4)
@@ -1298,10 +1296,10 @@ vectorized: true
                     │
                     └── • project
                         │ columns: (column1, column2, column3, column4)
-                        │ estimated row count: 2
                         │
                         └── • scan buffer
                               columns: (column1, column2, column3, column4, check1, partial_index_put1)
+                              estimated row count: 2
                               label: buffer 1
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
@@ -1323,7 +1321,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, column3, column4, check1, partial_index_put1)
-    │ estimated row count: 0
     │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
     │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
     │ render column1: column1
@@ -1339,7 +1336,6 @@ vectorized: true
         │
         └── • render
             │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
-            │ estimated row count: 0
             │ render arbiter_unique_b_distinct: (column4 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
             │ render column1: column1
             │ render column2: column2
@@ -1390,7 +1386,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -1409,6 +1404,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
@@ -1445,6 +1441,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 # The default value of id1 is gen_random_uuid(), so we don't need to plan checks
@@ -1482,6 +1479,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 # We can also detect gen_random_uuid() when it is a projection.
@@ -1558,6 +1556,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 1
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -1575,6 +1574,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok
@@ -2088,7 +2088,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (r, s, i, j, r_new, s_new, i_new, check1)
-│           │ estimated row count: 9 (missing stats)
 │           │ render check1: r_new IN ('us-east', 'us-west', 'eu-west')
 │           │ render r: r
 │           │ render s: s
@@ -2100,7 +2099,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (r_new, s_new, i_new, r, s, i, j)
-│               │ estimated row count: 9 (missing stats)
 │               │ render r_new: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
 │               │ render s_new: 'baz'
 │               │ render i_new: 3
@@ -2124,7 +2122,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (i_new)
-│           │ estimated row count: 3 (missing stats)
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (r_new, i_new)
@@ -2135,10 +2132,10 @@ vectorized: true
 │               │
 │               └── • project
 │                   │ columns: (r_new, i_new)
-│                   │ estimated row count: 9 (missing stats)
 │                   │
 │                   └── • scan buffer
 │                         columns: (r, s, i, j, r_new, s_new, i_new, check1)
+│                         estimated row count: 9 (missing stats)
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -2148,7 +2145,6 @@ vectorized: true
         │
         └── • project
             │ columns: (s_new, j)
-            │ estimated row count: 3 (missing stats)
             │
             └── • lookup join (semi)
                 │ columns: (r_new, s_new, i_new, j)
@@ -2159,10 +2155,10 @@ vectorized: true
                 │
                 └── • project
                     │ columns: (r_new, s_new, i_new, j)
-                    │ estimated row count: 9 (missing stats)
                     │
                     └── • scan buffer
                           columns: (r, s, i, j, r_new, s_new, i_new, check1)
+                          estimated row count: 9 (missing stats)
                           label: buffer 1
 
 # None of the updated values have nulls.
@@ -2393,7 +2389,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (partial_index_put1, b_new, r, a, b, c)
-│               │ estimated row count: 1
 │               │ render partial_index_put1: c IN ('bar', 'baz', 'foo')
 │               │ render b_new: 20
 │               │ render r: r
@@ -2416,7 +2411,6 @@ vectorized: true
         │
         └── • project
             │ columns: (b_new)
-            │ estimated row count: 0
             │
             └── • lookup join (semi)
                 │ columns: (r, a, b_new, c)
@@ -2432,10 +2426,10 @@ vectorized: true
                     │
                     └── • project
                         │ columns: (r, a, b_new, c)
-                        │ estimated row count: 1
                         │
                         └── • scan buffer
                               columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
+                              estimated row count: 1
                               label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
@@ -2630,7 +2624,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -2693,7 +2686,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -2757,7 +2749,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 2 columns, 2 rows
@@ -2894,7 +2885,6 @@ vectorized: true
 │               │     spans: FULL SCAN
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -3090,7 +3080,6 @@ vectorized: true
 │                   │ error on duplicate
 │                   │
 │                   └── • render
-│                       │ estimated row count: 2
 │                       │
 │                       └── • values
 │                             size: 3 columns, 2 rows
@@ -3168,7 +3157,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -3187,6 +3175,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -3202,6 +3191,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -3217,6 +3207,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Test that we use the index when available for the upsert checks.
@@ -3244,7 +3235,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, column1, column2, column3, column4, r, s, i, j, upsert_r, upsert_i)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
 │               │ render column1: column1
 │               │ render column2: column2
@@ -3259,7 +3249,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_i, column1, column2, column3, column4, r, s, i, j)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
 │                   │ render upsert_i: CASE WHEN r IS NULL THEN column3 ELSE i END
 │                   │ render column1: column1
@@ -3298,7 +3287,6 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (upsert_i)
-│           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (upsert_r, upsert_i)
@@ -3309,10 +3297,10 @@ vectorized: true
 │               │
 │               └── • project
 │                   │ columns: (upsert_r, upsert_i)
-│                   │ estimated row count: 2 (missing stats)
 │                   │
 │                   └── • scan buffer
 │                         columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+│                         estimated row count: 2 (missing stats)
 │                         label: buffer 1
 │
 └── • constraint-check
@@ -3322,7 +3310,6 @@ vectorized: true
         │
         └── • project
             │ columns: (column2, column4)
-            │ estimated row count: 1 (missing stats)
             │
             └── • lookup join (semi)
                 │ columns: (upsert_r, column2, upsert_i, column4)
@@ -3333,10 +3320,10 @@ vectorized: true
                 │
                 └── • project
                     │ columns: (upsert_r, column2, upsert_i, column4)
-                    │ estimated row count: 2 (missing stats)
                     │
                     └── • scan buffer
                           columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+                          estimated row count: 2 (missing stats)
                           label: buffer 1
 
 # Test that we use the index when available for the ON CONFLICT checks.
@@ -3365,7 +3352,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, column1, column2, column3, column4, r, s, i, j, upsert_r, upsert_i)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
 │               │ render column1: column1
 │               │ render column2: column2
@@ -3380,7 +3366,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_i, column1, column2, column3, column4, r, s, i, j)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
 │                   │ render upsert_i: CASE WHEN r IS NULL THEN column3 ELSE 3 END
 │                   │ render column1: column1
@@ -3419,7 +3404,6 @@ vectorized: true
         │
         └── • project
             │ columns: (upsert_i)
-            │ estimated row count: 1 (missing stats)
             │
             └── • lookup join (semi)
                 │ columns: (upsert_r, upsert_i)
@@ -3430,10 +3414,10 @@ vectorized: true
                 │
                 └── • project
                     │ columns: (upsert_r, upsert_i)
-                    │ estimated row count: 2 (missing stats)
                     │
                     └── • scan buffer
                           columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r)
+                          estimated row count: 2 (missing stats)
                           label: buffer 1
 
 # None of the upserted values have nulls.
@@ -3475,6 +3459,7 @@ vectorized: true
 │               │ filter: column3 > 0
 │               │
 │               └── • scan buffer
+│                     estimated row count: 2
 │                     label: buffer 1
 │
 └── • constraint-check
@@ -3498,6 +3483,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
@@ -3526,7 +3512,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 2 columns, 2 rows
@@ -3614,6 +3599,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # On conflict do update with constant input.
@@ -3655,7 +3641,6 @@ vectorized: true
 │                   │ error on duplicate
 │                   │
 │                   └── • render
-│                       │ estimated row count: 2
 │                       │
 │                       └── • values
 │                             size: 2 columns, 2 rows
@@ -3877,7 +3862,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (partial_index_put1, partial_index_del1, check1, column1, column2, column3, column4, r, a, b, c, upsert_r, upsert_a)
-│               │ estimated row count: 2
 │               │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
 │               │ render partial_index_del1: c IN ('bar', 'baz', 'foo')
 │               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
@@ -3894,7 +3878,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_a, column1, column2, column3, column4, r, a, b, c)
-│                   │ estimated row count: 2
 │                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
 │                   │ render upsert_a: CASE WHEN r IS NULL THEN column2 ELSE a END
 │                   │ render column1: column1
@@ -3933,7 +3916,6 @@ vectorized: true
         │
         └── • project
             │ columns: (column3)
-            │ estimated row count: 1
             │
             └── • lookup join (semi)
                 │ columns: (upsert_r, upsert_a, column3, column4)
@@ -3949,10 +3931,10 @@ vectorized: true
                     │
                     └── • project
                         │ columns: (upsert_r, upsert_a, column3, column4)
-                        │ estimated row count: 2
                         │
                         └── • scan buffer
                               columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
+                              estimated row count: 2
                               label: buffer 1
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
@@ -3976,7 +3958,6 @@ vectorized: true
     │
     └── • render
         │ columns: (partial_index_put1, partial_index_del1, check1, upsert_a, column1, column2, column3, column4, r, a, b, c)
-        │ estimated row count: 2
         │ render partial_index_put1: CASE WHEN r IS NULL THEN column4 ELSE c END IN ('bar', 'baz', 'foo')
         │ render partial_index_del1: c IN ('bar', 'baz', 'foo')
         │ render check1: CASE WHEN r IS NULL THEN column1 ELSE r END IN ('us-east', 'us-west', 'eu-west')
@@ -4013,7 +3994,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
-                        │ estimated row count: 2
                         │ render arbiter_unique_b_distinct: (column4 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
                         │ render column1: column1
                         │ render column2: column2
@@ -4066,6 +4046,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok
@@ -4104,6 +4085,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 1
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -4121,6 +4103,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok

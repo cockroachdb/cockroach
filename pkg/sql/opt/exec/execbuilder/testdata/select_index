@@ -200,7 +200,6 @@ vectorized: true
 ·
 • project
 │ columns: (b, a, c, d, a, c, d)
-│ estimated row count: 100 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -488,7 +487,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (a, c)
@@ -509,7 +507,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 311 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -530,7 +527,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (a, c)
@@ -551,7 +547,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (a, c)
@@ -572,7 +567,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 311 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -593,7 +587,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 311 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -614,7 +607,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, b, c)
@@ -630,7 +622,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, b, c)
@@ -646,7 +637,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 3 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -668,7 +658,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 20 (missing stats)
 │
 └── • scan
       columns: (a, b)
@@ -696,7 +685,6 @@ vectorized: true
 ·
 • project
 │ columns: (b)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, b)
@@ -712,7 +700,6 @@ vectorized: true
 ·
 • project
 │ columns: (b)
-│ estimated row count: 3 (missing stats)
 │
 └── • scan
       columns: (a, b)
@@ -819,7 +806,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (k, a, b)
@@ -1012,7 +998,6 @@ vectorized: true
 ·
 • project
 │ columns: (c)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, c)
@@ -1033,7 +1018,6 @@ vectorized: true
 ·
 • project
 │ columns: (f)
-│ estimated row count: 1 (missing stats)
 │
 └── • filter
     │ columns: (d, f)
@@ -1062,7 +1046,6 @@ vectorized: true
 ·
 • project
 │ columns: (f)
-│ estimated row count: 1 (missing stats)
 │
 └── • filter
     │ columns: (d, f)
@@ -1465,7 +1448,6 @@ vectorized: true
 ·
 • limit
 │ columns: (a, b, c, d)
-│ estimated row count: 995 (missing stats)
 │ offset: 5
 │
 └── • sort
@@ -1489,7 +1471,6 @@ vectorized: true
 ·
 • limit
 │ columns: (a, b, c, d)
-│ estimated row count: 5 (missing stats)
 │ offset: 5
 │
 └── • index join
@@ -1729,7 +1710,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 3
 │
 └── • scan
       columns: (a, b)
