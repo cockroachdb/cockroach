@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // This file contains facilities to report SQL activities to separate
@@ -204,9 +205,9 @@ func (p *planner) maybeLogStatementInternal(
 	age := float32(queryDuration.Nanoseconds()) / 1e6
 	// The text of the error encountered, if the query did in fact end
 	// in error.
-	execErrStr := ""
+	var execErrStr redact.RedactableString
 	if err != nil {
-		execErrStr = err.Error()
+		execErrStr = redact.Sprint(err)
 	}
 	// The type of execution context (execute/prepare).
 	lbl := execType.logLabel()
