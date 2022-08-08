@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -61,6 +60,21 @@ var IntentAgeThreshold = settings.RegisterDurationSetting(
 		}
 		return nil
 	},
+)
+
+// TxnCleanupThreshold is the threshold after which a transaction is
+// considered abandoned and fit for removal, as measured by the
+// maximum of its last heartbeat and read timestamp. Abort spans for the
+// transaction are cleaned up at the same time.
+//
+// TODO(tschottdorf): need to enforce at all times that this is much
+// larger than the heartbeat interval used by the coordinator.
+var TxnCleanupThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.gc.txn_cleanup_threshold",
+	"the threshold after which a transaction is considered abandoned and "+
+		"fit for removal, as measured by the maximum of its last heartbeat and timestamp",
+	time.Hour,
 )
 
 // MaxIntentsPerCleanupBatch is the maximum number of intents that GC will send
@@ -221,6 +235,10 @@ type RunOptions struct {
 	MaxTxnsPerIntentCleanupBatch int64
 	// IntentCleanupBatchTimeout is the timeout for processing a batch of intents. 0 to disable.
 	IntentCleanupBatchTimeout time.Duration
+	// TxnCleanupThreshold is the threshold after which a transaction is
+	// considered abandoned and fit for removal, as measured by the maximum of
+	// its last heartbeat and read timestamp.
+	TxnCleanupThreshold time.Duration
 }
 
 // CleanupIntentsFunc synchronously resolves the supplied intents
@@ -252,7 +270,7 @@ func Run(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-options.TxnCleanupThreshold.Nanoseconds(), 0)
 	if err := gcer.SetGCThreshold(ctx, Threshold{
 		Key: newThreshold,
 		Txn: txnExp,
