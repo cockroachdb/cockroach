@@ -531,6 +531,15 @@ type JoinTokenCreator interface {
 	CreateJoinToken(ctx context.Context) (string, error)
 }
 
+// GossipOperator is capable of manipulating the cluster's gossip network. The
+// methods will return errors when run by any tenant other than the system
+// tenant.
+type GossipOperator interface {
+	// TryClearGossipInfo attempts to clear an info object from the cluster's
+	// gossip network.
+	TryClearGossipInfo(ctx context.Context, key string) (bool, error)
+}
+
 // SQLStatsController is an interface embedded in EvalCtx which can be used by
 // the builtins to reset SQL stats in the cluster. This interface is introduced
 // to avoid circular dependency.

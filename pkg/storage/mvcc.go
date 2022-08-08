@@ -600,6 +600,17 @@ func updateStatsOnRangeKeyCover(ts hlc.Timestamp, key MVCCKey, valueRaw []byte) 
 	return ms
 }
 
+// updateStatsOnRangeKeyCoverStats updates MVCCStats for when an MVCC range
+// tombstone covers existing data whose stats are already known.
+func updateStatsOnRangeKeyCoverStats(ts hlc.Timestamp, cur enginepb.MVCCStats) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+	ms.AgeTo(ts.WallTime)
+	ms.ContainsEstimates += cur.ContainsEstimates
+	ms.LiveCount -= cur.LiveCount
+	ms.LiveBytes -= cur.LiveBytes
+	return ms
+}
+
 // updateStatsOnRangeKeyMerge updates MVCCStats for a merge of two MVCC range
 // key stacks. Both sides of the merge must have identical versions. The merge
 // can happen either to the right or the left, only the merge key (i.e. the key
@@ -2763,7 +2774,7 @@ func MVCCPredicateDeleteRange(
 			batchByteSize+runByteSize >= maxBatchByteSize {
 			if err := MVCCDeleteRangeUsingTombstone(ctx, rw, ms,
 				runStart, runEnd.Next(), endTime, localTimestamp, leftPeekBound, rightPeekBound,
-				maxIntents); err != nil {
+				maxIntents, nil); err != nil {
 				return err
 			}
 			batchByteSize += int64(MVCCRangeKey{StartKey: runStart, EndKey: runEnd, Timestamp: endTime}.EncodedSize())
@@ -2907,6 +2918,15 @@ func MVCCPredicateDeleteRange(
 // range tombstones that we'll merge or overlap with. These are provided to
 // prevent the command from reading outside of the CRDB range bounds and latch
 // bounds. nil means no bounds.
+//
+// If msCovered is given, it must contain the current stats of the data that
+// will be covered by the MVCC range tombstone. This avoids scanning across all
+// point keys in the span, but will still do a time-bound scan to check for
+// newer point keys that we conflict with.
+//
+// When deleting an entire Raft range, passing the current MVCCStats as
+// msCovered and setting left/rightPeekBound to start/endKey will make the
+// deletion significantly faster.
 func MVCCDeleteRangeUsingTombstone(
 	ctx context.Context,
 	rw ReadWriter,
@@ -2916,6 +2936,7 @@ func MVCCDeleteRangeUsingTombstone(
 	localTimestamp hlc.ClockTimestamp,
 	leftPeekBound, rightPeekBound roachpb.Key,
 	maxIntents int64,
+	msCovered *enginepb.MVCCStats,
 ) error {
 	// Validate the range key. We must do this first, to catch e.g. any bound violations.
 	rangeKey := MVCCRangeKey{StartKey: startKey, EndKey: endKey, Timestamp: timestamp}
@@ -2941,20 +2962,43 @@ func MVCCDeleteRangeUsingTombstone(
 		return &roachpb.WriteIntentError{Intents: intents}
 	}
 
-	// First, set up an iterator covering only the range key span itself, and scan
-	// it to find conflicts and update MVCC stats within it.
-	//
-	// TODO(erikgrinaker): This introduces an O(n) read penalty. We should
-	// optimize it, in particular by making this optional in cases where we're
-	// deleting an entire range and the stats can be computed without the scan.
-	// However, in that case we'll still have to do a time-bounded scan to check
-	// for conflicts.
-	iter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+	// If we're omitting point keys in the stats/conflict scan below, we need to
+	// do a separate time-bound scan for point key conflicts.
+	if msCovered != nil {
+		if err := func() error {
+			iter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
+				KeyTypes:  IterKeyTypePointsOnly,
+				StartKey:  startKey,
+				EndKey:    endKey,
+				StartTime: timestamp.Prev(), // make inclusive
+			})
+			defer iter.Close()
+			iter.SeekGE(MVCCKey{Key: startKey})
+			if ok, err := iter.Valid(); err != nil {
+				return err
+			} else if ok {
+				key := iter.UnsafeKey().Clone()
+				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key.Clone())
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
+	}
+
+	// Scan for conflicts and MVCC stats updates. We can omit point keys from the
+	// scan if stats are already known for the live data.
+	iterOpts := IterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		LowerBound:           startKey,
 		UpperBound:           endKey,
 		RangeKeyMaskingBelow: timestamp, // lower point keys have already been accounted for
-	})
+	}
+	if msCovered != nil {
+		iterOpts.KeyTypes = IterKeyTypeRangesOnly
+		iterOpts.RangeKeyMaskingBelow = hlc.Timestamp{}
+	}
+	iter := rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 	defer iter.Close()
 
 	iter.SeekGE(MVCCKey{Key: startKey})
@@ -3029,7 +3073,7 @@ func MVCCDeleteRangeUsingTombstone(
 
 	// Check if the range key will merge with or fragment any existing range keys
 	// at the bounds, and adjust stats accordingly.
-	if ms != nil {
+	if ms != nil && (!leftPeekBound.Equal(startKey) || !rightPeekBound.Equal(endKey)) {
 		if rightPeekBound == nil {
 			rightPeekBound = keys.MaxKey
 		}
@@ -3085,6 +3129,12 @@ func MVCCDeleteRangeUsingTombstone(
 				ms.Add(updateStatsOnRangeKeyMerge(endKey, rhs.Versions))
 			}
 		}
+	}
+
+	// If we're given MVCC stats for the covered data, mark it as deleted at the
+	// current timestamp.
+	if ms != nil && msCovered != nil {
+		ms.Add(updateStatsOnRangeKeyCoverStats(timestamp, *msCovered))
 	}
 
 	if err := rw.PutMVCCRangeKey(rangeKey, value); err != nil {

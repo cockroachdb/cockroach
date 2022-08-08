@@ -361,6 +361,24 @@ func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
 	}
 }
 
+func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	ctx := context.Background()
+	for _, numKeys := range []int{1000, 10000, 100000} {
+		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
+			for _, valueSize := range []int{64} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					for _, entireRange := range []bool{false, true} {
+						b.Run(fmt.Sprintf("entireRange=%t", entireRange), func(b *testing.B) {
+							runMVCCDeleteRangeUsingTombstone(ctx, b, setupMVCCPebble, numKeys, valueSize, entireRange)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
