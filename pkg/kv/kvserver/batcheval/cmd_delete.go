@@ -30,14 +30,10 @@ func Delete(
 	h := cArgs.Header
 
 	var err error
-	if args.ReturnKey {
-		reply := resp.(*roachpb.DeleteResponse)
-		reply.FoundKey, err = storage.MVCCDeleteReturningExistence(
-			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn,
-		)
-	} else {
-		err = storage.MVCCDelete(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn)
-	}
+	reply := resp.(*roachpb.DeleteResponse)
+	reply.FoundKey, err = storage.MVCCDelete(
+		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn,
+	)
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld
 	// without re-evaluating the batch. This behavior isn't particularly

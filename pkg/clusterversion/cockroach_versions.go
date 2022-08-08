@@ -340,8 +340,8 @@ const (
 	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
 	SQLSchemaTelemetryScheduledJobs
-	// DeleteRequestReturnKey is the version where the ReturnKey argument of the
-	// DeleteRequest is introduced.
+	// DeleteRequestReturnKey is the version where the DeleteRequest began
+	// populating the FoundKey value in the response.
 	DeleteRequestReturnKey
 
 	// *************************************************

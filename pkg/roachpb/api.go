@@ -1194,12 +1194,11 @@ func NewInitPut(key Key, value Value, failOnTombstones bool) Request {
 }
 
 // NewDelete returns a Request initialized to delete the value at key.
-func NewDelete(key Key, returnKey bool) Request {
+func NewDelete(key Key) Request {
 	return &DeleteRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
-		ReturnKey: returnKey,
 	}
 }
 

@@ -90,8 +90,8 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	}
 
 	// Configure the fetcher, which is only used to decode the returned keys
-	// from the DeleteKey and the DeleteRange, and is never used to actually
-	// fetch kvs.
+	// from the DelKey and the DelRange operations, and is never used to
+	// actually fetch kvs.
 	var spec descpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* columnIDs */
@@ -172,7 +172,7 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 			if traceKV {
 				log.VEventf(ctx, 2, "Del %s", span.Key)
 			}
-			b.DelKey(span.Key, true /* returnKey */)
+			b.DelKey(span.Key)
 		} else {
 			if traceKV {
 				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)

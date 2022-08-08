@@ -1325,22 +1325,10 @@ func MVCCBlindPut(
 // Note that, when writing transactionally, the txn's timestamps
 // dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
+//
+// foundKey indicates whether the key that was passed in had a value already in
+// the database.
 func MVCCDelete(
-	ctx context.Context,
-	rw ReadWriter,
-	ms *enginepb.MVCCStats,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
-	txn *roachpb.Transaction,
-) error {
-	_, err := MVCCDeleteReturningExistence(ctx, rw, ms, key, timestamp, localTimestamp, txn)
-	return err
-}
-
-// MVCCDeleteReturningExistence is like MVCCDelete, but it returns whether the
-// key that was passed in had a value already in the database.
-func MVCCDeleteReturningExistence(
 	ctx context.Context,
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
@@ -1355,6 +1343,7 @@ func MVCCDeleteReturningExistence(
 	})
 	defer iter.Close()
 
+	// TODO(yuzefovich): can we avoid the actual put if foundKey is false?
 	valueFn := func(value optionalValue) (roachpb.Value, error) {
 		foundKey = len(value.RawBytes) > 0
 		return noValue, nil
