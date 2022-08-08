@@ -15,6 +15,16 @@ log_into_gcloud() {
   fi
 }
 
+log_into_aws() {
+  if [[ "${aws_access_key_id}" && "${aws_secret_access_key}" && "${aws_default_region}" ]]; then
+    aws configure set aws_access_key_id "${aws_access_key_id}";
+    aws configure set aws_secret_access_key "${aws_secret_access_key}";
+    aws configure set default.region "${aws_default_region}";
+  else
+    echo 'warning: `aws_access_key_id` or `aws_secret_access_key` or `aws_default_region` not set' >&2
+  fi
+}
+
 configure_git_ssh_key() {
   # Write a private key file and populate known_hosts
   touch .cockroach-teamcity-key

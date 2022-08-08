@@ -258,9 +258,9 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 	// Set AUTH to implicit
 	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 
-	keyARN := os.Getenv("AWS_KMS_KEY_ARN_A")
+	keyARN := os.Getenv("AWS_KMS_KEY_ARN")
 	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 	}
 	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 	_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{

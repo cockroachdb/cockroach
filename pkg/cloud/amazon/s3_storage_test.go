@@ -130,9 +130,9 @@ func TestPutS3(t *testing.T) {
 			"AES256",
 		), false, user, nil, nil, testSettings)
 
-		v := os.Getenv("AWS_KMS_KEY_ARN_A")
+		v := os.Getenv("AWS_KMS_KEY_ARN")
 		if v == "" {
-			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
+			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 		}
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s&%s=%s",
@@ -343,20 +343,15 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
+	credentialsProvider := credentials.SharedCredentialsProvider{}
+	_, err := credentialsProvider.Retrieve()
+	if err != nil {
+		skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+			"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+	}
 	q := make(url.Values)
-	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        AWSEndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    AWSAccessKeyParam,
-		"AWS_S3_ENDPOINT_REGION": S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": AWSSecretParam,
-	}
-	for env, param := range expect {
-		v := os.Getenv(env)
-		if v == "" {
-			skip.IgnoreLintf(t, "%s env var must be set", env)
-		}
-		q.Add(param, v)
-	}
+	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	q.Add(S3RegionParam, "us-east-1")
 
 	bucket := "invalid-bucket"
 	u := url.URL{
