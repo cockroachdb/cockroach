@@ -2447,6 +2447,21 @@ contains common SQL event/execution details.
 | `BytesRead` | The number of bytes read from disk. | no |
 | `RowsRead` | The number of rows read from disk. | no |
 | `RowsWritten` | The number of rows written. | no |
+| `InnerJoinCount` | The number of inner joins in the query plan. | no |
+| `LeftOuterJoinCount` | The number of left (or right) outer joins in the query plan. | no |
+| `FullOuterJoinCount` | The number of full outer joins in the query plan. | no |
+| `SemiJoinCount` | The number of semi joins in the query plan. | no |
+| `AntiJoinCount` | The number of anti joins in the query plan. | no |
+| `IntersectAllJoinCount` | The number of intersect all joins in the query plan. | no |
+| `ExceptAllJoinCount` | The number of except all joins in the query plan. | no |
+| `HashJoinCount` | The number of hash joins in the query plan. | no |
+| `CrossJoinCount` | The number of cross joins in the query plan. | no |
+| `IndexJoinCount` | The number of index joins in the query plan. | no |
+| `LookupJoinCount` | The number of lookup joins in the query plan. | no |
+| `MergeJoinCount` | The number of merge joins in the query plan. | no |
+| `InvertedJoinCount` | The number of inverted joins in the query plan. | no |
+| `ApplyJoinCount` | The number of apply joins in the query plan. | no |
+| `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
 
 
 #### Common fields

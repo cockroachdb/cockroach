@@ -3354,6 +3354,141 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendInt(b, int64(m.RowsWritten), 10)
 	}
 
+	if m.InnerJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"InnerJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.InnerJoinCount), 10)
+	}
+
+	if m.LeftOuterJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LeftOuterJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.LeftOuterJoinCount), 10)
+	}
+
+	if m.FullOuterJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FullOuterJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.FullOuterJoinCount), 10)
+	}
+
+	if m.SemiJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SemiJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.SemiJoinCount), 10)
+	}
+
+	if m.AntiJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AntiJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.AntiJoinCount), 10)
+	}
+
+	if m.IntersectAllJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IntersectAllJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.IntersectAllJoinCount), 10)
+	}
+
+	if m.ExceptAllJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ExceptAllJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ExceptAllJoinCount), 10)
+	}
+
+	if m.HashJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HashJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.HashJoinCount), 10)
+	}
+
+	if m.CrossJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CrossJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.CrossJoinCount), 10)
+	}
+
+	if m.IndexJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IndexJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.IndexJoinCount), 10)
+	}
+
+	if m.LookupJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LookupJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.LookupJoinCount), 10)
+	}
+
+	if m.MergeJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MergeJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.MergeJoinCount), 10)
+	}
+
+	if m.InvertedJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"InvertedJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.InvertedJoinCount), 10)
+	}
+
+	if m.ApplyJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ApplyJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ApplyJoinCount), 10)
+	}
+
+	if m.ZigZagJoinCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ZigZagJoinCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ZigZagJoinCount), 10)
+	}
+
 	return printComma, b
 }
 
