@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 // Check that GitHub PR descriptions and commit messages contain the
-// expected epic and issue references.
+// expected epic and docsIssue references.
 package main
 
 import (
@@ -19,8 +19,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "docs-issue-generation",
-	Short: "Generate a new set of release issues in the docs repo for a given commit.",
+	Use:   "docs-docsIssue-generation",
+	Short: "Generate a new set of release docsIssues in the docs repo for a given commit.",
 	Run: func(_ *cobra.Command, args []string) {
 		params := defaultEnvParameters()
 		docsIssueGeneration(params)
