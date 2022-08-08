@@ -12,26 +12,29 @@ SELECT * FROM system.privileges
 statement error pq: failed to resolve External Connection: external connection with name foo does not exist
 GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
 
+statement error pq: failed to resolve External Connection: external connection with name foo does not exist
+GRANT DROP ON EXTERNAL CONNECTION foo TO testuser
+
 statement ok
 CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo'
 
 statement ok
-GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
+GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
 
 query TTTT
 SELECT * FROM system.privileges
 ----
-testuser  /externalconn/foo  {USAGE}  {}
+testuser  /externalconn/foo  {DROP,USAGE}  {}
 
 statement ok
-REVOKE USAGE ON EXTERNAL CONNECTION foo FROM testuser
+REVOKE USAGE,DROP ON EXTERNAL CONNECTION foo FROM testuser
 
 query TTTT
 SELECT * FROM system.privileges
 ----
 
 statement ok
-GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
+GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
 
 statement ok
 CREATE USER bar
@@ -39,27 +42,27 @@ CREATE USER bar
 # Attempt to grant usage as testuser, this should fail since we did not specify WITH GRANT OPTION
 user testuser
 
-statement error pq: user testuser missing WITH GRANT OPTION privilege on USAGE
-GRANT USAGE ON EXTERNAL CONNECTION foo TO bar
+statement error pq: user testuser missing WITH GRANT OPTION privilege on one or more of USAGE, DROP
+GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO bar
 
 user root
 
 statement ok
-GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser WITH GRANT OPTION
+GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser WITH GRANT OPTION
 
 # Attempt to grant usage as testuser, this should succeed since we did specify WITH GRANT OPTION
 user testuser
 
 statement ok
-GRANT USAGE ON EXTERNAL CONNECTION foo TO bar
+GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO bar
 
 user root
 
 query TTTT
 SELECT * FROM system.privileges ORDER BY username
 ----
-bar       /externalconn/foo  {USAGE}  {}
-testuser  /externalconn/foo  {USAGE}  {USAGE}
+bar       /externalconn/foo  {DROP,USAGE}  {}
+testuser  /externalconn/foo  {DROP,USAGE}  {DROP,USAGE}
 
 # Invalid grants on external connections.
 
