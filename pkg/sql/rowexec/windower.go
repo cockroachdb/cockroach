@@ -98,6 +98,7 @@ var _ execopnode.OpNode = &windower{}
 const windowerProcName = "windower"
 
 func newWindower(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.WindowerSpec,
@@ -110,7 +111,6 @@ func newWindower(
 	}
 	evalCtx := flowCtx.NewEvalCtx()
 	w.inputTypes = input.OutputTypes()
-	ctx := evalCtx.Ctx()
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// windower will overflow to disk if this limit is not enough.
@@ -166,6 +166,7 @@ func newWindower(
 	w.outputRow = make(rowenc.EncDatumRow, len(w.outputTypes))
 
 	if err := w.InitWithEvalCtx(
+		ctx,
 		w,
 		post,
 		w.outputTypes,

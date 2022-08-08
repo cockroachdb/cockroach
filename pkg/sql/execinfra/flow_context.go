@@ -13,6 +13,8 @@
 package execinfra
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -104,34 +106,36 @@ type FlowCtx struct {
 // EvalContext, since it stores that EvalContext in its exprHelpers and mutates
 // them at runtime to ensure expressions are evaluated with the correct indexed
 // var context.
-func (ctx *FlowCtx) NewEvalCtx() *eval.Context {
-	evalCopy := ctx.EvalCtx.Copy()
+func (flowCtx *FlowCtx) NewEvalCtx() *eval.Context {
+	evalCopy := flowCtx.EvalCtx.Copy()
 	return evalCopy
 }
 
 // TestingKnobs returns the distsql testing knobs for this flow context.
-func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
-	return ctx.Cfg.TestingKnobs
+func (flowCtx *FlowCtx) TestingKnobs() TestingKnobs {
+	return flowCtx.Cfg.TestingKnobs
 }
 
 // Stopper returns the stopper for this flowCtx.
-func (ctx *FlowCtx) Stopper() *stop.Stopper {
-	return ctx.Cfg.Stopper
+func (flowCtx *FlowCtx) Stopper() *stop.Stopper {
+	return flowCtx.Cfg.Stopper
 }
 
 // Codec returns the SQL codec for this flowCtx.
-func (ctx *FlowCtx) Codec() keys.SQLCodec {
-	return ctx.EvalCtx.Codec
+func (flowCtx *FlowCtx) Codec() keys.SQLCodec {
+	return flowCtx.EvalCtx.Codec
 }
 
 // TableDescriptor returns a catalog.TableDescriptor object for the given
 // descriptor proto, using the descriptors collection if it is available.
-func (ctx *FlowCtx) TableDescriptor(desc *descpb.TableDescriptor) catalog.TableDescriptor {
+func (flowCtx *FlowCtx) TableDescriptor(
+	ctx context.Context, desc *descpb.TableDescriptor,
+) catalog.TableDescriptor {
 	if desc == nil {
 		return nil
 	}
-	if ctx != nil && ctx.Descriptors != nil && ctx.Txn != nil {
-		leased, _ := ctx.Descriptors.GetLeasedImmutableTableByID(ctx.EvalCtx.Ctx(), ctx.Txn, desc.ID)
+	if flowCtx != nil && flowCtx.Descriptors != nil && flowCtx.Txn != nil {
+		leased, _ := flowCtx.Descriptors.GetLeasedImmutableTableByID(ctx, flowCtx.Txn, desc.ID)
 		if leased != nil && leased.GetVersion() == desc.Version {
 			return leased
 		}
@@ -142,17 +146,17 @@ func (ctx *FlowCtx) TableDescriptor(desc *descpb.TableDescriptor) catalog.TableD
 // NewTypeResolver creates a new TypeResolver that is bound under the input
 // transaction. It returns a nil resolver if the FlowCtx doesn't hold a
 // descs.Collection object.
-func (ctx *FlowCtx) NewTypeResolver(txn *kv.Txn) descs.DistSQLTypeResolver {
-	if ctx == nil || ctx.Descriptors == nil {
+func (flowCtx *FlowCtx) NewTypeResolver(txn *kv.Txn) descs.DistSQLTypeResolver {
+	if flowCtx == nil || flowCtx.Descriptors == nil {
 		return descs.DistSQLTypeResolver{}
 	}
-	return descs.NewDistSQLTypeResolver(ctx.Descriptors, txn)
+	return descs.NewDistSQLTypeResolver(flowCtx.Descriptors, txn)
 }
 
 // NewSemaContext creates a new SemaContext with a TypeResolver bound to the
 // input transaction.
-func (ctx *FlowCtx) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
-	resolver := ctx.NewTypeResolver(txn)
+func (flowCtx *FlowCtx) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
+	resolver := flowCtx.NewTypeResolver(txn)
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.TypeResolver = &resolver
 	return &semaCtx
@@ -160,12 +164,12 @@ func (ctx *FlowCtx) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
 
 // ProcessorComponentID returns a ComponentID for the given processor in this
 // flow.
-func (ctx *FlowCtx) ProcessorComponentID(procID int32) execinfrapb.ComponentID {
-	return execinfrapb.ProcessorComponentID(ctx.NodeID.SQLInstanceID(), ctx.ID, procID)
+func (flowCtx *FlowCtx) ProcessorComponentID(procID int32) execinfrapb.ComponentID {
+	return execinfrapb.ProcessorComponentID(flowCtx.NodeID.SQLInstanceID(), flowCtx.ID, procID)
 }
 
 // StreamComponentID returns a ComponentID for the given stream in this flow.
 // The stream must originate from the node associated with this FlowCtx.
-func (ctx *FlowCtx) StreamComponentID(streamID execinfrapb.StreamID) execinfrapb.ComponentID {
-	return execinfrapb.StreamComponentID(ctx.NodeID.SQLInstanceID(), ctx.ID, streamID)
+func (flowCtx *FlowCtx) StreamComponentID(streamID execinfrapb.StreamID) execinfrapb.ComponentID {
+	return execinfrapb.StreamComponentID(flowCtx.NodeID.SQLInstanceID(), flowCtx.ID, streamID)
 }

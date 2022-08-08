@@ -272,6 +272,7 @@ const zigzagJoinerProcName = "zigzagJoiner"
 // newZigzagJoiner creates a new zigzag joiner given a spec and an EncDatumRow
 // holding the values of the prefix columns of the index specified in the spec.
 func newZigzagJoiner(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.ZigzagJoinerSpec,
@@ -293,7 +294,7 @@ func newZigzagJoiner(
 	for _, fetchSpec := range []descpb.IndexFetchSpec{spec.Sides[0].FetchSpec, spec.Sides[1].FetchSpec} {
 		for i := range fetchSpec.KeyAndSuffixColumns {
 			if err := typedesc.EnsureTypeIsHydrated(
-				flowCtx.EvalCtx.Ctx(), fetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+				ctx, fetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
 			); err != nil {
 				return nil, err
 			}
@@ -303,6 +304,7 @@ func newZigzagJoiner(
 	leftColumnTypes := spec.Sides[0].FetchSpec.FetchedColumnTypes()
 	rightColumnTypes := spec.Sides[1].FetchSpec.FetchedColumnTypes()
 	err := z.joinerBase.init(
+		ctx,
 		z, /* self */
 		flowCtx,
 		processorID,
@@ -331,7 +333,6 @@ func newZigzagJoiner(
 	z.numTables = len(spec.Sides)
 	z.infos = make([]zigzagJoinerInfo, z.numTables)
 
-	ctx := flowCtx.EvalCtx.Ctx()
 	collectingStats := false
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		collectingStats = true

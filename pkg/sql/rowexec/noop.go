@@ -46,6 +46,7 @@ var noopPool = sync.Pool{
 }
 
 func newNoopProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
@@ -55,6 +56,7 @@ func newNoopProcessor(
 	n := noopPool.Get().(*noopProcessor)
 	n.input = input
 	if err := n.Init(
+		ctx,
 		n,
 		post,
 		input.OutputTypes(),
@@ -69,7 +71,6 @@ func newNoopProcessor(
 		return nil, err
 	}
 	n.AddInputToDrain(n.input)
-	ctx := flowCtx.EvalCtx.Ctx()
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		n.input = newInputStatCollector(n.input)
 		n.ExecStatsForTrace = n.execStatsForTrace

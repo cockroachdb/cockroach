@@ -36,6 +36,7 @@ var _ execopnode.OpNode = &filtererProcessor{}
 const filtererProcName = "filterer"
 
 func newFiltererProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.FiltererSpec,
@@ -46,6 +47,7 @@ func newFiltererProcessor(
 	f := &filtererProcessor{input: input}
 	types := input.OutputTypes()
 	if err := f.Init(
+		ctx,
 		f,
 		post,
 		types,
@@ -57,8 +59,6 @@ func newFiltererProcessor(
 	); err != nil {
 		return nil, err
 	}
-
-	ctx := flowCtx.EvalCtx.Ctx()
 
 	f.filter = &execinfrapb.ExprHelper{}
 	if err := f.filter.Init(ctx, spec.Filter, types, &f.SemaCtx, f.EvalCtx); err != nil {

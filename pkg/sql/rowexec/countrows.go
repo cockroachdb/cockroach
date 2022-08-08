@@ -36,6 +36,7 @@ var _ execinfra.RowSource = &countAggregator{}
 const countRowsProcName = "count rows"
 
 func newCountAggregator(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
@@ -45,12 +46,13 @@ func newCountAggregator(
 	ag := &countAggregator{}
 	ag.input = input
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		ag.input = newInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 
 	if err := ag.Init(
+		ctx,
 		ag,
 		post,
 		[]*types.T{types.Int},

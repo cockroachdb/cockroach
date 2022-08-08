@@ -131,6 +131,7 @@ func newCSVExporter(sp execinfrapb.ExportSpec) *csvExporter {
 }
 
 func newCSVWriterProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ExportSpec,
@@ -145,7 +146,7 @@ func newCSVWriterProcessor(
 		output:      output,
 	}
 	semaCtx := tree.MakeSemaContext()
-	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
+	if err := c.out.Init(ctx, &execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
 		return nil, err
 	}
 	return c, nil

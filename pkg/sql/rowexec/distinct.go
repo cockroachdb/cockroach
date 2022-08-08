@@ -73,6 +73,7 @@ const sortedDistinctProcName = "sorted distinct"
 
 // newDistinct instantiates a new Distinct processor.
 func newDistinct(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.DistinctSpec,
@@ -98,7 +99,6 @@ func newDistinct(
 		}
 	}
 
-	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
 	d := &distinct{
 		input:            input,
@@ -118,7 +118,7 @@ func newDistinct(
 	}
 
 	if err := d.Init(
-		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
+		ctx, d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{d.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

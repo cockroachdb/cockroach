@@ -207,6 +207,7 @@ type splitAndScatterProcessor struct {
 var _ execinfra.Processor = &splitAndScatterProcessor{}
 
 func newSplitAndScatterProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.SplitAndScatterSpec,
@@ -240,7 +241,7 @@ func newSplitAndScatterProcessor(
 		doneScatterCh:     make(chan entryNode, numEntries),
 		routingDatumCache: make(map[roachpb.NodeID]rowenc.EncDatum),
 	}
-	if err := ssp.Init(ssp, post, splitAndScatterOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := ssp.Init(ctx, ssp, post, splitAndScatterOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: nil, // there are no inputs to drain
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
