@@ -104,6 +104,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabaseSecondaryRegion(ctx, n)
 	case *tree.AlterDatabaseDropSecondaryRegion:
 		return p.AlterDatabaseDropSecondaryRegion(ctx, n)
+	case *tree.AlterDatabaseSetZoneConfigExtension:
+		return p.AlterDatabaseSetZoneConfigExtension(ctx, n)
 	case *tree.AlterDefaultPrivileges:
 		return p.alterDefaultPrivileges(ctx, n)
 	case *tree.AlterFunctionOptions:
@@ -286,6 +288,7 @@ func init() {
 		&tree.AlterDatabaseAlterSuperRegion{},
 		&tree.AlterDatabaseSecondaryRegion{},
 		&tree.AlterDatabaseDropSecondaryRegion{},
+		&tree.AlterDatabaseSetZoneConfigExtension{},
 		&tree.AlterDefaultPrivileges{},
 		&tree.AlterFunctionOptions{},
 		&tree.AlterFunctionRename{},

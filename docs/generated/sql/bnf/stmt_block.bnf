@@ -1528,6 +1528,7 @@ alter_database_stmt ::=
 	| alter_database_drop_super_region
 	| alter_database_set_secondary_region_stmt
 	| alter_database_drop_secondary_region
+	| alter_database_set_zone_config_extension_stmt
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -2107,6 +2108,11 @@ alter_database_set_secondary_region_stmt ::=
 
 alter_database_drop_secondary_region ::=
 	'ALTER' 'DATABASE' database_name 'DROP' 'SECONDARY' 'REGION'
+
+alter_database_set_zone_config_extension_stmt ::=
+	'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'GLOBAL' set_zone_config
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' set_zone_config
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'IN' region_name set_zone_config
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' a_expr set_zone_config

@@ -1619,11 +1619,11 @@ docs/generated/redact_safe.md:
 EVENTPB_PROTOS = \
   pkg/util/log/eventpb/events.proto \
   pkg/util/log/eventpb/debug_events.proto \
+  pkg/util/log/eventpb/zone_events.proto \
   pkg/util/log/eventpb/ddl_events.proto \
   pkg/util/log/eventpb/misc_sql_events.proto \
   pkg/util/log/eventpb/privilege_events.proto \
   pkg/util/log/eventpb/role_events.proto \
-  pkg/util/log/eventpb/zone_events.proto \
   pkg/util/log/eventpb/session_events.proto \
   pkg/util/log/eventpb/sql_audit_events.proto \
   pkg/util/log/eventpb/cluster_events.proto \
