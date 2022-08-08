@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/datadriven"
@@ -55,13 +54,13 @@ func TestJSONFormats(t *testing.T) {
 		{},
 		{idPayload: idPayload{clusterID: "abc", nodeID: "123"}},
 		{idPayload: idPayload{tenantID: "456", sqlInstanceID: "123"}},
-		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &eventpb.RenameDatabase{
+		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
 			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,
 				EventType: "rename_database",
 			},
-			DatabaseName:    "hello",
-			NewDatabaseName: "world",
+			Channel: logpb.Channel_SQL_SCHEMA,
+			Event:   "rename from `hello` to `world`",
 		}),
 		makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
 		makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "world"),
