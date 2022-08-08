@@ -110,7 +110,7 @@ func collectDescriptorReferences(j JobMetadata) (ids catalog.DescriptorIDSet) {
 		}
 	case jobspb.TypeSchemaChangeGC:
 		for _, table := range j.Progress.GetSchemaChangeGC().Tables {
-			if table.Status == jobspb.SchemaChangeGCProgress_DELETED {
+			if table.Status == jobspb.SchemaChangeGCProgress_CLEARED {
 				continue
 			}
 			ids.Add(table.ID)
