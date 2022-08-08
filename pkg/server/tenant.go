@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -210,7 +212,7 @@ func startTenantInternal(
 	// going to assume that the tenant status server won't require
 	// the SQL server object.
 	tenantStatusServer := newTenantStatusServer(
-		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		baseCfg.AmbientCtx, nil,
 		args.sessionRegistry, args.closedSessionCache, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
@@ -220,6 +222,22 @@ func startTenantInternal(
 	if err != nil {
 		return nil, nil, nil, "", "", err
 	}
+	adminAuthzCheck := &adminPrivilegeChecker{
+		ie: s.execCfg.InternalExecutor,
+		st: args.Settings,
+		makePlanner: func(opName string) (interface{}, func()) {
+			txn := args.db.NewTxn(ctx, "check-system-privilege")
+			return sql.NewInternalPlanner(
+				opName,
+				txn,
+				username.RootUserName(),
+				&sql.MemoryMetrics{},
+				s.execCfg,
+				sessiondatapb.SessionData{},
+			)
+		},
+	}
+	tenantStatusServer.privilegeChecker = adminAuthzCheck
 	tenantStatusServer.sqlServer = s
 
 	drainServer = newDrainServer(baseCfg, args.stopper, args.grpc, s)
@@ -260,7 +278,6 @@ func startTenantInternal(
 	}
 
 	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-	adminAuthzCheck := &adminPrivilegeChecker{ie: s.execCfg.InternalExecutor}
 
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
 		return roachpb.NodeID(0), false, errors.New("tenants cannot proxy to KV Nodes")
