@@ -5069,10 +5069,10 @@ def go_deps():
         name = "com_github_lib_pq_auth_kerberos",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lib/pq/auth/kerberos",
-        sha256 = "26113d1ad535ca1b52b9f093025ea658c6d3f14b617386a0c38115bfaceffdd4",
-        strip_prefix = "github.com/lib/pq/auth/kerberos@v0.0.0-20200720160335-984a6aa1ca46",
+        sha256 = "38df8be51351b20287c83bf2a177df328d01b6abe3d150bc77fd280fc5fd9c07",
+        strip_prefix = "github.com/lib/pq/auth/kerberos@v0.0.0-20220516182748-8c6de565f76f",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/auth/kerberos/com_github_lib_pq_auth_kerberos-v0.0.0-20200720160335-984a6aa1ca46.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/auth/kerberos/com_github_lib_pq_auth_kerberos-v0.0.0-20220516182748-8c6de565f76f.zip",
         ],
     )
     go_repository(
