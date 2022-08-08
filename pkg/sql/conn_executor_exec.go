@@ -851,7 +851,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 
 	if err := descs.CheckSpanCountLimit(
 		ctx,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollection,
 		ex.server.cfg.SpanConfigSplitter,
 		ex.server.cfg.SpanConfigLimiter,
 		ex.state.mu.txn,
@@ -863,7 +863,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalExecutor,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollection,
 		ex.state.mu.txn,
 		inRetryBackoff,
 	)
@@ -977,7 +977,9 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
 	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
-		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+		if !ex.extraTxnState.fromOuterTxn {
+			ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+		}
 	}
 	return nil
 }
