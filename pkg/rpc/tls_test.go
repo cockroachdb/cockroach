@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,7 +57,7 @@ func TestClientSSLSettings(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
 			if tc.hasCerts {
-				testutils.FillCerts(cfg)
+				cfg.SSLCertsDir = certnames.EmbeddedCertsDir
 			} else {
 				// We can't leave this empty because otherwise it refers to the cwd which
 				// always exists.
@@ -119,7 +120,7 @@ func TestServerSSLSettings(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			cfg := &base.Config{Insecure: tc.insecure, User: username.NodeUserName()}
 			if tc.hasCerts {
-				testutils.FillCerts(cfg)
+				cfg.SSLCertsDir = certnames.EmbeddedCertsDir
 			}
 			ctx := context.Background()
 			stopper := stop.NewStopper()
