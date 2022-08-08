@@ -137,6 +137,8 @@ var retiredSettings = map[string]struct{}{
 	"sql.ttl.range_batch_size":                          {},
 
 	// removed as of 22.2.
+	"bulkio.restore_at_current_time.enabled":                    {},
+	"bulkio.import_at_current_time.enabled":                     {},
 	"kv.bulk_io_write.experimental_incremental_export_enabled":  {},
 	"kv.bulk_io_write.revert_range_time_bound_iterator.enabled": {},
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled":   {},
