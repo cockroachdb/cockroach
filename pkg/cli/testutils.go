@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -422,7 +422,7 @@ func (c TestCLI) RunWithCAArgs(origArgs []string) {
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
 		if c.TestServer != nil {
-			args = append(args, fmt.Sprintf("--ca-key=%s", filepath.Join(c.certsDir, security.EmbeddedCAKey)))
+			args = append(args, fmt.Sprintf("--ca-key=%s", filepath.Join(c.certsDir, certnames.EmbeddedCAKey)))
 			args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
 		}
 		args = append(args, origArgs[1:]...)
