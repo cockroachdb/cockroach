@@ -62,6 +62,7 @@ import {
   mapStateToActiveStatementViewProps,
 } from "./activeStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
+import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
 
 type ICollectedStatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -360,6 +361,7 @@ export default withRouter(
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         statements: selectStatements(state, props),
+        lastUpdated: selectStatementsLastUpdated(state),
         statementsError: state.cachedData.statements.lastError,
         totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),

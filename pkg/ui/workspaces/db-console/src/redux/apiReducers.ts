@@ -315,7 +315,7 @@ export const refreshStores = storesReducerObj.refresh;
 const queriesReducerObj = new CachedDataReducer(
   api.getCombinedStatements,
   "statements",
-  moment.duration(5, "m"),
+  null,
   moment.duration(30, "m"),
 );
 export const invalidateStatements = queriesReducerObj.invalidateData;

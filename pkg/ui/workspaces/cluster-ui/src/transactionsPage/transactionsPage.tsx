@@ -85,6 +85,7 @@ interface TState {
 export interface TransactionsPageStateProps {
   columns: string[];
   data: IStatementsResponse;
+  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   error?: Error | null;
   filters: Filters;
@@ -127,6 +128,8 @@ export class TransactionsPage extends React.Component<
   TransactionsPageProps,
   TState
 > {
+  refreshDataTimeout: NodeJS.Timeout;
+
   constructor(props: TransactionsPageProps) {
     super(props);
     this.state = {
@@ -185,17 +188,51 @@ export class TransactionsPage extends React.Component<
     };
   };
 
+  clearRefreshDataTimeout() {
+    if (this.refreshDataTimeout) {
+      clearTimeout(this.refreshDataTimeout);
+    }
+  }
+
   refreshData = (): void => {
+    this.clearRefreshDataTimeout();
+
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
+
+    if (this.props.timeScale.key !== "Custom") {
+      this.refreshDataTimeout = setTimeout(
+        this.refreshData,
+        300000, // 5 minutes
+      );
+    }
   };
+
   resetSQLStats = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.resetSQLStats(req);
   };
 
   componentDidMount(): void {
-    this.refreshData();
+    // For the first data fetch for this page, we refresh if there are:
+    // - Last updated is null (no statements fetched previously)
+    // - The time interval is not custom, i.e. we have a moving window
+    // in which case we poll every 5 minutes. For the first fetch we will
+    // calculate the next time to refresh based on when the data was last
+    // udpated.
+    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
+      const now = moment();
+      const nextRefresh =
+        this.props.lastUpdated?.clone().add(5, "minutes") || now;
+      setTimeout(
+        this.refreshData,
+        Math.max(0, nextRefresh.diff(now, "milliseconds")),
+      );
+    }
+  }
+
+  componentWillUnmount(): void {
+    this.clearRefreshDataTimeout();
   }
 
   updateQueryParams(): void {
