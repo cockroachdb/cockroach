@@ -210,6 +210,20 @@ func (d *buildDeps) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T
 	return d.schemaResolver.ResolveTypeByOID(ctx, oid)
 }
 
+// ResolveFunction implements the scbuild.CatalogReader interface.
+func (d *buildDeps) ResolveFunction(
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	return d.schemaResolver.ResolveFunction(ctx, name, path)
+}
+
+// ResolveFunctionByOID implements the scbuild.CatalogReader interface.
+func (d *buildDeps) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (string, *tree.Overload, error) {
+	return d.schemaResolver.ResolveFunctionByOID(ctx, oid)
+}
+
 // GetQualifiedTableNameByID implements the scbuild.CatalogReader interface.
 func (d *buildDeps) GetQualifiedTableNameByID(
 	ctx context.Context, id int64, requiredType tree.RequiredTableKind,

@@ -102,6 +102,7 @@ type CreatePartitioningCCLCallback func(
 type CatalogReader interface {
 	tree.TypeReferenceResolver
 	tree.QualifiedNameResolver
+	tree.FunctionReferenceResolver
 
 	// MayResolveDatabase looks up a database by name.
 	MayResolveDatabase(ctx context.Context, name tree.Name) catalog.DatabaseDescriptor

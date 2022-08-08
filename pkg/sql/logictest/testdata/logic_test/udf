@@ -722,3 +722,47 @@ SET search_path = public
 
 statement ok
 DROP SCHEMA sc1;
+
+subtest disallow_udf_in_table
+
+statement ok
+CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT DEFAULT (test_tbl_f() + 1));
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT ON UPDATE (test_tbl_f() + 1));
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT AS (test_tbl_f() + 1) STORED);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT CHECK (test_tbl_f() > 0));
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT, INDEX idx_b(test_tbl_f()));
+
+statement ok
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(test_tbl_f());
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(b) WHERE test_tbl_f() > 0;
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD CONSTRAINT bgt CHECK (test_tbl_f() > 1);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int CHECK (test_tbl_f() > 0);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int ON UPDATE (test_tbl_f());

@@ -1148,3 +1148,37 @@ func (s *TestState) GetTestingKnobs() *scexec.TestingKnobs {
 func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 	s.LogSideEffectf("adding table for stats refresh: %d", id)
 }
+
+// ResolveFunction implements the scbuild.CatalogReader interface.
+func (s *TestState) ResolveFunction(
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	// TODO(chengxiong): add UDF support for test.
+	fn, err := name.ToFunctionName()
+	if err != nil {
+		return nil, err
+	}
+	fd, err := tree.GetBuiltinFuncDefinitionOrFail(fn, path)
+	if err != nil {
+		return nil, err
+	}
+	return fd, nil
+}
+
+// ResolveFunctionByOID implements the scbuild.CatalogReader interface.
+func (s *TestState) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (string, *tree.Overload, error) {
+	// TODO(chengxiong): add UDF support for test.
+	name, ok := tree.OidToBuiltinName[oid]
+	if !ok {
+		return "", nil, errors.Newf("function %d not found", oid)
+	}
+	funcDef := tree.FunDefs[name]
+	for _, o := range funcDef.Definition {
+		if o.Oid == oid {
+			return funcDef.Name, o, nil
+		}
+	}
+	return "", nil, errors.Newf("function %d not found", oid)
+}
