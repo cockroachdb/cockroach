@@ -37,6 +37,12 @@ type metrics struct {
 	ConnMigrationAttemptedCount              *metric.Counter
 	ConnMigrationAttemptedLatency            *metric.Histogram
 	ConnMigrationTransferResponseMessageSize *metric.Histogram
+
+	QueryCancelReceivedPGWire *metric.Counter
+	QueryCancelReceivedHTTP   *metric.Counter
+	QueryCancelForwarded      *metric.Counter
+	QueryCancelIgnored        *metric.Counter
+	QueryCancelSuccessful     *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -174,6 +180,36 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaQueryCancelReceivedPGWire = metric.Metadata{
+		Name:        "proxy.query_cancel.received.pgwire",
+		Help:        "Number of query cancel requests this proxy received over pgwire",
+		Measurement: "Query Cancel Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaQueryCancelReceivedHTTP = metric.Metadata{
+		Name:        "proxy.query_cancel.received.http",
+		Help:        "Number of query cancel requests this proxy received over HTTP",
+		Measurement: "Query Cancel Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaQueryCancelIgnored = metric.Metadata{
+		Name:        "proxy.query_cancel.ignored",
+		Help:        "Number of query cancel requests this proxy ignored",
+		Measurement: "Query Cancel Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaQueryCancelForwarded = metric.Metadata{
+		Name:        "proxy.query_cancel.forwarded",
+		Help:        "Number of query cancel requests this proxy forwarded to another proxy",
+		Measurement: "Query Cancel Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaQueryCancelSuccessful = metric.Metadata{
+		Name:        "proxy.query_cancel.successful",
+		Help:        "Number of query cancel requests this proxy forwarded to the tenant",
+		Measurement: "Query Cancel Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.
@@ -215,6 +251,11 @@ func makeProxyMetrics() metrics {
 			maxExpectedTransferResponseMessageSize,
 			1,
 		),
+		QueryCancelReceivedPGWire: metric.NewCounter(metaQueryCancelReceivedPGWire),
+		QueryCancelReceivedHTTP:   metric.NewCounter(metaQueryCancelReceivedHTTP),
+		QueryCancelIgnored:        metric.NewCounter(metaQueryCancelIgnored),
+		QueryCancelForwarded:      metric.NewCounter(metaQueryCancelForwarded),
+		QueryCancelSuccessful:     metric.NewCounter(metaQueryCancelSuccessful),
 	}
 }
 

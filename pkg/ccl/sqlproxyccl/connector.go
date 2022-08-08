@@ -81,6 +81,10 @@ type connector struct {
 	// DialTenantRetries counts how often dialing a tenant is retried.
 	DialTenantRetries *metric.Counter
 
+	// CancelInfo contains the data used to implement pgwire query cancellation.
+	// It is only populated after authenticating the connection.
+	CancelInfo *cancelInfo
+
 	// Testing knobs for internal connector calls. If specified, these will
 	// be called instead of the actual logic.
 	testingKnobs struct {
@@ -116,11 +120,11 @@ func (c *connector) OpenTenantConnWithToken(
 	// Since this method is only used during connection migration (i.e. proxy
 	// is connecting to the SQL pod), we'll discard all of the messages, and
 	// only return once we've seen a ReadyForQuery message.
-	//
-	// NOTE: This will need to be updated when we implement query cancellation.
-	if err := readTokenAuthResult(serverConn); err != nil {
+	newBackendKeyData, err := readTokenAuthResult(serverConn)
+	if err != nil {
 		return nil, err
 	}
+	c.CancelInfo.setNewBackend(newBackendKeyData, serverConn.RemoteAddr().(*net.TCPAddr))
 	log.Infof(ctx, "connected to %s through token-based auth", serverConn.RemoteAddr())
 	return serverConn, nil
 }
@@ -139,7 +143,7 @@ func (c *connector) OpenTenantConnWithAuth(
 	requester balancer.ConnectionHandle,
 	clientConn net.Conn,
 	throttleHook func(throttler.AttemptStatus) error,
-) (retServerConn net.Conn, sentToClient bool, retErr error) {
+) (retServerConnection net.Conn, sentToClient bool, retErr error) {
 	// Just a safety check, but this shouldn't happen since we will block the
 	// startup param in the frontend admitter. The only case where we actually
 	// need to delete this param is if OpenTenantConnWithToken was called
@@ -158,10 +162,12 @@ func (c *connector) OpenTenantConnWithAuth(
 
 	// Perform user authentication for non-token-based auth methods. This will
 	// block until the server has authenticated the client.
-	if err := authenticate(clientConn, serverConn, throttleHook); err != nil {
+	crdbBackendKeyData, err := authenticate(clientConn, serverConn, c.CancelInfo.proxyBackendKeyData, throttleHook)
+	if err != nil {
 		return nil, true, err
 	}
 	log.Infof(ctx, "connected to %s through normal auth", serverConn.RemoteAddr())
+	c.CancelInfo.setNewBackend(crdbBackendKeyData, serverConn.RemoteAddr().(*net.TCPAddr))
 	return serverConn, false, nil
 }
 

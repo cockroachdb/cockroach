@@ -10,6 +10,7 @@ package sqlproxyccl
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -70,6 +71,7 @@ func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions)
 	// endpoints.
 	mux.HandleFunc("/_status/vars/", s.handleVars)
 	mux.HandleFunc("/_status/healthz/", s.handleHealth)
+	mux.HandleFunc("/_status/cancel/", s.handleCancel)
 
 	// Taken from pprof's `init()` method. See:
 	// https://golang.org/src/net/http/pprof/pprof.go
@@ -111,6 +113,48 @@ func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// handleCancel processes a cancel request that has been forwarded from another
+// sqlproxy.
+func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
+	var retErr error
+	defer func() {
+		if retErr != nil {
+			// Lots of noise from this log indicates that somebody is spamming
+			// fake cancel requests.
+			log.Warningf(
+				r.Context(), "could not handle cancel request from client %s: %v",
+				r.RemoteAddr, retErr,
+			)
+		}
+		if f := s.handler.testingKnobs.httpCancelErrHandler; f != nil {
+			f(retErr)
+		}
+	}()
+	buf := make([]byte, proxyCancelRequestLen)
+	n, err := r.Body.Read(buf)
+	// Write the response as soon as we read the data, so we don't reveal if we
+	// are processing the request or not.
+	// Explicitly ignore any errors from writing the response as there's
+	// nothing to be done if the write fails.
+	_, _ = w.Write([]byte("OK"))
+	if err != nil && err != io.EOF {
+		retErr = err
+		return
+	}
+	if n != len(buf) {
+		retErr = errors.Errorf("unexpected number of bytes %d", n)
+		return
+	}
+	p := &proxyCancelRequest{}
+	if err := p.Decode(buf); err != nil {
+		retErr = err
+		return
+	}
+	// This request should never be forwarded, since if it is handled here, it
+	// was already forwarded to the correct node.
+	retErr = s.handler.handleCancelRequest(p, false /* allowForward */)
 }
 
 // ServeHTTP starts the proxy's HTTP server on the given listener.
