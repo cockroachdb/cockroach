@@ -229,6 +229,35 @@ sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v
 <stderrCfg(ERROR,true)>},
 <stdCaptureFd2(<defaultLogDir>)>}
 
+# Ensure variable expansion works.
+run
+start
+--log=sinks: {fluent-servers: {health: {channels: [DEV], address: ${HOST_IP}:5170}}}
+--log-config-vars=HOST_IP
+----
+config: {<stdFileDefaults(<defaultLogDir>)>,
+<fluentDefaults>,
+sinks: {file-groups: {default: <fileCfg([DEV,
+OPS,
+HEALTH,
+SQL_SCHEMA,
+USER_ADMIN,
+PRIVILEGES],<defaultLogDir>,true,crdb-v2)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,true,crdb-v2)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v2)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,false,crdb-v2)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,true,crdb-v2)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,true,crdb-v2)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v2)>},
+fluent-servers: {health: {channels: [ DEV],
+net: tcp,
+address: '1.2.3.4:5170',
+filter: INFO,
+format: json-fluent-compact,
+redactable: true,
+exit-on-error: false}},
+<stderrDisabled>},
+<stdCaptureFd2(<defaultLogDir>)>}
 
 # It's possible to disable the stderr capture.
 run
