@@ -280,7 +280,7 @@ type Planner interface {
 
 	// DeserializeSessionState deserializes the state as serialized variables
 	// into the current session.
-	DeserializeSessionState(state *tree.DBytes) (*tree.DBool, error)
+	DeserializeSessionState(ctx context.Context, state *tree.DBytes) (*tree.DBool, error)
 
 	// CreateSessionRevivalToken creates a token that can be used to log in
 	// as the current user, in bytes form.

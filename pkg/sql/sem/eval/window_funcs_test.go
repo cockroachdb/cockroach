@@ -81,16 +81,16 @@ func testStartPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 		}
 		wfr.StartBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameStartIdx, err := wfr.FrameStartIdx(evalCtx.Ctx(), evalCtx)
+			frameStartIdx, err := wfr.FrameStartIdx(context.Background(), evalCtx)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			value, err := wfr.getValueByOffset(evalCtx.Ctx(), evalCtx, typedOffset, true /* negative */)
+			value, err := wfr.getValueByOffset(context.Background(), evalCtx, typedOffset, true /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			for idx := 0; idx <= wfr.RowIdx; idx++ {
-				valueAt, err := wfr.valueAt(evalCtx.Ctx(), idx)
+				valueAt, err := wfr.valueAt(context.Background(), idx)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -98,7 +98,7 @@ func testStartPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 					if idx != frameStartIdx {
 						t.Errorf("FrameStartIdx returned wrong result on Preceding: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
-						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+						t.Errorf(partitionToString(context.Background(), wfr.Rows))
 						t.Fatal("")
 					}
 					break
@@ -129,11 +129,11 @@ func testStartFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 		}
 		wfr.StartBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameStartIdx, err := wfr.FrameStartIdx(evalCtx.Ctx(), evalCtx)
+			frameStartIdx, err := wfr.FrameStartIdx(context.Background(), evalCtx)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			value, err := wfr.getValueByOffset(evalCtx.Ctx(), evalCtx, typedOffset, false /* negative */)
+			value, err := wfr.getValueByOffset(context.Background(), evalCtx, typedOffset, false /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -142,12 +142,12 @@ func testStartFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 					if idx != frameStartIdx {
 						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
-						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+						t.Errorf(partitionToString(context.Background(), wfr.Rows))
 						t.Fatal("")
 					}
 					break
 				}
-				valueAt, err := wfr.valueAt(evalCtx.Ctx(), idx)
+				valueAt, err := wfr.valueAt(context.Background(), idx)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -155,7 +155,7 @@ func testStartFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 					if idx != frameStartIdx {
 						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
-						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+						t.Errorf(partitionToString(context.Background(), wfr.Rows))
 						t.Fatal("")
 					}
 					break
@@ -186,16 +186,16 @@ func testEndPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 		}
 		wfr.EndBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameEndIdx, err := wfr.FrameEndIdx(evalCtx.Ctx(), evalCtx)
+			frameEndIdx, err := wfr.FrameEndIdx(context.Background(), evalCtx)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			value, err := wfr.getValueByOffset(evalCtx.Ctx(), evalCtx, typedOffset, true /* negative */)
+			value, err := wfr.getValueByOffset(context.Background(), evalCtx, typedOffset, true /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			for idx := wfr.PartitionSize() - 1; idx >= 0; idx-- {
-				valueAt, err := wfr.valueAt(evalCtx.Ctx(), idx)
+				valueAt, err := wfr.valueAt(context.Background(), idx)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -203,7 +203,7 @@ func testEndPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 					if idx+1 != frameEndIdx {
 						t.Errorf("FrameEndIdx returned wrong result on Preceding: expected %+v, found %+v", idx+1, frameEndIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
-						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+						t.Errorf(partitionToString(context.Background(), wfr.Rows))
 						t.Fatal("")
 					}
 					break
@@ -234,16 +234,16 @@ func testEndFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 		}
 		wfr.EndBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameEndIdx, err := wfr.FrameEndIdx(evalCtx.Ctx(), evalCtx)
+			frameEndIdx, err := wfr.FrameEndIdx(context.Background(), evalCtx)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			value, err := wfr.getValueByOffset(evalCtx.Ctx(), evalCtx, typedOffset, false /* negative */)
+			value, err := wfr.getValueByOffset(context.Background(), evalCtx, typedOffset, false /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			for idx := wfr.PartitionSize() - 1; idx >= wfr.RowIdx; idx-- {
-				valueAt, err := wfr.valueAt(evalCtx.Ctx(), idx)
+				valueAt, err := wfr.valueAt(context.Background(), idx)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -251,7 +251,7 @@ func testEndFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 					if idx+1 != frameEndIdx {
 						t.Errorf("FrameEndIdx returned wrong result on Following: expected %+v, found %+v", idx+1, frameEndIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
-						t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+						t.Errorf(partitionToString(context.Background(), wfr.Rows))
 						t.Fatal("")
 					}
 					break
