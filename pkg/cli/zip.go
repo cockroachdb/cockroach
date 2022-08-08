@@ -164,7 +164,14 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+
 	zr := zipCtx.newZipReporter("cluster")
+	// Interpret the deprecated `--redact-logs` the same as the new `--redact` flag.
+	if zipCtx.deprecatedRedactLogs {
+		zipCtx.redact = true
+		zr.info("WARNING: The `--redact-logs` flag has been deprecated in favor of the `--redact` flag. " +
+			"Interpreting as `--redact` and continuing.")
+	}
 
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)

@@ -338,9 +338,15 @@ var zipCtx zipContext
 type zipContext struct {
 	nodes nodeSelection
 
-	// redactLogs indicates whether log files should be redacted
-	// server-side during retrieval.
-	redactLogs bool
+	// DEPRECATED: redactLogs indicates whether log files should be
+	// redacted server-side during retrieval. This flag is deprecated
+	// in favor of redact.
+	deprecatedRedactLogs bool
+
+	// redact indicates whether the entirety of debug zip should
+	// be redacted server-side during retrieval, except for
+	// range key data, which is necessary to support CockroachDB.
+	redact bool
 
 	// Duration (in seconds) to run CPU profile for.
 	cpuProfDuration time.Duration
@@ -359,7 +365,8 @@ type zipContext struct {
 func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
 	zipCtx.files = fileSelection{}
-	zipCtx.redactLogs = false
+	zipCtx.deprecatedRedactLogs = false
+	zipCtx.redact = false
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
 

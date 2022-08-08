@@ -648,7 +648,8 @@ func init() {
 	// Zip command.
 	{
 		f := debugZipCmd.Flags()
-		cliflagcfg.BoolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
+		cliflagcfg.BoolFlag(f, &zipCtx.deprecatedRedactLogs, cliflags.ZipRedactLogsDeprecated)
+		cliflagcfg.BoolFlag(f, &zipCtx.redact, cliflags.ZipRedact)
 		cliflagcfg.DurationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		cliflagcfg.IntFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
 	}
