@@ -1287,6 +1287,10 @@ type ExecutorConfig struct {
 	// perform compaction over a key span.
 	CompactEngineSpanFunc eval.CompactEngineSpanFunc
 
+	// CompactionConcurrencyFunc is used to inform a storage engine to change its
+	// compaction concurrency.
+	CompactionConcurrencyFunc eval.SetCompactionConcurrencyFunc
+
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector

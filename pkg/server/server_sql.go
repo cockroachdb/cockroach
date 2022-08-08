@@ -105,7 +105,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -578,18 +577,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	gcJobNotifier := gcjobnotifier.New(cfg.Settings, cfg.systemConfigWatcher, codec, cfg.stopper)
 
-	var compactEngineSpanFunc eval.CompactEngineSpanFunc
-	if !codec.ForSystemTenant() {
-		compactEngineSpanFunc = func(
-			ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
-		) error {
-			return errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
-		}
-	} else {
-		cli := kvserver.NewCompactEngineSpanClient(cfg.nodeDialer)
-		compactEngineSpanFunc = cli.CompactEngineSpan
-	}
-
 	spanConfig := struct {
 		manager              *spanconfigmanager.Manager
 		sqlTranslatorFactory *spanconfigsqltranslator.Factory
@@ -761,43 +748,46 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	contentionRegistry.Start(ctx, cfg.stopper)
 
+	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
+
 	*execCfg = sql.ExecutorConfig{
-		Settings:                cfg.Settings,
-		NodeInfo:                nodeInfo,
-		Codec:                   codec,
-		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
-		Locality:                cfg.Locality,
-		AmbientCtx:              cfg.AmbientCtx,
-		DB:                      cfg.db,
-		Gossip:                  cfg.gossip,
-		NodeLiveness:            cfg.nodeLiveness,
-		SystemConfig:            cfg.systemConfigWatcher,
-		MetricsRecorder:         cfg.recorder,
-		DistSender:              cfg.distSender,
-		RPCContext:              cfg.rpcContext,
-		LeaseManager:            leaseMgr,
-		TenantStatusServer:      cfg.tenantStatusServer,
-		Clock:                   cfg.clock,
-		DistSQLSrv:              distSQLServer,
-		NodesStatusServer:       cfg.nodesStatusServer,
-		SQLStatusServer:         cfg.sqlStatusServer,
-		RegionsServer:           cfg.regionsServer,
-		SessionRegistry:         cfg.sessionRegistry,
-		ClosedSessionCache:      cfg.closedSessionCache,
-		ContentionRegistry:      contentionRegistry,
-		SQLLiveness:             cfg.sqlLivenessProvider,
-		JobRegistry:             jobRegistry,
-		VirtualSchemas:          virtualSchemas,
-		HistogramWindowInterval: cfg.HistogramWindowInterval(),
-		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
-		RoleMemberCache:         sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
-		SessionInitCache:        sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
-		RootMemoryMonitor:       rootSQLMemoryMonitor,
-		TestingKnobs:            sqlExecutorTestingKnobs,
-		CompactEngineSpanFunc:   compactEngineSpanFunc,
-		TraceCollector:          traceCollector,
-		TenantUsageServer:       cfg.tenantUsageServer,
-		KVStoresIterator:        cfg.kvStoresIterator,
+		Settings:                  cfg.Settings,
+		NodeInfo:                  nodeInfo,
+		Codec:                     codec,
+		DefaultZoneConfig:         &cfg.DefaultZoneConfig,
+		Locality:                  cfg.Locality,
+		AmbientCtx:                cfg.AmbientCtx,
+		DB:                        cfg.db,
+		Gossip:                    cfg.gossip,
+		NodeLiveness:              cfg.nodeLiveness,
+		SystemConfig:              cfg.systemConfigWatcher,
+		MetricsRecorder:           cfg.recorder,
+		DistSender:                cfg.distSender,
+		RPCContext:                cfg.rpcContext,
+		LeaseManager:              leaseMgr,
+		TenantStatusServer:        cfg.tenantStatusServer,
+		Clock:                     cfg.clock,
+		DistSQLSrv:                distSQLServer,
+		NodesStatusServer:         cfg.nodesStatusServer,
+		SQLStatusServer:           cfg.sqlStatusServer,
+		RegionsServer:             cfg.regionsServer,
+		SessionRegistry:           cfg.sessionRegistry,
+		ClosedSessionCache:        cfg.closedSessionCache,
+		ContentionRegistry:        contentionRegistry,
+		SQLLiveness:               cfg.sqlLivenessProvider,
+		JobRegistry:               jobRegistry,
+		VirtualSchemas:            virtualSchemas,
+		HistogramWindowInterval:   cfg.HistogramWindowInterval(),
+		RangeDescriptorCache:      cfg.distSender.RangeDescriptorCache(),
+		RoleMemberCache:           sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		SessionInitCache:          sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		RootMemoryMonitor:         rootSQLMemoryMonitor,
+		TestingKnobs:              sqlExecutorTestingKnobs,
+		CompactEngineSpanFunc:     storageEngineClient.CompactEngineSpan,
+		CompactionConcurrencyFunc: storageEngineClient.SetCompactionConcurrency,
+		TraceCollector:            traceCollector,
+		TenantUsageServer:         cfg.tenantUsageServer,
+		KVStoresIterator:          cfg.kvStoresIterator,
 		SyntheticPrivilegeCache: cacheutil.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */),
 
