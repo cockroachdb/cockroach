@@ -181,10 +181,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
-	// that correspond to range descriptor changes resulting from recovery
-	// procedures.
-	UnsafeLossOfQuorumRecoveryRangeLog
 	// AlterSystemProtectedTimestampAddColumn adds a target column to the
 	// system.protected_ts_records table that describes what is protected by the
 	// record.
@@ -396,10 +392,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 46},
 	},
 	{
 		Key:     AlterSystemProtectedTimestampAddColumn,
