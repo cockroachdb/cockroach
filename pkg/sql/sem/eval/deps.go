@@ -384,6 +384,12 @@ type CompactEngineSpanFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) error
 
+// SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
+// store.
+type SetCompactionConcurrencyFunc func(
+	ctx context.Context, nodeID, storeID int32, compactionConcurrency uint64,
+) error
+
 // SessionAccessor is a limited interface to access session variables.
 type SessionAccessor interface {
 	// SetSessionVar sets a session variable to a new value. If isLocal is true,

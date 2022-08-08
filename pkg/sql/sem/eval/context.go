@@ -198,6 +198,10 @@ type Context struct {
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
 
+	// SetCompactionConcurrency is used to change the compaction concurrency of
+	// a store.
+	SetCompactionConcurrency SetCompactionConcurrencyFunc
+
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
