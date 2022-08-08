@@ -13,7 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -44,6 +46,19 @@ func (p *planner) EvalRoutineExpr(
 	defer rch.Close(ctx)
 	rrw := NewRowResultWriter(&rch)
 
+	// Configure stepping for volatile routines so that mutations made by the
+	// invoking statement are visible to the routine.
+	txn := p.Txn()
+	if expr.Volatility == volatility.Volatile {
+		// _ = p.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
+		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
+		defer func() {
+			txn.SetReadSeqNum(prevSeqNum)
+			_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
+		}()
+	}
+
 	// Execute each statement in the routine sequentially.
 	ef := newExecFactory(p)
 	for i := 0; i < expr.NumStmts; i++ {
@@ -60,6 +75,14 @@ func (p *planner) EvalRoutineExpr(
 			w = rrw
 		} else {
 			w = &droppingResultWriter{}
+		}
+
+		// Place a sequence point before each statement in the routine for
+		// volatile functions.
+		if expr.Volatility == volatility.Volatile {
+			if err := txn.Step(ctx); err != nil {
+				return nil, err
+			}
 		}
 
 		// TODO(mgartner): Add a new tracing.ChildSpan to the context for better

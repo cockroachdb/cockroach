@@ -13,6 +13,7 @@ package tree
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -50,6 +51,14 @@ type RoutineExpr struct {
 	// Typ is the type of the routine's result.
 	Typ *types.T
 
+	// Volatility affects the visibility of mutations made by the statement
+	// invoking the routine. A volatile routine will see these mutations. Also,
+	// statements within a volatile function's body will see changes made by
+	// previous statements the routine. In contrast, a stable, immutable,
+	// or leakproof function will see a snapshot of the data as of the start of
+	// the statement calling the function.
+	Volatility volatility.V
+
 	// CalledOnNullInput is true if the function should be called when any of
 	// its inputs are NULL. If false, the function will not be evaluated in the
 	// presence of null inputs, and will instead evaluate directly to NULL.
@@ -65,6 +74,7 @@ func NewTypedRoutineExpr(
 	planFn RoutinePlanFn,
 	numStmts int,
 	typ *types.T,
+	v volatility.V,
 	calledOnNullInput bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
@@ -72,6 +82,7 @@ func NewTypedRoutineExpr(
 		PlanFn:            planFn,
 		NumStmts:          numStmts,
 		Typ:               typ,
+		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
 		name:              name,
 	}
