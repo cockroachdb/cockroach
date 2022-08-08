@@ -81,7 +81,7 @@ func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 			return -a.Compare(evalCtx, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			res, err := min.Compute(evalCtx.Ctx(), evalCtx, wfr)
+			res, err := min.Compute(context.Background(), evalCtx, wfr)
 			if err != nil {
 				t.Errorf("Unexpected error received when getting min from sliding window: %+v", err)
 			}
@@ -91,7 +91,7 @@ func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				row, err := wfr.Rows.GetRow(evalCtx.Ctx(), idx)
+				row, err := wfr.Rows.GetRow(context.Background(), idx)
 				if err != nil {
 					panic(err)
 				}
@@ -108,7 +108,7 @@ func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 				t.Errorf("Min sliding window returned wrong result: expected %+v, found %+v", naiveMin, minResult)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
 				t.Errorf(min.sw.string())
-				t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+				t.Errorf(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 		}
@@ -124,7 +124,7 @@ func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 			return a.Compare(evalCtx, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			res, err := max.Compute(evalCtx.Ctx(), evalCtx, wfr)
+			res, err := max.Compute(context.Background(), evalCtx, wfr)
 			if err != nil {
 				t.Errorf("Unexpected error received when getting max from sliding window: %+v", err)
 			}
@@ -134,7 +134,7 @@ func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				row, err := wfr.Rows.GetRow(evalCtx.Ctx(), idx)
+				row, err := wfr.Rows.GetRow(context.Background(), idx)
 				if err != nil {
 					panic(err)
 				}
@@ -151,7 +151,7 @@ func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 				t.Errorf("Max sliding window returned wrong result: expected %+v, found %+v", naiveMax, maxResult)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
 				t.Errorf(max.sw.string())
-				t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+				t.Errorf(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 		}
@@ -165,12 +165,12 @@ func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun
 		sum := &slidingWindowSumFunc{agg: &intSumAggregate{}}
 		avg := &avgWindowFunc{sum: newSlidingWindowSumFunc(&intSumAggregate{})}
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			res, err := sum.Compute(evalCtx.Ctx(), evalCtx, wfr)
+			res, err := sum.Compute(context.Background(), evalCtx, wfr)
 			if err != nil {
 				t.Errorf("Unexpected error received when getting sum from sliding window: %+v", err)
 			}
 			sumResult := tree.DDecimal{Decimal: res.(*tree.DDecimal).Decimal}
-			res, err = avg.Compute(evalCtx.Ctx(), evalCtx, wfr)
+			res, err = avg.Compute(context.Background(), evalCtx, wfr)
 			if err != nil {
 				t.Errorf("Unexpected error received when getting avg from sliding window: %+v", err)
 			}
@@ -180,7 +180,7 @@ func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				row, err := wfr.Rows.GetRow(evalCtx.Ctx(), idx)
+				row, err := wfr.Rows.GetRow(context.Background(), idx)
 				if err != nil {
 					panic(err)
 				}
@@ -198,21 +198,21 @@ func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun
 			if s != naiveSum {
 				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", naiveSum, s)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
-				t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+				t.Errorf(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 			a, err := avgResult.Float64()
 			if err != nil {
 				t.Errorf("Unexpected error received when converting avg from DDecimal to float64: %+v", err)
 			}
-			frameSize, err := wfr.FrameSize(evalCtx.Ctx(), evalCtx)
+			frameSize, err := wfr.FrameSize(context.Background(), evalCtx)
 			if err != nil {
 				t.Errorf("Unexpected error when getting FrameSize: %+v", err)
 			}
 			if a != float64(naiveSum)/float64(frameSize) {
 				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", float64(naiveSum)/float64(frameSize), a)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
-				t.Errorf(partitionToString(evalCtx.Ctx(), wfr.Rows))
+				t.Errorf(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 		}

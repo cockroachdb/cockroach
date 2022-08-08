@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -18,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
-func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (planNode, error) {
+func (p *planner) SetSessionCharacteristics(
+	ctx context.Context, n *tree.SetSessionCharacteristics,
+) (planNode, error) {
 	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 	switch n.Modes.Isolation {
 	case tree.SerializableIsolation, tree.UnspecifiedIsolation:
@@ -55,7 +59,7 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 		// the same SET SESSION CHARACTERISTICS AS TRANSACTION mechanism? Currently, the
 		// way to do this is SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE;
 		if n.Modes.AsOf.Expr != nil {
-			if asof.IsFollowerReadTimestampFunction(p.EvalContext().Ctx(), n.Modes.AsOf, p.semaCtx.SearchPath) {
+			if asof.IsFollowerReadTimestampFunction(ctx, n.Modes.AsOf, p.semaCtx.SearchPath) {
 				m.SetDefaultTransactionUseFollowerReads(true)
 			} else {
 				return pgerror.Newf(pgcode.InvalidParameterValue,

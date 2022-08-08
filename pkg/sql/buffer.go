@@ -36,7 +36,7 @@ type bufferNode struct {
 
 func (n *bufferNode) startExec(params runParams) error {
 	n.typs = planTypes(n.plan)
-	n.rows.Init(n.typs, params.extendedEvalCtx, redact.Sprint(n.label))
+	n.rows.Init(params.ctx, n.typs, params.extendedEvalCtx, redact.Sprint(n.label))
 	return nil
 }
 

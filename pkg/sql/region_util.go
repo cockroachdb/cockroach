@@ -1138,7 +1138,7 @@ func partitionByForRegionalByRow(
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
 func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
-		p.EvalContext().Ctx(),
+		ctx,
 		p.txn,
 		p.CurrentDatabase(),
 		tree.DatabaseLookupFlags{
@@ -1216,7 +1216,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 // the multi-region syntax.
 func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error {
 	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		p.EvalContext().Ctx(),
+		ctx,
 		p.txn,
 		descpb.ID(id),
 		tree.DatabaseLookupFlags{
@@ -1315,7 +1315,7 @@ func (p *planner) CurrentDatabaseRegionConfig(
 	ctx context.Context,
 ) (eval.DatabaseRegionConfig, error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
-		p.EvalContext().Ctx(),
+		ctx,
 		p.txn,
 		p.CurrentDatabase(),
 		tree.DatabaseLookupFlags{
