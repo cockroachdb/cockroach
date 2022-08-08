@@ -123,7 +123,7 @@ func (b *overloadBase) String() string {
 	return fmt.Sprintf("%s: %s", b.Name, b.OpStr)
 }
 
-func toString(family types.Family) string {
+func familyToString(family types.Family) string {
 	switch family {
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "typeconv.DatumVecCanonicalTypeFamily"
@@ -140,7 +140,7 @@ type argTypeOverloadBase struct {
 func newArgTypeOverloadBase(canonicalTypeFamily types.Family) *argTypeOverloadBase {
 	return &argTypeOverloadBase{
 		CanonicalTypeFamily:    canonicalTypeFamily,
-		CanonicalTypeFamilyStr: toString(canonicalTypeFamily),
+		CanonicalTypeFamilyStr: familyToString(canonicalTypeFamily),
 	}
 }
 
@@ -359,7 +359,7 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 
 type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
 type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
-type castFunc func(to, from, evalCtx, toType string) string
+type castFunc func(to, from, evalCtx, toType, buf string) string
 type hashFunc func(targetElem, vElem, vVec, vIdx string) string
 
 // Assign produces a Go source string that assigns the "targetElem" variable to
