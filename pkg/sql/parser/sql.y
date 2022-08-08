@@ -5332,6 +5332,18 @@ grant_stmt:
       WithGrantOption: $11.bool(),
     }
   }
+| GRANT privileges ON ALL FUNCTIONS IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      WithGrantOption: $11.bool(),
+    }
+  }
 | GRANT SYSTEM privileges TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
@@ -5442,6 +5454,30 @@ revoke_stmt:
       Targets: tree.GrantTargetList{
         Schemas: $11.objectNamePrefixList(),
         AllTablesInSchema: true,
+      },
+      Grantees: $13.roleSpecList(),
+      GrantOptionFor: true,
+    }
+  }
+| REVOKE privileges ON ALL FUNCTIONS IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON ALL FUNCTIONS IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $5.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $11.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
       },
       Grantees: $13.roleSpecList(),
       GrantOptionFor: true,
@@ -7528,6 +7564,10 @@ grant_targets:
 | EXTERNAL CONNECTION name_list
   {
     $$.val = tree.GrantTargetList{ExternalConnections: $3.nameList()}
+  }
+| FUNCTION function_with_argtypes_list
+  {
+    $$.val = tree.GrantTargetList{Functions: $2.functionObjs()}
   }
 
 // backup_targets is similar to grant_targets but used by backup and restore, and thus
@@ -9898,7 +9938,7 @@ target_object_type:
   {
     $$.val = privilege.Schemas
   }
-| FUNCTIONS error
+| FUNCTIONS
   {
     $$.val = privilege.Functions
   }
