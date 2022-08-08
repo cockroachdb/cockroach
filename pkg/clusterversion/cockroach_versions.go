@@ -337,6 +337,9 @@ const (
 	UsersHaveIDs
 	// SetUserIDNotNull sets the user_id column in system.users to not null.
 	SetUserIDNotNull
+	// SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
+	// statement.
+	SchemaChangeSupportsCreateFunction
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -589,6 +592,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SetUserIDNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
+	},
+	{
+		Key:     SchemaChangeSupportsCreateFunction,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
