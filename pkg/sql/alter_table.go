@@ -737,6 +737,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableSetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc)
 			if err := storageparam.Set(
+				params.ctx,
 				params.p.SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
@@ -1286,7 +1287,7 @@ func injectTableStats(
 StatsLoop:
 	for i := range jsonStats {
 		s := &jsonStats[i]
-		h, err := s.GetHistogram(&params.p.semaCtx, params.EvalContext())
+		h, err := s.GetHistogram(params.ctx, &params.p.semaCtx, params.EvalContext())
 		if err != nil {
 			return err
 		}

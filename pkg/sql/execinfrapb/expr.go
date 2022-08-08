@@ -11,6 +11,7 @@
 package execinfrapb
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -55,7 +56,11 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 //
 // evalCtx will not be mutated.
 func processExpression(
-	exprSpec Expression, evalCtx *eval.Context, semaCtx *tree.SemaContext, h *tree.IndexedVarHelper,
+	ctx context.Context,
+	exprSpec Expression,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	h *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
@@ -77,7 +82,7 @@ func processExpression(
 
 	semaCtx.IVarContainer = h.Container()
 	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(evalCtx.Context, expr, semaCtx, types.Any)
+	typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
 	if err != nil {
 		// Type checking must succeed by now.
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
@@ -149,18 +154,22 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 //
 // evalCtx will not be mutated.
 func DeserializeExpr(
-	expr string, semaCtx *tree.SemaContext, evalCtx *eval.Context, vars *tree.IndexedVarHelper,
+	ctx context.Context,
+	expr string,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	vars *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
 	if expr == "" {
 		return nil, nil
 	}
 
-	deserializedExpr, err := processExpression(Expression{Expr: expr}, evalCtx, semaCtx, vars)
+	deserializedExpr, err := processExpression(ctx, Expression{Expr: expr}, evalCtx, semaCtx, vars)
 	if err != nil {
 		return deserializedExpr, err
 	}
 	var t transform.ExprTransformContext
-	if t.AggregateInExpr(evalCtx.Context, deserializedExpr, evalCtx.SessionData().SearchPath) {
+	if t.AggregateInExpr(ctx, deserializedExpr, evalCtx.SessionData().SearchPath) {
 		return nil, errors.Errorf("expression '%s' has aggregate", deserializedExpr)
 	}
 	return deserializedExpr, nil
@@ -168,7 +177,11 @@ func DeserializeExpr(
 
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
-	expr Expression, types []*types.T, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+	ctx context.Context,
+	expr Expression,
+	types []*types.T,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
 ) error {
 	if expr.Empty() {
 		return nil
@@ -185,13 +198,13 @@ func (eh *ExprHelper) Init(
 	}
 	if semaCtx.TypeResolver != nil {
 		for _, t := range types {
-			if err := typedesc.EnsureTypeIsHydrated(evalCtx.Context, t, semaCtx.TypeResolver.(catalog.TypeDescriptorResolver)); err != nil {
+			if err := typedesc.EnsureTypeIsHydrated(ctx, t, semaCtx.TypeResolver.(catalog.TypeDescriptorResolver)); err != nil {
 				return err
 			}
 		}
 	}
 	var err error
-	eh.Expr, err = DeserializeExpr(expr.Expr, semaCtx, evalCtx, &eh.Vars)
+	eh.Expr, err = DeserializeExpr(ctx, expr.Expr, semaCtx, evalCtx, &eh.Vars)
 	return err
 }
 
