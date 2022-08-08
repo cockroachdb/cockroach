@@ -148,10 +148,30 @@ func (v *fixCastForStyleVisitor) VisitPost(expr tree.Expr) tree.Expr {
 				}
 				return newExpr
 			}
-		case types.IntervalFamily, types.DateFamily, types.TimestampFamily, types.TimeFamily, types.TimeTZFamily, types.TimestampTZFamily:
+		case types.IntervalFamily, types.DateFamily, types.TimestampFamily:
 			if outerTyp.Family() == types.StringFamily {
 				newExpr = &tree.CastExpr{
 					Expr:       &tree.FuncExpr{Func: tree.WrapFunction("to_char"), Exprs: tree.Exprs{expr.Expr}},
+					Type:       expr.Type,
+					SyntaxMode: tree.CastShort,
+				}
+				return newExpr
+			}
+		case types.TimestampTZFamily:
+			if outerTyp.Family() == types.StringFamily {
+				newExpr = &tree.CastExpr{
+					Expr: &tree.FuncExpr{
+						Func: tree.WrapFunction("to_char"),
+						Exprs: tree.Exprs{
+							&tree.FuncExpr{
+								Func: tree.WrapFunction("timezone"),
+								Exprs: tree.Exprs{
+									tree.NewStrVal("UTC"),
+									expr.Expr,
+								},
+							},
+						},
+					},
 					Type:       expr.Type,
 					SyntaxMode: tree.CastShort,
 				}

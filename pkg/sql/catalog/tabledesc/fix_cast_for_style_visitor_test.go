@@ -37,7 +37,7 @@ func TestFixCastForStyleVisitor(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.ds (it INTERVAL, s STRING, vc VARCHAR, c CHAR, t TIMESTAMP, n NAME, d DATE);
+CREATE TABLE t.ds (it INTERVAL, s STRING, vc VARCHAR, c CHAR, t TIMESTAMP, n NAME, d DATE, tz TIMESTAMPTZ);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -102,8 +102,8 @@ CREATE TABLE t.ds (it INTERVAL, s STRING, vc VARCHAR, c CHAR, t TIMESTAMP, n NAM
 			expect: "lower(to_char(it)::STRING)",
 		},
 		{
-			expr:   "s::TIMESTAMPTZ::STRING",
-			expect: "to_char(s::TIMESTAMPTZ)::STRING",
+			expr:   "tz::STRING",
+			expect: "to_char(timezone('UTC', tz))::STRING",
 		},
 		{
 			expr:   "extract(epoch from s::TIME)",
