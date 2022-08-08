@@ -34,6 +34,7 @@ export interface ActiveExecution {
   application: string;
   query?: string; // Possibly empty for a transaction.
   timeSpentWaiting?: moment.Duration;
+  isFullScan: boolean;
 }
 
 export type ActiveStatement = ActiveExecution &
@@ -45,6 +46,8 @@ export type ActiveStatement = ActiveExecution &
 export type ActiveTransaction = ActiveExecution & {
   statementCount: number;
   retries: number;
+  lastAutoRetryReason?: string;
+  priority: string;
 };
 
 export type ActiveExecutions = {

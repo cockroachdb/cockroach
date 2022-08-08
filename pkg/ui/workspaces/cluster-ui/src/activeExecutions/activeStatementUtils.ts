@@ -118,6 +118,7 @@ export function getActiveExecutionsFromSessions(
           application: session.application_name,
           user: session.username,
           clientAddress: session.client_address,
+          isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
         };
 
         statements.push(stmt);
@@ -138,6 +139,9 @@ export function getActiveExecutionsFromSessions(
         application: session.application_name,
         retries: activeTxn.num_auto_retries,
         statementCount: activeTxn.num_statements_executed,
+        isFullScan: session.active_queries.some(query => query.is_full_scan),
+        lastAutoRetryReason: activeTxn.last_auto_retry_reason,
+        priority: activeTxn.priority,
       });
     });
 
@@ -147,6 +151,7 @@ export function getActiveExecutionsFromSessions(
     if (!mostRecentStmt) return txn;
     txn.query = mostRecentStmt.query;
     txn.statementID = mostRecentStmt.statementID;
+    txn.isFullScan = mostRecentStmt.isFullScan;
     return txn;
   });
 
