@@ -3043,7 +3043,6 @@ func TestReplicaGCRace(t *testing.T) {
 	fromTransport := kvserver.NewRaftTransport(
 		ambient,
 		cluster.MakeTestingClusterSettings(),
-		ambient.Tracer,
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
 		tc.Servers[0].Stopper(),
@@ -3541,7 +3540,6 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	transport0 := kvserver.NewRaftTransport(
 		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
-		tc.Servers[0].AmbientCtx().Tracer,
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.GetFirstStoreFromServer(t, 0).Gossip())),
 		nil, /* grpcServer */
