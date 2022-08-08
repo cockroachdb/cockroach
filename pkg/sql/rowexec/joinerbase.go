@@ -11,6 +11,8 @@
 package rowexec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -36,6 +38,7 @@ type joinerBase struct {
 // opts is passed along to the underlying ProcessorBase. The zero value is used
 // if the processor using the joinerBase is not implementing RowSource.
 func (jb *joinerBase) init(
+	ctx context.Context,
 	self execinfra.RowSource,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -87,7 +90,7 @@ func (jb *joinerBase) init(
 		return err
 	}
 	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
-	return jb.onCond.Init(flowCtx.EvalCtx.Ctx(), onExpr, onCondTypes, semaCtx, jb.EvalCtx)
+	return jb.onCond.Init(ctx, onExpr, onCondTypes, semaCtx, jb.EvalCtx)
 }
 
 // joinSide is the utility type to distinguish between two sides of the join.

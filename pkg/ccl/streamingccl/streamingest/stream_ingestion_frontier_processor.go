@@ -89,6 +89,7 @@ func init() {
 }
 
 func newStreamIngestionFrontierProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.StreamIngestionFrontierSpec,
@@ -106,7 +107,7 @@ func newStreamIngestionFrontierProcessor(
 		}
 	}
 
-	heartbeatSender, err := newHeartbeatSender(flowCtx, spec)
+	heartbeatSender, err := newHeartbeatSender(ctx, flowCtx, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -169,9 +170,9 @@ type heartbeatSender struct {
 }
 
 func newHeartbeatSender(
-	flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
 ) (*heartbeatSender, error) {
-	streamClient, err := streamclient.GetFirstActiveClient(flowCtx.EvalCtx.Ctx(), spec.StreamAddresses)
+	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses)
 	if err != nil {
 		return nil, err
 	}

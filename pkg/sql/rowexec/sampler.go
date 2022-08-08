@@ -100,6 +100,7 @@ const cpuUsageMaxThrottle = 0.75
 var bytesRowType = []*types.T{types.Bytes}
 
 func newSamplerProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.SamplerSpec,
@@ -113,7 +114,6 @@ func newSamplerProcessor(
 		}
 	}
 
-	ctx := flowCtx.EvalCtx.Ctx()
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
 	// enough.

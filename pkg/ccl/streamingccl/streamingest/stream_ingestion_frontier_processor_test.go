@@ -288,8 +288,10 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 
 			frontierPost := execinfrapb.PostProcessSpec{}
 			frontierOut := distsqlutils.RowBuffer{}
-			frontierProc, err := newStreamIngestionFrontierProcessor(&flowCtx, 0, /* processorID*/
-				frontierSpec, sip, &frontierPost, &frontierOut)
+			frontierProc, err := newStreamIngestionFrontierProcessor(
+				ctx, &flowCtx, 0, /* processorID*/
+				frontierSpec, sip, &frontierPost, &frontierOut,
+			)
 			require.NoError(t, err)
 			fp, ok := frontierProc.(*streamIngestionFrontier)
 			if !ok {

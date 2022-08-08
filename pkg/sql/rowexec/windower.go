@@ -98,6 +98,7 @@ var _ execopnode.OpNode = &windower{}
 const windowerProcName = "windower"
 
 func newWindower(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.WindowerSpec,
@@ -110,7 +111,6 @@ func newWindower(
 	}
 	evalCtx := flowCtx.NewEvalCtx()
 	w.inputTypes = input.OutputTypes()
-	ctx := evalCtx.Ctx()
 
 	w.partitionBy = spec.PartitionBy
 	windowFns := spec.WindowFns

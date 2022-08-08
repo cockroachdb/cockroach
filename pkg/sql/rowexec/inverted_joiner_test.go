@@ -688,6 +688,7 @@ func TestInvertedJoiner(t *testing.T) {
 				}
 
 				ij, err := newInvertedJoiner(
+					ctx,
 					&flowCtx,
 					0, /* processorID */
 					&execinfrapb.InvertedJoinerSpec{
@@ -795,6 +796,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 			t.Fatal(err)
 		}
 		return newInvertedJoiner(
+			ctx,
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.InvertedJoinerSpec{

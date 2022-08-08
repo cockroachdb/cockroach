@@ -52,6 +52,7 @@ var _ execopnode.OpNode = &mergeJoiner{}
 const mergeJoinerProcName = "merge joiner"
 
 func newMergeJoiner(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.MergeJoinerSpec,
@@ -66,14 +67,14 @@ func newMergeJoiner(
 		trackMatchedRight: shouldEmitUnmatchedRow(rightSide, spec.Type) || spec.Type == descpb.RightSemiJoin,
 	}
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		m.leftSource = newInputStatCollector(m.leftSource)
 		m.rightSource = newInputStatCollector(m.rightSource)
 		m.ExecStatsForTrace = m.execStatsForTrace
 	}
 
 	if err := m.joinerBase.init(
-		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
+		ctx, m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, false, /* outputContinuationColumn */
 		post, output,
 		execinfra.ProcStateOpts{
@@ -87,7 +88,7 @@ func newMergeJoiner(
 		return nil, err
 	}
 
-	m.MemMonitor = execinfra.NewMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
+	m.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "mergejoiner-mem")
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(

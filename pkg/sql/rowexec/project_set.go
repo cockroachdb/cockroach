@@ -69,6 +69,7 @@ var _ execopnode.OpNode = &projectSetProcessor{}
 const projectSetProcName = "projectSet"
 
 func newProjectSetProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.ProjectSetSpec,
@@ -104,8 +105,6 @@ func newProjectSetProcessor(
 	); err != nil {
 		return nil, err
 	}
-
-	ctx := flowCtx.EvalCtx.Ctx()
 
 	// Initialize exprHelpers.
 	semaCtx := ps.FlowCtx.NewSemaContext(ps.FlowCtx.Txn)

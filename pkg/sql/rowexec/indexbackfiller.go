@@ -78,7 +78,7 @@ func newIndexBackfiller(
 	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
 	ib := &indexBackfiller{
-		desc:    flowCtx.TableDescriptor(&spec.Table),
+		desc:    flowCtx.TableDescriptor(ctx, &spec.Table),
 		spec:    spec,
 		flowCtx: flowCtx,
 		output:  output,

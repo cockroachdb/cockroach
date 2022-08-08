@@ -162,6 +162,7 @@ const invertedJoinerProcName = "inverted joiner"
 // argument is non-nil only for tests. When nil, the invertedJoiner uses
 // the spec to construct an implementation of DatumsToInvertedExpr.
 func newInvertedJoiner(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.InvertedJoinerSpec,
@@ -220,8 +221,6 @@ func newInvertedJoiner(
 			outputColTypes = append(outputColTypes, types.Bool)
 		}
 	}
-
-	ctx := flowCtx.EvalCtx.Ctx()
 
 	// Make sure the key column types are hydrated. The fetched column types
 	// will be hydrated in ProcessorBase.Init below.

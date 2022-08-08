@@ -49,6 +49,7 @@ var _ execinfra.Processor = &bulkRowWriter{}
 var _ execinfra.RowSource = &bulkRowWriter{}
 
 func newBulkRowWriterProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BulkRowWriterSpec,
@@ -59,7 +60,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      flowCtx.TableDescriptor(&spec.Table),
+		tableDesc:      flowCtx.TableDescriptor(ctx, &spec.Table),
 		spec:           spec,
 		input:          input,
 		output:         output,

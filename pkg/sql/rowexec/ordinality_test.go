@@ -118,7 +118,7 @@ func TestOrdinality(t *testing.T) {
 				EvalCtx: &evalCtx,
 			}
 
-			d, err := newOrdinalityProcessor(&flowCtx, 0 /* processorID */, &os, in, &execinfrapb.PostProcessSpec{}, out)
+			d, err := newOrdinalityProcessor(context.Background(), &flowCtx, 0 /* processorID */, &os, in, &execinfrapb.PostProcessSpec{}, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -173,7 +173,7 @@ func BenchmarkOrdinality(b *testing.B) {
 		b.SetBytes(int64(8 * numRows * numCols))
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				o, err := newOrdinalityProcessor(flowCtx, 0 /* processorID */, spec, input, post, &rowDisposer{})
+				o, err := newOrdinalityProcessor(ctx, flowCtx, 0 /* processorID */, spec, input, post, &rowDisposer{})
 				if err != nil {
 					b.Fatal(err)
 				}

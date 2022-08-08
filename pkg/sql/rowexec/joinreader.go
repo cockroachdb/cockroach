@@ -255,6 +255,7 @@ var ParallelizeMultiKeyLookupJoinsEnabled = settings.RegisterBoolSetting(
 
 // newJoinReader returns a new joinReader.
 func newJoinReader(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.JoinReaderSpec,
@@ -344,8 +345,6 @@ func newJoinReader(
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
 	}
 
-	ctx := flowCtx.EvalCtx.Ctx()
-
 	// Make sure the key column types are hydrated. The fetched column types will
 	// be hydrated in ProcessorBase.Init (via joinerBase.init).
 	resolver := flowCtx.NewTypeResolver(jr.txn)
@@ -375,6 +374,7 @@ func newJoinReader(
 	rightTypes := spec.FetchSpec.FetchedColumnTypes()
 
 	if err := jr.joinerBase.init(
+		ctx,
 		jr,
 		flowCtx,
 		processorID,
@@ -440,7 +440,7 @@ func newJoinReader(
 	jr.MemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
-	if err := jr.initJoinReaderStrategy(flowCtx, rightTypes, readerType); err != nil {
+	if err := jr.initJoinReaderStrategy(ctx, flowCtx, rightTypes, readerType); err != nil {
 		return nil, err
 	}
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
@@ -485,7 +485,7 @@ func newJoinReader(
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
 			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.EvalCtx.Mon,
 		)
-		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
+		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		// The index joiner can rely on the streamer to maintain the input ordering,
@@ -499,7 +499,7 @@ func newJoinReader(
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
-				flowCtx.EvalCtx.Ctx(), jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
 				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor,
@@ -563,7 +563,7 @@ func newJoinReader(
 }
 
 func (jr *joinReader) initJoinReaderStrategy(
-	flowCtx *execinfra.FlowCtx, typs []*types.T, readerType joinReaderType,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, typs []*types.T, readerType joinReaderType,
 ) error {
 	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
@@ -662,7 +662,6 @@ func (jr *joinReader) initJoinReaderStrategy(
 		return nil
 	}
 
-	ctx := flowCtx.EvalCtx.Ctx()
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// joinReader will overflow to disk if this limit is not enough.
 	limit := execinfra.GetWorkMemLimit(flowCtx)

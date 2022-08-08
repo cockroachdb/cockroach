@@ -314,9 +314,9 @@ func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
 
 // GetRowMetrics returns the proper rowinfra.Metrics for either internal or user
 // queries.
-func (ctx *FlowCtx) GetRowMetrics() *rowinfra.Metrics {
-	if ctx.EvalCtx.SessionData().Internal {
-		return ctx.Cfg.InternalRowMetrics
+func (flowCtx *FlowCtx) GetRowMetrics() *rowinfra.Metrics {
+	if flowCtx.EvalCtx.SessionData().Internal {
+		return flowCtx.Cfg.InternalRowMetrics
 	}
-	return ctx.Cfg.RowMetrics
+	return flowCtx.Cfg.RowMetrics
 }
