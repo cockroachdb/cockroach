@@ -166,3 +166,21 @@ func (is Server) CompactEngineSpan(
 		})
 	return resp, err
 }
+
+// SetCompactionConcurrency implements PerStoreServer. It changes the compaction
+// concurrency of a store.
+func (is Server) SetCompactionConcurrency(
+	ctx context.Context, req *CompactionConcurrencyRequest,
+) (*CompactionConcurrencyResponse, error) {
+	resp := &CompactionConcurrencyResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			prevConcurrency := s.Engine().SetCompactionConcurrency(req.CompactionConcurrency)
+
+			// Wait for cancellation, and once cancelled, reset the compaction concurrency.
+			<-ctx.Done()
+			s.Engine().SetCompactionConcurrency(prevConcurrency)
+			return nil
+		})
+	return resp, err
+}
