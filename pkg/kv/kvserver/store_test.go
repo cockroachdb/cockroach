@@ -1087,14 +1087,14 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	defer stopper.Stop(ctx)
 	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
 	args := getArgs([]byte("a"))
-	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds(), 0).WithSynthetic(false)
-	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Timestamp: reqTS}, &args)
+	now := hlc.ClockTimestamp(store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds(), 0))
+	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Now: now}, &args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 	ts := store.cfg.Clock.Now()
-	if ts.WallTime != reqTS.WallTime || ts.Logical <= reqTS.Logical {
-		t.Errorf("expected store clock to advance to %s; got %s", reqTS, ts)
+	if ts.WallTime != now.WallTime || ts.Logical <= now.Logical {
+		t.Errorf("expected store clock to advance to %s; got %s", now, ts)
 	}
 }
 
@@ -1135,8 +1135,8 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
 	args := getArgs([]byte("a"))
 	// Set args timestamp to exceed max offset.
-	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0).WithSynthetic(false)
-	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Timestamp: reqTS}, &args)
+	now := hlc.ClockTimestamp(store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0))
+	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Now: now}, &args)
 	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Errorf("unexpected error: %v", pErr)
 	}
