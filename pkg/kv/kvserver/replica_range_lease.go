@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -349,15 +348,10 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		p.nextLease = roachpb.Lease{}
 	}
 
-	// We may need to hold a Raft election and repropose the lease acquisition
-	// command, which can take a couple of Raft election timeouts.
-	timeout := 2 * p.repl.store.cfg.RaftElectionTimeout()
-
-	const taskName = "pendingLeaseRequest: requesting lease"
 	err := p.repl.store.Stopper().RunAsyncTaskEx(
 		ctx,
 		stop.TaskOpts{
-			TaskName: taskName,
+			TaskName: "pendingLeaseRequest: requesting lease",
 			// Trace the lease acquisition as a child even though it might outlive the
 			// parent in case the parent's ctx is canceled. Other requests might
 			// later block on this lease acquisition too, and we can't include the
@@ -368,13 +362,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		func(ctx context.Context) {
 			defer sp.Finish()
 
-			// Run the lease acquisition request with a timeout. We must eventually
-			// return a NotLeaseHolderError rather than hanging, otherwise we could
-			// prevent the caller from nudging a different replica into acquiring the
-			// lease.
-			err := contextutil.RunWithTimeout(ctx, taskName, timeout, func(ctx context.Context) error {
-				return p.requestLease(ctx, nextLeaseHolder, reqLease, status, leaseReq)
-			})
+			err := p.requestLease(ctx, nextLeaseHolder, reqLease, status, leaseReq)
 			// Error will be handled below.
 
 			// We reset our state below regardless of whether we've gotten an error or
@@ -1167,22 +1155,12 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	// We may need to hold a Raft election and repropose the lease acquisition
 	// command, which can take a couple of Raft election timeouts.
 	timeout := 2 * r.store.cfg.RaftElectionTimeout()
-	if err := contextutil.RunWithTimeout(ctx, "acquire-lease", timeout,
-		func(ctx context.Context) error {
-			status, pErr = r.redirectOnOrAcquireLeaseForRequestWithoutTimeout(ctx, reqTS, brSig)
-			return nil
-		},
-	); err != nil {
-		return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
-	}
-	return status, pErr
-}
 
-// redirectOnOrAcquireLeaseForRequestWithoutTimeout is like
-// redirectOnOrAcquireLeaseForRequest, but runs without a timeout.
-func (r *Replica) redirectOnOrAcquireLeaseForRequestWithoutTimeout(
-	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
-) (kvserverpb.LeaseStatus, *roachpb.Error) {
+	// Does not use RunWithTimeout(), because we do not want to mask the
+	// NotLeaseHolderError on context cancellation.
+	ctx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
+	defer cancel()
+
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
 	{
