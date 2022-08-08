@@ -181,9 +181,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// DeleteCommentsWithDroppedIndexes cleans up left over comments that belong
-	// to dropped indexes.
-	DeleteCommentsWithDroppedIndexes
 	// RemoveIncompatibleDatabasePrivileges adds the migration which guarantees that
 	// databases do not have incompatible privileges
 	RemoveIncompatibleDatabasePrivileges
@@ -379,10 +376,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     DeleteCommentsWithDroppedIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
 	},
 	{
 		Key:     RemoveIncompatibleDatabasePrivileges,
