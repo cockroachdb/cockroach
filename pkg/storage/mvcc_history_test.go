@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -49,8 +48,12 @@ import (
 )
 
 var (
+	clearRangeUsingIter = util.ConstantWithMetamorphicTestBool(
+		"mvcc-histories-clear-range-using-iterator", false)
 	cmdDeleteRangeTombstoneKnownStats = util.ConstantWithMetamorphicTestBool(
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
+	iterReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-iter-reader",
+		"engine", "readonly", "batch", "snapshot").(string)
 	sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 )
 
@@ -895,7 +898,7 @@ func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	// NB: We can't test ClearRawRange or ClearRangeUsingHeuristic here, because
 	// it does not handle separated intents.
-	if util.ConstantWithMetamorphicTestBool("clear-range-using-iterator", false) {
+	if clearRangeUsingIter {
 		return e.engine.ClearMVCCIteratorRange(key, endKey, true, true)
 	}
 	return e.engine.ClearMVCCRange(key, endKey, true, true)
@@ -1015,17 +1018,21 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
-		iter := e.engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: key,
-			UpperBound: endKey,
-		})
-		ms, err := ComputeStatsForRange(iter, key, endKey, ts.WallTime)
-		iter.Close()
-		if err != nil {
-			return err
+		// Some tests will submit invalid MVCC range keys, where e.g. the end key is
+		// before the start key -- ignore them to avoid iterator panics.
+		if key.Compare(endKey) < 0 {
+			iter := e.engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				LowerBound: key,
+				UpperBound: endKey,
+			})
+			ms, err := ComputeStatsForRange(iter, key, endKey, ts.WallTime)
+			iter.Close()
+			if err != nil {
+				return err
+			}
+			msCovered = &ms
 		}
-		msCovered = &ms
 	}
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
@@ -1375,7 +1382,7 @@ func cmdIterNew(e *evalCtx) error {
 		e.iter.Close()
 	}
 
-	r, closer := metamorphicReader(e, "iter-reader")
+	r, closer := metamorphicReader(e)
 	e.iter = &iterWithCloser{r.NewMVCCIterator(kind, opts), closer}
 
 	if e.hasArg("pointSynthesis") {
@@ -1437,7 +1444,7 @@ func cmdIterNewIncremental(e *evalCtx) error {
 		e.iter.Close()
 	}
 
-	r, closer := metamorphicReader(e, "iter-incremental-reader")
+	r, closer := metamorphicReader(e)
 	e.iter = &iterWithCloser{NewMVCCIncrementalIterator(r, opts), closer}
 	return nil
 }
@@ -1459,7 +1466,7 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 	if len(opts.UpperBound) == 0 {
 		opts.UpperBound = keys.MaxKey
 	}
-	r, closer := metamorphicReader(e, "iter-reader")
+	r, closer := metamorphicReader(e)
 	iter := &iterWithCloser{r.NewMVCCIterator(MVCCKeyIterKind, opts), closer}
 	e.iter = NewReadAsOfIterator(iter, asOf)
 	return nil
@@ -2089,10 +2096,8 @@ func toKey(s string) roachpb.Key {
 
 // metamorphicReader returns a random storage.Reader for the Engine, and a
 // closer function if the reader must be closed when done (nil otherwise).
-func metamorphicReader(e *evalCtx, name string) (r Reader, closer func()) {
-	t := util.ConstantWithMetamorphicTestChoice(fmt.Sprintf("%s@%s", name, filepath.Base(e.td.Pos)),
-		"engine", "readonly", "batch", "snapshot").(string)
-	switch t {
+func metamorphicReader(e *evalCtx) (r Reader, closer func()) {
+	switch iterReader {
 	case "engine":
 		return e.engine, nil
 	case "readonly":
@@ -2104,7 +2109,7 @@ func metamorphicReader(e *evalCtx, name string) (r Reader, closer func()) {
 		snapshot := e.engine.NewSnapshot()
 		return snapshot, snapshot.Close
 	default:
-		e.t.Fatalf("unknown reader type %q", t)
+		e.t.Fatalf("unknown reader type %q", iterReader)
 	}
 	return nil, nil
 }
