@@ -120,7 +120,7 @@ func ingestionPlanHook(
 		}
 
 		// Create a new tenant for the replication stream
-		if _, err := sql.GetTenantRecord(ctx, p.ExecCfg(), nil, newTenantID.ToUint64()); err == nil {
+		if _, err := sql.GetTenantRecord(ctx, p.ExecCfg(), p.Txn(), newTenantID.ToUint64()); err == nil {
 			return errors.Newf("tenant with id %s already exists", newTenantID)
 		}
 		tenantInfo := &descpb.TenantInfoWithUsage{
@@ -129,7 +129,7 @@ func ingestionPlanHook(
 				State: descpb.TenantInfo_ADD,
 			},
 		}
-		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), nil, tenantInfo); err != nil {
+		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo); err != nil {
 			return err
 		}
 
