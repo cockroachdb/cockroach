@@ -533,7 +533,6 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 			break
 		}
 		row := v.buffer[0]
-		v.buffer = v.buffer[1:]
 
 		// If we've processed all row updates belonging to the previous row's timestamp,
 		// we fingerprint at `updated.Prev()` since we want to catch cases where one or
@@ -547,6 +546,10 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		if err := v.applyRowUpdate(row); err != nil {
 			return err
 		}
+		// NOTE: the buffer below can only be updated if the function
+		// above succeeded; otherwise, updates stored in the validator's
+		// buffer could be lost, leading to fingerprint mismatches.
+		v.buffer = v.buffer[1:]
 
 		// If any updates have exactly the same timestamp, we have to apply them all
 		// before fingerprinting.
