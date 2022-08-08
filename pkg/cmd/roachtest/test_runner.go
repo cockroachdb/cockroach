@@ -1234,6 +1234,20 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	return v, nil
 }
 
+// RecentPatchVersions returns up to n version strings (e.g. "21.1.2")
+// from the same minor release as buildVersion, in reverse chronological order.
+func RecentPatchVersions(buildVersion version.Version, n int) []string {
+	current := buildVersion.Patch()
+	if current < n {
+		n = current
+	}
+	versions := make([]string, n)
+	for i := 0; i < n; i++ {
+		versions[i] = fmt.Sprintf("%d.%d.%d", buildVersion.Major(), buildVersion.Minor(), current-i)
+	}
+	return versions
+}
+
 type workerErrors struct {
 	mu struct {
 		syncutil.Mutex
