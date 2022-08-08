@@ -122,6 +122,7 @@ export interface StatementsPageDispatchProps {
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
+  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   statementsError: Error | null;
   apps: string[];
@@ -182,6 +183,8 @@ export class StatementsPage extends React.Component<
   StatementsPageState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+  refreshDataTimeout: NodeJS.Timeout;
+
   constructor(props: StatementsPageProps) {
     super(props);
     const defaultState = {
@@ -265,6 +268,7 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
+    this.resetPolling(ts.key);
     this.setState({
       startRequest: new Date(),
     });
@@ -281,10 +285,29 @@ export class StatementsPage extends React.Component<
     });
   };
 
+  clearRefreshDataTimeout() {
+    if (this.refreshDataTimeout != null) {
+      clearTimeout(this.refreshDataTimeout);
+    }
+  }
+
+  resetPolling(key: string) {
+    this.clearRefreshDataTimeout();
+    if (key !== "Custom") {
+      this.refreshDataTimeout = setTimeout(
+        this.refreshStatements,
+        300000, // 5 minutes
+      );
+    }
+  }
+
   refreshStatements = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshStatements(req);
+
+    this.resetPolling(this.props.timeScale.key);
   };
+
   resetSQLStats = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.resetSQLStats(req);
@@ -297,7 +320,23 @@ export class StatementsPage extends React.Component<
     this.setState({
       startRequest: new Date(),
     });
-    this.refreshStatements();
+
+    // For the first data fetch for this page, we refresh if there are:
+    // - Last updated is null (no statements fetched previously)
+    // - The time interval is not custom, i.e. we have a moving window
+    // in which case we poll every 5 minutes. For the first fetch we will
+    // calculate the next time to refresh based on when the data was last
+    // updated.
+    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
+      const now = moment();
+      const nextRefresh =
+        this.props.lastUpdated?.clone().add(5, "minutes") || now;
+      setTimeout(
+        this.refreshStatements,
+        Math.max(0, nextRefresh.diff(now, "milliseconds")),
+      );
+    }
+
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -345,6 +384,7 @@ export class StatementsPage extends React.Component<
 
   componentWillUnmount(): void {
     this.props.dismissAlertMessage();
+    this.clearRefreshDataTimeout();
   }
 
   onChangePage = (current: number): void => {

@@ -247,6 +247,7 @@ const diagnosticsReportsInProgress: IStatementDiagnosticsReport[] = [
 ];
 
 const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
+const lastUpdated = moment("Sep 15 2021 01:30:00 GMT");
 const aggregationInterval = 3600; // 1 hour
 
 const statementsPagePropsFixture: StatementsPageProps = {
@@ -285,6 +286,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     regions: "",
     nodes: "",
   },
+  lastUpdated,
   // Aggregate key values in these statements will need to change if implementation
   // of 'statementKey' in appStats.ts changes.
   statements: [
