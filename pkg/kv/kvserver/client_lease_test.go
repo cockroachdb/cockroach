@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -951,4 +952,124 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		}
 		return errors.Errorf("Expected server 1 to have at lease 1 lease.")
 	})
+}
+
+// TestAcquireLeaseTimeout is a regression test that lease acquisition timeouts
+// always return a NotLeaseHolderError.
+func TestAcquireLeaseTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set a timeout for the test context, to guard against the test getting stuck.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	// blockRangeID, when non-zero, will signal the replica to delay lease
+	// requests for the given range until the request's context is canceled, and
+	// return the context error.
+	var blockRangeID int32
+
+	maybeBlockLeaseRequest := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == roachpb.RequestLease &&
+			int32(ba.RangeID) == atomic.LoadInt32(&blockRangeID) {
+			t.Logf("blocked lease request for r%d", ba.RangeID)
+			<-ctx.Done()
+			return roachpb.NewError(ctx.Err())
+		}
+		return nil
+	}
+
+	// The lease request timeout depends on the Raft election timeout, so we set
+	// it low to get faster timeouts (800 ms) and speed up the test.
+	var raftCfg base.RaftConfig
+	raftCfg.SetDefaults()
+	raftCfg.RaftHeartbeatIntervalTicks = 1
+	raftCfg.RaftElectionTimeoutTicks = 2
+
+	manualClock := hlc.NewHybridManualClock()
+
+	// Start a two-node cluster.
+	const numNodes = 2
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: raftCfg,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manualClock.UnixNano,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter:                    maybeBlockLeaseRequest,
+					AllowLeaseRequestProposalsWhenNotLeader: true,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+
+	// Split off a range, upreplicate it to both servers, and move the lease
+	// from n1 to n2.
+	splitKey := roachpb.Key("a")
+	_, desc := tc.SplitRangeOrFatal(t, splitKey)
+	tc.AddVotersOrFatal(t, splitKey, tc.Target(1))
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+	repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+
+	// Stop n2 and increment its epoch to invalidate the lease.
+	lv, ok := tc.Server(1).NodeLiveness().(*liveness.NodeLiveness)
+	require.True(t, ok)
+	lvNode2, ok := lv.Self()
+	require.True(t, ok)
+	tc.StopServer(1)
+
+	manualClock.Increment(lvNode2.Expiration.WallTime - srv.Clock().PhysicalNow())
+	lv, ok = srv.NodeLiveness().(*liveness.NodeLiveness)
+	require.True(t, ok)
+	testutils.SucceedsSoon(t, func() error {
+		err := lv.IncrementEpoch(context.Background(), lvNode2)
+		if errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
+			return nil
+		}
+		return err
+	})
+	require.False(t, repl.CurrentLeaseStatus(ctx).IsValid())
+
+	// Trying to acquire the lease should error with an empty NLHE, since the
+	// range doesn't have quorum.
+	var nlhe *roachpb.NotLeaseHolderError
+	_, err = repl.TestingAcquireLease(ctx)
+	require.Error(t, err)
+	require.IsType(t, &roachpb.NotLeaseHolderError{}, err) // check exact type
+	require.ErrorAs(t, err, &nlhe)
+	require.Empty(t, nlhe.Lease)
+
+	// Now for the real test: block lease requests for the range, and send off a
+	// bunch of sequential lease requests with a small delay, which should join
+	// onto the same lease request internally. All of these should return a NLHE
+	// when they time out, regardless of the internal mechanics.
+	atomic.StoreInt32(&blockRangeID, int32(desc.RangeID))
+
+	const attempts = 20
+	var wg sync.WaitGroup
+	errC := make(chan error, attempts)
+	wg.Add(attempts)
+	for i := 0; i < attempts; i++ {
+		time.Sleep(10 * time.Millisecond)
+		go func() {
+			_, err := repl.TestingAcquireLease(ctx)
+			errC <- err
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	close(errC)
+
+	for err := range errC {
+		require.Error(t, err)
+		require.IsType(t, &roachpb.NotLeaseHolderError{}, err) // check exact type
+		require.ErrorAs(t, err, &nlhe)
+		require.Empty(t, nlhe.Lease)
+	}
 }
