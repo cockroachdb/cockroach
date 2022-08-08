@@ -273,7 +273,6 @@ vectorized: true
 ·
 • project
 │ columns: (z)
-│ estimated row count: 990 (missing stats)
 │
 └── • delete
     │ columns: (x, z)
@@ -301,7 +300,6 @@ vectorized: true
 ·
 • project
 │ columns: (z)
-│ estimated row count: 990 (missing stats)
 │
 └── • delete
     │ columns: (x, z)

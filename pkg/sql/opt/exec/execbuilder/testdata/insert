@@ -316,7 +316,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, v, rowid_default)
-    │ estimated row count: 10 (missing stats)
     │ render rowid_default: unique_rowid()
     │ render x: x
     │ render v: v
@@ -349,7 +348,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, v, rowid_default)
-    │ estimated row count: 1 (missing stats)
     │ render rowid_default: unique_rowid()
     │ render x: x
     │ render v: v
@@ -373,10 +371,8 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ estimated row count: 1
     │
     └── • limit
-        │ estimated row count: 1
         │ count: 1
         │
         └── • values
@@ -393,7 +389,6 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ estimated row count: 1
     │
     └── • top-k
         │ estimated row count: 1
@@ -414,7 +409,6 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ estimated row count: 1
     │
     └── • top-k
         │ estimated row count: 1
@@ -435,7 +429,6 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ estimated row count: 1
     │
     └── • top-k
         │ estimated row count: 1
@@ -455,7 +448,6 @@ vectorized: true
 ·
 • render
 │ columns: ("?column?")
-│ estimated row count: 10 (missing stats)
 │ render ?column?: x + v
 │
 └── • insert
@@ -465,7 +457,6 @@ vectorized: true
     │
     └── • render
         │ columns: (length, "?column?", rowid_default)
-        │ estimated row count: 10 (missing stats)
         │ render rowid_default: unique_rowid()
         │ render length: length
         │ render ?column?: "?column?"
@@ -479,7 +470,6 @@ vectorized: true
             │
             └── • render
                 │ columns: (length, "?column?", column12)
-                │ estimated row count: 1,000 (missing stats)
                 │ render length: length(k)
                 │ render ?column?: 2
                 │ render column12: k || v
@@ -509,7 +499,6 @@ vectorized: true
 ·
 • project
 │ columns: (x)
-│ estimated row count: 1
 │
 └── • insert fast path
       columns: (x, rowid)
@@ -585,7 +574,6 @@ vectorized: true
         │
         └── • project
             │ columns: (z)
-            │ estimated row count: 1,000 (missing stats)
             │
             └── • insert
                 │ columns: (z, rowid)
@@ -594,7 +582,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (a, b, c, rowid_default)
-                    │ estimated row count: 1,000 (missing stats)
                     │ render rowid_default: unique_rowid()
                     │ render a: a
                     │ render b: b

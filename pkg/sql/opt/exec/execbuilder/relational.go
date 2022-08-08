@@ -363,8 +363,25 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	// If we are building against an ExplainFactory, annotate the nodes with more
-	// information.
+	b.maybeAnnotateWithEstimates(ep.root, e)
+
+	if saveTableName != "" {
+		ep, err = b.applySaveTable(ep, e, saveTableName)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	// Wrap the expression in a render expression if presentation requires it.
+	if p := e.RequiredPhysical(); !p.Presentation.Any() {
+		ep, err = b.applyPresentation(ep, p.Presentation)
+	}
+	return ep, err
+}
+
+// maybeAnnotateWithEstimates checks if we are building against an
+// ExplainFactory and annotates the node with more information if so.
+func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 	if ef, ok := b.factory.(exec.ExplainFactory); ok {
 		stats := &e.Relational().Stats
 		val := exec.EstimatedStats{
@@ -385,21 +402,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 				val.LimitHint = scan.RequiredPhysical().LimitHint
 			}
 		}
-		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &val)
+		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
 	}
-
-	if saveTableName != "" {
-		ep, err = b.applySaveTable(ep, e, saveTableName)
-		if err != nil {
-			return execPlan{}, err
-		}
-	}
-
-	// Wrap the expression in a render expression if presentation requires it.
-	if p := e.RequiredPhysical(); !p.Presentation.Any() {
-		ep, err = b.applyPresentation(ep, p.Presentation)
-	}
-	return ep, err
 }
 
 func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
@@ -841,15 +845,17 @@ func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execP
 	// TODO(rytaft): the invertedFilter used to do this post-projection, but we
 	// had difficulty integrating that behavior. Investigate and restore that
 	// original behavior.
-	return b.applySimpleProject(
-		res, invFilter.Relational().OutputCols, invFilter.ProvidedPhysical().Ordering,
-	)
+	return b.applySimpleProject(res, invFilter, invFilter.Relational().OutputCols, invFilter.ProvidedPhysical().Ordering)
 }
 
 // applySimpleProject adds a simple projection on top of an existing plan.
 func (b *Builder) applySimpleProject(
-	input execPlan, cols opt.ColSet, providedOrd opt.Ordering,
+	input execPlan, inputExpr memo.RelExpr, cols opt.ColSet, providedOrd opt.Ordering,
 ) (execPlan, error) {
+	// Since we are constructing a simple project on top of the main operator,
+	// we need to explicitly annotate the latter with estimates since the code
+	// in buildRelational() will attach them to the project.
+	b.maybeAnnotateWithEstimates(input.root, inputExpr)
 	// We have only pass-through columns.
 	colList := make([]exec.NodeColumnOrdinal, 0, cols.Len())
 	var res execPlan
@@ -877,7 +883,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
-		return b.applySimpleProject(input, prj.Passthrough, prj.ProvidedPhysical().Ordering)
+		return b.applySimpleProject(input, prj.Input, prj.Passthrough, prj.ProvidedPhysical().Ordering)
 	}
 
 	var res execPlan
@@ -1434,7 +1440,7 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 	if input.outputCols.Len() == outCols.Len() {
 		return ep, nil
 	}
-	return b.ensureColumns(ep, outCols.ToList(), distinct.ProvidedPhysical().Ordering)
+	return b.ensureColumns(ep, distinct, outCols.ToList(), distinct.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
@@ -1526,11 +1532,11 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	// Note that (unless this is part of a larger query) the presentation property
 	// will ensure that the columns are presented correctly in the output (i.e. in
 	// the order `b, c, a`).
-	left, err = b.ensureColumns(left, private.LeftCols, leftExpr.ProvidedPhysical().Ordering)
+	left, err = b.ensureColumns(left, leftExpr, private.LeftCols, leftExpr.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
-	right, err = b.ensureColumns(right, private.RightCols, rightExpr.ProvidedPhysical().Ordering)
+	right, err = b.ensureColumns(right, rightExpr, private.RightCols, rightExpr.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1887,7 +1893,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
 			outCols = join.Cols.Intersection(inputCols)
 		}
-		return b.applySimpleProject(res, outCols, join.ProvidedPhysical().Ordering)
+		return b.applySimpleProject(res, join, outCols, join.ProvidedPhysical().Ordering)
 	}
 	return res, nil
 }
@@ -1992,7 +1998,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 
 	// Apply a post-projection to remove the inverted column.
-	return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
+	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
@@ -2097,7 +2103,7 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	}
 
 	// Apply a post-projection to retain only the columns we need.
-	return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
+	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
@@ -2160,7 +2166,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 	}
 
 	// Make sure we have the columns in the correct order.
-	initial, err = b.ensureColumns(initial, rec.InitialCols, nil /* ordering */)
+	initial, err = b.ensureColumns(initial, rec.Initial, rec.InitialCols, nil /* ordering */)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -2195,7 +2201,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 			return nil, err
 		}
 		// Ensure columns are output in the same order.
-		plan, err = innerBld.ensureColumns(plan, rec.RecursiveCols, opt.Ordering{})
+		plan, err = innerBld.ensureColumns(plan, rec.Recursive, rec.RecursiveCols, opt.Ordering{})
 		if err != nil {
 			return nil, err
 		}
@@ -2236,7 +2242,7 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 	res := execPlan{root: node, outputCols: e.outputCols}
 
 	// Apply any necessary projection to produce the InCols in the given order.
-	res, err = b.ensureColumns(res, withScan.InCols, withScan.ProvidedPhysical().Ordering)
+	res, err = b.ensureColumns(res, withScan, withScan.InCols, withScan.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -2414,7 +2420,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
 	// can result in an extra render beneath each window function. Figure out a
 	// way to alleviate this.
-	input, err = b.ensureColumns(input, desiredCols, opt.Ordering{})
+	input, err = b.ensureColumns(input, w, desiredCols, opt.Ordering{})
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -2634,12 +2640,16 @@ func (b *Builder) needProjection(
 // ensureColumns applies a projection as necessary to make the output match the
 // given list of columns; colNames is optional.
 func (b *Builder) ensureColumns(
-	input execPlan, colList opt.ColList, provided opt.Ordering,
+	input execPlan, inputExpr memo.RelExpr, colList opt.ColList, provided opt.Ordering,
 ) (execPlan, error) {
 	cols, needProj := b.needProjection(input, colList)
 	if !needProj {
 		return input, nil
 	}
+	// Since we are constructing a simple project on top of the main operator,
+	// we need to explicitly annotate the latter with estimates since the code
+	// in buildRelational() will attach them to the project.
+	b.maybeAnnotateWithEstimates(input.root, inputExpr)
 	var res execPlan
 	for i, col := range colList {
 		res.outputCols.Set(int(col), i)

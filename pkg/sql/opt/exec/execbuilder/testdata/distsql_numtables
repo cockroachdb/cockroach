@@ -153,7 +153,6 @@ vectorized: true
 ·
 • project
 │ columns: (x, str)
-│ estimated row count: 333 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (x, y, str)
@@ -361,7 +360,6 @@ vectorized: true
 │
 └── • render
     │ columns: (res, y, str)
-    │ estimated row count: 1,000 (missing stats)
     │ render res: repeat('test', y)
     │ render y: y
     │ render str: str
@@ -387,7 +385,6 @@ vectorized: true
 │
 └── • render
     │ columns: (res, y, str)
-    │ estimated row count: 1,000 (missing stats)
     │ render res: repeat('test', y)
     │ render y: y
     │ render str: str

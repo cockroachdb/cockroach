@@ -54,7 +54,6 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1,000 (missing stats)
 │ render a: a
 │
 └── • scan
@@ -89,7 +88,6 @@ vectorized: true
         │
         └── • project
             │ columns: (a)
-            │ estimated row count: 1
             │
             └── • insert
                 │ columns: (a, rowid)
@@ -154,7 +152,6 @@ vectorized: true
 │
 └── • render
     │ columns: (n)
-    │ estimated row count: 10 (missing stats)
     │ render n: column1
     │
     └── • recursive cte
@@ -185,7 +182,6 @@ vectorized: true
 │
 └── • render
     │ columns: (n)
-    │ estimated row count: 10 (missing stats)
     │ render n: column1
     │
     └── • recursive cte
