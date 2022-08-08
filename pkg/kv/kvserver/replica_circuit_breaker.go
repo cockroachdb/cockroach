@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -97,13 +96,8 @@ func (br *replicaCircuitBreaker) canEnable() bool {
 	if b {
 		return true // fast path
 	}
-	// IsActive is mildly expensive since it has to unmarshal
-	// a protobuf.
-	if br.st.Version.IsActive(context.Background(), clusterversion.ProbeRequest) {
-		atomic.StoreInt32(&br.versionIsActive, 1)
-		return true
-	}
-	return false // slow path
+	atomic.StoreInt32(&br.versionIsActive, 1)
+	return true
 }
 
 func (br *replicaCircuitBreaker) enabled() bool {
