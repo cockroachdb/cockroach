@@ -3422,8 +3422,14 @@ func (s *adminServer) dialNode(
 // adminPrivilegeChecker is a helper struct to check whether given usernames
 // have admin privileges.
 type adminPrivilegeChecker struct {
-	ie          *sql.InternalExecutor
-	st          *cluster.Settings
+	ie *sql.InternalExecutor
+	st *cluster.Settings
+	// makePlanner is a function that calls NewInternalPlanner
+	// to make a planner outside of the sql package. This is a hack
+	// to get around a Go package dependency cycle. See comment
+	// in pkg/scheduledjobs/env.go on planHookMaker. It should
+	// be cast to AuthorizationAccessor in order to use
+	// privilege checking functions.
 	makePlanner func(opName string) (interface{}, func())
 }
 
