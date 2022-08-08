@@ -559,6 +559,11 @@ type benchDataOptions struct {
 	numColumnFamilies int
 	numRangeKeys      int // MVCC range tombstones, 1=global
 
+	// If garbage is enabled, point keys will be tombstones rather than values.
+	// Furthermore, range keys (controlled by numRangeKeys) will be written above
+	// the point keys rather than below them.
+	garbage bool
+
 	// In transactional mode, data is written by writing and later resolving
 	// intents. In non-transactional mode, data is written directly, without
 	// leaving intents. Transactional mode notably stresses RocksDB deletion
@@ -683,6 +688,9 @@ func setupMVCCData(
 	if opts.transactional {
 		loc += "_txn"
 	}
+	if opts.garbage {
+		loc += "_garbage"
+	}
 
 	exists := true
 	if _, err := os.Stat(loc); oserror.IsNotExist(err) {
@@ -703,25 +711,31 @@ func setupMVCCData(
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
 
-	// Write MVCC range keys.
-	batch := eng.NewBatch()
-	for i := 0; i < opts.numRangeKeys; i++ {
-		ts := hlc.Timestamp{Logical: int32(i + 1)}
-		start := rng.Intn(opts.numKeys)
-		end := start + rng.Intn(opts.numKeys-start) + 1
-		// As a special case, if we're only writing one range key, write it across
-		// the entire span.
-		if opts.numRangeKeys == 1 {
-			start = 0
-			end = opts.numKeys + 1
+	// Write MVCC range keys. If garbage is enabled, they will be written on top
+	// of the point keys, otherwise they will be written below them.
+	writeRangeKeys := func(b testing.TB, wallTime int) {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		for i := 0; i < opts.numRangeKeys; i++ {
+			ts := hlc.Timestamp{WallTime: int64(wallTime), Logical: int32(i + 1)}
+			start := rng.Intn(opts.numKeys)
+			end := start + rng.Intn(opts.numKeys-start) + 1
+			// As a special case, if we're only writing one range key, write it across
+			// the entire span.
+			if opts.numRangeKeys == 1 {
+				start = 0
+				end = opts.numKeys + 1
+			}
+			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
+			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
+			require.NoError(b, MVCCDeleteRangeUsingTombstone(
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, 0, nil))
 		}
-		startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
-		endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
-		require.NoError(b, MVCCDeleteRangeUsingTombstone(
-			ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, 0, nil))
+		require.NoError(b, batch.Commit(false /* sync */))
 	}
-	require.NoError(b, batch.Commit(false /* sync */))
-	batch.Close()
+	if !opts.garbage {
+		writeRangeKeys(b, 0 /* wallTime */)
+	}
 
 	// Generate point keys.
 	keySlice := make([]roachpb.Key, opts.numKeys)
@@ -756,8 +770,11 @@ func setupMVCCData(
 
 	writeKey := func(batch Batch, idx int) {
 		key := keySlice[idx]
-		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
-		value.InitChecksum(key)
+		var value roachpb.Value
+		if !opts.garbage {
+			value = roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
+			value.InitChecksum(key)
+		}
 		counts[idx]++
 		ts := hlc.Timestamp{WallTime: int64(counts[idx] * 5)}
 		if txn != nil {
@@ -782,7 +799,7 @@ func setupMVCCData(
 		}
 	}
 
-	batch = eng.NewBatch()
+	batch := eng.NewBatch()
 	for i, idx := range order {
 		// Output the keys in ~20 batches. If we used a single batch to output all
 		// of the keys rocksdb would create a single sstable. We want multiple
@@ -824,6 +841,13 @@ func setupMVCCData(
 		b.Fatal(err)
 	}
 	batch.Close()
+
+	// If we're writing garbage, write MVCC range tombstones on top of the
+	// point keys.
+	if opts.garbage {
+		writeRangeKeys(b, 10*opts.numVersions)
+	}
+
 	if err := eng.Flush(); err != nil {
 		b.Fatal(err)
 	}
@@ -891,6 +915,9 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 			endKey = makeBenchRowKey(b, endKeyBuf[:0], int(endID), 0)
 		}
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
+		if opts.garbage {
+			walltime = hlc.MaxTimestamp.WallTime
+		}
 		ts := hlc.Timestamp{WallTime: walltime}
 		var wholeRowsOfSize int32
 		if opts.wholeRows {
@@ -909,8 +936,11 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		if opts.wholeRows {
 			expectKVs -= opts.numRows % opts.numColumnFamilies
 		}
-		if len(res.KVs) != expectKVs {
+		if !opts.garbage && len(res.KVs) != expectKVs {
 			b.Fatalf("failed to scan: %d != %d", len(res.KVs), expectKVs)
+		}
+		if opts.garbage && len(res.KVs) != 0 {
+			b.Fatalf("failed to scan garbage: found %d keys", len(res.KVs))
 		}
 	}
 
