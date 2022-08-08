@@ -817,8 +817,8 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCAbortSpanGCNum.Inc(int64(info.AbortSpanGCNum))
 	metrics.GCPushTxn.Inc(int64(info.PushTxn))
 	metrics.GCResolveTotal.Inc(int64(info.ResolveTotal))
-	metrics.GCUsedClearRange.Inc(int64(info.ClearRangeKeyOperations))
-	metrics.GCFailedClearRange.Inc(int64(info.ClearRangeKeyFailures))
+	metrics.GCUsedClearRange.Inc(int64(info.ClearRangeSpanOperations))
+	metrics.GCFailedClearRange.Inc(int64(info.ClearRangeSpanFailures))
 }
 
 func (mgcq *mvccGCQueue) postProcessScheduled(

@@ -261,12 +261,12 @@ type Info struct {
 	// AffectedVersionsRangeValBytes is the number of (fully encoded) bytes deleted from values that
 	// belong to removed range keys.
 	AffectedVersionsRangeValBytes int64
-	// ClearRangeKeyOperations number of GCClearRange requests sent by GC to remove
-	// old data. Includes full range clear as well as requests to remove large
-	// number of consecutive keys and versions.
-	ClearRangeKeyOperations int
-	// ClearRangeKeyFailures number of failed requests to perform GC ClearRange.
-	ClearRangeKeyFailures int
+	// ClearRangeSpanOperations number of ClearRange requests performed by GC. This
+	// number includes full range clear requests as well as requests covering
+	// multiple keys or versions of the same key.
+	ClearRangeSpanOperations int
+	// ClearRangeSpanFailures number of ClearRange requests GC failed to perform.
+	ClearRangeSpanFailures int
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
@@ -444,11 +444,11 @@ func processReplicatedKeyRange(
 				EndKey:   end,
 			}); err == nil {
 				excludeUserKeySpan = true
-				info.ClearRangeKeyOperations++
+				info.ClearRangeSpanOperations++
 			} else {
 				log.Warningf(ctx, "failed to perform GC clear range operation on range %s: %s",
 					desc.String(), err)
-				info.ClearRangeKeyFailures++
+				info.ClearRangeSpanFailures++
 			}
 		}
 	}
@@ -887,8 +887,10 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error)
 			// thresholds. We may leave some inconsistent history
 			// behind, but nobody can read it.
 			log.Warningf(ctx, "failed to GC keys with clear range: %v", err)
+			b.info.ClearRangeSpanFailures++
 		}
 		b.clearRangeCounters.updateGcInfo(b.info)
+		b.info.ClearRangeSpanOperations++
 		b.totalMemUsed = 0
 	} else if flushTo := len(b.pointsBatches) - 1; flushTo > 0 {
 		err := b.flushOldestPointBatches(ctx, flushTo)

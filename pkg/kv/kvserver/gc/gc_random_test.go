@@ -333,6 +333,11 @@ func TestNewVsInvariants(t *testing.T) {
 					storage.MVCCGarbageCollectRangeKeys(ctx, eng, &stats, rangeKeys))
 			}
 
+			// For the sake of assertion we need to reset this counter as it signals
+			// counter for specific feature rather than processed data. Data and number
+			// of cleared keys and versions should be the same regardless of operations
+			// used to clear it.
+			gcInfoNew.ClearRangeSpanOperations = 0
 			assertLiveData(t, eng, beforeGC, *desc, tc.now, gcThreshold, intentThreshold, ttl,
 				gcInfoNew)
 		})

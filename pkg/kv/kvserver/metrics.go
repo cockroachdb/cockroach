@@ -1416,13 +1416,13 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 	}
 	metaGCUsedClearRange = metric.Metadata{
 		Name:        "queue.gc.info.clearrangesuccess",
-		Help:        "Number of successful ClearRange operation during GC",
+		Help:        "Number of successful ClearRange operations during GC",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaGCFailedClearRange = metric.Metadata{
 		Name:        "queue.gc.info.clearrangefailed",
-		Help:        "Number of failed ClearRange operation during GC",
+		Help:        "Number of failed ClearRange operations during GC",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
