@@ -3061,8 +3061,13 @@ func (r *Replica) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			ops, leaseTarget, err := r.relocateOne(
-				ctx, &rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
+			ops, leaseTarget, err := RelocateOne(
+				ctx,
+				&rangeDesc,
+				voterTargets,
+				nonVoterTargets,
+				transferLeaseToFirstVoter,
+				&replicaRelocateOneOptions{Replica: r},
 			)
 			if err != nil {
 				return rangeDesc, err
@@ -3145,11 +3150,77 @@ func (r *relocationArgs) finalRelocationTargets() []roachpb.ReplicationTarget {
 	}
 }
 
-func (r *Replica) relocateOne(
+// RelocateOneOptions contains methods that return the information necssary to
+// generate the next suggested replication change for a relocate range command.
+type RelocateOneOptions interface {
+	// Allocator returns the allocator for the store this replica is on.
+	Allocator() allocatorimpl.Allocator
+	// SpanConfig returns the span configuration for the range with start key.
+	SpanConfig(ctx context.Context, startKey roachpb.RKey) (roachpb.SpanConfig, error)
+	// LeaseHolder returns the descriptor of the replica which holds the lease
+	// on the range with start key.
+	Leaseholder(ctx context.Context, startKey roachpb.RKey) (roachpb.ReplicaDescriptor, error)
+	// LHRemovalAllowed returns true if the lease holder may be removed during
+	// a replication change.
+	LHRemovalAllowed(ctx context.Context) bool
+}
+
+type replicaRelocateOneOptions struct {
+	*Replica
+}
+
+// Allocator returns the allocator for the store this replica is on.
+func (roo *replicaRelocateOneOptions) Allocator() allocatorimpl.Allocator {
+	return roo.store.allocator
+}
+
+// SpanConfig returns the span configuration for the range with start key.
+func (roo *replicaRelocateOneOptions) SpanConfig(
+	ctx context.Context, startKey roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	confReader, err := roo.store.GetConfReader(ctx)
+	if err != nil {
+		return roachpb.SpanConfig{}, errors.Wrap(err, "can't relocate range")
+	}
+	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+	return conf, nil
+}
+
+// Leaseholder returns the descriptor of the replica which holds the lease on
+// the range with start key.
+func (roo *replicaRelocateOneOptions) Leaseholder(
+	ctx context.Context, startKey roachpb.RKey,
+) (roachpb.ReplicaDescriptor, error) {
+	var b kv.Batch
+	liReq := &roachpb.LeaseInfoRequest{}
+	liReq.Key = startKey.AsRawKey()
+	b.AddRawRequest(liReq)
+	if err := roo.store.DB().Run(ctx, &b); err != nil {
+		return roachpb.ReplicaDescriptor{}, errors.Wrap(err, "looking up lease")
+	}
+	// Determines whether we can remove the leaseholder without first
+	// transferring the lease away.
+	return b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica, nil
+}
+
+// LHRemovalAllowed returns true if the lease holder may be removed during
+// a replication change.
+func (roo *replicaRelocateOneOptions) LHRemovalAllowed(ctx context.Context) bool {
+	return roo.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+}
+
+// RelocateOne returns a suggested replication change and lease transfer that
+// should occur next, to relocate the range onto the given voter and non-voter
+// targets.
+func RelocateOne(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	transferLeaseToFirstVoter bool,
+	options RelocateOneOptions,
 ) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
 	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
@@ -3158,16 +3229,15 @@ func (r *Replica) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	confReader, err := r.store.GetConfReader(ctx)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "can't relocate range")
-	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	allocator := options.Allocator()
+	storePool := allocator.StorePool
+
+	conf, err := options.SpanConfig(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	storeList, _, _ := r.store.cfg.StorePool.GetStoreList(storepool.StoreFilterNone)
+	storeList, _, _ := storePool.GetStoreList(storepool.StoreFilterNone)
 	storeMap := storeList.ToMap()
 
 	// Compute which replica to add and/or remove, respectively. We then ask the
@@ -3208,13 +3278,13 @@ func (r *Replica) relocateOne(
 		}
 		candidateStoreList := storepool.MakeStoreList(candidateDescs)
 
-		additionTarget, _ = r.store.allocator.AllocateTargetFromList(
+		additionTarget, _ = allocator.AllocateTargetFromList(
 			ctx,
 			candidateStoreList,
 			conf,
 			existingVoters,
 			existingNonVoters,
-			r.store.allocator.ScorerOptions(ctx),
+			allocator.ScorerOptions(ctx),
 			// NB: Allow the allocator to return target stores that might be on the
 			// same node as an existing replica. This is to ensure that relocations
 			// that require "lateral" movement of replicas within a node can succeed.
@@ -3277,14 +3347,14 @@ func (r *Replica) relocateOne(
 		// (s1,s2,s3,s4) which is a reasonable request; that replica set is
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
-		targetStore, _, err := r.store.allocator.RemoveTarget(
+		targetStore, _, err := allocator.RemoveTarget(
 			ctx,
 			conf,
-			r.store.allocator.StoreListForTargets(args.targetsToRemove()),
+			allocator.StoreListForTargets(args.targetsToRemove()),
 			existingVoters,
 			existingNonVoters,
 			args.targetType,
-			r.store.allocator.ScorerOptions(ctx),
+			allocator.ScorerOptions(ctx),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(
@@ -3301,18 +3371,12 @@ func (r *Replica) relocateOne(
 		// This is not possible if there is no other replica available at that
 		// point, i.e. if the existing descriptor is a single replica that's
 		// being replaced.
-		var b kv.Batch
-		liReq := &roachpb.LeaseInfoRequest{}
-		liReq.Key = desc.StartKey.AsRawKey()
-		b.AddRawRequest(liReq)
-		if err := r.store.DB().Run(ctx, &b); err != nil {
+		curLeaseholder, err := options.Leaseholder(ctx, desc.StartKey)
+		if err != nil {
 			return nil, nil, errors.Wrap(err, "looking up lease")
 		}
-		// Determines whether we can remove the leaseholder without first
-		// transferring the lease away.
-		lhRemovalAllowed = len(args.votersToAdd) > 0 &&
-			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
-		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
+
+		lhRemovalAllowed = len(args.votersToAdd) > 0 && options.LHRemovalAllowed(ctx)
 		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
 		if args.targetType == allocatorimpl.VoterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
