@@ -16,13 +16,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir, security.CommandTLSSettings{})
+	cm, err := security.NewCertificateManager(certnames.EmbeddedCertsDir, security.CommandTLSSettings{})
 	require.NoError(t, err)
 	config, err := cm.GetServerTLSConfig()
 	require.NoError(t, err)

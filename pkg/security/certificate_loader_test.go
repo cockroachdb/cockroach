@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -91,12 +92,12 @@ func TestCertNomenclature(t *testing.T) {
 
 func TestLoadEmbeddedCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cl := security.NewCertificateLoader(security.EmbeddedCertsDir)
+	cl := security.NewCertificateLoader(certnames.EmbeddedCertsDir)
 	if err := cl.Load(); err != nil {
 		t.Error(err)
 	}
 
-	assets, err := securitytest.AssetReadDir(security.EmbeddedCertsDir)
+	assets, err := securitytest.AssetReadDir(certnames.EmbeddedCertsDir)
 	if err != nil {
 		t.Fatal(err)
 	}

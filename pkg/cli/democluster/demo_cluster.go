@@ -1048,7 +1048,7 @@ This server is running at increased risk of memory-related failures.`,
 
 // generateCerts generates some temporary certificates for cockroach demo.
 func (demoCtx *Context) generateCerts(certsDir string) (err error) {
-	caKeyPath := filepath.Join(certsDir, security.EmbeddedCAKey)
+	caKeyPath := filepath.Join(certsDir, certnames.EmbeddedCAKey)
 	// Create a CA-Key.
 	if err := security.CreateCAPair(
 		certsDir,
@@ -1075,7 +1075,7 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 	// rootUserScope contains the tenant IDs the root user is allowed to access.
 	rootUserScope := []roachpb.TenantID{roachpb.SystemTenantID}
 	if demoCtx.Multitenant {
-		tenantCAKeyPath := filepath.Join(certsDir, security.EmbeddedTenantCAKey)
+		tenantCAKeyPath := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
 		// Create a CA key for the tenants.
 		if err := security.CreateTenantCAPair(
 			certsDir,
