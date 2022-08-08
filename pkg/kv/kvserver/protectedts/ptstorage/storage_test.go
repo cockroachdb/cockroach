@@ -23,8 +23,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -32,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -44,14 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -806,67 +801,6 @@ func TestErrorsFromSQL(t *testing.T) {
 		_, err := pts.GetState(ctx, txn)
 		return err
 	}), "failed to read records: boom")
-}
-
-// TestNullTargetColumnResolution is a regression test that ensures that
-// pre-22.1 protected timestamp records that will have a NULL target column are
-// still resolved correctly by the protectedts provider. Previously, this would
-// panic due to an incorrect assumption that the column would be non-nullable.
-func TestNullTargetColumnResolution(t *testing.T) {
-	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-
-	disableUpgradeCh := make(chan struct{})
-	params.Knobs = base.TestingKnobs{
-		Server: &server.TestingKnobs{
-			BinaryVersionOverride: clusterversion.ByKey(
-				clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
-			DisableAutomaticVersionUpgrade: disableUpgradeCh,
-		},
-	}
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-	defer tc.Stopper().Stop(ctx)
-
-	s := tc.Server(0)
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	ptp := execCfg.ProtectedTimestampProvider
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	// Write an old style protected timestamp record with a null target column.
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	recordID := uuid.MakeV4()
-	rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, []roachpb.Span{keys.EverythingSpan},
-		jobsprotectedts.Jobs, nil /* target */)
-	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return ptp.Protect(ctx, txn, rec)
-	}))
-
-	// Close the channel so that the cluster version is upgraded.
-	close(disableUpgradeCh)
-	// Check the cluster version is bumped to newVersion.
-	testutils.SucceedsSoon(t, func() error {
-		var version string
-		sqlDB.QueryRow(t, "SELECT value FROM system.settings WHERE name = 'version'").Scan(&version)
-		var v clusterversion.ClusterVersion
-		if err := protoutil.Unmarshal([]byte(version), &v); err != nil {
-			return err
-		}
-		version = v.String()
-		if version != clusterversion.TestingBinaryVersion.String() {
-			return errors.Errorf("cluster version is still %s, should be %s", version, clusterversion.TestingBinaryVersion.String())
-		}
-		return nil
-	})
-
-	// Check the record we wrote above is correctly unmarshalled.
-	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		state, err := ptp.GetState(ctx, txn)
-		require.NoError(t, err)
-
-		require.Len(t, state.Records, 1)
-		return nil
-	}))
 }
 
 // wrappedInternalExecutor allows errors to be injected in SQL execution.
