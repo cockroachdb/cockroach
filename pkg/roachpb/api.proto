@@ -2258,6 +2258,12 @@ message Header {
   // request's uncertainty interval remains fixed across retries.
   util.hlc.Timestamp timestamp_from_server_clock = 27 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // now is a clock reading from the sender of the request. It can be used by
+  // the receiver to update its local HLC, which can help stabilize HLCs across
+  // the cluster. The receiver is NOT required to use the timestamp to update
+  // its local clock, and the sender is NOT required to attach a timestamp.
+  util.hlc.Timestamp now = 28 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
