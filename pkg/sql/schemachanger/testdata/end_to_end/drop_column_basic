@@ -52,7 +52,7 @@ upsert descriptor #104
   +    state: DELETE_AND_WRITE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 2
+  +      constraintId: 1
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -75,7 +75,7 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 3
+  +      constraintId: 1
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -99,8 +99,7 @@ upsert descriptor #104
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 3
-  -  nextConstraintId: 2
-  +  nextConstraintId: 4
+     nextConstraintId: 2
      nextFamilyId: 1
   -  nextIndexId: 2
   +  nextIndexId: 4
@@ -295,10 +294,8 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-  -      constraintId: 2
-  +      constraintId: 3
-         createdExplicitly: true
-         encodingType: 1
+         constraintId: 1
+  ...
          foreignKey: {}
          geoConfig: {}
   -      id: 2
@@ -322,9 +319,8 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-  -      constraintId: 3
+         constraintId: 1
   -      createdExplicitly: true
-  +      constraintId: 1
   +      createdAtNanos: "1640995200000000000"
          encodingType: 1
          foreignKey: {}
@@ -350,11 +346,9 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   ...
-     parentId: 100
      primaryIndex:
-  -    constraintId: 1
+       constraintId: 1
   -    createdAtNanos: "1640995200000000000"
-  +    constraintId: 2
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
@@ -451,7 +445,7 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 3
+  -      constraintId: 1
   -      createdExplicitly: true
   -      encodingType: 1
   -      foreignKey: {}

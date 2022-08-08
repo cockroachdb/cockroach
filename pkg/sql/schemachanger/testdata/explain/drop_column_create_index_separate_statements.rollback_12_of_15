@@ -19,7 +19,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
-      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
       │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, SourceIndexID: 3}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
       │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}

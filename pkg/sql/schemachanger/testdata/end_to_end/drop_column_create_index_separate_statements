@@ -128,7 +128,7 @@ upsert descriptor #104
   +    state: DELETE_AND_WRITE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 2
+  +      constraintId: 1
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -154,7 +154,7 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 3
+  +      constraintId: 1
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -181,8 +181,7 @@ upsert descriptor #104
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 5
-  -  nextConstraintId: 2
-  +  nextConstraintId: 4
+     nextConstraintId: 2
      nextFamilyId: 1
   -  nextIndexId: 3
   +  nextIndexId: 5
@@ -370,12 +369,6 @@ upsert descriptor #104
      mutations:
      - column:
   ...
-     - direction: ADD
-       index:
-  -      constraintId: 2
-  +      constraintId: 3
-         createdExplicitly: true
-         encodingType: 1
          foreignKey: {}
          geoConfig: {}
   -      id: 3
@@ -399,9 +392,8 @@ upsert descriptor #104
   -  - direction: ADD
   +  - direction: DROP
        index:
-  -      constraintId: 3
+         constraintId: 1
   -      createdExplicitly: true
-  +      constraintId: 1
   +      createdAtNanos: "1640995200000000000"
          encodingType: 1
          foreignKey: {}
@@ -430,7 +422,7 @@ upsert descriptor #104
        state: DELETE_AND_WRITE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 4
+  +      constraintId: 2
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -454,7 +446,7 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 5
+  +      constraintId: 2
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -479,17 +471,16 @@ upsert descriptor #104
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 5
-  -  nextConstraintId: 4
-  +  nextConstraintId: 6
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
      nextFamilyId: 1
   -  nextIndexId: 5
   +  nextIndexId: 7
      nextMutationId: 1
      parentId: 100
      primaryIndex:
-  -    constraintId: 1
+       constraintId: 1
   -    createdAtNanos: "1640995200000000000"
-  +    constraintId: 2
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
@@ -642,7 +633,7 @@ upsert descriptor #104
   -  modificationTime:
   -    wallTime: "1640995200000000016"
   +  indexes:
-  +  - constraintId: 4
+  +  - constraintId: 2
   +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
@@ -687,7 +678,7 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-         constraintId: 3
+         constraintId: 1
   ...
          version: 4
        mutationId: 1
@@ -703,10 +694,10 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-  -      constraintId: 4
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
+         constraintId: 2
+  ...
+         foreignKey: {}
+         geoConfig: {}
   -      id: 5
   -      interleave: {}
   -      keyColumnDirections:
@@ -727,8 +718,12 @@ upsert descriptor #104
   -    state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
   -    index:
-         constraintId: 5
-         createdExplicitly: true
+  -      constraintId: 2
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+         id: 6
+         interleave: {}
   ...
          version: 4
        mutationId: 1
@@ -834,7 +829,7 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 3
+  -      constraintId: 1
   -      createdExplicitly: true
   -      encodingType: 1
   -      foreignKey: {}
@@ -889,7 +884,7 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 5
+  -      constraintId: 2
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}

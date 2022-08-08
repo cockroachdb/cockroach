@@ -341,7 +341,6 @@ upsert descriptor #106
        index:
   -      constraintId: 6
   -      createdExplicitly: true
-  +      constraintId: 1
   +      createdAtNanos: "1640995200000000000"
          encodingType: 1
          foreignKey: {}
@@ -370,9 +369,8 @@ upsert descriptor #106
          version: 4
        mutationId: 3
   ...
-     parentId: 104
      primaryIndex:
-  -    constraintId: 1
+       constraintId: 1
   -    createdAtNanos: "1640995200000000000"
   +    constraintId: 5
   +    createdExplicitly: true
