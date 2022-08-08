@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,6 +31,12 @@ func TestChangefeedNemeses(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		disableDeclarativeSchemaChangesForTest(t, sqlDB)
+
+		knobs := s.Server.(*server.TestServer).TestingKnobs().DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		knobs.FeedKnobs.RestartOnSchemaChange = func() bool {
+			return true
+		}
+
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
 		// `RunNemesis` for details.
 		isSinkless := strings.Contains(t.Name(), "sinkless")
@@ -46,7 +54,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	//
 	// nemeses_test.go:39: pq: unimplemented: operation is
 	// unsupported in multi-tenancy mode
-	cdcTest(t, testFn, feedTestNoTenants)
+	cdcTest(t, testFn, feedTestNoTenants, feedTestForceSink("sinkless"))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)

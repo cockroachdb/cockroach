@@ -690,7 +690,7 @@ func addColumn(a fsm.Args) error {
 	}
 	// We expect one table scan that corresponds to the schema change backfill, and one
 	// scan that corresponds to the changefeed level backfill.
-	ns.availableRows += 2 * rows
+	//ns.availableRows += 2 * rows
 	return nil
 }
 
@@ -713,7 +713,7 @@ func removeColumn(a fsm.Args) error {
 	}
 	// We expect one table scan that corresponds to the schema change backfill, and one
 	// scan that corresponds to the changefeed level backfill.
-	ns.availableRows += 2 * rows
+	//ns.availableRows += 2 * rows
 	return nil
 }
 

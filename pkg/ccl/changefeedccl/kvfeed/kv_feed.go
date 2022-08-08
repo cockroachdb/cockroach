@@ -306,6 +306,11 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		} else if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
 			boundaryType = jobspb.ResolvedSpan_EXIT
 		}
+
+		if f.knobs.RestartOnSchemaChange != nil && f.knobs.RestartOnSchemaChange() {
+			boundaryType = jobspb.ResolvedSpan_RESTART
+		}
+
 		// Resolve all of the spans as a boundary if the policy indicates that
 		// we should do so.
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||

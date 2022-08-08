@@ -29,6 +29,9 @@ type TestingKnobs struct {
 	// EndTimeReached is a callback that may return true to indicate the
 	// feed should exit because its end time has been reached.
 	EndTimeReached func() bool
+	// RestartOnSchemaChange makes the kvfeed return a jobspb.ResolvedSpan_RESTART
+	// when a schema change occurs.
+	RestartOnSchemaChange func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
