@@ -1018,17 +1018,21 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
-		iter := e.engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: key,
-			UpperBound: endKey,
-		})
-		ms, err := ComputeStatsForRange(iter, key, endKey, ts.WallTime)
-		iter.Close()
-		if err != nil {
-			return err
+		// Some tests will submit invalid MVCC range keys, where e.g. the end key is
+		// before the start key -- ignore them to avoid iterator panics.
+		if key.Compare(endKey) < 0 {
+			iter := e.engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				LowerBound: key,
+				UpperBound: endKey,
+			})
+			ms, err := ComputeStatsForRange(iter, key, endKey, ts.WallTime)
+			iter.Close()
+			if err != nil {
+				return err
+			}
+			msCovered = &ms
 		}
-		msCovered = &ms
 	}
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
