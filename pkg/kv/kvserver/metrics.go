@@ -1268,6 +1268,18 @@ The count is emitted by the leaseholder of each range.
 		Measurement: "Range Keys",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaGCClearRangesIssued = metric.Metadata{
+		Name:        "queue.gc.info.numclearrangerequests",
+		Help:        "Number of clear range requests issued by GC",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaGCClearRangesAborted = metric.Metadata{
+		Name:        "queue.gc.info.numclearrangeabandoned",
+		Help:        "Number of clear range requests abandoned by GC",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaGCIntentsConsidered = metric.Metadata{
 		Name:        "queue.gc.info.intentsconsidered",
 		Help:        "Number of 'old' intents",
@@ -1800,6 +1812,8 @@ type StoreMetrics struct {
 	// GCInfo cumulative totals.
 	GCNumKeysAffected            *metric.Counter
 	GCNumRangeKeysAffected       *metric.Counter
+	GCClearRangesIssued          *metric.Counter
+	GCClearRangeAbandoned        *metric.Counter
 	GCIntentsConsidered          *metric.Counter
 	GCIntentTxns                 *metric.Counter
 	GCTransactionSpanScanned     *metric.Counter
@@ -2314,6 +2328,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// GCInfo cumulative totals.
 		GCNumKeysAffected:            metric.NewCounter(metaGCNumKeysAffected),
 		GCNumRangeKeysAffected:       metric.NewCounter(metaGCNumRangeKeysAffected),
+		GCClearRangesIssued:          metric.NewCounter(metaGCClearRangesIssued),
+		GCClearRangeAbandoned:        metric.NewCounter(metaGCClearRangesAborted),
 		GCIntentsConsidered:          metric.NewCounter(metaGCIntentsConsidered),
 		GCIntentTxns:                 metric.NewCounter(metaGCIntentTxns),
 		GCTransactionSpanScanned:     metric.NewCounter(metaGCTransactionSpanScanned),

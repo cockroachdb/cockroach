@@ -875,6 +875,13 @@ var charts = []sectionDescription{
 				Metrics: []string{"queue.gc.info.numrangekeysaffected"},
 			},
 			{
+				Title: "Clear Range Requests",
+				Metrics: []string{
+					"queue.gc.info.numclearrangerequests",
+					"queue.gc.info.numclearrangeabandoned",
+				},
+			},
+			{
 				Title:   "Old Intents",
 				Metrics: []string{"queue.gc.info.intentsconsidered"},
 			},
