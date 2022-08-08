@@ -362,6 +362,34 @@ scan: "j"-"k" -> <no data>
 scan: "k"-"l" -> <no data>
 scan: "l"-"m" -> <no data>
 
+# Start forward and reverse scans in the middle of range tombstones.
+run ok
+scan k=h end=z ts=4 tombstones
+----
+scan: "h" -> /<empty> @4.000000000,0
+scan: "j" -> /<empty> @4.000000000,0
+
+run ok
+scan k=a end=h+ ts=4 tombstones reverse
+----
+scan: "h" -> /<empty> @4.000000000,0
+scan: "f" -> /<empty> @4.000000000,0
+scan: "e" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @4.000000000,0
+scan: "c" -> /<empty> @4.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "a" -> /<empty> @3.000000000,0
+
+run ok
+scan k=k end=l ts=4 tombstones
+----
+scan: "k" -> /<empty> @4.000000000,0
+
+run ok
+scan k=j end=k ts=4 tombstones
+----
+scan: "j" -> /<empty> @4.000000000,0
+
 # failOnMoreRecent: a-d
 run error
 scan k=a end=d ts=3 failOnMoreRecent
