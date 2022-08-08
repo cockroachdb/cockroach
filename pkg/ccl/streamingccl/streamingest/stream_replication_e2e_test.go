@@ -741,6 +741,8 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "takes too long with multiple nodes")
+
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
 	args.srcNumNodes = 4
@@ -918,12 +920,13 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "takes too long with multiple nodes")
+
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
 	args.srcNumNodes = 4
 	args.destNumNodes = 4
 
-	log.Warningf(ctx, "\x1b[31m CLIENT ADDRESS KNOBS \x1b[30m")
 	// Track the number of unique addresses that were connected to
 	clientAddresses := make(map[string]struct{})
 	args.testingKnobs = &sql.StreamingTestingKnobs{
@@ -932,69 +935,49 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		},
 	}
 
-	log.Warningf(ctx, "\x1b[31m CREATE STREAMING CLUSTERS \x1b[30m")
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	log.Warningf(ctx, "\x1b[31m CREATE SCATTERED TABLE \x1b[30m")
 	createScatteredTable(t, c)
 
-	log.Warningf(ctx, "\x1b[31m START REPLICAITON STREAM \x1b[30m")
 	producerJobID, ingestionJobID := c.startStreamReplication()
-	log.Warningf(ctx, "\x1b[31m WAIT FOR PRODUCER \x1b[30m")
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
-	log.Warningf(ctx, "\x1b[31m WAIT FOR INGESTION \x1b[30m")
 	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 
-	log.Warningf(ctx, "\x1b[31m INSERT TABLE \x1b[30m")
 	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
 		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
 	})
 
-	log.Warningf(ctx, "\x1b[31m PAUSE JOB \x1b[30m")
 	c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
-	log.Warningf(ctx, "\x1b[31m WAIT FOR PAUSE \x1b[30m")
 	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
-	log.Warningf(ctx, "\x1b[31m INSERT DX 2 \x1b[30m")
 	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (2, 2)")
 	})
-	log.Warningf(ctx, "\x1b[31m RESUME JOB \x1b[30m")
 	c.destSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
-	log.Warningf(ctx, "\x1b[31m WAIT FOR RESUME \x1b[30m")
 	jobutils.WaitForJobToRun(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 
-	log.Warningf(ctx, "\x1b[31m INSERT DX 3\x1b[30m")
 	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (3, 3)")
 	})
 
-	log.Warningf(ctx, "\x1b[31m GET CUTOVER\x1b[30m")
 	var cutoverTime time.Time
 	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 	})
 
-	log.Warningf(ctx, "\x1b[31m DO CUTOVER\x1b[30m")
 	c.cutover(producerJobID, ingestionJobID, cutoverTime)
 
-	log.Warningf(ctx, "\x1b[31m CREATE DEST TENANT SQL \x1b[30m")
 	cleanupTenant := c.createDestTenantSQL(ctx)
 	defer func() {
 		require.NoError(t, cleanupTenant())
 	}()
 
-	log.Warningf(ctx, "\x1b[31m COMPRAE RESULT t1 \x1b[30m")
 	c.compareResult("SELECT * FROM d.t1")
-	log.Warningf(ctx, "\x1b[31m COMPRAE RESULT t2 \x1b[30m")
 	c.compareResult("SELECT * FROM d.t2")
-	log.Warningf(ctx, "\x1b[31m COMPRAE RESULT x \x1b[30m")
 	c.compareResult("SELECT * FROM d.x")
-	log.Warningf(ctx, "\x1b[31m COMPRAE RESULT scattered \x1b[30m")
 	c.compareResult("SELECT * FROM d.scattered ORDER BY key")
 
-	// Since the data was distributed across all nodes, every node should've been connected to
-	log.Warningf(ctx, "\x1b[31m REQURIE CONNECTIONS \x1b[30m")
-	require.Equal(t, len(clientAddresses), args.srcNumNodes)
+	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
+	require.Greater(t, len(clientAddresses), 1)
 }
