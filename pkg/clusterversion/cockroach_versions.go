@@ -181,9 +181,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
-	// in secondary tenants.
-	EnableProtectedTimestampsForTenant
 	// DeleteCommentsWithDroppedIndexes cleans up left over comments that belong
 	// to dropped indexes.
 	DeleteCommentsWithDroppedIndexes
@@ -391,10 +388,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     EnableProtectedTimestampsForTenant,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
 	},
 	{
 		Key:     DeleteCommentsWithDroppedIndexes,
