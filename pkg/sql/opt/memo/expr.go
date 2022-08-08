@@ -101,8 +101,15 @@ type RelExpr interface {
 	setNext(e RelExpr)
 }
 
+// RelRequiredPropsExpr encapsulates a relational expression and required
+// physical props that must be used when optimizing the relational expression.
+type RelRequiredPropsExpr struct {
+	RelExpr
+	PhysProps *physical.Required
+}
+
 // RelListExpr is an ordered list of relational expressions.
-type RelListExpr []RelExpr
+type RelListExpr []RelRequiredPropsExpr
 
 // ScalarPropsExpr is implemented by scalar expressions which cache scalar
 // properties, like FiltersExpr and ProjectionsExpr. These expressions are also

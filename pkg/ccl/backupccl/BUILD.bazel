@@ -111,6 +111,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/upgrade/upgrades",

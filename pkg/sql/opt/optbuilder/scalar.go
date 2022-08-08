@@ -616,7 +616,10 @@ func (b *Builder) buildUDF(
 		// CTEs that mutate and are not at the top-level.
 		bodyScope := b.allocScope()
 		bodyScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-		rels[i] = bodyScope.expr
+		rels[i] = memo.RelRequiredPropsExpr{
+			RelExpr:   bodyScope.expr,
+			PhysProps: bodyScope.makePhysicalProps(),
+		}
 	}
 
 	out = b.factory.ConstructUDF(

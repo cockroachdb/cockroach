@@ -11,9 +11,13 @@
 package execbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -67,6 +71,9 @@ func init() {
 		// Subquery operators.
 		opt.ExistsOp:   (*Builder).buildExistsSubquery,
 		opt.SubqueryOp: (*Builder).buildSubquery,
+
+		// User-defined functions.
+		opt.UDFOp: (*Builder).buildUDF,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -642,4 +649,60 @@ func (b *Builder) addSubquery(
 	// by index (1-based).
 	exprNode.Idx = len(b.subqueries)
 	return exprNode
+}
+
+// buildUDF builds a UDF expression into a typed expression that can be
+// evaluated.
+func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
+	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	// We do this planning in a separate memo. We use an exec.Factory passed to
+	// the closure rather than b.factory to support executing plans that are
+	// generated with explain.Factory.
+	//
+	// Note: the ref argument has type tree.RoutineExecFactory rather than
+	// exec.Factory to avoid import cycles.
+	//
+	// Note: we put o outside of the function so we allocate it only once.
+	udf := scalar.(*memo.UDFExpr)
+	var o xform.Optimizer
+	planFn := func(ctx context.Context, ref tree.RoutineExecFactory, stmtIdx int) (tree.RoutinePlan, error) {
+		o.Init(ctx, b.evalCtx, b.catalog)
+		f := o.Factory()
+		stmt := udf.Body[stmtIdx]
+
+		// Copy the expression into a new memo.
+		// TODO(mgartner): Replace argument references with constant values.
+		var replaceFn norm.ReplaceFunc
+		replaceFn = func(e opt.Expr) opt.Expr {
+			return f.CopyAndReplaceDefault(e, replaceFn)
+		}
+		f.CopyAndReplace(stmt, stmt.PhysProps, replaceFn)
+
+		// Optimize the memo.
+		newRightSide, err := o.Optimize()
+		if err != nil {
+			return nil, err
+		}
+
+		// Build the memo into a plan.
+		// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
+		// TODO(mgartner): Add support for subqueries inside UDF bodies.
+		ef := ref.(exec.Factory)
+		eb := New(ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		eb.disableTelemetry = true
+		plan, err := eb.Build()
+		if err != nil {
+			if errors.IsAssertionFailure(err) {
+				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the
+				// inner expression.
+				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
+					memo.ExprFmtHideTypes
+				explainOpt := o.FormatExpr(newRightSide, fmtFlags)
+				err = errors.WithDetailf(err, "routineExpr:\n%s", explainOpt)
+			}
+			return nil, err
+		}
+		return plan, nil
+	}
+	return tree.NewTypedRoutineExpr(udf.Name, planFn, len(udf.Body), udf.Typ), nil
 }
