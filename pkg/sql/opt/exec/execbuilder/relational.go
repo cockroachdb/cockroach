@@ -964,7 +964,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 
 	// Now, the cool part! We set up an ApplyJoinPlanRightSideFn which plans the
 	// right side given a particular left side row. We do this planning in a
-	// separate memo, but we use the same exec.Factory.
+	// separate memo. We use an exec.Factory passed to the closure rather than
+	// b.factory to support executing plans that are generated with
+	// explain.Factory.
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer

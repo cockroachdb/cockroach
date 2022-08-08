@@ -88,17 +88,20 @@ const (
 	Global ObjectType = "global"
 	// VirtualTable represents a virtual table object.
 	VirtualTable ObjectType = "virtual_table"
+	// ExternalConnection represents an external connection object.
+	ExternalConnection ObjectType = "external_connection"
 )
 
 var isDescriptorBacked = map[ObjectType]bool{
-	Database:     true,
-	Schema:       true,
-	Table:        true,
-	Type:         true,
-	Sequence:     true,
-	Function:     true,
-	Global:       false,
-	VirtualTable: false,
+	Database:           true,
+	Schema:             true,
+	Table:              true,
+	Type:               true,
+	Sequence:           true,
+	Function:           true,
+	Global:             false,
+	VirtualTable:       false,
+	ExternalConnection: false,
 }
 
 // Predefined sets of privileges.
@@ -116,9 +119,10 @@ var (
 	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
-	SequencePrivileges     = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
-	SystemPrivileges       = List{ALL, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN}
-	VirtualTablePrivileges = List{ALL, SELECT}
+	SequencePrivileges           = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
+	SystemPrivileges             = List{ALL, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN}
+	VirtualTablePrivileges       = List{ALL, SELECT}
+	ExternalConnectionPrivileges = List{ALL, USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -324,6 +328,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return SystemPrivileges
 	case VirtualTable:
 		return VirtualTablePrivileges
+	case ExternalConnection:
+		return ExternalConnectionPrivileges
 	default:
 		panic(errors.AssertionFailedf("unknown object type %s", objectType))
 	}

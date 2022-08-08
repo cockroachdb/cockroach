@@ -7521,6 +7521,10 @@ grant_targets:
   {
     $$.val = tree.GrantTargetList{Databases: $2.nameList()}
   }
+| EXTERNAL CONNECTION name_list
+  {
+    $$.val = tree.GrantTargetList{ExternalConnections: $3.nameList()}
+  }
 
 // backup_targets is similar to grant_targets but used by backup and restore, and thus
 // supports tenants, but does not support sequences, types, or other SQL nouns

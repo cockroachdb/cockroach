@@ -750,6 +750,8 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
 		// since there's only one possible tree.
+		// TODO(mgartner): Think about whether we need to short-circuit in the
+		// presence or absence of UDFs.
 		if !t.ScalarProps().HasSubquery {
 			return parent
 		}

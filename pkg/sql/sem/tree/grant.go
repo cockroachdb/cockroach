@@ -42,6 +42,8 @@ type GrantTargetList struct {
 	AllTablesInSchema bool
 	// If the target is system.
 	System bool
+	// If the target is External Connection.
+	ExternalConnections NameList
 
 	// ForRoles and Roles are used internally in the parser and not used
 	// in the AST. Therefore they do not participate in pretty-printing,
@@ -72,6 +74,9 @@ func (tl *GrantTargetList) Format(ctx *FmtCtx) {
 			}
 			ctx.FormatNode(typ)
 		}
+	} else if tl.ExternalConnections != nil {
+		ctx.WriteString("EXTERNAL CONNECTION ")
+		ctx.FormatNode(&tl.ExternalConnections)
 	} else {
 		if tl.Tables.SequenceOnly {
 			ctx.WriteString("SEQUENCE ")

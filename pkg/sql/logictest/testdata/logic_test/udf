@@ -312,3 +312,71 @@ ALTER FUNCTION f() SET SCHEMA test_sc
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
+
+subtest execution
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1)
+
+statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 2-1';
+
+query I
+SELECT one()
+----
+1
+
+query I colnames
+SELECT * FROM one()
+----
+one
+1
+
+query III colnames
+SELECT *, one() FROM ab WHERE a = one()
+----
+a  b  one
+1  1  1
+
+query III colnames
+SELECT *, one() FROM ab WHERE b = one()
+----
+a  b  one
+1  1  1
+4  1  1
+5  1  1
+
+query II colnames
+SELECT * FROM ab WHERE b = one() + 1
+----
+a  b
+2  2
+
+statement ok
+CREATE FUNCTION max_in_values() RETURNS INT LANGUAGE SQL AS $$
+  SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
+$$
+
+query I
+SELECT max_in_values()
+----
+3
+
+statement ok
+CREATE FUNCTION fetch_one_then_two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT b FROM ab WHERE a = 1;
+  SELECT b FROM ab WHERE a = 2;
+$$
+
+query II
+SELECT i, fetch_one_then_two()
+FROM (VALUES (1), (2), (3)) AS v(i)
+WHERE i = fetch_one_then_two()
+----
+2  2
+
+query I colnames
+SELECT * FROM fetch_one_then_two()
+----
+fetch_one_then_two
+2

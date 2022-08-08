@@ -14,6 +14,9 @@
 //   ./dev generate go
 //   go generate ./pkg/sql/sem/tree
 //
+// If you use the dev command and you have added a new tree expression, like
+// tree.XYZ in a new file, you may get the confusing error: undefined: XYZ.
+// Run './dev generate bazel' to fix this.
 package tree
 
 // ExprEvaluator is used to evaluate TypedExpr expressions.
@@ -45,6 +48,7 @@ type ExprEvaluator interface {
 	EvalParenExpr(*ParenExpr) (Datum, error)
 	EvalPlaceholder(*Placeholder) (Datum, error)
 	EvalRangeCond(*RangeCond) (Datum, error)
+	EvalRoutineExpr(*RoutineExpr) (Datum, error)
 	EvalSubquery(*Subquery) (Datum, error)
 	EvalTuple(*Tuple) (Datum, error)
 	EvalTupleStar(*TupleStar) (Datum, error)
@@ -323,6 +327,11 @@ func (node *Placeholder) Eval(v ExprEvaluator) (Datum, error) {
 // Eval is part of the TypedExpr interface.
 func (node *RangeCond) Eval(v ExprEvaluator) (Datum, error) {
 	return v.EvalRangeCond(node)
+}
+
+// Eval is part of the TypedExpr interface.
+func (node *RoutineExpr) Eval(v ExprEvaluator) (Datum, error) {
+	return v.EvalRoutineExpr(node)
 }
 
 // Eval is part of the TypedExpr interface.
