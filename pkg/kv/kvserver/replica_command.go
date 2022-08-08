@@ -2601,12 +2601,15 @@ func (r *Replica) sendSnapshot(
 		return err
 	}
 
-	if ioThresh := r.store.ioOverloadedStores.Load()[recipient.StoreID]; ioThresh != nil && destPaused {
+	if destPaused {
 		// If the destination is paused, be more hesitant to send snapshots. The destination being
 		// paused implies that we have recently checked that it's not required for quorum, and that
 		// we wish to conserve I/O on that store, which sending a snapshot counteracts. So hold back on
 		// the snapshot as well.
-		return errors.Errorf("skipping snapshot; %s is overloaded: %s", recipient, ioThresh)
+		return errors.Errorf(
+			"skipping snapshot; %s is overloaded: %s",
+			recipient, r.store.ioThresholds.Current().IOThreshold(recipient.StoreID),
+		)
 	}
 
 	// Check follower snapshots cluster setting.

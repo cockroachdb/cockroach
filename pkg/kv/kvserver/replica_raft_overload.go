@@ -14,11 +14,11 @@ import (
 	"context"
 	"math/rand"
 	"sort"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
@@ -42,12 +42,16 @@ var pauseReplicationIOThreshold = settings.RegisterFloatSetting(
 	},
 )
 
+type ioThresholdMapI interface {
+	// OverloadedWithThreshold returns true if the store's score exceeds the threshold.
+	OverloadedWithThreshold(_ roachpb.StoreID, threshold float64) bool
+}
+
 type computeExpendableOverloadedFollowersInput struct {
-	self      roachpb.ReplicaID
-	replDescs roachpb.ReplicaSet
-	// TODO(tbg): all entries are overloaded, so consdier removing the IOThreshold here
-	// because it's confusing.
-	ioOverloadMap map[roachpb.StoreID]*admissionpb.IOThreshold
+	self          roachpb.ReplicaID
+	replDescs     roachpb.ReplicaSet
+	ioOverloadMap ioThresholdMapI
+	threshold     float64 // cut-off above which stores are considered overloaded
 	// getProgressMap returns Raft's view of the progress map. This is only called
 	// when needed, and at most once.
 	getProgressMap func(context.Context) map[uint64]tracker.Progress
@@ -86,7 +90,7 @@ const (
 // overload), this method does very little work.
 //
 // If at least one follower is (close to being) overloaded, we determine the
-// maximum set of such followers that we can afford not replicating to without
+// maximum set of such followers that we can afford not to replicate to without
 // losing quorum by successively reducing the set of overloaded followers by one
 // randomly selected overloaded voter. The randomness makes it more likely that
 // when there are multiple overloaded stores in the system that cannot be
@@ -108,7 +112,7 @@ func computeExpendableOverloadedFollowers(
 	var prs map[uint64]tracker.Progress
 
 	for _, replDesc := range d.replDescs.AsProto() {
-		if _, overloaded := d.ioOverloadMap[replDesc.StoreID]; !overloaded || replDesc.ReplicaID == d.self {
+		if overloaded := d.ioOverloadMap.OverloadedWithThreshold(replDesc.StoreID, d.threshold); !overloaded || replDesc.ReplicaID == d.self {
 			continue
 		}
 		// There's at least one overloaded follower, so initialize
@@ -193,26 +197,94 @@ func computeExpendableOverloadedFollowers(
 	return liveOverloadedVoterCandidates, nonLive
 }
 
-type overloadedStoresMap atomic.Value // map[roachpb.StoreID]*admissionpb.IOThreshold
-
-func (osm *overloadedStoresMap) Load() map[roachpb.StoreID]*admissionpb.IOThreshold {
-	v, _ := (*atomic.Value)(osm).Load().(map[roachpb.StoreID]*admissionpb.IOThreshold)
-	return v
+type ioThresholdMap struct {
+	seq int
+	m   map[roachpb.StoreID]*admissionpb.IOThreshold
 }
 
-func (osm *overloadedStoresMap) Swap(
+var _ ioThresholdMapI = (*ioThresholdMap)(nil)
+
+func (osm *ioThresholdMap) Overloaded(id roachpb.StoreID) bool {
+	_, overloaded := osm.m[id].Score()
+	return overloaded
+}
+
+// OverloadedWithThreshold implements ioThresholdMapI.
+func (osm *ioThresholdMap) OverloadedWithThreshold(id roachpb.StoreID, threshold float64) bool {
+	sc, _ := osm.m[id].Score()
+	return sc > threshold
+}
+
+func (osm *ioThresholdMap) NumOverloaded() int {
+	var n int
+	for id := range osm.m {
+		if osm.Overloaded(id) {
+			n++
+		}
+	}
+	return n
+}
+
+func (osm *ioThresholdMap) IOThreshold(id roachpb.StoreID) *admissionpb.IOThreshold {
+	return osm.m[id]
+}
+
+// Sequence allows distinguishing sets of overloaded stores. Whenever an
+// ioThresholdMap is created, it inherits the sequence of its predecessor,
+// incrementing only when the set of overloaded stores has changed in the
+// transition.
+func (osm *ioThresholdMap) Sequence() int {
+	return osm.seq
+}
+
+type ioThresholds struct {
+	mu struct {
+		syncutil.Mutex
+		inner *ioThresholdMap // always replaced wholesale, so can leak out of mu
+	}
+}
+
+func (osm *ioThresholds) Current() *ioThresholdMap {
+	osm.mu.Lock()
+	defer osm.mu.Unlock()
+	return osm.mu.inner
+}
+
+// Replace replaces the stored view of stores for which we track IOThresholds.
+// If the set of overloaded stores (i.e. with a score of >=1) changes in the
+// process, the updated view will have an incremented Sequence().
+func (osm *ioThresholds) Replace(
 	m map[roachpb.StoreID]*admissionpb.IOThreshold,
-) map[roachpb.StoreID]*admissionpb.IOThreshold {
-	v, _ := (*atomic.Value)(osm).Swap(m).(map[roachpb.StoreID]*admissionpb.IOThreshold)
-	return v
+) (prev, cur *ioThresholdMap) {
+	osm.mu.Lock()
+	defer osm.mu.Unlock()
+	last := osm.mu.inner
+	if last == nil {
+		last = &ioThresholdMap{}
+	}
+	next := &ioThresholdMap{seq: last.seq, m: m}
+	var delta int
+	for id := range last.m {
+		if last.Overloaded(id) != next.Overloaded(id) {
+			delta = 1
+			break
+		}
+	}
+	for id := range next.m {
+		if last.Overloaded(id) != next.Overloaded(id) {
+			delta = 1
+			break
+		}
+	}
+	next.seq += delta
+	osm.mu.inner = next
+	return last, next
 }
 
-func (r *Replica) updatePausedFollowersLocked(
-	ctx context.Context, ioOverloadMap map[roachpb.StoreID]*admissionpb.IOThreshold,
-) {
+func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMap *ioThresholdMap) {
 	r.mu.pausedFollowers = nil
 
-	if len(ioOverloadMap) == 0 {
+	if ioThresholdMap.NumOverloaded() == 0 {
 		return
 	}
 
@@ -254,7 +326,8 @@ func (r *Replica) updatePausedFollowersLocked(
 	d := computeExpendableOverloadedFollowersInput{
 		self:          r.replicaID,
 		replDescs:     r.descRLocked().Replicas(),
-		ioOverloadMap: ioOverloadMap,
+		ioOverloadMap: ioThresholdMap,
+		threshold:     pauseReplicationIOThreshold.Get(&r.store.cfg.Settings.SV),
 		getProgressMap: func(_ context.Context) map[uint64]tracker.Progress {
 			prs := r.mu.internalRaftGroup.Status().Progress
 			updateRaftProgressFromActivity(ctx, prs, r.descRLocked().Replicas().AsProto(), func(id roachpb.ReplicaID) bool {

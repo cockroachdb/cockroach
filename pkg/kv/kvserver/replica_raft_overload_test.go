@@ -47,7 +47,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 			var seed uint64
 			var replDescs roachpb.ReplicaSet
 			var self roachpb.ReplicaID
-			ioOverloadMap := map[roachpb.StoreID]*admissionpb.IOThreshold{}
+			ioOverloadMap := &ioThresholdMap{m: map[roachpb.StoreID]*admissionpb.IOThreshold{}}
 			snapshotMap := map[roachpb.ReplicaID]struct{}{}
 			downMap := map[roachpb.ReplicaID]struct{}{}
 			match := map[roachpb.ReplicaID]uint64{}
@@ -87,7 +87,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 						}
 						replDescs.AddReplica(replDesc)
 					case "overloaded":
-						ioOverloadMap[roachpb.StoreID(id)] = &admissionpb.IOThreshold{
+						ioOverloadMap.m[roachpb.StoreID(id)] = &admissionpb.IOThreshold{
 							L0NumSubLevels:          1000,
 							L0NumSubLevelsThreshold: 20,
 							L0NumFiles:              1,
@@ -140,6 +140,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 				self:              self,
 				replDescs:         replDescs,
 				ioOverloadMap:     ioOverloadMap,
+				threshold:         1.0,
 				getProgressMap:    getProgressMap,
 				seed:              int64(seed),
 				minLiveMatchIndex: minLiveMatchIndex,
