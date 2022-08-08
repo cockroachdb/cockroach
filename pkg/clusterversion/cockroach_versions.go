@@ -181,10 +181,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// AlterSystemProtectedTimestampAddColumn adds a target column to the
-	// system.protected_ts_records table that describes what is protected by the
-	// record.
-	AlterSystemProtectedTimestampAddColumn
 	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
 	// in secondary tenants.
 	EnableProtectedTimestampsForTenant
@@ -395,10 +391,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     AlterSystemProtectedTimestampAddColumn,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 48},
 	},
 	{
 		Key:     EnableProtectedTimestampsForTenant,

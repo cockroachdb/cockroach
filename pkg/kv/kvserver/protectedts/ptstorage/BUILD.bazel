@@ -14,7 +14,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
@@ -43,8 +42,6 @@ go_test(
     shard_count = 16,
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
-        "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
@@ -66,7 +63,6 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -74,7 +70,6 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
