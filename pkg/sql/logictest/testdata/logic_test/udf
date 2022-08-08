@@ -611,3 +611,33 @@ ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
 
 statement error pq: unimplemented: usage of user-defined function from relations not supported
 ALTER TABLE test_tbl_t ADD COLUMN c int ON UPDATE (test_tbl_f());
+
+subtest disallow_udf_in_views_and_udf
+
+statement ok
+CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement error pq: unknown function: test_vf_f\(\): function undefined
+CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT test_vf_f() $$;
+
+statement ok
+CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement error pq: unknown function: test_vf_f\(\): function undefined
+CREATE VIEW v AS SELECT test_vf_f();
+
+statement ok
+CREATE VIEW v AS SELECT lower('hello');
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION test_vf_f];
+----
+CREATE FUNCTION public.test_vf_f()
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT lower('hello');
+$$
