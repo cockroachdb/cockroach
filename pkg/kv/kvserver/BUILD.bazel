@@ -9,6 +9,7 @@ go_library(
     srcs = [
         "addressing.go",
         "compact_span_client.go",
+        "compaction_concurrency_client.go",
         "consistency_queue.go",
         "debug_print.go",
         "deprecated_store_rebalancer.go",
