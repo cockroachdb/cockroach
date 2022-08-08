@@ -26,10 +26,10 @@ DROP FUNCTION _ CASCADE -- identifiers removed
 parse
 DROP FUNCTION f, g
 ----
-DROP FUNCTION f ,g -- normalized!
-DROP FUNCTION f ,g -- fully parenthesized
-DROP FUNCTION f ,g -- literals removed
-DROP FUNCTION _ ,_ -- identifiers removed
+DROP FUNCTION f, g
+DROP FUNCTION f, g -- fully parenthesized
+DROP FUNCTION f, g -- literals removed
+DROP FUNCTION _, _ -- identifiers removed
 
 parse
 DROP FUNCTION f(int)
