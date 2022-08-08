@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -165,6 +166,13 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	defer cancel()
 
 	zr := zipCtx.newZipReporter("cluster")
+	// Interpret the deprecated `--redact-logs` the same as the new `--redact` flag.
+	if zipCtx.redactLogs {
+		zipCtx.redact = true
+		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
+			" flag has been deprecated in favor of the --" + cliflags.ZipRedact.Name + " flag. " +
+			"Interpreting as --" + cliflags.ZipRedact.Name + " and continuing.")
+	}
 
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
