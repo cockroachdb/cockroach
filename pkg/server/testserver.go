@@ -25,7 +25,6 @@ import (
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -594,10 +593,6 @@ type tenantProtectedTSProvider struct {
 func (d tenantProtectedTSProvider) Protect(
 	ctx context.Context, txn *kv.Txn, rec *ptpb.Record,
 ) error {
-	if !d.st.Version.IsActive(ctx, clusterversion.EnableProtectedTimestampsForTenant) {
-		return errors.Newf("%s is inactive, tenant cannot write protected timestamp records",
-			clusterversion.EnableProtectedTimestampsForTenant.String())
-	}
 	return d.Provider.Protect(ctx, txn, rec)
 }
 
