@@ -59,13 +59,17 @@ func executeValidateCheckConstraint(
 	return errors.Errorf("executeValidateCheckConstraint is not implemented")
 }
 
-func executeValidationOps(ctx context.Context, deps Dependencies, execute []scop.Op) error {
-	for _, op := range execute {
+func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op) (err error) {
+	for _, op := range ops {
 		switch op := op.(type) {
 		case *scop.ValidateUniqueIndex:
-			return executeValidateUniqueIndex(ctx, deps, op)
+			if err = executeValidateUniqueIndex(ctx, deps, op); err != nil {
+				return errors.Wrapf(err, "%T: %v", op, op)
+			}
 		case *scop.ValidateCheckConstraint:
-			return executeValidateCheckConstraint(ctx, deps, op)
+			if err = executeValidateCheckConstraint(ctx, deps, op); err != nil {
+				return errors.Wrapf(err, "%T: %v", op, op)
+			}
 		default:
 			panic("unimplemented")
 		}
