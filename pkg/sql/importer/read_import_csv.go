@@ -204,8 +204,18 @@ func (c *csvRowConsumer) FillDatums(
 			continue
 		}
 
-		if c.opts.NullEncoding != nil &&
-			field.Val == *c.opts.NullEncoding {
+		// NullEncoding is stored as a *string historically, from before we wanted
+		// it to default to "". Rather than changing the proto, we just set the
+		// default here.
+		nullEncoding := ""
+		if c.opts.NullEncoding != nil {
+			nullEncoding = *c.opts.NullEncoding
+		}
+		if (!field.Quoted || c.opts.AllowQuotedNull) && field.Val == nullEncoding {
+			// To match COPY, the default behavior is to only treat the field as NULL
+			// if it was not quoted (and if it matches the configured NullEncoding).
+			// The AllowQuotedNull option can be used to get the old behavior where
+			// even a quoted value is treated as NULL.
 			conv.Datums[datumIdx] = tree.DNull
 		} else {
 			var err error
