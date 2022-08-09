@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -96,7 +97,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		tenant = uint64(rand.Int63())
 		certsDir = makeTenantCerts(t, tenant)
 	} else {
-		certsDir = security.EmbeddedCertsDir
+		certsDir = certnames.EmbeddedCertsDir
 		tenant = security.EmbeddedTenantIDs()[0]
 	}
 

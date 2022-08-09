@@ -794,6 +794,10 @@ const (
 	// ScheduledRowLevelTTLExecutor is an executor responsible for the cleanup
 	// of rows on row level TTL tables.
 	ScheduledRowLevelTTLExecutor
+
+	// ScheduledSchemaTelemetryExecutor is an executor responsible for the logging
+	// of schema telemetry.
+	ScheduledSchemaTelemetryExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
@@ -801,6 +805,7 @@ var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
 	ScheduledBackupExecutor:             "scheduled-backup-executor",
 	ScheduledSQLStatsCompactionExecutor: "scheduled-sql-stats-compaction-executor",
 	ScheduledRowLevelTTLExecutor:        "scheduled-row-level-ttl-executor",
+	ScheduledSchemaTelemetryExecutor:    "scheduled-schema-telemetry-executor",
 }
 
 // InternalName returns an internal executor name.
@@ -818,6 +823,8 @@ func (t ScheduledJobExecutorType) UserName() string {
 		return "SQL STATISTICS"
 	case ScheduledRowLevelTTLExecutor:
 		return "ROW LEVEL TTL"
+	case ScheduledSchemaTelemetryExecutor:
+		return "SCHEMA TELEMETRY"
 	}
 	return "unsupported-executor"
 }

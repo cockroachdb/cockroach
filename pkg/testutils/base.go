@@ -12,7 +12,7 @@ package testutils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 )
 
@@ -35,5 +35,5 @@ func NewTestBaseContext(user username.SQLUsername) *base.Config {
 
 // FillCerts sets the certs on a base.Config.
 func FillCerts(cfg *base.Config) {
-	cfg.SSLCertsDir = security.EmbeddedCertsDir
+	cfg.SSLCertsDir = certnames.EmbeddedCertsDir
 }

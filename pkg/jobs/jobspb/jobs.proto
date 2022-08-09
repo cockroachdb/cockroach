@@ -91,7 +91,6 @@ message StreamIngestionDetails {
 
   // Stream of tenant data will be ingested as a new tenant with 'new_tenant_id'.
   roachpb.TenantID new_tenant_id = 7 [(gogoproto.customname) = "NewTenantID", (gogoproto.nullable) = false];
-  // NEXT ID: 8.
 }
 
 message StreamIngestionCheckpoint {
@@ -261,8 +260,6 @@ message BackupDetails {
   // timestamp and the timestamp resolved by the AS OF SYSTEM TIME expression.
   // The interval is expressed in nanoseconds.
   int64 as_of_interval = 22;
-
-  // NEXT ID: 23;
 }
 
 message BackupProgress {
@@ -384,8 +381,6 @@ message RestoreDetails {
   // RestoreValidation determines whether to skip certain parts of the restore
   // job if its only purpose is to validate the user's restore command.
   RestoreValidation validation = 24;
-
-  // NEXT ID: 25.
 }
 
 enum RestoreValidation {
@@ -754,8 +749,6 @@ message SchemaChangeDetails {
   // WriteTimestamp is the timestamp at which a backfill may want to write, e.g.
   // a time that has been identified via a scan as safe for writing.
   util.hlc.Timestamp write_timestamp = 10 [(gogoproto.nullable) = false];
-
-  // NEXT ID: 11.
 }
 
 message SchemaChangeProgress {
@@ -858,7 +851,6 @@ message ChangefeedDetails {
   string select = 10;
   reserved 1, 2, 5;
   reserved "targets";
-  // NEXT ID: 11
 }
 
 message ResolvedSpan {
@@ -1011,6 +1003,12 @@ message RowLevelTTLProgress {
   int64 row_count = 1;
 }
 
+message SchemaTelemetryDetails {
+}
+
+message SchemaTelemetryProgress {
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -1058,6 +1056,10 @@ message Payload {
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
     StreamReplicationDetails streamReplication = 33;
     RowLevelTTLDetails row_level_ttl = 34 [(gogoproto.customname)="RowLevelTTL"];
+    // SchemaTelemetry jobs collect a snapshot of the cluster's SQL schema
+    // and publish it to the telemetry event log. These jobs are typically
+    // created by a built-in schedule named "sql-schema-telemetry".
+    SchemaTelemetryDetails schema_telemetry = 37;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1080,8 +1082,6 @@ message Payload {
   // cluster version, in case a job resuming later needs to use this information
   // to migrate or update the job.
   roachpb.Version creation_cluster_version = 36 [(gogoproto.nullable) = false];
-
-  // NEXT ID: 37.
 }
 
 message Progress {
@@ -1108,6 +1108,7 @@ message Progress {
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
     StreamReplicationProgress streamReplication = 24;
     RowLevelTTLProgress row_level_ttl = 25 [(gogoproto.customname)="RowLevelTTL"];
+    SchemaTelemetryProgress schema_telemetry = 26;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1136,6 +1137,7 @@ enum Type {
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
   STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
   ROW_LEVEL_TTL = 16 [(gogoproto.enumvalue_customname) = "TypeRowLevelTTL"];
+  AUTO_SCHEMA_TELEMETRY = 17 [(gogoproto.enumvalue_customname) = "TypeAutoSchemaTelemetry"];
 }
 
 message Job {

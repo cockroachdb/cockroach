@@ -44,7 +44,9 @@ import (
 func (s *Store) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	br, _, pErr = s.SendWithWriteBytes(ctx, ba)
+	var writeBytes *StoreWriteBytes
+	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba)
+	writeBytes.Release()
 	return br, pErr
 }
 

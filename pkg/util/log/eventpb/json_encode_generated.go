@@ -8,9 +8,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/jsonpb"
 )
 
 var safeRe1 = regexp.MustCompile(`^root|node$`)
+
+var _ = jsonpb.Marshaler{}
 
 // AppendJSONFields implements the EventPayload interface.
 func (m *AdminQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
@@ -3787,6 +3790,128 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		printComma = true
 		b = append(b, "\"ZigZagJoinCount\":"...)
 		b = strconv.AppendInt(b, int64(m.ZigZagJoinCount), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *SchemaDescriptor) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.SnapshotID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SnapshotID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SnapshotID)))
+		b = append(b, '"')
+	}
+
+	if m.ParentDatabaseID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ParentDatabaseID\":"...)
+		b = strconv.AppendUint(b, uint64(m.ParentDatabaseID), 10)
+	}
+
+	if m.ParentSchemaID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ParentSchemaID\":"...)
+		b = strconv.AppendUint(b, uint64(m.ParentSchemaID), 10)
+	}
+
+	if m.Name != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Name\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Name)))
+		b = append(b, '"')
+	}
+
+	if m.DescID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DescID\":"...)
+		b = strconv.AppendUint(b, uint64(m.DescID), 10)
+	}
+
+	if m.Desc != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		jsonEncoder := jsonpb.Marshaler{}
+		if str, err := jsonEncoder.MarshalToString(m.Desc); err == nil {
+			b = append(b, "\"Desc\":"...)
+			b = append(b, []byte(str)...)
+		}
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *SchemaSnapshotMetadata) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.SnapshotID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SnapshotID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SnapshotID)))
+		b = append(b, '"')
+	}
+
+	if m.NumRecords != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumRecords\":"...)
+		b = strconv.AppendUint(b, uint64(m.NumRecords), 10)
+	}
+
+	if m.AsOfTimestamp != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AsOfTimestamp\":"...)
+		b = strconv.AppendInt(b, int64(m.AsOfTimestamp), 10)
+	}
+
+	if len(m.Errors) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Errors\":["...)
+		for i, v := range m.Errors {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = append(b, redact.StartMarker()...)
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(v)))))
+			b = append(b, redact.EndMarker()...)
+			b = append(b, '"')
+		}
+		b = append(b, ']')
 	}
 
 	return printComma, b

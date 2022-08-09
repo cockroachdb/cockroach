@@ -101,7 +101,8 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	br, _, pErr := r.SendWithWriteBytes(ctx, ba)
+	br, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba)
+	writeBytes.Release()
 	return br, pErr
 }
 

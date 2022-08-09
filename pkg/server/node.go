@@ -959,7 +959,7 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 		retryOpts.Closer = n.stopper.ShouldQuiesce()
 		for r := retry.Start(retryOpts); r.Next(); {
 			if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return sql.InsertEventRecord(ctx, n.sqlExec,
+				return sql.InsertEventRecords(ctx, n.sqlExec,
 					txn,
 					int32(n.Descriptor.NodeID), /* reporting ID: the node where the event is logged */
 					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* LogEventDestination: we already call log.StructuredEvent above */
@@ -1009,17 +1009,16 @@ func (n *Node) batchInternal(
 
 	tStart := timeutil.Now()
 	handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
-	defer n.admissionController.AdmittedKVWorkDone(handle)
 	if err != nil {
 		return nil, err
 	}
-	var pErr *roachpb.Error
-	// TODO(sumeer): plumb *StoreWriteBytes to admission control.
 	var writeBytes *kvserver.StoreWriteBytes
-	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, *args)
-	if writeBytes != nil {
+	defer func() {
+		n.admissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
-	}
+	}()
+	var pErr *roachpb.Error
+	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, *args)
 	if pErr != nil {
 		br = &roachpb.BatchResponse{}
 		log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)

@@ -69,6 +69,9 @@ const (
 	// RehomeRowBuiltinName is the name for the builtin that rehomes a row to the
 	// user's gateway region, defaulting to the database primary region.
 	RehomeRowBuiltinName = "rehome_row"
+	// CreateSchemaTelemetryJobBuiltinName is the name for the builtin that
+	// creates a job that logs SQL schema telemetry.
+	CreateSchemaTelemetryJobBuiltinName = "crdb_internal.create_sql_schema_telemetry_job"
 )
 
 // NodeIDBits is the number of bits stored in the lower portion of
