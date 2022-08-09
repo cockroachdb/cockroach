@@ -40,7 +40,6 @@ import {
   setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import {
   trackCancelDiagnosticsBundleAction,
@@ -56,6 +55,8 @@ import {
   statementDetailsLatestQueryAction,
   statementDetailsLatestFormattedQueryAction,
 } from "src/redux/sqlActivity";
+import { selectTimeScale } from "src/redux/timeScale";
+
 type IStatementDiagnosticsReport =
   protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
 
@@ -67,7 +68,7 @@ export const selectStatementDetails = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     queryByName(props.location, appNamesAttr),
   (state: AdminUIState): TimeScale =>
-    globalTimeScaleLocalSetting.selector(state),
+    selectTimeScale(state),
   (state: AdminUIState) => state.cachedData.statementDetails,
   (
     fingerprintID,
@@ -113,7 +114,7 @@ const mapStateToProps = (
     latestFormattedQuery:
       state.sqlActivity.statementDetailsLatestFormattedQuery,
     statementsError: state.cachedData.statements.lastError,
-    timeScale: globalTimeScaleLocalSetting.selector(state),
+    timeScale: selectTimeScale(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
