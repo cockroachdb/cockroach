@@ -1289,6 +1289,20 @@ func (desc *wrapper) validateTableIndexes(
 				newPKColIDs.UnionWith(newPK.CollectKeyColumnIDs())
 			}
 		}
+		if newPKColIDs.Empty() {
+			// Sadly, if the `ALTER PRIMARY KEY USING HASH` is from declarative schema changer,
+			// we won't find the `PrimaryKeySwap` mutation. In that case, we will attempt to
+			// find a mutation of adding a primary index and allow its key columns to be used
+			// as SUFFIX columns in other indexes, even if they are virtual.
+			for _, mut := range desc.Mutations {
+				if pidx := mut.GetIndex(); pidx != nil &&
+					pidx.EncodingType == descpb.PrimaryIndexEncoding &&
+					mut.Direction == descpb.DescriptorMutation_ADD &&
+					!mut.Rollback {
+					newPKColIDs.UnionWith(catalog.MakeTableColSet(pidx.KeyColumnIDs...))
+				}
+			}
+		}
 		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
 			if !vea.IsActive(clusterversion.Start22_1) {
 				if col := columnsByID[colID]; col != nil && col.IsVirtual() {
