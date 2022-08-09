@@ -59,7 +59,6 @@ go_library(
     deps = [
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/batcheval/result",
