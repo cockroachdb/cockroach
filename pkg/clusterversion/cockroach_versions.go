@@ -196,9 +196,6 @@ const (
 	// AutoStatsTableSettings is the version where we allow auto stats related
 	// table settings.
 	AutoStatsTableSettings
-	// SpanCountTable adds system.span_count to track the number of committed
-	// tenant spans.
-	SpanCountTable
 	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
 	// accounting for incremental schema changes.
 	PreSeedSpanCountTable
@@ -356,10 +353,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AutoStatsTableSettings,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
-	},
-	{
-		Key:     SpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 108},
 	},
 	{
 		Key:     PreSeedSpanCountTable,
