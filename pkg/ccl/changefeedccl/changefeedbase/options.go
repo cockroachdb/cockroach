@@ -9,12 +9,10 @@
 package changefeedbase
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/errors"
 )
 
@@ -404,14 +402,6 @@ var AlterChangefeedTargetOptions = map[string]OptionPermittedValues{
 	OptNoInitialScan: flagOption,
 }
 
-// VersionGateOptions is a mapping between an option and its minimum supported
-// version.
-var VersionGateOptions = map[string]clusterversion.Key{
-	OptEndTime:         clusterversion.EnableNewChangefeedOptions,
-	OptInitialScanOnly: clusterversion.EnableNewChangefeedOptions,
-	OptInitialScan:     clusterversion.EnableNewChangefeedOptions,
-}
-
 // MakeStatementOptions wraps and canonicalizes the options we get
 // from TypeAsStringOpts or the job record.
 func MakeStatementOptions(opts map[string]string) StatementOptions {
@@ -443,24 +433,6 @@ func (s StatementOptions) AsMap() map[string]string {
 func (s StatementOptions) IsSet(key string) bool {
 	_, ok := s.m[key]
 	return ok
-}
-
-// CheckVersionGates verifies that all options are supported by the
-// active cluster version.
-func (s StatementOptions) CheckVersionGates(
-	ctx context.Context, version clusterversion.Handle,
-) error {
-	for key := range s.m {
-		if clusterVersion, ok := VersionGateOptions[key]; ok {
-			if !version.IsActive(ctx, clusterVersion) {
-				return errors.Newf(
-					`option %s is not supported until upgrade to version %s or higher is finalized`,
-					key, clusterVersion.String(),
-				)
-			}
-		}
-	}
-	return nil
 }
 
 // DeprecationWarnings checks for options in forms we still support and serialize,
