@@ -254,6 +254,12 @@ func (c *conn) findAuthenticationMethod(
 		return
 	}
 
+	if flag, ok := c.sessionArgs.CustomOptionSessionDefaults["crdb:jwt.auth"]; ok && strings.ToLower(flag) == "true" {
+		methodFn = authJwtToken
+		hbaEntry = &jwtAuthEntry
+		return
+	}
+
 	// Look up the method from the HBA configuration.
 	var mi methodInfo
 	mi, hbaEntry, err = c.lookupAuthenticationMethodUsingRules(authOpt.connType, authOpt.auth)
