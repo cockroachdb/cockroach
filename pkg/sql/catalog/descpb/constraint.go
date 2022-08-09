@@ -125,3 +125,22 @@ func (c *ConstraintDetail) GetConstraintName() string {
 	}
 	return ""
 }
+
+// SetConstraintName sets correct constraint name base on the constraint
+// type.
+func (c *ConstraintDetail) SetConstraintName(name string) {
+	switch c.Kind {
+	case ConstraintTypePK:
+		c.Index.Name = name
+	case ConstraintTypeUnique:
+		if c.Index != nil {
+			c.Index.Name = name
+		} else {
+			c.UniqueWithoutIndexConstraint.Name = name
+		}
+	case ConstraintTypeFK:
+		c.FK.Name = name
+	case ConstraintTypeCheck:
+		c.CheckConstraint.Name = name
+	}
+}
