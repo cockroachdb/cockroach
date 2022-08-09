@@ -319,11 +319,6 @@ func createChangefeedJobRecord(
 	telemetryPath string,
 ) (*jobs.Record, error) {
 	unspecifiedSink := changefeedStmt.SinkURI == nil
-
-	if err := opts.CheckVersionGates(ctx, p.ExecCfg().Settings.Version); err != nil {
-		return nil, err
-	}
-
 	for _, warning := range opts.DeprecationWarnings() {
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 	}
