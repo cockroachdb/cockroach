@@ -2084,7 +2084,6 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
-
 	// CockroachDB extension.
 	`show_primary_key_constraint_on_not_visible_columns`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`show_primary_key_constraint_on_not_visible_columns`),
@@ -2100,6 +2099,22 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns), nil
 		},
 		GlobalDefault: globalTrue,
+	},
+	// CockroachDB extension.
+	`disable_hoist_projection_in_join_limitation`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_hoist_projection_in_join_limitation`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_hoist_projection_in_join_limitation", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableHoistProjectionInJoinLimitation(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableHoistProjectionInJoinLimitation), nil
+		},
+		GlobalDefault: globalFalse,
 	},
 }
 
