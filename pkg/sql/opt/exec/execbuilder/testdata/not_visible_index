@@ -1,22 +1,1155 @@
 # LogicTest: local
 
+# This file will exercise these dimensions of not visible index feature:
+# - Check show create table
+# - Check system descriptors
+# - Check show indexes
+# - Check invisible index feature using EXPLAIN
+
 statement ok
-CREATE TABLE t1 (k INT PRIMARY KEY, v INT, geom GEOMETRY)
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT, i INT, INDEX idx_v_visible(v) VISIBLE, INDEX idx_i_invisible(i) NOT VISIBLE, FAMILY (k, v, i))
 
-statement error pq: unimplemented: creating a not visible index is not supported yet
-CREATE INDEX idx_k_invisible ON t1(v) NOT VISIBLE
+statement ok
+CREATE UNIQUE INDEX idx_v_invisible ON t1(v) NOT VISIBLE
 
-statement error pq: unimplemented: creating a not visible index is not supported yet
-CREATE INVERTED INDEX idx_c_partial_invisible ON t1(geom) WHERE k >= v AND v = 3 NOT VISIBLE
+# Test SHOW CREATE TABLE.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1]
+----
+CREATE TABLE public.t1 (
+   k INT8 NOT NULL,
+   v INT8 NULL,
+   i INT8 NULL,
+   CONSTRAINT t1_pkey PRIMARY KEY (k ASC),
+   INDEX idx_v_visible (v ASC),
+   INDEX idx_i_invisible (i ASC) NOT VISIBLE,
+   UNIQUE INDEX idx_v_invisible (v ASC) NOT VISIBLE,
+   FAMILY fam_0_k_v_i (k, v, i)
+)
 
-statement error pq: unimplemented: creating a not visible index is not supported yet
-CREATE UNIQUE INDEX unique_idx ON t1(k) NOT VISIBLE
+# Test SHOW INDEX, SHOW INDEXES, SHOW KEYS FROM TABLE.
+query TTB
+SELECT index_name, column_name, visible FROM [SHOW INDEX FROM t1] ORDER BY index_name, seq_in_index
+----
+idx_i_invisible  i  false
+idx_i_invisible  k  false
+idx_v_invisible  v  false
+idx_v_invisible  k  false
+idx_v_visible    v  true
+idx_v_visible    k  true
+t1_pkey          k  true
+t1_pkey          v  true
+t1_pkey          i  true
 
-statement error pq: unimplemented: creating a not visible index is not supported yet
-CREATE TABLE t1_invisible (b INT, INDEX foo (b) WHERE b > 3 NOT VISIBLE)
+query TTB
+SELECT index_name, column_name, visible  FROM [SHOW INDEXES FROM t1] ORDER BY index_name, seq_in_index
+----
+idx_i_invisible  i  false
+idx_i_invisible  k  false
+idx_v_invisible  v  false
+idx_v_invisible  k  false
+idx_v_visible    v  true
+idx_v_visible    k  true
+t1_pkey          k  true
+t1_pkey          v  true
+t1_pkey          i  true
 
-statement error pq: unimplemented: creating a not visible index is not supported yet
-CREATE TABLE t2_invisible (k INT PRIMARY KEY, v INT, i INT, p INT, INDEX idx_v_invisible (v) NOT VISIBLE)
+query TTB
+SELECT index_name, column_name, visible  FROM [SHOW KEYS FROM t1] ORDER BY index_name, seq_in_index
+----
+idx_i_invisible  i  false
+idx_i_invisible  k  false
+idx_v_invisible  v  false
+idx_v_invisible  k  false
+idx_v_visible    v  true
+idx_v_visible    k  true
+t1_pkey          k  true
+t1_pkey          v  true
+t1_pkey          i  true
 
-statement error pq: unimplemented: creating a not visible index is not supported yet
-CREATE TABLE t3_invisible (b INT, UNIQUE INDEX foo (b) WHERE b > 3 NOT VISIBLE)
+# Check System Descriptor.
+query TTBITTBBB colnames
+SELECT * FROM [SHOW INDEX FROM system.descriptor]
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+descriptor  primary     false       1             id           ASC        false    false     true
+descriptor  primary     false       2             descriptor   N/A        true     false     true
+
+query TT
+SELECT cols.desc->>'name', cols.desc->>'notVisible' FROM (
+  SELECT json_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes'
+  ) AS desc FROM system.descriptor WHERE id = 't1'::REGCLASS
+) AS cols
+----
+idx_v_visible    NULL
+idx_i_invisible  true
+idx_v_invisible  true
+
+# Check crdb_internal.table_indexes.
+query TB colnames
+SELECT index_name, is_visible FROM crdb_internal.table_indexes ORDER BY index_id
+----
+index_name       is_visible
+t1_pkey          true
+idx_v_visible    true
+idx_i_invisible  false
+idx_v_invisible  false
+
+# Check information_schema.statistics.
+query TTT colnames
+SELECT index_name, column_name, is_visible  FROM information_schema.statistics ORDER BY index_name, seq_in_index
+----
+index_name       column_name  is_visible
+idx_i_invisible  i            NO
+idx_i_invisible  k            NO
+idx_v_invisible  v            NO
+idx_v_invisible  k            NO
+idx_v_visible    v            YES
+idx_v_visible    k            YES
+t1_pkey          k            YES
+t1_pkey          v            YES
+t1_pkey          i            YES
+
+statement ok
+DROP TABLE t1;
+
+# Test SHOW INDEX, SHOW INDEXES, SHOW KEYS FROM DATABASE.
+statement ok
+CREATE DATABASE db;
+
+statement ok
+CREATE TABLE db.t1 (k INT PRIMARY KEY, v INT, INDEX idx_i_invisible(v) NOT VISIBLE)
+
+statement ok
+CREATE TABLE db.t2 (k INT PRIMARY KEY, v INT, INDEX idx_i_invisible(v) NOT VISIBLE)
+
+query TTTB
+SELECT table_name, index_name, column_name, visible FROM [SHOW INDEX FROM DATABASE db] ORDER BY table_name, index_name, seq_in_index
+----
+t1  idx_i_invisible  v  false
+t1  idx_i_invisible  k  false
+t1  t1_pkey          k  true
+t1  t1_pkey          v  true
+t2  idx_i_invisible  v  false
+t2  idx_i_invisible  k  false
+t2  t2_pkey          k  true
+t2  t2_pkey          v  true
+
+query TTTB
+SELECT table_name, index_name, column_name, visible  FROM [SHOW INDEXES FROM DATABASE db] ORDER BY table_name, index_name, seq_in_index
+----
+t1  idx_i_invisible  v  false
+t1  idx_i_invisible  k  false
+t1  t1_pkey          k  true
+t1  t1_pkey          v  true
+t2  idx_i_invisible  v  false
+t2  idx_i_invisible  k  false
+t2  t2_pkey          k  true
+t2  t2_pkey          v  true
+
+query TTTB
+SELECT table_name, index_name, column_name, visible  FROM [SHOW KEYS FROM DATABASE db] ORDER BY table_name, index_name, seq_in_index
+----
+t1  idx_i_invisible  v  false
+t1  idx_i_invisible  k  false
+t1  t1_pkey          k  true
+t1  t1_pkey          v  true
+t2  idx_i_invisible  v  false
+t2  idx_i_invisible  k  false
+t2  t2_pkey          k  true
+t2  t2_pkey          v  true
+
+statement ok
+DROP DATABASE db;
+
+####################################################################
+# Invisible index is ignored during normal SELECT, UPDATE, DELETE. #
+####################################################################
+statement ok
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT, other INT, INDEX idx_v_visible(v) VISIBLE)
+
+# idx_v_visible is selected if it is visible.
+query T
+EXPLAIN SELECT * FROM t1 WHERE v = 2
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: t1@t1_pkey
+│
+└── • scan
+      missing stats
+      table: t1@idx_v_visible
+      spans: [/2 - /2]
+
+statement ok
+DROP INDEX t1@idx_v_visible
+
+statement ok
+CREATE INDEX idx_v_invisible ON t1(v) NOT VISIBLE
+
+# After making idx_v_invisible invisible, SELECT ignores idx_v_invisible.
+query T
+EXPLAIN SELECT v FROM t1 WHERE v = 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: v = 2
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# More SELECT ignores idx_v_invisible.
+query T
+EXPLAIN SELECT DISTINCT ON (v) t1 FROM t1
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: v
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# idx_v_invisible is ignored for normal UPDATE.
+query T
+EXPLAIN UPDATE t1 SET k = 1 WHERE v > 0
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t1
+│ set: k
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: v > 0
+        │
+        └── • scan
+              missing stats
+              table: t1@t1_pkey
+              spans: FULL SCAN
+
+# idx_v_invisible is ignored for normal DELETE.
+query T
+EXPLAIN DELETE FROM t1 WHERE v > 0
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: t1
+│ auto commit
+│
+└── • filter
+    │ filter: v > 0
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# Check DISTINCT: ignore idx_v_invisible.
+query T
+EXPLAIN SELECT DISTINCT v FROM t1
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: v
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Check ORDER BY: ignore idx_v_invisible.
+query T
+EXPLAIN SELECT v FROM t1 ORDER BY v
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +v
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Check hash-sharded index: ignore idx_hash_invisible.
+statement ok
+CREATE INDEX idx_hash_invisible ON t1(other) USING HASH WITH (bucket_count=12) NOT VISIBLE
+
+query T
+EXPLAIN SELECT * FROM t1 WHERE other > 100 ORDER BY other LIMIT 10;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +other
+│ k: 10
+│
+└── • filter
+    │ filter: other > 100
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# Check expression index: ignore idx_plus.
+statement ok
+CREATE INDEX idx_plus ON t1((v + other)) NOT VISIBLE
+
+query T
+EXPLAIN SELECT * FROM t1 WHERE (v + other) = 100
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (v + other) = 100
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+statement ok
+DROP INDEX idx_hash_invisible
+
+statement ok
+DROP INDEX idx_plus
+
+##################################################################################
+# Check Force Index, Force Partial Index, Inverted Index, Partial Inverted Index #
+##################################################################################
+# Force index is still in effect, and idx_v_invisible is used.
+query T
+EXPLAIN SELECT v FROM t1@idx_v_invisible WHERE v = 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t1@idx_v_invisible
+  spans: [/2 - /2]
+
+statement ok
+DROP INDEX t1@idx_v_invisible
+
+statement ok
+CREATE INDEX idx_v_invisible ON t1(v) WHERE v > 0 NOT VISIBLE
+
+# idx_v_invisible is ignored normally.
+query T
+EXPLAIN SELECT * FROM t1 WHERE v > 10;
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: v > 10
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Partial force index is still in effect, and idx_v_invisible is used when query filter implies predicate.
+query T
+EXPLAIN SELECT * FROM t1@{FORCE_INDEX=idx_v_invisible} WHERE v > 10;
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: t1@t1_pkey
+│
+└── • filter
+    │ filter: v > 10
+    │
+    └── • scan
+          missing stats
+          table: t1@idx_v_invisible (partial index)
+          spans: FULL SCAN
+
+# Partial force index is still in effect, and idx_v_invisible is not used if
+# query filter does not imply predicate.
+statement error pgcode 42809 index "idx_v_invisible" is a partial index that does not contain all the rows needed to execute this query
+EXPLAIN SELECT * FROM t1@{FORCE_INDEX=idx_v_invisible} WHERE v < 0;
+
+statement ok
+DROP TABLE t1
+
+#################################################################################
+# These tests check for JOIN where indexes may be used.
+#################################################################################
+statement ok
+CREATE TABLE t1 (p INT PRIMARY KEY, col1 INT NOT NULL, col2 INT)
+
+statement ok
+CREATE INDEX idx_1_invisible ON t1(col1) NOT VISIBLE
+
+statement ok
+CREATE INDEX idx_2_invisible ON t1(col2) NOT VISIBLE
+
+# Cannot plan zig-zag join because idx_1_invisible, idx_2_invisible are ignored.
+query T
+EXPLAIN SELECT col1, col2 FROM t1 WHERE col1 = 1 AND col2 = 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (col1 = 1) AND (col2 = 2)
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Force zig-zag join will result in error.
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+SELECT col1, col2 FROM t1@{FORCE_ZIGZAG} WHERE col1 = 1 AND col2 = 2
+
+statement ok
+CREATE TABLE t2 (p INT PRIMARY KEY, col1 INT NOT NULL)
+
+statement ok
+CREATE INDEX idx_t2_invisible ON t2(col1) NOT VISIBLE
+
+# Force a look up join results error because t1 doesn't have visible indexes on col1.
+statement error could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT * FROM t2 INNER LOOKUP JOIN t1 USING(col1)
+
+# Cannot plan merge join because indexes on t1.col1 and t2.col2 are invisible.
+# So hash join is chosen.
+query T
+EXPLAIN SELECT t2.col1 FROM t2 JOIN t1 ON t1.col1 = t2.col1
+----
+distribution: local
+vectorized: true
+·
+• hash join
+│ equality: (col1) = (col1)
+│
+├── • scan
+│     missing stats
+│     table: t2@t2_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Cannot plan merge join because indexes on t1.col1 and t2.col2 are invisible.
+# So primary key scan is chosen.
+query T
+EXPLAIN SELECT t2.col1 FROM t2 CROSS MERGE JOIN t1 WHERE t1.col1 = t2.col1
+----
+distribution: local
+vectorized: true
+·
+• merge join
+│ equality: (col1) = (col1)
+│
+├── • sort
+│   │ order: +col1
+│   │
+│   └── • scan
+│         missing stats
+│         table: t2@t2_pkey
+│         spans: FULL SCAN
+│
+└── • sort
+    │ order: +col1
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# Cross join does not require indexes and can still work.
+query T
+EXPLAIN SELECT * FROM t1 JOIN t2 ON t1.col1 = 1
+----
+distribution: local
+vectorized: true
+·
+• cross join
+│
+├── • scan
+│     missing stats
+│     table: t2@t2_pkey
+│     spans: FULL SCAN
+│
+└── • filter
+    │ filter: col1 = 1
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# Check Lateral subqueries: idx_t2_invisible is ignored.
+query T
+EXPLAIN SELECT * FROM t1, LATERAL (SELECT * FROM t2 WHERE col1 > 0) WHERE t1.col1 > 0;
+----
+distribution: local
+vectorized: true
+·
+• cross join
+│
+├── • filter
+│   │ filter: col1 > 0
+│   │
+│   └── • scan
+│         missing stats
+│         table: t1@t1_pkey
+│         spans: FULL SCAN
+│
+└── • filter
+    │ filter: col1 > 0
+    │
+    └── • scan
+          missing stats
+          table: t2@t2_pkey
+          spans: FULL SCAN
+
+# Inverted join will be tested later with inverted indexes.
+
+statement ok
+DROP TABLE t1
+
+statement ok
+DROP TABLE t2
+
+
+##################################################################################
+# Check Invisible Inverted Index and Partial Inverted Index.
+##################################################################################
+statement ok
+CREATE TABLE t1 (id INT, data JSONB, geom GEOMETRY, INVERTED INDEX idx_geom_visible(geom) VISIBLE);
+
+# idx_geom_visible is chosen because it is visible.
+query T
+EXPLAIN SELECT * FROM t1 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: st_covers(geom, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040')
+│
+└── • index join
+    │ table: t1@t1_pkey
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: t1@idx_geom_visible
+              spans: 31 spans
+
+statement ok
+DROP INDEX idx_geom_visible
+
+statement ok
+CREATE INDEX idx_geom_invisible ON t1 USING GIN (geom) NOT VISIBLE;
+
+# Check invisible inverted index: ignored idx_geom_invisible.
+query T
+EXPLAIN SELECT * FROM t1 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: st_covers(geom, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040')
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Check JSONB.
+statement ok
+CREATE INVERTED INDEX idx_data_invisible ON t1(data) WHERE id > 10 NOT VISIBLE
+
+# Check invisible inverted partial index: ignored idx_data_invisible.
+query T
+EXPLAIN SELECT * FROM t1 WHERE data @> '{"foo": "1"}' AND id > 10
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (data @> '{"foo": "1"}') AND (id > 10)
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE TABLE t2 (id INT, geom2 GEOMETRY, INVERTED INDEX idx_geom2_invisible(geom2) NOT VISIBLE)
+
+# Force INVERTED JOIN will result in error because idx_geom2_invisible is invisible.
+statement error could not produce a query plan conforming to the INVERTED JOIN hint
+SELECT * FROM t1 INNER INVERTED JOIN t2 ON st_covers(t1.geom, t2.geom2)
+
+
+# INVERTED JOIN can still work with force index on idx_geom2_invisible.
+query T
+EXPLAIN SELECT * FROM t1 INNER INVERTED JOIN t2@idx_geom2_invisible ON st_covers(t1.geom, t2.geom2)
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: t2@t2_pkey
+│ equality: (rowid) = (rowid)
+│ equality cols are key
+│ pred: st_covers(geom, geom2)
+│
+└── • inverted join
+    │ table: t2@idx_geom2_invisible
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+statement ok
+DROP TABLE t1
+
+statement ok
+DROP TABLE t2
+
+########################################################################################
+# Invisible index is still used to check for uniqueness. INSERT...ON CONFLICT, UPSERT. #
+########################################################################################
+statement ok
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT)
+
+statement ok
+CREATE UNIQUE INDEX idx_v_unique_invisible ON t1(v) NOT VISIBLE
+
+# idx_v_unique_invisible is ignored normally.
+query T
+EXPLAIN SELECT * FROM t1 WHERE v > 0
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: v > 0
+│
+└── • scan
+      missing stats
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# idx_v_unique_invisible is used to check uniqueness.
+query T
+EXPLAIN INSERT INTO t1 VALUES (1, 2) ON CONFLICT DO NOTHING
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: t1(k, v)
+│ auto commit
+│ arbiter indexes: t1_pkey, idx_v_unique_invisible
+│
+└── • lookup join (anti)
+    │ table: t1@idx_v_unique_invisible
+    │ equality: (column2) = (v)
+    │ equality cols are key
+    │
+    └── • cross join (anti)
+        │
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: t1@t1_pkey
+              spans: [/1 - /1]
+
+# idx_v_unique_invisible is used to check uniqueness.
+query T
+EXPLAIN INSERT INTO t1 VALUES (1, 2) ON CONFLICT(v) DO UPDATE SET k = t1.v
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: t1(k, v)
+│ auto commit
+│ arbiter indexes: idx_v_unique_invisible
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: t1@idx_v_unique_invisible
+              spans: [/2 - /2]
+              locking strength: for update
+
+# idx_v_unique_invisible is used for constraint check but ignored for the SELECT scan.
+query T
+EXPLAIN INSERT INTO t1 (k, v) SELECT * FROM t1 WHERE v IN (1, 2) ON CONFLICT DO NOTHING;
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: t1(k, v)
+│ auto commit
+│ arbiter indexes: t1_pkey, idx_v_unique_invisible
+│
+└── • distinct
+    │ distinct on: v
+    │ nulls are distinct
+    │
+    └── • distinct
+        │ distinct on: k
+        │ nulls are distinct
+        │
+        └── • lookup join (anti)
+            │ table: t1@t1_pkey
+            │ equality: (k) = (k)
+            │ equality cols are key
+            │
+            └── • lookup join (anti)
+                │ table: t1@idx_v_unique_invisible
+                │ equality: (v) = (v)
+                │ equality cols are key
+                │
+                └── • filter
+                    │ filter: v IN (1, 2)
+                    │
+                    └── • scan
+                          missing stats
+                          table: t1@t1_pkey
+                          spans: FULL SCAN
+
+# UPSERT uses primary index to check uniqueness, so idx_v_unique_invisible is
+# not useful.
+query T
+EXPLAIN UPSERT INTO t1(k, v) VALUES (1, 2)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: t1(k, v)
+│ auto commit
+│ arbiter indexes: t1_pkey
+│
+└── • cross join (left outer)
+    │
+    ├── • values
+    │     size: 2 columns, 1 row
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: [/1 - /1]
+          locking strength: for update
+
+statement ok
+DROP TABLE t1
+
+###########################################################################################
+# Invisible index is still used to check for FK constraint.
+# - When parent deletes or update
+# - When child inserts, upserts, or update
+###########################################################################################
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), INDEX c_idx_invisible (p) NOT VISIBLE)
+
+# Part 1: When parent deletes or update, invisible indexes on the child table will be used.
+# c_idx_invisible is invisible when no FK is involved (delete on a child table
+# requires no FK check).
+query T
+EXPLAIN DELETE FROM child WHERE p = 4
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: child
+│ auto commit
+│
+└── • filter
+    │ filter: p = 4
+    │
+    └── • scan
+          missing stats
+          table: child@child_pkey
+          spans: FULL SCAN
+
+# c_idx_invisible is used to perform constraint check (delete on a parent table
+# requires FK check).
+query T
+EXPLAIN DELETE FROM parent where p = 2
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@parent_pkey
+│             spans: [/2 - /2]
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child@c_idx_invisible
+            │ equality: (p) = (p)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# c_idx_invisible is used to perform constraint check (update on a parent table
+# requires FK check).
+query T
+EXPLAIN UPDATE parent SET p = p+1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: parent
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@parent_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (p) = (p)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: p
+                │ order key: p
+                │
+                └── • scan
+                      missing stats
+                      table: child@c_idx_invisible
+                      spans: FULL SCAN
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+# Part 2: When child insert, upsert, update, invisible indexes on the parent table will be used.
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY, other INT)
+
+statement ok
+CREATE UNIQUE INDEX u_idx_invisible ON parent(other) NOT VISIBLE
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
+
+# u_idx_invisible is invisible when no FK check is involved (select on a table
+# requires no FK check).
+query T
+EXPLAIN SELECT * FROM parent WHERE other > 0
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: other > 0
+│
+└── • scan
+      missing stats
+      table: parent@parent_pkey
+      spans: FULL SCAN
+
+# u_idx_invisible is used for FK check (insert on a child table requires FK
+# check).
+query T
+EXPLAIN INSERT INTO child VALUES (200, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: child(c, p)
+  auto commit
+  FK check: parent@u_idx_invisible
+  size: 2 columns, 1 row
+
+# u_idx_invisible is used for FK check (upsert on a child table requires FK
+# check).
+query T
+EXPLAIN UPSERT INTO child VALUES (200, 1)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@u_idx_invisible
+            │ equality: (column2) = (other)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+###################################################################################################
+# Invisible index is still used to check for FK constraint with ON CASCADE, SET DEFAULT, SET NULL.
+# - When parent deletes or update
+# - Since EXPLAIN does not show here. We will check the scan flag output under `opt` testdata to confirm.
+###################################################################################################
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY, other INT)
+
+statement ok
+CREATE TABLE child_delete (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE, INDEX c_delete_idx_invisible (p) NOT VISIBLE)
+
+statement ok
+CREATE TABLE child_update (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON UPDATE CASCADE, INDEX c_update_idx_invisible (p) NOT VISIBLE)
+
+# c_update_idx_invisible on child table is used for constraint check (delete on
+# a parent table requires FK check). This triggers delete cascade fast path since
+# filter on p can get transferred to the cascade.
+query T
+EXPLAIN DELETE FROM parent where p = 2
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@parent_pkey
+│             spans: [/2 - /2]
+│
+├── • fk-cascade
+│     fk: child_delete_p_fkey
+│     input: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child_update@c_update_idx_invisible
+            │ equality: (p) = (p)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# c_update_idx_invisible on child table is used for constraint check (delete on
+# a parent table requires FK check). This doesn't trigger delete cascade fast
+# path since filter on other cannot get transferred.
+query T
+EXPLAIN DELETE FROM parent WHERE other > 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • filter
+│           │ filter: other > 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@parent_pkey
+│                 spans: FULL SCAN
+│
+├── • fk-cascade
+│     fk: child_delete_p_fkey
+│     input: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (p) = (p)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: p
+                │ order key: p
+                │
+                └── • scan
+                      missing stats
+                      table: child_update@c_update_idx_invisible
+                      spans: FULL SCAN
+
+# c_delete_idx_invisible is used for constraint check (update on a parent table
+# requires FK check).
+query T
+EXPLAIN UPDATE parent SET p = p+1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: parent
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@parent_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • fk-cascade
+│     fk: child_update_p_fkey
+│     input: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (p) = (p)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: p
+                │ order key: p
+                │
+                └── • scan
+                      missing stats
+                      table: child_delete@c_delete_idx_invisible
+                      spans: FULL SCAN
+
+statement ok
+DROP TABLE child_delete
+
+statement ok
+DROP TABLE child_update
+
+statement ok
+DROP TABLE parent
