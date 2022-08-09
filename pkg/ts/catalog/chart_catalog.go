@@ -355,6 +355,7 @@ var charts = []sectionDescription{
 					"rpc.method.transferlease.recv",
 					"rpc.method.truncatelog.recv",
 					"rpc.method.writebatch.recv",
+					"rpc.method.isspanempty.recv",
 				},
 			},
 			{
@@ -409,6 +410,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.probe.sent",
 					"distsender.rpc.truncatelog.sent",
 					"distsender.rpc.writebatch.sent",
+					"distsender.rpc.isspanempty.sent",
 				},
 			},
 			{

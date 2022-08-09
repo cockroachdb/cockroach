@@ -18,6 +18,15 @@ data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
 
+run ok
+is_span_empty k=a end=+a
+----
+false
+
+run ok
+is_span_empty k=a end=z
+----
+false
 
 run ok
 clear_range k=a end=+a
@@ -29,12 +38,27 @@ data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
 
 run ok
+is_span_empty k=a end=+a
+----
+true
+
+run ok
+is_span_empty k=a end=-a
+----
+false
+
+run ok
 clear_range k=a end=-a
 ----
 >> at end:
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+
+run ok
+is_span_empty k=a end=-a
+----
+true
 
 run ok
 clear_range k=a end==b

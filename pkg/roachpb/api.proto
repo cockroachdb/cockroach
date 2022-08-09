@@ -193,6 +193,25 @@ message ProbeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// IsSpanEmptyRequest is used to determine whether a span contains any keys,
+// garbage or otherwise. It is used to determine whether data deleted by a
+// DeleteRange tombstone has been fully removed.
+//
+// Generally, the caller should set the MaxSpanKeys header on the BatchRequest
+// to 1 so that the DistSender will process the overlapping ranges sequentially
+// and stop after the first non-empty range.
+message IsSpanEmptyRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// IsSpanEmptyResponse is the response to an IsSpanEmptyRequest.
+// If there is any data in the queried span, the NumKeys field of the
+// ResponseHeader will have a positive value; if NumKeys is zero, then the
+// span is empty.
+message IsSpanEmptyResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -2144,6 +2163,7 @@ message RequestUnion {
     ScanInterleavedIntentsRequest scan_interleaved_intents = 52;
     BarrierRequest barrier = 53;
     ProbeRequest probe = 54;
+    IsSpanEmptyRequest is_span_empty = 56;
   }
   reserved 8, 15, 23, 25, 27, 31, 34;
 }
@@ -2199,6 +2219,7 @@ message ResponseUnion {
     ScanInterleavedIntentsResponse scan_interleaved_intents = 52;
     BarrierResponse barrier = 53;
     ProbeResponse probe = 54;
+    IsSpanEmptyResponse is_span_empty = 56;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34;
 }
