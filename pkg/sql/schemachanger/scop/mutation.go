@@ -440,6 +440,14 @@ type SetIndexName struct {
 	Name    string
 }
 
+// SetConstraintName renames a constraint.
+type SetConstraintName struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	Name         string
+}
+
 // DeleteDescriptor deletes a descriptor.
 type DeleteDescriptor struct {
 	mutationOp
