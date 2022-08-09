@@ -114,7 +114,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				columnInPrimaryIndexSwap(ic, from, relationID, columnID, "index-id"),
+				columnInSwappedInPrimaryIndex(ic, from, relationID, columnID, "index-id"),
 				joinOnColumnID(ic, to, relationID, columnID),
 				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
