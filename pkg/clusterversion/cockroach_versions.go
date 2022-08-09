@@ -358,6 +358,13 @@ const (
 	//  Cockroach (likely 23.1), a blocking migration will be run to
 	//  rewrite-compact on any remaining marked tables.
 	PebbleFormatPrePebblev1Marked
+	// UseDelRangeInGCJob enables the use of the DelRange operation in the
+	// GC job. Before it is enabled, the GC job uses ClearRange operations
+	// after the job waits out the GC TTL. After it has been enabled, the
+	// job instead issues DelRange operations at the beginning of the job
+	// and then waits for the data to be removed automatically before removing
+	// the descriptor and zone configurations.
+	UseDelRangeInGCJob
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -626,6 +633,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatPrePebblev1Marked,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
+	},
+	{
+		Key:     UseDelRangeInGCJob,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

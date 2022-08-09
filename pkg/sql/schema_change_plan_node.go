@@ -254,6 +254,7 @@ func newSchemaChangerTxnRunDependencies(
 		sessionData,
 	)
 	return scdeps.NewExecutorDependencies(
+		execCfg.Settings,
 		execCfg.Codec,
 		sessionData,
 		txn,

@@ -124,9 +124,14 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				return errors.Errorf("unexpected SST ingestion: %v", t)
 
 			case *roachpb.RangeFeedDeleteRange:
-				// For now, we just error on MVCC range tombstones. These are currently
+				// For now, we just ignore on MVCC range tombstones. These are currently
 				// only expected to be used by schema GC and IMPORT INTO, and such spans
-				// should not have active changefeeds across them.
+				// should not have active changefeeds across them, at least at the times
+				// of interest. A case where one will show up in a changefeed is when
+				// the primary index changes while we're watching it and then the old
+				// primary index is dropped. In this case, we'll get a schema event to
+				// restart into the new primary index, but the DeleteRange may come
+				// through before the schema event.
 				//
 				// TODO(erikgrinaker): Write an end-to-end test which verifies that an
 				// IMPORT INTO which gets rolled back using MVCC range tombstones will
@@ -136,7 +141,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				// catchup scans should detect that this happened and prevent reading
 				// anything in that timespan. See:
 				// https://github.com/cockroachdb/cockroach/issues/70433
-				return errors.Errorf("unexpected MVCC range deletion: %v", t)
+				continue
 
 			default:
 				return errors.Errorf("unexpected RangeFeedEvent variant %v", t)

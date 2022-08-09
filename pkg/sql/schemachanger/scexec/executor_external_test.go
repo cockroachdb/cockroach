@@ -65,6 +65,7 @@ func (ti testInfra) newExecDeps(
 	const kvTrace = true
 	const schemaChangerJobID = 1
 	return scdeps.NewExecutorDependencies(
+		ti.settings,
 		ti.lm.Codec(),
 		&sessiondata.SessionData{},
 		txn,

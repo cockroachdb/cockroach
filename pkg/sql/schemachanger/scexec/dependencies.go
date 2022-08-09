@@ -139,6 +139,10 @@ type TransactionalJobRegistry interface {
 	// See (*jobs.Registry).CheckPausepoint
 	CheckPausepoint(name string) error
 
+	// UseLegacyGCJob indicate whether the legacy GC job should be used.
+	// This only matters for setting the initial RunningStatus.
+	UseLegacyGCJob(ctx context.Context) bool
+
 	// TODO(ajwerner): Deal with setting the running status to indicate
 	// validating, backfilling, or generally performing metadata changes
 	// and waiting for lease draining.

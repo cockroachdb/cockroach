@@ -23,6 +23,7 @@ go_test(
         "//pkg/server",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster",
+        "//pkg/sql",
         "//pkg/sql/gcjob",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -48,14 +49,21 @@ func TestFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	settings := clustersettings.MakeTestingClusterSettings()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Settings: settings,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					// We compare job progress before and after a restore. Disable
 					// the automatic jobs checkpointing which could possibly mutate
 					// the progress data during the backup/restore process.
 					JobDisablePersistingCheckpoints: true,
+				},
+				GCJob: &sql.GCJobTestingKnobs{
+					// We want to run the GC job to completion without waiting for
+					// MVCC GC.
+					SkipWaitingForMVCCGC: true,
 				},
 			},
 		}}
@@ -67,7 +75,7 @@ func TestFullClusterBackup(t *testing.T) {
 
 	// Closed when the restore is allowed to progress with the rest of the backup.
 	allowProgressAfterPreRestore := make(chan struct{})
-	// Closed to signal the the zones have been restored.
+	// Closed to signal the zones have been restored.
 	restoredZones := make(chan struct{})
 	for _, server := range tcRestore.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)

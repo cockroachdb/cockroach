@@ -401,9 +401,16 @@ func runSchemaChangeWithOperations(
 	// validate schema change operations. We wait for any SCHEMA
 	// CHANGE GC jobs for temp indexes to show that the temp index
 	// has been cleared.
-	if _, err := sqlDB.Exec(`SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC')`); err != nil {
-		t.Fatal(err)
-	}
+	sqlutils.MakeSQLRunner(sqlDB).CheckQueryResultsRetry(t, `
+SELECT count(*)
+  FROM (
+        SELECT job_id
+          FROM [SHOW JOBS]
+         WHERE job_type = 'SCHEMA CHANGE GC'
+               AND status != 'succeeded'
+               AND running_status != 'waiting for MVCC GC'
+       )`,
+		[][]string{{"0"}})
 	testutils.SucceedsSoon(t, func() error {
 		return sqltestutils.CheckTableKeyCount(ctx, kvDB, keyMultiple, maxValue+numInserts)
 	})

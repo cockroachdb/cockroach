@@ -67,6 +67,9 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 			TenantID: tenID,
 			TestingKnobs: base.TestingKnobs{
 				SpanConfig: h.scKnobs,
+				GCJob: &sql.GCJobTestingKnobs{
+					SkipWaitingForMVCCGC: true,
+				},
 			},
 		}
 		var err error

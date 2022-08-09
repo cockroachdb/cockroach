@@ -598,7 +598,10 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 				},
 				// Decrease the adopt loop interval so that retries happen quickly.
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				GCJob:            &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
+				GCJob: &sql.GCJobTestingKnobs{
+					RunBeforeResume:      func(_ jobspb.JobID) error { <-blockGC; return nil },
+					SkipWaitingForMVCCGC: true,
+				},
 			}
 
 			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
