@@ -541,7 +541,7 @@ update fam
                      └── d:19 = two.b:21
 
 # Verify that the join hint is set.
-build prefer-lookup-joins-for-fks
+build set=prefer_lookup_joins_for_fks=true
 UPDATE child SET p = 4
 ----
 update child

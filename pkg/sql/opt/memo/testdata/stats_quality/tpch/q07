@@ -17,7 +17,7 @@ import file=tpch_stats
 # that took place in that year. The query orders the answer by Supplier nation,
 # Customer nation, and year (all ascending).
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q7
+stats-quality database=tpch set=save_tables_prefix=q7
 SELECT
     supp_nation,
     cust_nation,

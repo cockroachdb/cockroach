@@ -20,7 +20,7 @@ import file=tpch_stats
 # TODO:
 #   1. Allow Select to be pushed below Ordinality used to add key column
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q17
+stats-quality database=tpch set=save_tables_prefix=q17
 SELECT
     sum(l_extendedprice) / 7.0 AS avg_yearly
 FROM

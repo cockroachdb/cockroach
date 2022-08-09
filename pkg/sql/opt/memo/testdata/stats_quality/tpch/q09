@@ -20,7 +20,7 @@ import file=tpch_stats
 #  nations in ascending alphabetical order and, for each nation, the year and
 #  profit in descending order by year (most recent first).
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q9
+stats-quality database=tpch set=save_tables_prefix=q9
 SELECT
     nation,
     o_year,

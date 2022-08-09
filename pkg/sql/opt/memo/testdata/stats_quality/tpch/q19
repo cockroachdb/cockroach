@@ -16,7 +16,7 @@ import file=tpch_stats
 # person. Parts are selected based on the combination of specific brands, a list
 # of containers, and a range of sizes.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q19
+stats-quality database=tpch set=save_tables_prefix=q19
 SELECT
     sum(l_extendedprice* (1 - l_discount)) AS revenue
 FROM
