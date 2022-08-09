@@ -1515,6 +1515,42 @@ func (e InvalidIndexesError) Error() string {
 	return fmt.Sprintf("found %d invalid indexes", len(e.Indexes))
 }
 
+// ValidateCheckConstraint validates the check constraint against all rows
+// in the table.
+func ValidateCheckConstraint(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	sessionData *sessiondata.SessionData,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) (err error) {
+	if constraint.CheckConstraint == nil {
+		return errors.AssertionFailedf("%v is not a check constraint", constraint.GetConstraintName())
+	}
+
+	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+	if err != nil {
+		return err
+	}
+
+	// The check operates at the historical timestamp.
+	return runHistoricalTxn(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, descriptors *descs.Collection,
+	) error {
+		// Use the DistSQLTypeResolver because we need to resolve types by ID.
+		resolver := descs.NewDistSQLTypeResolver(descriptors, txn)
+		semaCtx := tree.MakeSemaContext()
+		semaCtx.TypeResolver = &resolver
+		defer func() { descriptors.ReleaseAll(ctx) }()
+
+		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
+			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, constraint.CheckConstraint.Expr,
+				tableDesc.(*tabledesc.Mutable), ie)
+		})
+	})
+}
+
 // ValidateInvertedIndexes checks that the indexes have entries for
 // all the items of data in rows.
 //
@@ -1615,19 +1651,6 @@ func ValidateInvertedIndexes(
 	if len(invalidErr.Indexes) > 0 {
 		return invalidErr
 	}
-	return nil
-}
-
-// ValidateCheckConstraint checks all rows satisfy the check constraint.
-func ValidateCheckConstraint(
-	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
-	constraint *descpb.ConstraintDetail,
-	sessionData *sessiondata.SessionData,
-	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
-	execOverride sessiondata.InternalExecutorOverride,
-) (err error) {
-	// TODO (xiang): implement this.
 	return nil
 }
 
