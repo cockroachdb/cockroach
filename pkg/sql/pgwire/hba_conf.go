@@ -247,6 +247,13 @@ var sessionRevivalEntry = hba.Entry{
 	Method:   hba.String{Value: "session_revival_token"},
 }
 
+var jwtAuthEntry = hba.Entry{
+	ConnType: hba.ConnHostAny,
+	User:     []hba.String{{Value: "all", Quoted: false}},
+	Address:  hba.AnyAddr{},
+	Method:   hba.String{Value: "jwt_token"},
+}
+
 var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []hba.String{{Value: username.RootUser, Quoted: false}},
