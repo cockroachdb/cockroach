@@ -306,6 +306,29 @@ memo (optimized, ~17KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G16: (variable s)
  └── G17: (const 'foo')
 
+# GeneratePartialIndexScans will be triggered, but not add an index
+# scan to the memo since NO_INDEX_JOIN is specified.
+memo expect-not=GeneratePartialIndexScans
+SELECT * FROM p@{NO_INDEX_JOIN} WHERE i > 0 AND s = 'foo'
+----
+memo (optimized, ~9KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+ ├── G1: (select G2 G3)
+ │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
+ │         ├── best: (select G2 G3)
+ │         └── cost: 1135.06
+ ├── G2: (scan p,cols=(1-5))
+ │    └── []
+ │         ├── best: (scan p,cols=(1-5))
+ │         └── cost: 1125.02
+ ├── G3: (filters G4 G5)
+ ├── G4: (gt G6 G7)
+ ├── G5: (eq G8 G9)
+ ├── G6: (variable i)
+ ├── G7: (const 0)
+ ├── G8: (variable s)
+ └── G9: (const 'foo')
+
+
 # Do not generate a partial index scan when the predicate is not implied by the
 # filter.
 memo expect-not=GeneratePartialIndexScans
@@ -2201,6 +2224,30 @@ memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G7: (contains G8 G9)
  ├── G8: (variable j)
  └── G9: (const '{"a": "b"}')
+
+# GenerateInvertedIndexScans will be triggered, but not add an index
+# scan to the memo since NO_INDEX_JOIN is specified.
+memo expect-not=GenerateInvertedIndexScans
+SELECT k FROM b@{NO_INDEX_JOIN} WHERE j @> '{"a": "b"}'
+----
+memo (optimized, ~6KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 1095.77
+ ├── G2: (select G4 G5)
+ │    └── []
+ │         ├── best: (select G4 G5)
+ │         └── cost: 1094.65
+ ├── G3: (projections)
+ ├── G4: (scan b,cols=(1,4))
+ │    └── []
+ │         ├── best: (scan b,cols=(1,4))
+ │         └── cost: 1084.62
+ ├── G5: (filters G6)
+ ├── G6: (contains G7 G8)
+ ├── G7: (variable j)
+ └── G8: (const '{"a": "b"}')
 
 # Query requiring an index join with no remaining filter.
 opt expect=GenerateInvertedIndexScans
