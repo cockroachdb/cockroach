@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -1298,6 +1299,8 @@ func (t *logicTest) newCluster(
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
 				Locality:          paramsPerNode[i].Locality,
 				TracingDefault:    params.ServerArgs.TracingDefault,
+				// Give every tenant its own ExternalIO directory.
+				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
 			}
 
 			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
