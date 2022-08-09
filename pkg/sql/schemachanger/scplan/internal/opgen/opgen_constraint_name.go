@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -20,18 +21,24 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ConstraintName) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.ConstraintName) *scop.SetConstraintName {
+					return &scop.SetConstraintName{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+						Name:         this.Name,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				// TODO(postamar): remove revertibility constraint when possible
-				revertible(false),
-				emit(func(this *scpb.ConstraintName) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.ConstraintName) *scop.SetConstraintName {
+					return &scop.SetConstraintName{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+						Name:         tabledesc.ConstraintNamePlaceholder(this.ConstraintID),
+					}
 				}),
 			),
 		),
