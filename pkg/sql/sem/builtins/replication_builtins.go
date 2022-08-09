@@ -227,9 +227,10 @@ var replicationBuiltins = map[string]builtinDefinition{
 	),
 	"crdb_internal.stream_partition": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: false,
-			Class:            tree.GeneratorClass,
+			Category:           builtinconstants.CategoryStreamIngestion,
+			DistsqlBlocklist:   false,
+			Class:              tree.GeneratorClass,
+			VectorizeStreaming: true,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
