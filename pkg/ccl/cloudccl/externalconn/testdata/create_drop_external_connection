@@ -12,12 +12,12 @@ foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/ba
 exec-sql
 CREATE EXTERNAL CONNECTION "missing-node-id" AS 'nodelocal:///foo';
 ----
-pq: failed to construct External Connection details: invalid `nodelocal` URI: host component of nodelocal URI must be a node ID (use 'self' to specify each node should access its own local filesystem): nodelocal:///foo
+pq: failed to construct External Connection details: failed to create nodelocal external connection: invalid `nodelocal` URI: host component of nodelocal URI must be a node ID (use 'self' to specify each node should access its own local filesystem): nodelocal:///foo
 
 exec-sql
 CREATE EXTERNAL CONNECTION "invalid-nodeid-nodelocal" AS 'nodelocal://a/foo';
 ----
-pq: failed to construct External Connection details: invalid `nodelocal` URI: host component of nodelocal URI must be a node ID: nodelocal://a/foo
+pq: failed to construct External Connection details: failed to create nodelocal external connection: invalid `nodelocal` URI: host component of nodelocal URI must be a node ID: nodelocal://a/foo
 
 # Try to create another External Connection with the same name.
 exec-sql
@@ -142,6 +142,9 @@ subtest end
 
 subtest basic-gs-kms
 
+disable-check-external-storage
+----
+
 exec-sql
 CREATE EXTERNAL CONNECTION "foo-kms" AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
 ----
@@ -168,9 +171,15 @@ DROP EXTERNAL CONNECTION "foo-kms";
 inspect-system-table
 ----
 
+enable-check-external-storage
+----
+
 subtest end
 
 subtest basic-s3
+
+disable-check-external-storage
+----
 
 exec-sql
 CREATE EXTERNAL CONNECTION "foo-s3" AS 's3://foo/bar?AUTH=implicit&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&ASSUME_ROLE=ronaldo,rashford,bruno';
@@ -180,12 +189,12 @@ CREATE EXTERNAL CONNECTION "foo-s3" AS 's3://foo/bar?AUTH=implicit&AWS_ACCESS_KE
 exec-sql
 CREATE EXTERNAL CONNECTION "missing-host-s3" AS 's3:///?AUTH=implicit';
 ----
-pq: failed to construct External Connection details: empty host component; s3 URI must specify a target bucket
+pq: failed to construct External Connection details: failed to create s3 external connection: empty host component; s3 URI must specify a target bucket
 
 exec-sql
 CREATE EXTERNAL CONNECTION "invalid-params-s3" AS 's3://foo/bar?AUTH=implicit&INVALIDPARAM=baz';
 ----
-pq: failed to construct External Connection details: unknown S3 query parameters: INVALIDPARAM
+pq: failed to construct External Connection details: failed to create s3 external connection: unknown S3 query parameters: INVALIDPARAM
 
 inspect-system-table
 ----
@@ -196,6 +205,9 @@ DROP EXTERNAL CONNECTION "foo-s3";
 ----
 
 inspect-system-table
+----
+
+enable-check-external-storage
 ----
 
 subtest end

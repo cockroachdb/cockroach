@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,7 +36,9 @@ func RegisterConnectionDetailsFromURIFactory(
 }
 
 // ExternalConnectionFromURI returns a ExternalConnection for the given URI.
-func ExternalConnectionFromURI(ctx context.Context, uri string) (ExternalConnection, error) {
+func ExternalConnectionFromURI(
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
+) (ExternalConnection, error) {
 	externalConnectionURI, err := url.Parse(uri)
 	if err != nil {
 		return nil, err
@@ -46,5 +50,19 @@ func ExternalConnectionFromURI(ctx context.Context, uri string) (ExternalConnect
 		return nil, errors.Newf("no parseFn found for external connection provider %s", externalConnectionURI.Scheme)
 	}
 
-	return parseFn(ctx, externalConnectionURI)
+	return parseFn(ctx, execCfg, user, externalConnectionURI)
 }
+
+// TestingKnobs provide fine-grained control over the external connection
+// components for testing.
+type TestingKnobs struct {
+	// SkipCheckingExternalStorageConnection returns whether `CREATE EXTERNAL
+	// CONNECTION` should skip the step that writes, lists and reads a sentinel
+	// file from the underlying ExternalStorage.
+	SkipCheckingExternalStorageConnection func() bool
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (t *TestingKnobs) ModuleTestingKnobs() {}
+
+var _ base.ModuleTestingKnobs = (*TestingKnobs)(nil)

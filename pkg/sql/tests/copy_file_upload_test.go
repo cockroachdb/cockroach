@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package tests
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -39,7 +39,7 @@ import (
 const defaultQualifiedDBSchemaName = "defaultdb.public."
 const filename = "/test/test_file_upload.csv"
 
-var fileUploadModes = []string{NodelocalFileUploadTable, UserFileUploadTable}
+var fileUploadModes = []string{sql.NodelocalFileUploadTable, sql.UserFileUploadTable}
 
 func writeFile(t *testing.T, testSendFile string, fileContent []byte) {
 	err := os.MkdirAll(filepath.Dir(testSendFile), 0755)
@@ -57,10 +57,10 @@ func prepareFileUploadURI(
 ) (string, error) {
 	var uri string
 	switch copyInternalTable {
-	case NodelocalFileUploadTable:
+	case sql.NodelocalFileUploadTable:
 		testSendFile = strings.TrimPrefix(testSendFile, "/")
 		uri = fmt.Sprintf("nodelocal://self/%s", testSendFile)
-	case UserFileUploadTable:
+	case sql.UserFileUploadTable:
 		if !strings.HasPrefix(testSendFile, "/") {
 			return "", errors.New("userfile destination must start with a /")
 		}
@@ -99,7 +99,7 @@ func runCopyFile(
 	if err != nil {
 		return err
 	}
-	stmt, err := txn.Prepare(CopyInFileStmt(fileUploadURI, CrdbInternalName, copyInternalTable))
+	stmt, err := txn.Prepare(sql.CopyInFileStmt(fileUploadURI, sql.CrdbInternalName, copyInternalTable))
 	if err != nil {
 		return err
 	}
@@ -144,9 +144,9 @@ func checkUserFileContent(
 	filename string,
 	expectedContent []byte,
 ) {
-	uri, err := prepareFileUploadURI(user, filename, UserFileUploadTable)
+	uri, err := prepareFileUploadURI(user, filename, sql.UserFileUploadTable)
 	require.NoError(t, err)
-	store, err := s.ExecutorConfig().(ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx, uri,
+	store, err := s.ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx, uri,
 		user)
 	require.NoError(t, err)
 	reader, err := store.ReadFile(ctx, "")
@@ -161,7 +161,7 @@ func TestFileUpload(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -190,7 +190,7 @@ func TestUploadEmptyFile(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -217,7 +217,7 @@ func TestFileNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -235,7 +235,7 @@ func TestFileExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -266,7 +266,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -295,7 +295,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
 	writeFile(t, testSendFile, fileContent)
 
-	err = runCopyFile(t, userDB, smithUserName, testSendFile, NodelocalFileUploadTable)
+	err = runCopyFile(t, userDB, smithUserName, testSendFile, sql.NodelocalFileUploadTable)
 	expectedErr := "only users with the admin role are allowed to upload"
 	require.True(t, testutils.IsError(err, expectedErr))
 }
@@ -306,7 +306,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -337,7 +337,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
 	writeFile(t, testSendFile, fileContent)
 
-	err = runCopyFile(t, userDB, smithUserName, testSendFile, UserFileUploadTable)
+	err = runCopyFile(t, userDB, smithUserName, testSendFile, sql.UserFileUploadTable)
 	require.NoError(t, err)
 	checkUserFileContent(context.Background(), t, s, smithUserName, testSendFile, fileContent)
 }

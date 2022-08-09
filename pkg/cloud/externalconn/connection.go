@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 )
 
 // ExternalConnection is the interface to the external resource represented by
@@ -34,4 +35,5 @@ type ExternalConnection interface {
 // connectionParserFactory is the factory method that takes in an endpoint URI
 // for an external resource, and returns the ExternalConnection representation
 // of that URI.
-type connectionParserFactory func(ctx context.Context, uri *url.URL) (ExternalConnection, error)
+type connectionParserFactory func(ctx context.Context, execCfg interface{},
+	user username.SQLUsername, uri *url.URL) (ExternalConnection, error)
