@@ -55,6 +55,7 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	// scanned.
 	dbZoneConfigsToDelete, gcJobRecords := mvs.gcJobs.makeRecords(
 		deps.TransactionalJobRegistry().MakeJobID,
+		!deps.TransactionalJobRegistry().UseLegacyGCJob(ctx),
 	)
 	if err := performBatchedCatalogWrites(
 		ctx,

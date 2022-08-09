@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -68,6 +69,12 @@ import (
 )
 
 const (
+	// RunningStatusWaitingForMVCCGC is used for the GC job when it has cleared
+	// the data but is waiting for MVCC GC to remove the data.
+	RunningStatusWaitingForMVCCGC jobs.RunningStatus = "waiting for MVCC GC"
+	// RunningStatusDeletingData is used for the GC job when it is about
+	// to clear the data.
+	RunningStatusDeletingData jobs.RunningStatus = "deleting data"
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
 	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
@@ -510,8 +517,11 @@ func startGCJob(
 	userName username.SQLUsername,
 	schemaChangeDescription string,
 	details jobspb.SchemaChangeGCDetails,
+	useLegacyGCJob bool,
 ) error {
-	jobRecord := CreateGCJobRecord(schemaChangeDescription, userName, details)
+	jobRecord := CreateGCJobRecord(
+		schemaChangeDescription, userName, details, useLegacyGCJob,
+	)
 	jobID := jobRegistry.MakeJobID()
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := jobRegistry.CreateJobWithTxn(ctx, jobRecord, jobID, txn)
@@ -719,7 +729,11 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				},
 			}
 			if err := startGCJob(
-				ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
+				ctx, sc.db, sc.jobRegistry,
+				sc.job.Payload().UsernameProto.Decode(),
+				sc.job.Payload().Description,
+				gcDetails,
+				!sc.settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob),
 			); err != nil {
 				return err
 			}
@@ -1062,6 +1076,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 					},
 				},
 			},
+			!sc.settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob),
 		)
 		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, gcJobID, txn); err != nil {
 			return err
@@ -1277,7 +1292,10 @@ func (sc *SchemaChanger) createIndexGCJobWithDropTime(
 		ParentID: sc.descID,
 	}
 
-	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails)
+	gcJobRecord := CreateGCJobRecord(
+		jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails,
+		!sc.settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob),
+	)
 	jobID := sc.jobRegistry.MakeJobID()
 	if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, jobID, txn); err != nil {
 		return err
@@ -2279,7 +2297,10 @@ func (sc *SchemaChanger) reverseMutation(
 // CreateGCJobRecord creates the job record for a GC job, setting some
 // properties which are common for all GC jobs.
 func CreateGCJobRecord(
-	originalDescription string, userName username.SQLUsername, details jobspb.SchemaChangeGCDetails,
+	originalDescription string,
+	userName username.SQLUsername,
+	details jobspb.SchemaChangeGCDetails,
+	useLegacyGCJob bool,
 ) jobs.Record {
 	descriptorIDs := make([]descpb.ID, 0)
 	if len(details.Indexes) > 0 {
@@ -2291,13 +2312,17 @@ func CreateGCJobRecord(
 			descriptorIDs = append(descriptorIDs, table.ID)
 		}
 	}
+	runningStatus := RunningStatusDeletingData
+	if useLegacyGCJob {
+		runningStatus = RunningStatusWaitingGC
+	}
 	return jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", originalDescription),
 		Username:      userName,
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
-		RunningStatus: RunningStatusWaitingGC,
+		RunningStatus: runningStatus,
 		NonCancelable: true,
 	}
 }
@@ -2315,6 +2340,9 @@ type GCJobTestingKnobs struct {
 
 	// Notifier is used to optionally inject a new gcjobnotifier.Notifier.
 	Notifier *gcjobnotifier.Notifier
+
+	// If true, the GC job will not wait for MVCC GC.
+	SkipWaitingForMVCCGC bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -2723,6 +2751,9 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			r.job.Payload().UsernameProto.Decode(),
 			r.job.Payload().Description,
 			multiTableGCDetails,
+			!p.ExecCfg().Settings.Version.IsActive(
+				ctx, clusterversion.UseDelRangeInGCJob,
+			),
 		); err != nil {
 			return err
 		}

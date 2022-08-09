@@ -310,6 +310,13 @@ const (
 	// options table id column cannot be null. This is the final step
 	// of the system.role_options table migration.
 	SetRoleOptionsUserIDColumnNotNull
+	// UseDelRangeInGCJob enables the use of the DelRange operation in the
+	// GC job. Before it is enabled, the GC job uses ClearRange operations
+	// after the job waits out the GC TTL. After it has been enabled, the
+	// job instead issues DelRange operations at the beginning of the job
+	// and then waits for the data to be removed automatically before removing
+	// the descriptor and zone configurations.
+	UseDelRangeInGCJob
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -523,6 +530,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SetRoleOptionsUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
+	},
+	{
+		Key:     UseDelRangeInGCJob,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 56},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
