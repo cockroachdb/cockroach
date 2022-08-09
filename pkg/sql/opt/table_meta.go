@@ -141,6 +141,12 @@ type TableMeta struct {
 	// depend on the consistency of unique without index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
 
+	// IsSkipLocked is true if this table is scanned with SKIP LOCKED. If true, we
+	// should disable any rules that depend on preserved-multiplicity consistency
+	// of this table (i.e. rules that assume there is always a PK row for every
+	// secondary index row or a FK row for every FK reference).
+	IsSkipLocked bool
+
 	// Constraints stores a *FiltersExpr containing filters that are known to
 	// evaluate to true on the table data. This list is extracted from validated
 	// check constraints; specifically, those check constraints that we can prove
@@ -202,6 +208,7 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 		Alias:                        from.Alias,
 		IgnoreForeignKeys:            from.IgnoreForeignKeys,
 		IgnoreUniqueWithoutIndexKeys: from.IgnoreUniqueWithoutIndexKeys,
+		IsSkipLocked:                 from.IsSkipLocked,
 		// Annotations are not copied.
 	}
 
