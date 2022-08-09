@@ -3431,6 +3431,15 @@ type JoinTokenCreator interface {
 	CreateJoinToken(ctx context.Context) (string, error)
 }
 
+// GossipOperator is capable of manipulating the cluster's gossip network. The
+// methods will return errors when run by any tenant other than the system
+// tenant.
+type GossipOperator interface {
+	// TryClearGossipInfo attempts to clear an info object from the cluster's
+	// gossip network.
+	TryClearGossipInfo(ctx context.Context, key string) (bool, error)
+}
+
 // EvalContextTestingKnobs contains test knobs.
 type EvalContextTestingKnobs struct {
 	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations
@@ -3581,6 +3590,8 @@ type EvalContext struct {
 	Regions RegionOperator
 
 	JoinTokenCreator JoinTokenCreator
+
+	Gossip GossipOperator
 
 	PreparedStatementState PreparedStatementState
 
