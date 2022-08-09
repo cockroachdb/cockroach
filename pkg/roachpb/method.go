@@ -174,6 +174,9 @@ const (
 	// Probe is a noop write request used to test the ability to make
 	// progress at the replication layer.
 	Probe
+	// IsSpanEmpty is a non-transaction read request used to determine whether
+	// a span contains any keys whatsoever (garbage or otherwise).
+	IsSpanEmpty
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )

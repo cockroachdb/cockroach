@@ -677,7 +677,7 @@ func (ds *DistSender) initAndVerifyBatch(
 			switch inner.(type) {
 			case *roachpb.ScanRequest, *roachpb.ResolveIntentRangeRequest,
 				*roachpb.DeleteRangeRequest, *roachpb.RevertRangeRequest,
-				*roachpb.ExportRequest, *roachpb.QueryLocksRequest:
+				*roachpb.ExportRequest, *roachpb.QueryLocksRequest, *roachpb.IsSpanEmptyRequest:
 				// Accepted forward range requests.
 				foundForward = true
 
