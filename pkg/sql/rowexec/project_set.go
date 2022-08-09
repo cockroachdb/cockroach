@@ -125,7 +125,15 @@ func newProjectSetProcessor(
 // MustBeStreaming implements the execinfra.Processor interface.
 func (ps *projectSetProcessor) MustBeStreaming() bool {
 	// If we have a single streaming generator, then the processor is such too.
-	for _, gen := range ps.gens {
+	for _, fn := range ps.funcs {
+		if fn == nil {
+			continue
+		}
+		gen, err := ps.generatorForFuncExpr(fn)
+		if err != nil {
+			continue
+		}
+		defer gen.Close(ps.Ctx)
 		if eval.IsStreamingValueGenerator(gen) {
 			return true
 		}
@@ -138,6 +146,19 @@ func (ps *projectSetProcessor) Start(ctx context.Context) {
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 	ps.input.Start(ctx)
 	ps.cancelChecker.Reset(ctx)
+}
+
+func (ps *projectSetProcessor) generatorForFuncExpr(
+	fn *tree.FuncExpr,
+) (eval.ValueGenerator, error) {
+	gen, err := eval.GetGenerator(ps.EvalCtx, fn)
+	if err != nil {
+		return nil, err
+	}
+	if gen == nil {
+		gen = builtins.EmptyGenerator()
+	}
+	return gen, nil
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also
@@ -161,12 +182,9 @@ func (ps *projectSetProcessor) nextInputRow() (
 			ps.exprHelpers[i].Row = row
 
 			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
-			gen, err := eval.GetGenerator(ps.EvalCtx, fn)
+			gen, err := ps.generatorForFuncExpr(fn)
 			if err != nil {
 				return nil, nil, err
-			}
-			if gen == nil {
-				gen = builtins.EmptyGenerator()
 			}
 			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
 				return nil, nil, err
