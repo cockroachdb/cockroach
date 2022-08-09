@@ -10,6 +10,7 @@ go_library(
         "chunked_event_queue.go",
         "err_buffer.go",
         "event.go",
+        "event_ring.go",
         "metrics.go",
         "throttling_buffer.go",
     ],

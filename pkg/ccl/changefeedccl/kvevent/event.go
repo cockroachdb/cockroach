@@ -100,40 +100,40 @@ type Event struct {
 }
 
 // Type returns the event's Type.
-func (b *Event) Type() Type {
-	if b.kv.Key != nil {
+func (e *Event) Type() Type {
+	if e.kv.Key != nil {
 		return TypeKV
 	}
-	if b.resolved.Span.Key != nil {
+	if e.resolved.Span.Key != nil {
 		return TypeResolved
 	}
-	if b.flush {
+	if e.flush {
 		return TypeFlush
 	}
 	return TypeUnknown
 }
 
 // ApproximateSize returns events approximate size in bytes.
-func (b *Event) ApproximateSize() int {
-	return b.approxSize
+func (e *Event) ApproximateSize() int {
+	return e.approxSize
 }
 
 // KV is populated if this event returns true for IsKV().
-func (b *Event) KV() roachpb.KeyValue {
-	return b.kv
+func (e *Event) KV() roachpb.KeyValue {
+	return e.kv
 }
 
 // PrevValue returns the previous value for this event. PrevValue is non-zero
 // if this is a KV event and the key had a non-tombstone value before the change
 // and the before value of each change was requested (optDiff).
-func (b *Event) PrevValue() roachpb.Value {
-	return b.prevVal
+func (e *Event) PrevValue() roachpb.Value {
+	return e.prevVal
 }
 
 // Resolved will be non-nil if this is a resolved timestamp event (i.e. IsKV()
 // returns false).
-func (b *Event) Resolved() jobspb.ResolvedSpan {
-	return b.resolved
+func (e *Event) Resolved() jobspb.ResolvedSpan {
+	return e.resolved
 }
 
 // BackfillTimestamp overrides the timestamp of the schema that should be
@@ -142,28 +142,28 @@ func (b *Event) Resolved() jobspb.ResolvedSpan {
 //
 // If unset (zero-valued), the KV's timestamp will be used to interpret both
 // of the current and previous values instead.
-func (b *Event) BackfillTimestamp() hlc.Timestamp {
-	return b.backfillTimestamp
+func (e *Event) BackfillTimestamp() hlc.Timestamp {
+	return e.backfillTimestamp
 }
 
 // BufferAddTimestamp is the time this event came into  the buffer.
-func (b *Event) BufferAddTimestamp() time.Time {
-	return b.bufferAddTimestamp
+func (e *Event) BufferAddTimestamp() time.Time {
+	return e.bufferAddTimestamp
 }
 
 // Timestamp returns the timestamp of the write if this is a KV event.
 // If there is a non-zero BackfillTimestamp, that is returned.
 // If this is a resolved timestamp event, the timestamp is the resolved
 // timestamp.
-func (b *Event) Timestamp() hlc.Timestamp {
-	switch b.Type() {
+func (e *Event) Timestamp() hlc.Timestamp {
+	switch e.Type() {
 	case TypeResolved:
-		return b.resolved.Timestamp
+		return e.resolved.Timestamp
 	case TypeKV:
-		if !b.backfillTimestamp.IsEmpty() {
-			return b.backfillTimestamp
+		if !e.backfillTimestamp.IsEmpty() {
+			return e.backfillTimestamp
 		}
-		return b.kv.Value.Timestamp
+		return e.kv.Value.Timestamp
 	case TypeFlush:
 		return hlc.Timestamp{}
 	default:
@@ -176,12 +176,12 @@ func (b *Event) Timestamp() hlc.Timestamp {
 // MVCCTimestamp returns the Timestamp of the KV, ignoring the
 // backfillTimestamp if present. This helps distinguish backfills from
 // other events.
-func (b *Event) MVCCTimestamp() hlc.Timestamp {
-	switch b.Type() {
+func (e *Event) MVCCTimestamp() hlc.Timestamp {
+	switch e.Type() {
 	case TypeResolved:
-		return b.resolved.Timestamp
+		return e.resolved.Timestamp
 	case TypeKV:
-		return b.kv.Value.Timestamp
+		return e.kv.Value.Timestamp
 	case TypeFlush:
 		return hlc.Timestamp{}
 	default:
@@ -192,9 +192,9 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 }
 
 // DetachAlloc detaches and returns allocation associated with this event.
-func (b *Event) DetachAlloc() Alloc {
-	a := b.alloc
-	b.alloc.clear()
+func (e *Event) DetachAlloc() Alloc {
+	a := e.alloc
+	e.alloc.clear()
 	return a
 }
 

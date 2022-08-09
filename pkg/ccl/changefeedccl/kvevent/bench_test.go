@@ -31,15 +31,23 @@ import (
 
 func BenchmarkMemBuffer(b *testing.B) {
 	log.Infof(context.Background(), "b.N=%d", b.N)
-	rng, _ := randutil.NewTestRand()
-	eventPool := make([]kvevent.Event, 64<<10)
-	for i := range eventPool {
-		if i%25 == 0 {
-			eventPool[i] = kvevent.MakeResolvedEvent(generateSpan(b, rng), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE)
-		} else {
-			eventPool[i] = kvevent.MakeKVEvent(makeKV(b, rng), makeKV(b, rng).Value, hlc.Timestamp{})
+
+	eventPool := func() []kvevent.Event {
+		const valSize = 16 << 10
+		rng, _ := randutil.NewTestRand()
+		p := make([]kvevent.Event, 32<<10)
+		for i := range p {
+			if rng.Int31()%20 == 0 {
+				p[i] = kvevent.MakeResolvedEvent(generateSpan(rng), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE)
+			} else {
+				p[i] = kvevent.MakeKVEvent(
+					makeKV(rng, valSize),
+					roachpb.Value{RawBytes: randutil.RandBytes(rng, rng.Intn(valSize))},
+					hlc.Timestamp{})
+			}
 		}
-	}
+		return p
+	}()
 
 	ba, release := getBoundAccountWithBudget(1 << 30)
 	defer release()
@@ -56,9 +64,9 @@ func BenchmarkMemBuffer(b *testing.B) {
 	}()
 
 	addToBuff := func(ctx context.Context) error {
+		rng, _ := randutil.NewTestRand()
 		for {
-			event := eventPool[rng.Intn(len(eventPool))]
-			err := buf.Add(ctx, event)
+			err := buf.Add(ctx, eventPool[rng.Intn(len(eventPool))])
 			if err != nil {
 				return err
 			}
@@ -67,17 +75,24 @@ func BenchmarkMemBuffer(b *testing.B) {
 
 	consumedN := make(chan struct{})
 	consumeBuf := func(ctx context.Context) error {
-		// <-time.After(5 * time.Second)
-		consumed := 0
-		for {
+		const flushBytes = 32 << 20
+		var alloc kvevent.Alloc
+		defer alloc.Release(ctx)
+
+		for consumed := 0; ; {
 			e, err := buf.Get(ctx)
 			if err != nil {
 				return err
 			}
 			a := e.DetachAlloc()
-			a.Release(ctx)
-			consumed++
-			if consumed == b.N {
+			alloc.Merge(&a)
+
+			if alloc.Bytes() > flushBytes || e.Type() == kvevent.TypeFlush || consumed+int(alloc.Events()) >= b.N {
+				consumed += int(alloc.Events())
+				alloc.Release(ctx)
+			}
+
+			if consumed >= b.N {
 				close(consumedN)
 				return nil
 			}
@@ -87,7 +102,7 @@ func BenchmarkMemBuffer(b *testing.B) {
 	producerCtx, stopProducers := context.WithCancel(context.Background())
 	wg := ctxgroup.WithContext(producerCtx)
 
-	// During backfill, we start 3*number of nodes producers; Simulate that.
+	// During backfill, we start 3*number of nodes producers; Simulate ~10 node cluster.
 	for i := 0; i < 32; i++ {
 		wg.GoCtx(addToBuff)
 	}
@@ -96,12 +111,12 @@ func BenchmarkMemBuffer(b *testing.B) {
 
 	<-consumedN
 	b.StopTimer() // Done with this benchmark after we consumed N events.
+
 	stopProducers()
 	_ = wg.Wait() // Ignore error -- this group returns context cancellation.
-	log.Infof(context.Background(), "in=%d out=%d", metrics.BufferEntriesIn.Count(), metrics.BufferEntriesOut.Count())
 }
 
-func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {
+func generateSpan(rng *rand.Rand) roachpb.Span {
 	start := rng.Intn(2 << 20)
 	end := start + rng.Intn(2<<20)
 	startDatum := tree.NewDInt(tree.DInt(start))
@@ -114,7 +129,7 @@ func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {
 		encoding.Ascending,
 	)
 	if err != nil {
-		b.Fatal("could not generate key")
+		panic(err)
 	}
 
 	endKey, err := keyside.Encode(
@@ -123,7 +138,7 @@ func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {
 		encoding.Ascending,
 	)
 	if err != nil {
-		b.Fatal("could not generate key")
+		panic(err)
 	}
 
 	return roachpb.Span{

@@ -46,6 +46,14 @@ func (a *Alloc) Release(ctx context.Context) {
 	a.clear()
 }
 
+func (a *Alloc) Bytes() int64 {
+	return a.bytes
+}
+
+func (a *Alloc) Events() int64 {
+	return a.entries
+}
+
 // Merge merges other resources into this allocation.
 func (a *Alloc) Merge(other *Alloc) {
 	defer other.clear()
@@ -84,6 +92,15 @@ func (a *Alloc) Merge(other *Alloc) {
 
 func (a *Alloc) clear()       { *a = Alloc{} }
 func (a *Alloc) isZero() bool { return a.ap == nil }
+func (a *Alloc) init(bytes int64, p pool) {
+	if !a.isZero() {
+		panic("cannot initialize already initialized alloc")
+	}
+	a.bytes = bytes
+	a.entries = 1
+	a.ap = p
+
+}
 
 // TestingMakeAlloc creates allocation for the specified number of bytes
 // in a single message using allocation pool 'p'.
