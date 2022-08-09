@@ -163,6 +163,9 @@ func (b *indexScanBuilder) AddSelectAfterSplit(
 // AddIndexJoin wraps the input expression with an IndexJoin expression that
 // produces the given set of columns by lookup in the primary index.
 func (b *indexScanBuilder) AddIndexJoin(cols opt.ColSet) {
+	if b.scanPrivate.Flags.NoIndexJoin {
+		panic(errors.AssertionFailedf("attempt to create an index join with NoIndexJoin flag"))
+	}
 	if b.hasIndexJoin() {
 		panic(errors.AssertionFailedf("cannot call AddIndexJoin twice"))
 	}

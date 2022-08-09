@@ -1966,6 +1966,34 @@ top-k
  └── scan defg
       └── columns: d:1 e:2 f:3 g:4
 
+# GenerateLimitedTopKScans will be triggered, but not add an index
+# scan to the memo since NO_INDEX_JOIN is specified.
+memo expect-not=GenerateLimitedTopKScans
+SELECT d, f, e FROM defg@{NO_INDEX_JOIN} ORDER BY d, f, e LIMIT 10
+----
+memo (optimized, ~4KB, required=[presentation: d:1,f:3,e:2] [ordering: +1,+3,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3})
+ │    ├── [presentation: d:1,f:3,e:2] [ordering: +1,+3,+2]
+ │    │    ├── best: (top-k G2 &{10 +1,+3,+2 })
+ │    │    └── cost: 1196.32
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+3,+2 })
+ │         └── cost: 1196.32
+ ├── G2: (scan defg,cols=(1-3))
+ │    ├── [ordering: +1,+3,+2] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1366.36
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1365.27
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1365.27
+ │    └── []
+ │         ├── best: (scan defg,cols=(1-3))
+ │         └── cost: 1104.82
+ └── G3: (const 10)
+
 # ---------------------------------------------------
 # GeneratePartialOrderTopK
 # ---------------------------------------------------
