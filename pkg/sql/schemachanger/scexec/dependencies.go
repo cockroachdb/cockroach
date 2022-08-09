@@ -37,7 +37,7 @@ type Dependencies interface {
 	IndexMerger() Merger
 	BackfillProgressTracker() BackfillerTracker
 	PeriodicProgressFlusher() PeriodicProgressFlusher
-	IndexValidator() IndexValidator
+	Validator() Validator
 	IndexSpanSplitter() IndexSpanSplitter
 	EventLogger() EventLogger
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
@@ -196,8 +196,8 @@ type Merger interface {
 	) error
 }
 
-// IndexValidator provides interfaces that allow indexes to be validated.
-type IndexValidator interface {
+// Validator provides interfaces that allow indexes and check constraints to be validated.
+type Validator interface {
 	ValidateForwardIndexes(
 		ctx context.Context,
 		tbl catalog.TableDescriptor,

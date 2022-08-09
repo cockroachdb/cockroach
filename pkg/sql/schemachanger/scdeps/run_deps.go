@@ -44,7 +44,7 @@ func NewJobRunDependencies(
 	job *jobs.Job,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	indexValidator scexec.IndexValidator,
+	indexValidator scexec.Validator,
 	metadataUpdaterFactory MetadataUpdaterFactory,
 	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scexec.TestingKnobs,
@@ -88,7 +88,7 @@ type jobExecutionDeps struct {
 	job                   *jobs.Job
 	kvTrace               bool
 
-	indexValidator scexec.IndexValidator
+	indexValidator scexec.Validator
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
