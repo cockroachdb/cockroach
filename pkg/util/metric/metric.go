@@ -13,6 +13,7 @@ package metric
 import (
 	"encoding/json"
 	"math"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -453,7 +454,6 @@ func (h *HistogramV2) RecordValue(n int64) {
 	h.windowed.RLock()
 	defer h.windowed.RUnlock()
 	h.windowed.cur.Observe(v)
-
 }
 
 func (h *HistogramV2) GetType() *prometheusgo.MetricType {
@@ -468,6 +468,16 @@ func (h *HistogramV2) ToPrometheusMetric() *prometheusgo.Metric {
 	return m
 }
 
+func (h *HistogramV2) ToPrometheusMetricWindowed() *prometheusgo.Metric {
+	h.windowed.Lock()
+	defer h.windowed.Unlock()
+	m := &prometheusgo.Metric{}
+	if err := h.windowed.cur.Write(m); err != nil {
+		panic(err) // TODD
+	}
+	return m
+}
+
 func (h *HistogramV2) GetMetadata() Metadata {
 	return h.Metadata
 }
@@ -477,6 +487,60 @@ func (h *HistogramV2) Inspect(f func(interface{})) {
 	maybeTick(&h.windowed)
 	h.windowed.Unlock()
 	f(h)
+}
+
+// TotalCount returns the (cumulative) number of samples.
+func (h *HistogramV2) TotalCount() int64 {
+	return int64(h.ToPrometheusMetric().Histogram.GetSampleCount())
+}
+
+// TotalCountWindowed returns the number of samples in the current window.
+func (h *HistogramV2) TotalCountWindowed() int64 {
+	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
+}
+
+// TotalSum returns the (cumulative) number of samples.
+func (h *HistogramV2) TotalSum() float64 {
+	return h.ToPrometheusMetric().Histogram.GetSampleSum()
+}
+
+// TotalSumWindowed returns the number of samples in the current window.
+func (h *HistogramV2) TotalSumWindowed() float64 {
+	return h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
+}
+
+// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
+// interpolated value at that quantile for the windowed histogram.
+//
+// https://github.com/prometheus/prometheus/blob/d91621890a2ccb3191a6d74812cc1827dd4093bf/promql/quantile.go#L75
+// This function is mostly taken from a prometheus internal function that
+// does the same thing. There are a few differences for our use case:
+// 		1. As a user of the prometheus go client library, we don't have access
+//			 to the implicit +Inf bucket, so we don't need special cases to deal
+//			 with the quantiles that include the +Inf bucket.
+//		2. Since the prometheus client library ensures buckets are in a strictly
+//			 increasing order at creation, we do not sort them.
+func (h *HistogramV2) ValueAtQuantileWindowed(q float64) float64 {
+	m := h.ToPrometheusMetricWindowed()
+
+	buckets := m.Histogram.Bucket
+	n := float64(*m.Histogram.SampleCount)
+	rank := uint64((q / 100) * n)
+	b := sort.Search(len(buckets)-1, func(i int) bool { return *buckets[i].CumulativeCount >= rank })
+
+	var (
+		bucketStart float64
+		bucketEnd   = *buckets[b].UpperBound
+		count       = *buckets[b].CumulativeCount
+	)
+
+	// Calculate the linearly interpolated value within the bucket
+	if b > 0 {
+		bucketStart = *buckets[b-1].UpperBound
+		count -= *buckets[b-1].CumulativeCount
+		rank -= *buckets[b-1].CumulativeCount
+	}
+	return bucketStart + (bucketEnd-bucketStart)*(float64(rank)/float64(count))
 }
 
 // A Counter holds a single mutable atomic value.
