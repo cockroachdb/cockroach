@@ -263,10 +263,14 @@ INSERT INTO assn_cast(s) VALUES (1)
 statement ok
 PREPARE insert_s AS INSERT INTO assn_cast(s) VALUES ($1)
 
-# TODO(mgartner): This should succeed to match the behavior of Postgres.
-statement error expected EXECUTE parameter expression to have type string, but \'1\' has type int
-EXECUTE insert_s(1)
+statement ok
+EXECUTE insert_s(2)
 
+query T rowsort
+SELECT s FROM assn_cast WHERE s IS NOT NULL
+----
+1
+2
 
 # Tests for assignment casts of DEFAULT expressions.
 subtest assignment_casts_default
