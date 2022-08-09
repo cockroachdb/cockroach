@@ -190,9 +190,6 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
-	// during joint configuration, including to VOTER_INCOMING replicas.
-	EnableLeaseHolderRemoval
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
@@ -385,10 +382,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionBlockProperties,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
-	},
-	{
-		Key:     EnableLeaseHolderRemoval,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
 	{
 		Key:     ChangefeedIdleness,
