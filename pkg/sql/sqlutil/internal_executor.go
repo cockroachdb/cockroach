@@ -196,11 +196,14 @@ type InternalRows interface {
 	Types() colinfo.ResultColumns
 }
 
-// SessionBoundInternalExecutorFactory is a function that produces a "session
-// bound" internal executor.
-type SessionBoundInternalExecutorFactory func(
-	context.Context, *sessiondata.SessionData,
-) InternalExecutor
+// InternalExecutorFactory is an interface that allow the creation of an
+// internal executor, and run sql statement without a txn with the internal
+// executor.
+type InternalExecutorFactory interface {
+	// NewInternalExecutor constructs a new internal executor.
+	// TODO (janexing): this should be deprecated soon.
+	NewInternalExecutor(sd *sessiondata.SessionData) InternalExecutor
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
