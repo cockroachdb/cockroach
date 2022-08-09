@@ -18,6 +18,8 @@ import { PayloadAction } from "src/interfaces/action";
 import _ from "lodash";
 import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
 import moment from "moment";
+import { createSelector } from "reselect";
+import { AdminUIState } from "src/redux/state";
 
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
 export const SET_METRICS_MOVING_WINDOW =
@@ -157,6 +159,11 @@ export function setMetricsFixedWindow(
     payload: tw,
   };
 }
+
+export const selectTimeScale = createSelector(
+  (state: AdminUIState) => state.timeScale,
+  timeScaleState => timeScaleState.scale,
+);
 
 export type AdjustTimeScaleReturnType = {
   timeScale: TimeScale;
