@@ -416,8 +416,10 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
     *scop.RemoveCheckConstraint
       ConstraintID: 2
       TableID: 104
-    *scop.NotImplemented
-      ElementType: scpb.ConstraintName
+    *scop.SetConstraintName
+      ConstraintID: 4
+      Name: crdb_internal_constraint_4_name_placeholder
+      TableID: 104
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 6
       TableID: 104
