@@ -1,0 +1,29 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jwtauthccl",
+    srcs = [
+        "authentication_jwt.go",
+        "settings.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/utilccl",
+        "//pkg/security/username",
+        "//pkg/server/telemetry",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/pgwire",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lestrrat_go_jwx//jwk",
+        "@com_github_lestrrat_go_jwx//jwt",
+    ],
+)
+
+get_x_data(name = "get_x_data")
