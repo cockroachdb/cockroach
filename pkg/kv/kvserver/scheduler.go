@@ -169,7 +169,7 @@ type raftScheduleState struct {
 type raftScheduler struct {
 	ambientContext log.AmbientContext
 	processor      raftProcessor
-	latency        *metric.HistogramV2
+	latency        *metric.Histogram
 	numWorkers     int
 
 	mu struct {
