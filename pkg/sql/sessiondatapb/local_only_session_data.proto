@@ -278,6 +278,9 @@ message LocalOnlySessionData {
   bool optimizer_use_not_visible_indexes = 74;
   // CopyFastPathEnabled controls whether the optimized copy mode is enabled.
   bool copy_fast_path_enabled = 75;
+  // disable_hoist_projection_in_join_limitation disables the restrictions
+  // placed on projection hoisting during query planning in the optimizer.
+  bool disable_hoist_projection_in_join_limitation = 76;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
