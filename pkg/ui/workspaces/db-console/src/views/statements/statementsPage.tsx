@@ -28,7 +28,6 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { queryByName } from "src/util/query";
 
@@ -62,6 +61,7 @@ import {
   activeStatementsViewActions,
   mapStateToActiveStatementViewProps,
 } from "./activeStatementsSelectors";
+import { selectTimeScale } from "src/redux/timeScale";
 
 type ICollectedStatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -353,7 +353,7 @@ export default withRouter(
         apps: selectApps(state),
         columns: statementColumnsLocalSetting.selectorToArray(state),
         databases: selectDatabases(state),
-        timeScale: globalTimeScaleLocalSetting.selector(state),
+        timeScale: selectTimeScale(state),
         filters: filtersLocalSetting.selector(state),
         lastReset: selectLastReset(state),
         nodeRegions: nodeRegionsByIDSelector(state),
