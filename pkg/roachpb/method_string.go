@@ -57,12 +57,13 @@ func _() {
 	_ = x[ScanInterleavedIntents-46]
 	_ = x[Barrier-47]
 	_ = x[Probe-48]
-	_ = x[NumMethods-49]
+	_ = x[IsSpanEmpty-49]
+	_ = x[NumMethods-50]
 }
 
-const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTxnAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryLocksQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportAdminScatterAddSSTableMigrateRecomputeStatsRefreshRefreshRangeSubsumeRangeStatsAdminVerifyProtectedTimestampQueryResolvedTimestampScanInterleavedIntentsBarrierProbeNumMethods"
+const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTxnAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryLocksQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportAdminScatterAddSSTableMigrateRecomputeStatsRefreshRefreshRangeSubsumeRangeStatsAdminVerifyProtectedTimestampQueryResolvedTimestampScanInterleavedIntentsBarrierProbeIsSpanEmptyNumMethods"
 
-var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 88, 98, 110, 120, 138, 157, 175, 187, 189, 196, 206, 216, 224, 235, 248, 266, 271, 282, 294, 307, 316, 331, 347, 354, 364, 370, 382, 392, 399, 413, 420, 432, 439, 449, 478, 500, 522, 529, 534, 544}
+var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 88, 98, 110, 120, 138, 157, 175, 187, 189, 196, 206, 216, 224, 235, 248, 266, 271, 282, 294, 307, 316, 331, 347, 354, 364, 370, 382, 392, 399, 413, 420, 432, 439, 449, 478, 500, 522, 529, 534, 545, 555}
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {
