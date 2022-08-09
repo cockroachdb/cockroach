@@ -4207,6 +4207,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | aggregation_interval | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
 | explain_plan | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
 | plan_hash | [uint64](#cockroach.server.serverpb.StatementDetailsResponse-uint64) |  |  | [reserved](#support-status) |
+| index_recommendations | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) | repeated |  | [reserved](#support-status) |
 
 
 
