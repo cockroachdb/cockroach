@@ -190,8 +190,6 @@ const (
 	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
 	// can be used to construct schema change plan node.
 	EnableDeclarativeSchemaChanger
-	// RowLevelTTL is the version where we allow row level TTL tables.
-	RowLevelTTL
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
@@ -356,10 +354,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableDeclarativeSchemaChanger,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
-	},
-	{
-		Key:     RowLevelTTL,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 88},
 	},
 	{
 		Key:     PebbleFormatSplitUserKeysMarked,
