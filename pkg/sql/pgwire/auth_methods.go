@@ -15,6 +15,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/xdg-go/scram"
 )
@@ -107,6 +110,7 @@ var _ AuthMethod = authCertScram
 var _ AuthMethod = authTrust
 var _ AuthMethod = authReject
 var _ AuthMethod = authSessionRevivalToken([]byte{})
+var _ AuthMethod = authJwtToken
 
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from
@@ -625,4 +629,84 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 		})
 		return b, nil
 	}
+}
+
+type JWTVerifier interface {
+	ValidateJWTLogin(_ *cluster.Settings,
+		_ username.SQLUsername,
+		_ []byte,
+	) error
+}
+
+var jwtVerifier JWTVerifier
+
+type noJWTConfigured struct{}
+
+func (c *noJWTConfigured) ValidateJWTLogin(_ *cluster.Settings,
+	_ username.SQLUsername,
+	_ []byte,
+) error {
+	return errors.New("JWT token authentication requires CCL features")
+}
+
+var ConfigureJWTAuth = func(
+	serverCtx context.Context,
+	ambientCtx log.AmbientContext,
+	st *cluster.Settings,
+	clusterUUID uuid.UUID,
+) JWTVerifier {
+	return &noJWTConfigured{}
+}
+
+// authJwtToken is the AuthMethod constructor for the CRDB-specific
+// jwt auth token.
+func authJwtToken(
+	_ context.Context,
+	c AuthConn,
+	_ tls.ConnectionState,
+	execCfg *sql.ExecutorConfig,
+	_ *hba.Entry,
+	_ *identmap.Conf,
+) (*AuthBehaviors, error) {
+
+	b := &AuthBehaviors{}
+	b.SetRoleMapper(UseProvidedIdentity)
+	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, pwRetrieveFn PasswordRetrievalFn) error {
+		c.LogAuthInfof(ctx, "JWT token detected; attempting to use it")
+		if !clientConnection {
+			return errors.New("JWT token authentication is only available for client connections")
+		}
+		// Request password from client.
+		if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
+			return err
+		}
+		// Wait for the password response from the client.
+		pwdData, err := c.GetPwdData()
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+
+		// Extract the token response from the password field.
+		token, err := passwordString(pwdData)
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// If there is no token send the Password Auth Failed error to make the client prompt for a password.
+		if len(token) == 0 {
+			return security.NewErrPasswordUserAuthFailed(user)
+		}
+		// Initialize the jwt verifier if it hasn't been already
+		if jwtVerifier == nil {
+			jwtVerifier = ConfigureJWTAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+		}
+		if err = jwtVerifier.ValidateJWTLogin(execCfg.Settings, user, []byte(token)); err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+			return err
+		}
+		c.LogAuthOK(ctx)
+		return nil
+	})
+	return b, nil
 }

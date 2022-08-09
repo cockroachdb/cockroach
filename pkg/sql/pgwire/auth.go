@@ -254,6 +254,22 @@ func (c *conn) findAuthenticationMethod(
 		return
 	}
 
+	if flag, ok := c.sessionArgs.CustomOptionSessionDefaults["jwt.auth"]; ok && strings.ToLower(flag) == "true" {
+		methodFn = authJwtToken
+		hbaEntry = &jwtAuthEntry
+		if authOpt.connType != hba.ConnHostSSL {
+			err = errors.AssertionFailedf("only hostssl connections can use JWT authentication")
+			return
+		}
+		tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn)
+		if !ok {
+			err = errors.AssertionFailedf("server reports hostssl conn without TLS state")
+			return
+		}
+		tlsState = tlsConn.ConnectionState()
+		return
+	}
+
 	// Look up the method from the HBA configuration.
 	var mi methodInfo
 	mi, hbaEntry, err = c.lookupAuthenticationMethodUsingRules(authOpt.connType, authOpt.auth)
