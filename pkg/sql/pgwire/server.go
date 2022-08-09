@@ -1043,6 +1043,19 @@ func parseClientProvidedSessionParameters(
 				return sql.SessionArgs{}, err
 			}
 			for _, opt := range opts {
+				// crdb:jwt_auth_enabled must be passed as an option in order for us to support non-CRDB
+				// clients. jwt_auth_enabled is not a session variable. We extract it separately here.
+				if strings.ToLower(opt.key) == "crdb:jwt_auth_enabled" {
+					b, err := strconv.ParseBool(opt.value)
+					if err != nil {
+						return sql.SessionArgs{}, pgerror.Wrapf(
+							pgerror.Newf(pgcode.InvalidParameterValue,
+								"parameter crdb:jwt_auth_enabled must have a boolean value"),
+							pgcode.InvalidParameterValue, "options")
+					}
+					args.JWTAuthEnabled = b
+					continue
+				}
 				err = loadParameter(ctx, opt.key, opt.value, &args)
 				if err != nil {
 					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
