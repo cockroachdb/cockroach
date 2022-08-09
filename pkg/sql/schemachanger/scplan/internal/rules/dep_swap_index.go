@@ -88,3 +88,39 @@ func init() {
 		},
 	)
 }
+
+// This rule ensures that when a transient primary index is involved in the
+// swap, the old index is gone before the new index is instated.
+func init() {
+
+	registerDepRule(
+		"old index absent before new index public when swapping with transient",
+		scgraph.Precedence,
+		"old-primary-index", "new-primary-index",
+		func(from, to nodeVars) rel.Clauses {
+			union := mkNodeVars("transient-primary-index")
+			relationID := rel.Var("table-id")
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				union.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				joinOnDescID(from, union, relationID),
+				joinOn(
+					from, screl.IndexID,
+					union, screl.SourceIndexID,
+					"old-index-id",
+				),
+				joinOnDescID(union, to, relationID),
+				joinOn(
+					union, screl.IndexID,
+					to, screl.SourceIndexID,
+					"transient-index-id",
+				),
+				from.targetStatus(scpb.ToAbsent),
+				from.currentStatus(scpb.Status_ABSENT),
+				to.targetStatus(scpb.ToPublic),
+				to.currentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
+}
