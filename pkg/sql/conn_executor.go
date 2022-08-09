@@ -1224,16 +1224,15 @@ type connExecutor struct {
 	// the field is accessed in connExecutor's serialize function, it should be
 	// added to txnState behind the mutex.
 	extraTxnState struct {
+		// fromOuterTxn should be set true if the conn executor is run under an
+		// internal executor with an outer txn, which means when the conn executor
+		// closes, it should not release the leases of descriptor collections or
+		// delete schema change job records. Instead, we leave the caller of the
+		// internal executor to release them.
+		fromOuterTxn bool
+
 		// descCollection collects descriptors used by the current transaction.
 		descCollection *descs.Collection
-
-		// If the descriptor collection is passed from the internal executor's
-		// caller, we leave the caller to release the lease.
-		skipDescsCollectionRelease bool
-
-		// If the schema change job records are passed from the internal executor's
-		// caller, we leave the caller to release the lease.
-		skipSchemaChangeRecordRelease bool
 
 		// jobs accumulates jobs staged for execution inside the transaction.
 		// Staging happens when executing statements that are implemented with a
@@ -1650,13 +1649,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 		mode: ex.sessionData().NewSchemaChangerMode,
 	}
 
-	if ex.extraTxnState.skipDescsCollectionRelease {
+	if ex.extraTxnState.fromOuterTxn {
 		ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
-	}
-
-	if !ex.extraTxnState.skipSchemaChangeRecordRelease {
 		for k := range ex.extraTxnState.schemaChangeJobRecords {
 			delete(ex.extraTxnState.schemaChangeJobRecords, k)
 		}

@@ -977,7 +977,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
 	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
-		if !ex.extraTxnState.skipDescsCollectionRelease {
+		if !ex.extraTxnState.fromOuterTxn {
 			ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 		}
 	}
