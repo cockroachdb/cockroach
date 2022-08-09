@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -26,6 +27,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// UserDefinedFunctionEarlyBinding is a cluster setting used as a switch to turn
+// on/off early binding of referenced objects within a user-defined function
+// body. With early binding on, cross-references are tracked at function
+// definition time to prevent unexpected schema changes like dropping a table
+// used by the function. Turning this switch off means we will have late binding
+// with which references are not tracked. In that scene, schema changes to
+// referenced objects could potentially break the function.
+// Note that references of user-defined types, including table implicit types,
+// used in function signature will still be tracked when early binding is off.
+var UserDefinedFunctionEarlyBinding = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.user_defined_function.early_binding.enabled",
+	"set to true to enable early binding of objects referenced in function body, false to disable; default is true",
+	true,
+).WithPublic()
+
 func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
 	if cf.FuncName.ExplicitCatalog {
@@ -38,9 +55,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	cf.FuncName.ObjectNamePrefix = resName
 
 	b.insideFuncDef = true
-	b.trackSchemaDeps = true
+	b.trackSchemaDeps = UserDefinedFunctionEarlyBinding.Get(&b.evalCtx.Settings.SV)
 	// Make sure datasource names are qualified.
-	b.qualifyDataSourceNamesInAST = true
+	b.qualifyDataSourceNamesInAST = UserDefinedFunctionEarlyBinding.Get(&b.evalCtx.Settings.SV)
 	defer func() {
 		b.insideFuncDef = false
 		b.trackSchemaDeps = false

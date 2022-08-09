@@ -260,3 +260,95 @@ $$`,
 	})
 	require.NoError(t, err)
 }
+
+func TestCreateFunctionLateBinding(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, "SET CLUSTER SETTING sql.user_defined_function.early_binding.enabled = false")
+
+	tDB.Exec(t, `
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE TABLE t_implicit_type(a int, b int);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT 1;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM public.t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM defaultdb.public.v;
+  SELECT nextval('sq1');
+  SELECT * FROM t_implicit_type;
+$$;
+`,
+	)
+
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		// Make sure function only has reference to enum type and the implicit type table.
+		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 110, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, funcDesc.GetName(), "f")
+		require.Equal(t, []descpb.ID{105}, funcDesc.GetDependsOn())
+		require.Equal(t, []descpb.ID{108, 109}, funcDesc.GetDependsOnTypes())
+		// Make sure function body stays the same (not qualified if user didn't
+		// qualify the names).
+		require.Equal(t,
+			`SELECT a FROM public.t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM defaultdb.public.v;
+SELECT nextval(106:::REGCLASS);
+SELECT * FROM t_implicit_type;`,
+			funcDesc.GetFunctionBody())
+
+		// Make sure table has no back references.
+		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
+		_, tbl, err := col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, "t", tbl.GetName())
+		require.Nil(t, tbl.GetDependedOnBy())
+
+		// Make sure sequence has no back references.
+		sqn := tree.MakeTableNameWithSchema("defaultdb", "public", "sq1")
+		_, seq, err := col.GetImmutableTableByName(ctx, txn, &sqn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, "sq1", seq.GetName())
+		require.Nil(t, seq.GetDependedOnBy())
+
+		// Make sure view has no back references.
+		vn := tree.MakeTableNameWithSchema("defaultdb", "public", "v")
+		_, view, err := col.GetImmutableTableByName(ctx, txn, &vn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, "v", view.GetName())
+		require.Nil(t, view.GetDependedOnBy())
+
+		// Make sure enum type has correct back references.
+		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
+		_, typ, err := col.GetImmutableTypeByName(ctx, txn, &typn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, "notmyworkday", typ.GetName())
+		require.Equal(t, []descpb.ID{110}, typ.GetReferencingDescriptorIDs())
+
+		// Make sure implicit type has correct back references.
+		tn = tree.MakeTableNameWithSchema("defaultdb", "public", "t_implicit_type")
+		_, tbl, err = col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, "t_implicit_type", tbl.GetName())
+		require.Equal(t, []descpb.TableDescriptor_Reference{{ID: 110}}, tbl.GetDependedOnBy())
+
+		return nil
+	})
+	require.NoError(t, err)
+}
