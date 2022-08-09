@@ -364,6 +364,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCRetryOptions:    &retryOpts,
 		NodeDialer:         nodeDialer,
 		FirstRangeProvider: g,
+		Locality:           cfg.Locality,
 		TestingKnobs:       clientTestingKnobs,
 	}
 	distSender := kvcoord.NewDistSender(distSenderCfg)

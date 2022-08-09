@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // FollowerReadsEnabled controls whether replicas attempt to serve follower
@@ -101,7 +102,7 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.B
 	//
 	// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
 	// serve reads for that and smaller timestamps forever.
-	log.Eventf(ctx, "%s; query timestamp below closed timestamp by %s", kvbase.FollowerReadServingMsg, -tsDiff)
+	log.Eventf(ctx, "%s; query timestamp below closed timestamp by %s", redact.Safe(kvbase.FollowerReadServingMsg), -tsDiff)
 	r.store.metrics.FollowerReadsCount.Inc(1)
 	return true
 }
