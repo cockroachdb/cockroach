@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 )
@@ -75,13 +75,13 @@ func PGUrlWithOptionalClientCertsE(
 	}
 
 	// This CA is the one used by the SQL client driver to authenticate KV nodes on the host cluster.
-	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	caPath := filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedCACert)
 	tempCAPath, err := securitytest.RestrictedCopy(caPath, tempDir, "ca")
 	if err != nil {
 		return url.URL{}, func() {}, err
 	}
 	// This CA is the one used by the SQL client driver to authenticate SQL tenant servers.
-	tenantCAPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantCACert)
+	tenantCAPath := filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantCACert)
 	if err := securitytest.AppendFile(tenantCAPath, tempCAPath); err != nil {
 		return url.URL{}, func() {}, err
 	}
@@ -89,8 +89,8 @@ func PGUrlWithOptionalClientCertsE(
 	options.Add("sslrootcert", tempCAPath)
 
 	if withClientCerts {
-		certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
-		keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
+		certPath := filepath.Join(certnames.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
+		keyPath := filepath.Join(certnames.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
 
 		// Copy these assets to disk from embedded strings, so this test can
 		// run from a standalone binary.

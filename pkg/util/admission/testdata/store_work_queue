@@ -4,8 +4,8 @@ init
 print
 ----
 closed epoch: 0 tenantHeap len: 0
-stats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
-estimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1}
+stats:{admittedCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0}
+estimates:{writeTokens:1}
 
 set-try-get-return-value v=true
 ----
@@ -13,91 +13,103 @@ set-try-get-return-value v=true
 admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
 ----
 tryGet: returning true
-id 1: admit succeeded with handle {tenantID:{InternalValue:53} writeBytes:0 writeTokens:1 workByteAdditionTokens:1 ingestRequest:false admissionEnabled:true}
+id 1: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:1 admissionEnabled:true}
 
 work-done id=1
 ----
+storeWriteDone: originalTokens 1, doneBytes(write 0,ingested 0) returning 0
 
-set-store-request-estimates percent-ingested-into-l0=20 work-bytes-addition=100
+set-store-request-estimates write-tokens=100
 ----
 closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 1, w: 1, fifo: -128
-stats:{admittedCount:1 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
-estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0}
+estimates:{writeTokens:100}
 
 admit id=2 tenant=55 priority=0 create-time-millis=1 bypass=false
 ----
 tryGet: returning true
-id 2: admit succeeded with handle {tenantID:{InternalValue:55} writeBytes:0 writeTokens:100 workByteAdditionTokens:100 ingestRequest:false admissionEnabled:true}
+id 2: admit succeeded with handle {tenantID:{InternalValue:55} writeTokens:100 admissionEnabled:true}
 
-admit id=3 tenant=53 priority=0 create-time-millis=1 bypass=false write-bytes=1000000 ingest-request=true
+admit id=3 tenant=53 priority=0 create-time-millis=1 bypass=false
 ----
 tryGet: returning true
-id 3: admit succeeded with handle {tenantID:{InternalValue:53} writeBytes:1000000 writeTokens:200100 workByteAdditionTokens:100 ingestRequest:true admissionEnabled:true}
+id 3: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:100 admissionEnabled:true}
 
 print
 ----
 closed epoch: 0 tenantHeap len: 0
- tenant-id: 53 used: 200101, w: 1, fifo: -128
+ tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 100, w: 1, fifo: -128
-stats:{admittedCount:1 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
-estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0}
+estimates:{writeTokens:100}
 
 set-try-get-return-value v=false
 ----
 
-admit id=4 tenant=57 priority=0 create-time-millis=1 bypass=false write-bytes=2000 ingest-request=false
+admit id=4 tenant=57 priority=0 create-time-millis=1 bypass=false
 ----
 tryGet: returning false
 
-work-done id=2
+work-done id=2 additional-tokens=500
 ----
+storeWriteDone: originalTokens 100, doneBytes(write 0,ingested 0) returning 500
 
 print
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 57
- tenant-id: 53 used: 200101, w: 1, fifo: -128
- tenant-id: 55 used: 100, w: 1, fifo: -128
+ tenant-id: 53 used: 101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 0]
-stats:{admittedCount:2 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
-estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0}
+estimates:{writeTokens:100}
 
 granted
 ----
 continueGrantChain 0
-id 4: admit succeeded with handle {tenantID:{InternalValue:57} writeBytes:2000 writeTokens:2100 workByteAdditionTokens:100 ingestRequest:false admissionEnabled:true}
-granted: returned 2100
-
-work-done id=3 ingested-into-l0=20000
-----
-returnGrant 180000
+id 4: admit succeeded with handle {tenantID:{InternalValue:57} writeTokens:100 admissionEnabled:true}
+granted: returned 100
 
 print
 ----
 closed epoch: 0 tenantHeap len: 0
- tenant-id: 53 used: 20101, w: 1, fifo: -128
- tenant-id: 55 used: 100, w: 1, fifo: -128
- tenant-id: 57 used: 2100, w: 1, fifo: -128
-stats:{admittedCount:3 admittedWithBytesCount:1 admittedAccountedBytes:1000000 ingestedAccountedBytes:1000000 ingestedAccountedL0Bytes:20000}
-estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+ tenant-id: 53 used: 101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 100, w: 1, fifo: -128
+stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0}
+estimates:{writeTokens:100}
 
-set-store-request-estimates percent-ingested-into-l0=10 work-bytes-addition=10000
+work-done id=3 ingested-bytes=1000000 additional-tokens=50000
 ----
-closed epoch: 0 tenantHeap len: 0
- tenant-id: 53 used: 20101, w: 1, fifo: -128
- tenant-id: 55 used: 100, w: 1, fifo: -128
- tenant-id: 57 used: 2100, w: 1, fifo: -128
-stats:{admittedCount:3 admittedWithBytesCount:1 admittedAccountedBytes:1000000 ingestedAccountedBytes:1000000 ingestedAccountedL0Bytes:20000}
-estimates:{fractionOfIngestIntoL0:0.1 workByteAddition:10000}
-
-work-done id=4
-----
+storeWriteDone: originalTokens 100, doneBytes(write 0,ingested 1000000) returning 50000
 
 print
 ----
 closed epoch: 0 tenantHeap len: 0
- tenant-id: 53 used: 20101, w: 1, fifo: -128
- tenant-id: 55 used: 100, w: 1, fifo: -128
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 100, w: 1, fifo: -128
+stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000}
+estimates:{writeTokens:100}
+
+set-store-request-estimates write-tokens=10000
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 100, w: 1, fifo: -128
+stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000}
+estimates:{writeTokens:10000}
+
+work-done id=4 write-bytes=2000 ingested-bytes=1000 additional-tokens=2000
+----
+storeWriteDone: originalTokens 100, doneBytes(write 2000,ingested 1000) returning 2000
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-stats:{admittedCount:4 admittedWithBytesCount:2 admittedAccountedBytes:1002000 ingestedAccountedBytes:1000000 ingestedAccountedL0Bytes:20000}
-estimates:{fractionOfIngestIntoL0:0.1 workByteAddition:10000}
+stats:{admittedCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000}
+estimates:{writeTokens:10000}

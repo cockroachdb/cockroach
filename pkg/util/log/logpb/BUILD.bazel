@@ -8,6 +8,7 @@ go_library(
     srcs = [
         "event.go",
         "severity.go",
+        "test_utils.go",
         ":gen-json-encode-generated-go",  # keep
     ],
     embed = [":logpb_go_proto"],
@@ -16,6 +17,7 @@ go_library(
     deps = [
         "//pkg/util/jsonbytes",  # keep
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//jsonpb",  # keep
     ],
 )
 

@@ -552,6 +552,13 @@ type SQLStatsController interface {
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 
+// SchemaTelemetryController is an interface embedded in EvalCtx which can be
+// used by the builtins to create a job schedule for schema telemetry jobs.
+// This interface is introduced to avoid circular dependency.
+type SchemaTelemetryController interface {
+	CreateSchemaTelemetryJob(ctx context.Context, createdByName string, createdByID int64) (int64, error)
+}
+
 // IndexUsageStatsController is an interface embedded in EvalCtx which can be
 // used by the builtins to reset index usage stats in the cluster. This interface
 // is introduced to avoid circular dependency.

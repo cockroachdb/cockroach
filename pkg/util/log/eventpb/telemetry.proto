@@ -13,6 +13,7 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
+import "sql/catalog/descpb/structured.proto";
 import "util/log/eventpb/events.proto";
 import "util/log/eventpb/sql_audit_events.proto";
 import "util/log/logpb/event.proto";
@@ -299,4 +300,58 @@ message RecoveryEvent {
   // created even if a backup is already present in its destination.
   bool ignore_existing_backup = 29 [(gogoproto.jsontag) = ",omitempty"];
 
+}
+
+// SchemaDescriptor is an event for schema telemetry, whose purpose is
+// to take periodic snapshots of the cluster's SQL schema and publish them in
+// the telemetry log channel. For all intents and purposes, the data in such a
+// snapshot can be thought of the outer join of certain system tables:
+// namespace, descriptor, and at some point perhaps zones, etc.
+//
+// Snapshots are too large to conveniently be published as a single log event,
+// so instead they're broken down into SchemaDescriptor events which
+// contain the data in one record of this outer join projection. These events
+// are prefixed by a header (a SchemaSnapshotMetadata event).
+message SchemaDescriptor {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // SnapshotID is the unique identifier of the snapshot that this event
+  // is part of.
+  string snapshot_id = 2 [(gogoproto.customname) = "SnapshotID", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // ParentDatabaseID matches the same key column in system.namespace.
+  uint32 parent_database_id = 3 [(gogoproto.customname) = "ParentDatabaseID", (gogoproto.jsontag) = ",omitempty"];
+  // ParentSchemaID matches the same key column in system.namespace.
+  uint32 parent_schema_id = 4 [(gogoproto.customname) = "ParentSchemaID", (gogoproto.jsontag) = ",omitempty"];
+  // Name matches the same key column in system.namespace.
+  string name = 5 [(gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // DescID matches the 'id' column in system.namespace and system.descriptor.
+  uint32 desc_id = 6 [(gogoproto.customname) = "DescID", (gogoproto.jsontag) = ",omitempty"];
+  // Desc matches the 'descriptor' column in system.descriptor.
+  // Some contents of the descriptor may be redacted to prevent leaking PII.
+  cockroach.sql.sqlbase.Descriptor desc = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // TODO(postamar): include system.zones data.
+}
+
+// SchemaSnapshotMetadata is an event describing a schema snapshot, which
+// is a set of SchemaDescriptor messages sharing the same SnapshotID.
+message SchemaSnapshotMetadata {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // SnapshotID is the unique identifier of this snapshot.
+  string snapshot_id = 2 [(gogoproto.customname) = "SnapshotID", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // NumRecords is how many SchemaDescriptor events are in the
+  // snapshot.
+  uint32 num_records = 3;
+  // AsOfTimestamp is when the snapshot was taken.
+  // This is equivalent to the timestamp given in the AS OF SYSTEM TIME
+  // clause when querying the namespace and descriptor tables in the
+  // system database.
+  // Expressed as nanoseconds since the Unix epoch.
+  int64 as_of_timestamp = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Errors records any errors encountered when post-processing this snapshot,
+  // which includes the redaction of any potential PII.
+  repeated string errors = 5 [(gogoproto.jsontag) = ",omitempty"];
 }

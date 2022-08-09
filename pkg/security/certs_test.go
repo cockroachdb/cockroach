@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -234,7 +235,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 
 	// Try generating node certs without CA certs present.
 	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		testKeySize, time.Hour*48, false, []string{"localhost"},
 	); err == nil {
 		t.Fatalf("Expected error, but got none")
@@ -242,13 +243,13 @@ func TestGenerateNodeCerts(t *testing.T) {
 
 	// Now try in the proper order.
 	if err := security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), testKeySize, time.Hour*96, false, false,
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey), testKeySize, time.Hour*96, false, false,
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
 	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		testKeySize, time.Hour*48, false, []string{"localhost"},
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
@@ -263,7 +264,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 // tenant-signing.10.crt: tenant signing certificate for tenant 10.
 func generateBaseCerts(certsDir string) error {
 	{
-		caKey := filepath.Join(certsDir, security.EmbeddedCAKey)
+		caKey := filepath.Join(certsDir, certnames.EmbeddedCAKey)
 
 		if err := security.CreateCAPair(
 			certsDir, caKey,
@@ -295,7 +296,7 @@ func generateBaseCerts(certsDir string) error {
 
 	{
 		tenantID := uint64(10)
-		caKey := filepath.Join(certsDir, security.EmbeddedTenantCAKey)
+		caKey := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
 		if err := security.CreateTenantCAPair(
 			certsDir, caKey,
 			testKeySize, time.Hour*96, true, true,
@@ -333,35 +334,35 @@ func generateSplitCACerts(certsDir string) error {
 	// Overwrite those certs that we want to split.
 
 	if err := security.CreateClientCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
 		testKeySize, time.Hour*96, true, true,
 	); err != nil {
 		return errors.Wrap(err, "could not generate client CA pair")
 	}
 
 	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
 		testKeySize, time.Hour*48, true, username.NodeUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
 		testKeySize, time.Hour*48, true, username.RootUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateUICAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedUICAKey),
 		testKeySize, time.Hour*96, true, true,
 	); err != nil {
 		return errors.Wrap(err, "could not generate UI CA pair")
 	}
 
 	if err := security.CreateUIPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedUICAKey),
 		testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
 	); err != nil {
 		return errors.Wrap(err, "could not generate UI pair")
@@ -531,17 +532,17 @@ func TestUseSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Success, but "node" is not a sql user.
-		{"node", security.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
 		// Success!
-		{"root", security.EmbeddedCACert, "client.root", ""},
+		{"root", certnames.EmbeddedCACert, "client.root", ""},
 		// Bad server CA: can't verify server certificate.
-		{"root", security.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
+		{"root", certnames.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
 		// Bad client cert: we're using the node cert but it's not signed by the client CA.
-		{"node", security.EmbeddedCACert, "node", "tls: bad certificate"},
+		{"node", certnames.EmbeddedCACert, "node", "tls: bad certificate"},
 		// We can't verify the node certificate using the UI cert.
-		{"node", security.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
+		{"node", certnames.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
 		// And the SQL server doesn't know what the ui.crt is.
-		{"node", security.EmbeddedCACert, "ui", "tls: bad certificate"},
+		{"node", certnames.EmbeddedCACert, "ui", "tls: bad certificate"},
 	}
 
 	for i, tc := range testCases {
@@ -648,9 +649,9 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Certificate signed by wrong client CA.
-		{"root", security.EmbeddedCACert, "client.root", "tls: bad certificate"},
+		{"root", certnames.EmbeddedCACert, "client.root", "tls: bad certificate"},
 		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
-		{"node", security.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
 	}
 
 	for i, tc := range testCases {
@@ -671,7 +672,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 func TestAppendCertificateToBlob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	caBlob, err := securitytest.Asset(filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert))
+	caBlob, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedCACert))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -682,9 +683,9 @@ func TestAppendCertificateToBlob(t *testing.T) {
 	for _, certFilename := range []string{
 		//		security.EmbeddedClientCACert,
 		//		security.EmbeddedUICACert,
-		security.EmbeddedTenantCACert,
+		certnames.EmbeddedTenantCACert,
 	} {
-		newCertBlob, err := securitytest.Asset(filepath.Join(security.EmbeddedCertsDir, certFilename))
+		newCertBlob, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certFilename))
 		if err != nil {
 			t.Errorf("failed to read certificate \"%s\": %s", certFilename, err)
 			continue

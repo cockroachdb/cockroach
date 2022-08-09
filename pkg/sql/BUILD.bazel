@@ -327,6 +327,7 @@ go_library(
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/catalog/schematelemetry/schematelemetrycontroller",
         "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",

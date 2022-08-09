@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -447,11 +448,13 @@ func internalExtendedEvalCtx(
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
 	var sqlStatsController eval.SQLStatsController
+	var schemaTelemetryController eval.SchemaTelemetryController
 	var indexUsageStatsController eval.IndexUsageStatsController
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
 			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
+			schemaTelemetryController = execCfg.InternalExecutor.s.schemaTelemetryController
 			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
@@ -461,6 +464,7 @@ func internalExtendedEvalCtx(
 				Setting: execCfg.Settings,
 			})
 			sqlStatsController = &persistedsqlstats.Controller{}
+			schemaTelemetryController = &schematelemetrycontroller.Controller{}
 			indexUsageStatsController = &idxusage.Controller{}
 		}
 	}
@@ -477,6 +481,7 @@ func internalExtendedEvalCtx(
 			StmtTimestamp:                  stmtTimestamp,
 			TxnTimestamp:                   txnTimestamp,
 			SQLStatsController:             sqlStatsController,
+			SchemaTelemetryController:      schemaTelemetryController,
 			IndexUsageStatsController:      indexUsageStatsController,
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 		},

@@ -761,31 +761,26 @@ func (q *WorkQueue) gcTenantsAndResetTokens() {
 	}
 }
 
-// forceAllocateTokens is used internally by StoreWorkQueue. The token count
-// can be negative, in which case it is returning tokens.
-func (q *WorkQueue) forceAllocateTokens(tenantID roachpb.TenantID, count int64) {
+// adjustTenantTokens is used internally by StoreWorkQueue. The
+// additionalTokens count can be negative, in which case it is returning
+// tokens. This is only for WorkQueue's own accounting -- it should not call
+// into granter.
+func (q *WorkQueue) adjustTenantTokens(tenantID roachpb.TenantID, additionalTokens int64) {
 	tid := tenantID.ToUint64()
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	tenant, ok := q.mu.tenants[tid]
 	if ok {
-		if count < 0 {
-			toReturn := uint64(-count)
+		if additionalTokens < 0 {
+			toReturn := uint64(-additionalTokens)
 			if tenant.used < toReturn {
 				tenant.used = 0
 			} else {
 				tenant.used -= toReturn
 			}
 		} else {
-			tenant.used += uint64(count)
+			tenant.used += uint64(additionalTokens)
 		}
-	}
-	// Release q.mu before calling into the granter since the granter's mutex is
-	// earlier in the lock ordering.
-	q.mu.Unlock()
-	if count < 0 {
-		q.granter.returnGrant(-count)
-	} else {
-		q.granter.tookWithoutPermission(count)
 	}
 }
 
@@ -1552,30 +1547,22 @@ func makeWorkQueueMetrics(name string) WorkQueueMetrics {
 // seeking admission from a StoreWorkQueue.
 type StoreWriteWorkInfo struct {
 	WorkInfo
-
-	// TODO(sumeer): remove these 2 fields. No such info will be provided at
-	// admission time. The token subtraction at admission time will be
-	// completely based on estimation. This will be partially fixed at the time
-	// of AdmittedWorkDone via StoreWorkDoneInfo. StoreWorkDoneInfo does not
-	// specify how many of the ingested bytes went into L0 (for the
-	// leaseholder), since we don't want to plumb information through the raft
-	// replication and state machine application path. So we will continue to
-	// use estimates to decide what went into L0.
-
-	// WriteBytes should be populated if the caller knows the bytes that will be
-	// written, else this should be set to 0, and the callee will use an
-	// estimate. For large writes, typically generated for index backfills,
-	// restores etc. it is important to populate this.
-	WriteBytes int64
-	// IngestRequest is true iff this will be executed by ingesting sstables
-	// into the store. In this case WriteBytes must be populated.
-	IngestRequest bool
+	// NB: no information about the size of the work is provided at admission
+	// time. The token subtraction at admission time is completely based on past
+	// estimates. This estimation is improved at work completion time via size
+	// information provided in StoreWorkDoneInfo.
+	//
+	// TODO(sumeer): in some cases, like AddSSTable requests, we do have size
+	// information at proposal time, and may be able to use it fruitfully.
 }
 
 // StoreWorkQueue is responsible for admission to a store.
 type StoreWorkQueue struct {
-	q  WorkQueue
-	mu struct {
+	q WorkQueue
+	// Only calls storeWriteDone. The rest of the interface is used by
+	// WorkQueue.
+	granter granterWithStoreWriteDone
+	mu      struct {
 		syncutil.RWMutex
 		estimates storeRequestEstimates
 		stats     storeAdmissionStats
@@ -1587,15 +1574,8 @@ type StoreWorkQueue struct {
 // StoreWorkQueue.AdmittedWorkDone.
 type StoreWorkHandle struct {
 	tenantID roachpb.TenantID
-	// Equal to StoreWriteWorkInfo.WriteBytes.
-	writeBytes int64
-	// The writeTokens acquired by this request.
-	writeTokens int64
-	// The part of writeTokens due to storeRequestEstimates.workByteAddition.
-	// workByteAdditionTokens <= writeTokens.
-	workByteAdditionTokens int64
-	// Equal to StoreWriteWorkInfo.IngestRequest.
-	ingestRequest    bool
+	// The writeTokens acquired by this request. Must be > 0.
+	writeTokens      int64
 	admissionEnabled bool
 }
 
@@ -1612,24 +1592,13 @@ func (h StoreWorkHandle) AdmissionEnabled() bool {
 func (q *StoreWorkQueue) Admit(
 	ctx context.Context, info StoreWriteWorkInfo,
 ) (handle StoreWorkHandle, err error) {
-	if info.IngestRequest && info.WriteBytes == 0 {
-		return StoreWorkHandle{}, errors.Errorf("IngestRequest must specify WriteBytes")
-	}
 	h := StoreWorkHandle{
-		tenantID:      info.TenantID,
-		writeBytes:    info.WriteBytes,
-		ingestRequest: info.IngestRequest,
+		tenantID: info.TenantID,
 	}
 	q.mu.RLock()
 	estimates := q.mu.estimates
 	q.mu.RUnlock()
-	if h.ingestRequest {
-		h.writeTokens = int64(float64(h.writeBytes) * estimates.fractionOfIngestIntoL0)
-	} else {
-		h.writeTokens = h.writeBytes
-	}
-	h.writeTokens += estimates.workByteAddition
-	h.workByteAdditionTokens = estimates.workByteAddition
+	h.writeTokens = estimates.writeTokens
 	info.WorkInfo.requestedCount = h.writeTokens
 	enabled, err := q.q.Admit(ctx, info.WorkInfo)
 	if err != nil {
@@ -1644,7 +1613,8 @@ func (q *StoreWorkQueue) Admit(
 type StoreWorkDoneInfo struct {
 	// The size of the Pebble write-batch, for normal writes. It is zero when
 	// the write-batch is empty, which happens when all the bytes are being
-	// added via sstable ingestion.
+	// added via sstable ingestion. NB: it is possible for both WriteBytes and
+	// IngestedBytes to be 0 if nothing was actually written.
 	//
 	// TODO(sumeer): WriteBytes will under count the actual effect on the Pebble
 	// store shared by the raft log and the state machine, since this only
@@ -1654,51 +1624,25 @@ type StoreWorkDoneInfo struct {
 	// WriteBytes.
 	WriteBytes int64
 	// The size of the sstables, for ingests. Zero if there were no ingests.
-	SSTableBytes int64
+	IngestedBytes int64
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has
-// completed. ingestedIntoL0Bytes must be 0 unless
-// StoreWriteWorkInfo.IngestRequest was true. In the IngestRequest=true case,
-// it should provide an estimate of how many bytes were ingested into L0.
-func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, ingestedIntoL0Bytes int64) error {
+// completed.
+func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkDoneInfo) error {
 	if !h.admissionEnabled {
 		return nil
-	}
-	if !h.ingestRequest && ingestedIntoL0Bytes > 0 {
-		panic(errors.AssertionFailedf("ingested bytes for non-ingest request"))
 	}
 	{
 		q.mu.Lock()
 		q.mu.stats.admittedCount++
-		if h.writeBytes != 0 {
-			q.mu.stats.admittedWithBytesCount++
-			q.mu.stats.admittedAccountedBytes += uint64(h.writeBytes)
-			if h.ingestRequest {
-				q.mu.stats.ingestedAccountedBytes += uint64(h.writeBytes)
-				q.mu.stats.ingestedAccountedL0Bytes += uint64(ingestedIntoL0Bytes)
-			}
-		}
+		q.mu.stats.writeAccountedBytes += uint64(doneInfo.WriteBytes)
+		q.mu.stats.ingestedAccountedBytes += uint64(doneInfo.IngestedBytes)
 		q.mu.Unlock()
 	}
-	if !h.ingestRequest {
-		return nil
-	}
-	var err error
-	if ingestedIntoL0Bytes > h.writeBytes {
-		err = errors.Errorf("ingested L0 bytes %d > write bytes %d", ingestedIntoL0Bytes,
-			h.writeBytes)
-		// Don't return here since want to make the shared accounting correct.
-		ingestedIntoL0Bytes = h.writeBytes
-	}
-	// writeTokens-workByteAdditionTokens was what we thought would land in L0.
-	// What actually landed in L0 is ingestedIntoL0Bytes. NB: tokensToAllocate
-	// can be negative.
-	tokensToAllocate := ingestedIntoL0Bytes - (h.writeTokens - h.workByteAdditionTokens)
-	if tokensToAllocate != 0 {
-		q.q.forceAllocateTokens(h.tenantID, tokensToAllocate)
-	}
-	return err
+	additionalTokens := q.granter.storeWriteDone(h.writeTokens, doneInfo)
+	q.q.adjustTenantTokens(h.tenantID, additionalTokens)
+	return nil
 }
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
@@ -1731,15 +1675,19 @@ func (q *StoreWorkQueue) setStoreRequestEstimates(estimates storeRequestEstimate
 }
 
 func makeStoreWorkQueue(
-	ambientCtx log.AmbientContext, granter granter, settings *cluster.Settings, opts workQueueOptions,
+	ambientCtx log.AmbientContext,
+	granter granterWithStoreWriteDone,
+	settings *cluster.Settings,
+	opts workQueueOptions,
 ) storeRequester {
-	q := &StoreWorkQueue{}
+	q := &StoreWorkQueue{
+		granter: granter,
+	}
 	initWorkQueue(&q.q, ambientCtx, KVWork, granter, settings, opts)
-	// Arbitrary initial values. These will be replaced before any meaningful
+	// Arbitrary initial value. This will be replaced before any meaningful
 	// token constraints are enforced.
 	q.mu.estimates = storeRequestEstimates{
-		fractionOfIngestIntoL0: 0.5,
-		workByteAddition:       1,
+		writeTokens: 1,
 	}
 	return q
 }
