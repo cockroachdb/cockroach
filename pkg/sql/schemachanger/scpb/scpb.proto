@@ -44,6 +44,7 @@ enum Status {
   DELETE_ONLY = 7;
 
   // Intermediate states on the index dropping and adding paths.
+  // VALIDATED is also used on check constraint adding and dropping paths.
   VALIDATED = 8;
   MERGED = 9;
   MERGE_ONLY = 10;
@@ -59,6 +60,9 @@ enum Status {
   TRANSIENT_MERGED = 19;
   TRANSIENT_VALIDATED = 20;
   TRANSIENT_PUBLIC = 21;
+
+  // Intermediate states on check constraint adding and dropping paths.
+  VALIDATING = 22;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where

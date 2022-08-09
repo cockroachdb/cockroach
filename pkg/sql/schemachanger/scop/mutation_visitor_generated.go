@@ -55,6 +55,9 @@ type MutationVisitor interface {
 	RemoveOwnerBackReferenceInSequence(context.Context, RemoveOwnerBackReferenceInSequence) error
 	RemoveSequenceOwner(context.Context, RemoveSequenceOwner) error
 	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
+	AddCheckConstraint(context.Context, AddCheckConstraint) error
+	MakeDroppedCheckConstraintValidated(context.Context, MakeDroppedCheckConstraintValidated) error
+	MakeAddedCheckConstraintPublic(context.Context, MakeAddedCheckConstraintPublic) error
 	RemoveForeignKeyConstraint(context.Context, RemoveForeignKeyConstraint) error
 	RemoveForeignKeyBackReference(context.Context, RemoveForeignKeyBackReference) error
 	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
@@ -260,6 +263,21 @@ func (op RemoveSequenceOwner) Visit(ctx context.Context, v MutationVisitor) erro
 // Visit is part of the MutationOp interface.
 func (op RemoveCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveCheckConstraint(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddCheckConstraint(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeDroppedCheckConstraintValidated) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeDroppedCheckConstraintValidated(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAddedCheckConstraintPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAddedCheckConstraintPublic(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

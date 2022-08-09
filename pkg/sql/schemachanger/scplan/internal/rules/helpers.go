@@ -261,7 +261,7 @@ func IsDescriptor(e scpb.Element) bool {
 }
 
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
-	return isIndex(e) || isColumn(e)
+	return isIndex(e) || isColumn(e) || isCheckConstraint(e)
 }
 
 func isIndex(e scpb.Element) bool {
@@ -273,11 +273,13 @@ func isIndex(e scpb.Element) bool {
 }
 
 func isColumn(e scpb.Element) bool {
-	switch e.(type) {
-	case *scpb.Column:
-		return true
-	}
-	return false
+	_, ok := e.(*scpb.Column)
+	return ok
+}
+
+func isCheckConstraint(e scpb.Element) bool {
+	_, ok := e.(*scpb.CheckConstraint)
+	return ok
 }
 
 func isSimpleDependent(e scpb.Element) bool {

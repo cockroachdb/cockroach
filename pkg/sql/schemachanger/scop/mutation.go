@@ -288,6 +288,31 @@ type RemoveCheckConstraint struct {
 	ConstraintID descpb.ConstraintID
 }
 
+// AddCheckConstraint adds a check constraint to a table.
+type AddCheckConstraint struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	ColumnIDs    []descpb.ColumnID
+	scpb.Expression
+}
+
+// MakeDroppedCheckConstraintValidated moves a public
+// check constraint to WRITE_AND_DELETE_ONLY.
+type MakeDroppedCheckConstraintValidated struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakeAddedCheckConstraintPublic moves a new, validated check
+// constraint from mutation to public.
+type MakeAddedCheckConstraintPublic struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
 // RemoveForeignKeyConstraint removes a foreign key from the origin table.
 type RemoveForeignKeyConstraint struct {
 	mutationOp
