@@ -485,7 +485,11 @@ func (h *HistogramV2) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 	defer h.windowed.Unlock()
 	m := &prometheusgo.Metric{}
 	if err := h.windowed.cur.Write(m); err != nil {
+<<<<<<< HEAD
 		panic(err)
+=======
+		panic(err) // TODD
+>>>>>>> 5658e48493 (metric: export quantiles from prometheus-based histogram)
 	}
 	return m
 }
@@ -563,10 +567,13 @@ func (h *HistogramV2) ValueAtQuantileWindowed(q float64) float64 {
 	if math.IsNaN(val) || math.IsInf(val, -1) {
 		return 0
 	}
+<<<<<<< HEAD
 	// should not extrapolate past the upper bound of the largest bucket
 	if val > *buckets[len(buckets)-1].UpperBound {
 		return *buckets[len(buckets)-1].UpperBound
 	}
+=======
+>>>>>>> 5658e48493 (metric: export quantiles from prometheus-based histogram)
 	return val
 }
 
