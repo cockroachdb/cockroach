@@ -9,9 +9,6 @@ EXPLAIN (ddl) rollback at post-commit stage 11 of 15;
 Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT ‹1›; 
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── VALIDATED     → PUBLIC      PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-      │    │    └── ABSENT        → PUBLIC      IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
       │    ├── 15 elements transitioning toward ABSENT
       │    │    ├── PUBLIC        → WRITE_ONLY  Column:{DescID: 106, ColumnID: 2}
       │    │    ├── PUBLIC        → ABSENT      ColumnName:{DescID: 106, Name: g, ColumnID: 2}
@@ -28,6 +25,9 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
       │    │    └── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 2}
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── VALIDATED     → PUBLIC      PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+      │    │    └── ABSENT        → PUBLIC      IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
       │    └── 14 Mutation operations
       │         ├── SetIndexName {"IndexID":1,"Name":"tbl_pkey","TableID":106}
       │         ├── MakeDroppedColumnDeleteAndWriteOnly {"ColumnID":2,"TableID":106}
