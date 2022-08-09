@@ -1721,6 +1721,14 @@ func gcKey(key roachpb.Key, timestamp hlc.Timestamp) roachpb.GCRequest_GCKey {
 	}
 }
 
+func recomputeStatsArgs(key roachpb.Key) roachpb.RecomputeStatsRequest {
+	return roachpb.RecomputeStatsRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+	}
+}
+
 func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roachpb.GCRequest {
 	return roachpb.GCRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -8392,56 +8400,6 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	}
 }
 
-// TestGCWithoutThreshold validates that GCRequest only declares the threshold
-// key if it is subject to change, and that it does not access this key if it
-// does not declare them.
-func TestGCWithoutThreshold(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	tc := &testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
-
-	for _, keyThresh := range []hlc.Timestamp{{}, {Logical: 1}} {
-		t.Run(fmt.Sprintf("thresh=%s", keyThresh), func(t *testing.T) {
-			var gc roachpb.GCRequest
-			var spans spanset.SpanSet
-
-			gc.Threshold = keyThresh
-			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil, 0)
-
-			expSpans := 1
-			if !keyThresh.IsEmpty() {
-				expSpans++
-			}
-			if numSpans := spans.Len(); numSpans != expSpans {
-				t.Fatalf("expected %d declared keys, found %d", expSpans, numSpans)
-			}
-
-			eng := storage.NewDefaultInMemForTesting()
-			defer eng.Close()
-
-			batch := eng.NewBatch()
-			defer batch.Close()
-			rw := spanset.NewBatch(batch, &spans)
-
-			var resp roachpb.GCResponse
-			if _, err := batcheval.GC(ctx, rw, batcheval.CommandArgs{
-				Args: &gc,
-				EvalCtx: NewReplicaEvalContext(
-					ctx, tc.repl, &spans, false, /* requiresClosedTSOlderThanStorageSnap */
-				),
-			}, &resp); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
-}
-
 // Test that, if the Raft command resulting from EndTxn request fails to be
 // processed/apply, then the LocalResult associated with that command is
 // cleared.
@@ -8510,6 +8468,78 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestMVCCStatsGCCommutesWithWrites tests that the MVCCStats updates
+// corresponding to writes and GCs are commutative.
+//
+// This test does so by:
+// 1. Initially writing N versions of a key.
+// 2. Concurrently GC-ing the N-1 versions written in step 1 while writing N-1
+// new versions of the key.
+// 3. Concurrently recomputing MVCC stats (via RecomputeStatsRequests) in the
+// background and ensuring that the stats are always consistent at all times.
+func TestMVCCStatsGCCommutesWithWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	key := tc.ScratchRange(t)
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+
+	write := func() hlc.Timestamp {
+		var ba roachpb.BatchRequest
+		put := putArgs(key, []byte("0"))
+		ba.Add(&put)
+		resp, pErr := store.TestSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+		return resp.Timestamp
+	}
+
+	// Write `numIterations` versions for a key.
+	const numIterations = 100
+	writeTimestamps := make([]hlc.Timestamp, 0, numIterations)
+	for i := 0; i < numIterations; i++ {
+		writeTimestamps = append(writeTimestamps, write())
+	}
+
+	// Now, we GC the first `numIterations-1` versions we wrote above while
+	// concurrently writing `numIterations-1` new versions.
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		for _, ts := range writeTimestamps[:numIterations-1] {
+			gcReq := gcArgs(key, key.Next(), gcKey(key, ts))
+			_, pErr := kv.SendWrapped(ctx, store.TestSender(), &gcReq)
+			require.Nil(t, pErr)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < numIterations-1; i++ {
+			write()
+		}
+	}()
+	// Also concurrently recompute stats and ensure that they're consistent at all
+	// times.
+	go func() {
+		defer wg.Done()
+		expDelta := enginepb.MVCCStats{}
+		for i := 0; i < numIterations; i++ {
+			recomputeReq := recomputeStatsArgs(key)
+			resp, pErr := kv.SendWrapped(ctx, store.TestSender(), &recomputeReq)
+			require.Nil(t, pErr)
+			delta := enginepb.MVCCStats(resp.(*roachpb.RecomputeStatsResponse).AddedDelta)
+			delta.AgeTo(expDelta.LastUpdateNanos)
+			require.Equal(t, expDelta, delta)
+		}
+	}()
+
+	wg.Wait()
 }
 
 // TestBatchTimestampBelowGCThreshold verifies that commands below the replica
@@ -8778,6 +8808,18 @@ func TestGCThresholdRacesWithRead(t *testing.T) {
 			require.Nil(t, err)
 			require.Equal(t, va, b)
 
+			// Since the GC request does not acquire latches on the keys being GC'ed,
+			// they're not guaranteed to wait for these above Puts to get applied on
+			// the leaseholder. See AckCommittedEntriesBeforeApplication() and the the
+			// comment above it for more details. So we separately ensure both these
+			// Puts have been applied by just trying to read the latest value @ ts2.
+			// These Get requests do indeed declare latches on the keys being read, so
+			// by the time they return, subsequent GC requests are guaranteed to see
+			// the latest keys.
+			gArgs = getArgs(key)
+			_, pErr = kv.SendWrappedWith(ctx, reader, h2, &gArgs)
+			require.Nil(t, pErr)
+
 			// Perform two actions concurrently:
 			//  1. GC up to ts2. This should remove the k@ts1 version.
 			//  2. Read @ ts1.
@@ -8825,6 +8867,156 @@ func TestGCThresholdRacesWithRead(t *testing.T) {
 			go func() { defer wg.Done(); read() }()
 			wg.Wait()
 		})
+	})
+}
+
+// BenchmarkMVCCGCWithForegroundTraffic benchmarks performing GC of a key
+// concurrently with reads on that key.
+func BenchmarkMVCCGCWithForegroundTraffic(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, b, stopper)
+
+	key := roachpb.Key("test")
+	now := func() hlc.Timestamp { return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()} }
+
+	// send sends the Request with a present-time batch timestamp.
+	send := func(args roachpb.Request) *roachpb.BatchResponse {
+		var header roachpb.Header
+		header.Timestamp = now()
+		ba := roachpb.BatchRequest{}
+		ba.Header = header
+		ba.Add(args)
+		resp, err := tc.Sender().Send(ctx, ba)
+		require.Nil(b, err)
+		return resp
+	}
+
+	// gc issues a GC request to garbage collect `key` at `timestamp` with a
+	// present-time batch header timestamp.
+	gc := func(key roachpb.Key, timestamp hlc.Timestamp) {
+		// Note that we're not bumping the GC threshold, just GC'ing the keys.
+		gcReq := gcArgs(key, key.Next(), gcKey(key, timestamp))
+		send(&gcReq)
+	}
+
+	// read issues a present time read over `key`.
+	read := func() {
+		send(scanArgs(key, key.Next()))
+	}
+
+	// put issues a present time put over `key`.
+	put := func(key roachpb.Key) (writeTS hlc.Timestamp) {
+		putReq := putArgs(key, []byte("00"))
+		resp := send(&putReq)
+		return resp.Timestamp
+	}
+
+	// Issue no-op GC requests every 10 microseconds while reads are being
+	// benchmarked.
+	b.Run("noop gc with reads", func(b *testing.B) {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		doneCh := make(chan struct{}, 1)
+
+		b.ResetTimer()
+		go func() {
+			defer wg.Done()
+			for {
+				gc(key, now()) // NB: These are no-op GC requests.
+				time.Sleep(10 * time.Microsecond)
+
+				select {
+				case <-doneCh:
+					return
+				default:
+				}
+			}
+		}()
+
+		go func() {
+			for i := 0; i < b.N; i++ {
+				read()
+			}
+			close(doneCh)
+			wg.Done()
+		}()
+		wg.Wait()
+	})
+
+	// Write and GC the same key indefinitely while benchmarking read performance.
+	b.Run("gc with reads and writes", func(b *testing.B) {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		doneCh := make(chan struct{}, 1)
+		lastWriteTS := put(key)
+
+		b.ResetTimer()
+		go func() {
+			defer wg.Done()
+			for {
+				// Write a new version and immediately GC the previous version.
+				writeTS := put(key)
+				gc(key, lastWriteTS)
+				lastWriteTS = writeTS
+
+				select {
+				case <-doneCh:
+					return
+				default:
+				}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < b.N; i++ {
+				read()
+			}
+			close(doneCh)
+		}()
+		wg.Wait()
+	})
+
+	// Write a bunch of versions of a key. Then, GC them while concurrently
+	// reading those keys.
+	b.Run("gc with reads", func(b *testing.B) {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		doneCh := make(chan struct{}, 1)
+
+		writeTimestamps := make([]hlc.Timestamp, 0, b.N)
+		for i := 0; i < b.N; i++ {
+			writeTimestamps = append(writeTimestamps, put(key))
+		}
+		put(key)
+
+		b.ResetTimer()
+		go func() {
+			defer wg.Done()
+			for _, ts := range writeTimestamps {
+				gc(key, ts)
+
+				// Stop GC-ing once the reads are done and we're shutting down.
+				select {
+				case <-doneCh:
+					return
+				default:
+				}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < b.N; i++ {
+				read()
+			}
+			close(doneCh)
+		}()
+		wg.Wait()
 	})
 }
 

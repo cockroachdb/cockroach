@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -30,121 +31,152 @@ import (
 func TestLikeOperators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, tc := range []struct {
-		pattern  string
-		negate   bool
-		tups     colexectestutils.Tuples
-		expected colexectestutils.Tuples
-	}{
-		{
-			pattern:  "def",
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"def"}},
-		},
-		{
-			pattern:  "def",
-			negate:   true,
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
-		},
-		{
-			pattern:  "de%",
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"def"}},
-		},
-		{
-			pattern:  "de%",
-			negate:   true,
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
-		},
-		{
-			pattern:  "%ef",
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"def"}},
-		},
-		{
-			pattern:  "%ef",
-			negate:   true,
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
-		},
-		{
-			pattern:  "_e_",
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"def"}},
-		},
-		{
-			pattern:  "_e_",
-			negate:   true,
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
-		},
-		{
-			pattern:  "%e%",
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"def"}},
-		},
-		{
-			pattern:  "%e%",
-			negate:   true,
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
-		},
-		// These two cases are equivalent to the two previous ones, but the
-		// pattern is not normalized, so the slow regex matcher will be used.
-		{
-			pattern:  "%%e%",
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"def"}},
-		},
-		{
-			pattern:  "%%e%",
-			negate:   true,
-			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
-			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
-		},
-		{
-			pattern:  "%a%e%",
-			tups:     colexectestutils.Tuples{{"abc"}, {"adef"}, {"gahie"}, {"beb"}, {"ae"}},
-			expected: colexectestutils.Tuples{{"adef"}, {"gahie"}, {"ae"}},
-		},
-		{
-			pattern:  "%a%e%",
-			negate:   true,
-			tups:     colexectestutils.Tuples{{"abc"}, {"adef"}, {"gahie"}, {"beb"}, {"ae"}},
-			expected: colexectestutils.Tuples{{"abc"}, {"beb"}},
-		},
-		{
-			pattern: "%1%22%333%",
-			tups: colexectestutils.Tuples{
-				{"a1bc22def333fghi"},
-				{"abc22def333fghi"}, // 1 is missing.
-				{"a1bc2def333fghi"}, // 2 is missing.
-				{"a1bc22def33fghi"}, // 3 is missing.
-				{"122333"},
+	rng, _ := randutil.NewTestRand()
+	for _, caseInsensitive := range []bool{false, true} {
+		for _, tc := range []struct {
+			pattern    string
+			isConstant bool
+			negate     bool
+			tups       colexectestutils.Tuples
+			expected   colexectestutils.Tuples
+		}{
+			{
+				pattern:    "def",
+				isConstant: true,
+				tups:       colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected:   colexectestutils.Tuples{{"def"}},
 			},
-			expected: colexectestutils.Tuples{{"a1bc22def333fghi"}, {"122333"}},
-		},
-		{
-			pattern: "%1%22%333%",
-			negate:  true,
-			tups: colexectestutils.Tuples{
-				{"a1bc22def333fghi"},
-				{"abc22def333fghi"}, // 1 is missing.
-				{"a1bc2def333fghi"}, // 2 is missing.
-				{"a1bc22def33fghi"}, // 3 is missing.
-				{"122333"},
+			{
+				pattern:    "def",
+				isConstant: true,
+				negate:     true,
+				tups:       colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected:   colexectestutils.Tuples{{"abc"}, {"ghi"}},
 			},
-			expected: colexectestutils.Tuples{{"abc22def333fghi"}, {"a1bc2def333fghi"}, {"a1bc22def33fghi"}},
-		},
-	} {
-		colexectestutils.RunTests(
-			t, testAllocator, []colexectestutils.Tuples{tc.tups}, tc.expected, colexectestutils.OrderedVerifier,
-			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
-			})
+			{
+				pattern:  "de%",
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"def"}},
+			},
+			{
+				pattern:  "de%",
+				negate:   true,
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
+			},
+			{
+				pattern:  "%ef",
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"def"}},
+			},
+			{
+				pattern:  "%ef",
+				negate:   true,
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
+			},
+			{
+				pattern:  "_e_",
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"def"}},
+			},
+			{
+				pattern:  "_e_",
+				negate:   true,
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
+			},
+			{
+				pattern:  "%e%",
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"def"}},
+			},
+			{
+				pattern:  "%e%",
+				negate:   true,
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
+			},
+			// These two cases are equivalent to the two previous ones, but the
+			// pattern is not normalized, so the slow regex matcher will be used.
+			{
+				pattern:  "%%e%",
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"def"}},
+			},
+			{
+				pattern:  "%%e%",
+				negate:   true,
+				tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+				expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
+			},
+			{
+				pattern:  "%a%e%",
+				tups:     colexectestutils.Tuples{{"abc"}, {"adef"}, {"gahie"}, {"beb"}, {"ae"}},
+				expected: colexectestutils.Tuples{{"adef"}, {"gahie"}, {"ae"}},
+			},
+			{
+				pattern:  "%a%e%",
+				negate:   true,
+				tups:     colexectestutils.Tuples{{"abc"}, {"adef"}, {"gahie"}, {"beb"}, {"ae"}},
+				expected: colexectestutils.Tuples{{"abc"}, {"beb"}},
+			},
+			{
+				pattern: "%1%22%333%",
+				tups: colexectestutils.Tuples{
+					{"a1bc22def333fghi"},
+					{"abc22def333fghi"}, // 1 is missing.
+					{"a1bc2def333fghi"}, // 2 is missing.
+					{"a1bc22def33fghi"}, // 3 is missing.
+					{"122333"},
+				},
+				expected: colexectestutils.Tuples{{"a1bc22def333fghi"}, {"122333"}},
+			},
+			{
+				pattern: "%1%22%333%",
+				negate:  true,
+				tups: colexectestutils.Tuples{
+					{"a1bc22def333fghi"},
+					{"abc22def333fghi"}, // 1 is missing.
+					{"a1bc2def333fghi"}, // 2 is missing.
+					{"a1bc22def33fghi"}, // 3 is missing.
+					{"122333"},
+				},
+				expected: colexectestutils.Tuples{{"abc22def333fghi"}, {"a1bc2def333fghi"}, {"a1bc22def33fghi"}},
+			},
+		} {
+			if caseInsensitive && tc.isConstant {
+				// This case is currently not supported.
+				continue
+			}
+			pattern, tups, expected := tc.pattern, tc.tups, tc.expected
+			if caseInsensitive {
+				// If we don't care about the case sensitivity, then randomly
+				// modify the strings and / or the pattern to add some capital
+				// letters.
+				if rng.Float64() < 0.5 {
+					pattern = strings.ToUpper(pattern)
+				}
+				var newExpected colexectestutils.Tuples
+				for i := range tups {
+					expectedIdx := len(newExpected)
+					matched := expectedIdx < len(expected) && tups[i][0].(string) == expected[expectedIdx][0].(string)
+					if rng.Float64() < 0.5 {
+						tups[i][0] = strings.ToUpper(tups[i][0].(string))
+					}
+					if matched {
+						newExpected = append(newExpected, tups[i])
+					}
+				}
+				expected = newExpected
+			}
+			colexectestutils.RunTests(
+				t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier,
+				func(input []colexecop.Operator) (colexecop.Operator, error) {
+					ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+					return GetLikeOperator(&ctx, input[0], 0, pattern, tc.negate, caseInsensitive)
+				})
+		}
 	}
 }
 

@@ -25,57 +25,33 @@ const (
 	// LikeConstant is used when comparing against a constant string with no
 	// wildcards.
 	LikeConstant
-	// LikeConstantNegate is used when comparing against a constant string with
-	// no wildcards, and the result is negated.
-	LikeConstantNegate
 	// LikeContains is used when comparing against a constant substring.
 	LikeContains
-	// LikeContainsNegate is used when comparing against a constant substring,
-	// and the result is negated.
-	LikeContainsNegate
-	// LikeNeverMatch doesn't match anything.
-	LikeNeverMatch
 	// LikePrefix is used when comparing against a constant prefix.
 	LikePrefix
-	// LikePrefixNegate is used when comparing against a constant prefix, and
-	// the result is negated.
-	LikePrefixNegate
 	// LikeRegexp is the default slow case when we need to fallback to RegExp
 	// matching.
 	LikeRegexp
-	// LikeRegexpNegate is the default slow case when we need to fallback to
-	// RegExp matching, but the result is negated.
-	LikeRegexpNegate
 	// LikeSkeleton is used when comparing against a "skeleton" string (of the
 	// form '%foo%bar%' with any number of "skeleton words").
 	LikeSkeleton
-	// LikeSkeletonNegate is used when comparing against a "skeleton" string (of
-	// the form '%foo%bar%' with any number of "skeleton words"), and the result
-	// is negated.
-	LikeSkeletonNegate
 	// LikeSuffix is used when comparing against a constant suffix.
 	LikeSuffix
-	// LikeSuffixNegate is used when comparing against a constant suffix, and
-	// the result is negated.
-	LikeSuffixNegate
 )
 
 // GetLikeOperatorType returns LikeOpType corresponding to the inputs.
 //
 // The second return parameter always contains a single []byte, unless
 // "skeleton" LikeOpType is returned.
-func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, [][]byte, error) {
+func GetLikeOperatorType(pattern string, caseInsensitive bool) (LikeOpType, [][]byte, error) {
 	if pattern == "" {
-		if negate {
-			return LikeConstantNegate, [][]byte{{}}, nil
-		}
 		return LikeConstant, [][]byte{{}}, nil
 	}
 	if pattern == "%" {
-		if negate {
-			return LikeNeverMatch, [][]byte{{}}, nil
-		}
 		return LikeAlwaysMatch, [][]byte{{}}, nil
+	}
+	if caseInsensitive {
+		pattern = strings.ToUpper(pattern)
 	}
 	hasEscape := strings.Contains(pattern, `\`)
 	if !hasEscape && len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
@@ -94,30 +70,18 @@ func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, [][]byte, err
 		lastChar := pattern[len(pattern)-1]
 		if !isWildcard(firstChar) && !isWildcard(lastChar) {
 			// No wildcards, so this is just an exact string match.
-			if negate {
-				return LikeConstantNegate, [][]byte{[]byte(pattern)}, nil
-			}
 			return LikeConstant, [][]byte{[]byte(pattern)}, nil
 		}
 		if firstChar == '%' && !isWildcard(lastChar) {
 			suffix := pattern[1:]
-			if negate {
-				return LikeSuffixNegate, [][]byte{[]byte(suffix)}, nil
-			}
 			return LikeSuffix, [][]byte{[]byte(suffix)}, nil
 		}
 		if lastChar == '%' && !isWildcard(firstChar) {
 			prefix := pattern[:len(pattern)-1]
-			if negate {
-				return LikePrefixNegate, [][]byte{[]byte(prefix)}, nil
-			}
 			return LikePrefix, [][]byte{[]byte(prefix)}, nil
 		}
 		if firstChar == '%' && lastChar == '%' {
 			contains := pattern[1 : len(pattern)-1]
-			if negate {
-				return LikeContainsNegate, [][]byte{[]byte(contains)}, nil
-			}
 			return LikeContains, [][]byte{[]byte(contains)}, nil
 		}
 	}
@@ -136,15 +100,9 @@ func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, [][]byte, err
 			skeleton = append(skeleton, pat[:idx])
 			pat = pat[idx+1:]
 		}
-		if negate {
-			return LikeSkeletonNegate, skeleton, nil
-		}
 		return LikeSkeleton, skeleton, nil
 	}
 	// Default (slow) case: execute as a regular expression match.
-	if negate {
-		return LikeRegexpNegate, [][]byte{[]byte(pattern)}, nil
-	}
 	return LikeRegexp, [][]byte{[]byte(pattern)}, nil
 }
 

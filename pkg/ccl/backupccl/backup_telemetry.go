@@ -65,6 +65,7 @@ const (
 	telemetryOptionSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	telemetryOptionSkipMissingViews          = "skip_missing_views"
 	telemetryOptionSkipLocalitiesCheck       = "skip_localities_check"
+	telemetryOptionSchemaOnly                = "schema_only"
 )
 
 // logBackupTelemetry publishes an eventpb.RecoveryEvent about a manually
@@ -396,6 +397,9 @@ func logRestoreTelemetry(
 	}
 	if opts.Detached {
 		options = append(options, telemetryOptionDetached)
+	}
+	if opts.SchemaOnly {
+		options = append(options, telemetryOptionSchemaOnly)
 	}
 	sort.Strings(options)
 

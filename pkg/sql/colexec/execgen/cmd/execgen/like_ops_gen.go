@@ -73,7 +73,10 @@ func genLikeOps(
 			return err
 		}
 		bytesRepresentation := toPhysicalRepresentation(types.BytesFamily, anyWidth)
-		makeOverload := func(name string, rightGoType string, assignFunc func(targetElem, leftElem, rightElem string) string) *twoArgsResolvedOverload {
+		makeOverload := func(
+			name string, rightGoType string, caseInsensitive bool,
+			assignFunc func(targetElem, leftElem, rightElem string) string,
+		) *twoArgsResolvedOverload {
 			base := &overloadBase{
 				Name: name,
 			}
@@ -112,23 +115,43 @@ func genLikeOps(
 			}
 			rightTypeOverload.WidthOverloads[0] = rightWidthOverload
 			return &twoArgsResolvedOverload{
-				overloadBase: base,
-				Left:         leftWidthOverload,
-				Right:        rightWidthOverload,
+				overloadBase:    base,
+				Left:            leftWidthOverload,
+				Right:           rightWidthOverload,
+				Negatable:       true,
+				CaseInsensitive: caseInsensitive,
 			}
 		}
+		caseInsensitivePrelude := func(leftElem string) string {
+			return fmt.Sprintf(`if _caseInsensitive {
+						%[1]s = bytes.ToUpper(%[1]s)
+					}`, leftElem)
+		}
+		// makeSimpleOverload returns the overload for "simple" patterns which
+		// call a single method from 'bytes' package for comparison.
+		makeSimpleOverload := func(name string, bytesFunc string) *twoArgsResolvedOverload {
+			return makeOverload(name, bytesRepresentation, true, /* caseInsensitive */
+				func(targetElem, leftElem, rightElem string) string {
+					return fmt.Sprintf(
+						`%[4]s
+						%[1]s = bytes.%[5]s(%[2]s, %[3]s) != _negate`,
+						targetElem, leftElem, rightElem, caseInsensitivePrelude(leftElem), bytesFunc)
+				})
+		}
 		// makeSkeletonAssignFunc returns a string that assigns 'targetElem' to
-		// the result of evaluation 'leftElem' (LIKE | NOT LIKE) pattern where
-		// pattern is of the form '%word1%word2%...%' where "words" come from
-		// 'rightElem' (which is [][]byte).
+		// the result of evaluation
+		//   'leftElem' (LIKE | NOT LIKE | ILIKE | NOT ILIKE) pattern
+		// where pattern is of the form '%word1%word2%...%' where "words" come
+		// from 'rightElem' (which is [][]byte).
 		//
 		// The logic for evaluating such expression is that for each word we
 		// find its first occurrence in the unprocessed part of 'leftElem'. If
 		// it is not found, then 'leftElem' doesn't match the pattern, if it is
 		// found, then we advance 'leftElem' right past that first occurrence.
-		makeSkeletonAssignFunc := func(targetElem, leftElem, rightElem, comparison string) string {
+		makeSkeletonAssignFunc := func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf(`
 				{
+					%[4]s
 					var idx, skeletonIdx int
 					for skeletonIdx < len(%[3]s) {
 						idx = bytes.Index(%[2]s, %[3]s[skeletonIdx])
@@ -138,40 +161,25 @@ func genLikeOps(
 						%[2]s = %[2]s[idx+len(%[3]s[skeletonIdx]):]
 						skeletonIdx++
 					}
-					%[1]s = skeletonIdx %[4]s len(%[3]s)
-				}`, targetElem, leftElem, rightElem, comparison)
+					%[1]s = skeletonIdx == len(%[3]s) != _negate
+				}`, targetElem, leftElem, rightElem, caseInsensitivePrelude(leftElem))
 		}
 		overloads := []*twoArgsResolvedOverload{
-			makeOverload("Prefix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = bytes.HasPrefix(%s, %s)", targetElem, leftElem, rightElem)
-			}),
-			makeOverload("Suffix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = bytes.HasSuffix(%s, %s)", targetElem, leftElem, rightElem)
-			}),
-			makeOverload("Contains", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = bytes.Contains(%s, %s)", targetElem, leftElem, rightElem)
-			}),
-			makeOverload("Skeleton", "[][]byte", func(targetElem, leftElem, rightElem string) string {
-				return makeSkeletonAssignFunc(targetElem, leftElem, rightElem, "==")
-			}),
-			makeOverload("Regexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = %s.Match(%s)", targetElem, rightElem, leftElem)
-			}),
-			makeOverload("NotPrefix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", targetElem, leftElem, rightElem)
-			}),
-			makeOverload("NotSuffix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", targetElem, leftElem, rightElem)
-			}),
-			makeOverload("NotContains", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = !bytes.Contains(%s, %s)", targetElem, leftElem, rightElem)
-			}),
-			makeOverload("NotSkeleton", "[][]byte", func(targetElem, leftElem, rightElem string) string {
-				return makeSkeletonAssignFunc(targetElem, leftElem, rightElem, "!=")
-			}),
-			makeOverload("NotRegexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
-				return fmt.Sprintf("%s = !%s.Match(%s)", targetElem, rightElem, leftElem)
-			}),
+			makeSimpleOverload("Prefix", "HasPrefix"),
+			makeSimpleOverload("Suffix", "HasSuffix"),
+			makeSimpleOverload("Contains", "Contains"),
+			makeOverload("Skeleton", "[][]byte", true, /* caseInsensitive */
+				func(targetElem, leftElem, rightElem string) string {
+					return makeSkeletonAssignFunc(
+						targetElem, leftElem, rightElem,
+					)
+				}),
+			// Note that the Regexp overload handles the case sensitivity
+			// itself.
+			makeOverload("Regexp", "*regexp.Regexp", false, /* caseInsensitive */
+				func(targetElem, leftElem, rightElem string) string {
+					return fmt.Sprintf("%s = %s.Match(%s) != _negate", targetElem, rightElem, leftElem)
+				}),
 		}
 		return tmpl.Execute(wr, overloads)
 	}

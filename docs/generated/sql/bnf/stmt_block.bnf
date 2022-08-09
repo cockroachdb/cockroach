@@ -1266,6 +1266,7 @@ unreserved_keyword ::=
 	| 'RUNNING'
 	| 'SCHEDULE'
 	| 'SCHEDULES'
+	| 'SCHEMA_ONLY'
 	| 'SCROLL'
 	| 'SETTING'
 	| 'SETTINGS'
@@ -2492,6 +2493,7 @@ restore_options ::=
 	| 'NEW_DB_NAME' '=' string_or_placeholder
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'TENANT' '=' string_or_placeholder
+	| 'SCHEMA_ONLY'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*

@@ -31,8 +31,9 @@ func GetLikeProjectionOperator(
 	resultIdx int,
 	pattern string,
 	negate bool,
+	caseInsensitive bool,
 ) (colexecop.Operator, error) {
-	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, negate)
+	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, caseInsensitive)
 	if err != nil {
 		return nil, err
 	}
@@ -45,45 +46,29 @@ func GetLikeProjectionOperator(
 		outputIdx:      resultIdx,
 	}
 	switch likeOpType {
-	case colexeccmp.LikeConstant:
-		return &projEQBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        pat,
-		}, nil
-	case colexeccmp.LikeConstantNegate:
-		return &projNEBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        pat,
-		}, nil
-	case colexeccmp.LikeNeverMatch:
-		// Use an empty not-prefix operator to get correct NULL behavior.
-		return &projNotPrefixBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        []byte{},
-		}, nil
 	case colexeccmp.LikeAlwaysMatch:
-		// Use an empty prefix operator to get correct NULL behavior.
+		// Use an empty prefix operator to get correct NULL behavior. We don't
+		// need to pay attention to the case sensitivity here since the pattern
+		// will always match anyway.
 		return &projPrefixBytesBytesConstOp{
 			projConstOpBase: base,
 			constArg:        []byte{},
+			negate:          negate,
 		}, nil
-	case colexeccmp.LikeSuffix:
-		return &projSuffixBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        pat,
-		}, nil
-	case colexeccmp.LikeSuffixNegate:
-		return &projNotSuffixBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        pat,
-		}, nil
-	case colexeccmp.LikePrefix:
-		return &projPrefixBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        pat,
-		}, nil
-	case colexeccmp.LikePrefixNegate:
-		return &projNotPrefixBytesBytesConstOp{
+	case colexeccmp.LikeConstant:
+		if caseInsensitive {
+			// We don't have an equivalent projection operator that would
+			// convert the argument to capital letters, so for now we fall back
+			// to the default comparison operator.
+			return nil, errors.New("ILIKE and NOT ILIKE aren't supported with a constant pattern")
+		}
+		if negate {
+			return &projNEBytesBytesConstOp{
+				projConstOpBase: base,
+				constArg:        pat,
+			}, nil
+		}
+		return &projEQBytesBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
@@ -91,39 +76,39 @@ func GetLikeProjectionOperator(
 		return &projContainsBytesBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
 		}, nil
-	case colexeccmp.LikeContainsNegate:
-		return &projNotContainsBytesBytesConstOp{
+	case colexeccmp.LikePrefix:
+		return &projPrefixBytesBytesConstOp{
 			projConstOpBase: base,
 			constArg:        pat,
-		}, nil
-	case colexeccmp.LikeSkeleton:
-		return &projSkeletonBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        patterns,
-		}, nil
-	case colexeccmp.LikeSkeletonNegate:
-		return &projNotSkeletonBytesBytesConstOp{
-			projConstOpBase: base,
-			constArg:        patterns,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
 		}, nil
 	case colexeccmp.LikeRegexp:
-		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
+		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), caseInsensitive, '\\')
 		if err != nil {
 			return nil, err
 		}
 		return &projRegexpBytesBytesConstOp{
 			projConstOpBase: base,
 			constArg:        re,
+			negate:          negate,
 		}, nil
-	case colexeccmp.LikeRegexpNegate:
-		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
-		if err != nil {
-			return nil, err
-		}
-		return &projNotRegexpBytesBytesConstOp{
+	case colexeccmp.LikeSkeleton:
+		return &projSkeletonBytesBytesConstOp{
 			projConstOpBase: base,
-			constArg:        re,
+			constArg:        patterns,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
+		}, nil
+	case colexeccmp.LikeSuffix:
+		return &projSuffixBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        pat,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
 		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported like op type %d", likeOpType)
