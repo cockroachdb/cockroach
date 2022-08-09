@@ -22,13 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -993,53 +991,4 @@ WHERE
 			finishedSchemaChange.Wait()
 		})
 	}
-}
-
-// TODO (Chengxiong): Remove this version gating test in 22.2
-func TestNewSchemaChangerVersionGating(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.EnableDeclarativeSchemaChanger),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		tdb.Exec(t, `CREATE DATABASE db`)
-		tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY);`)
-
-		results := tdb.QueryStr(t, "EXPLAIN (DDL) DROP TABLE db.t;")
-		require.Equal(t, len(results), 1)
-		require.Equal(t, len(results[0]), 1)
-	})
-
-	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
-		// Override binary version to be older.
-		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.EnableDeclarativeSchemaChanger - 1),
-		}
-
-		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
-
-		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		tdb.Exec(t, `CREATE DATABASE db`)
-		tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY);`)
-
-		_, err := sqlDB.Query(`EXPLAIN (DDL) DROP TABLE db.t;`)
-		require.Error(t, err)
-		require.Equal(
-			t,
-			"pq: cannot explain a statement which is not supported by the declarative schema changer",
-			err.Error(),
-		)
-	})
 }
