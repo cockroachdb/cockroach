@@ -1,0 +1,16 @@
+# LogicTest: !metamorphic
+# Disabled to allow us to validate create as with large batch sizes.
+
+# Regression test for #81554, where tried to do gigantic batches for CTAS in
+# explicit transactions. Use a fixed command size, so that an error is decoupled
+# fom the default size.
+statement ok
+SET CLUSTER SETTING kv.raft.command.max_size='5m'
+
+statement ok
+BEGIN;
+CREATE TABLE source_tbl_huge AS SELECT 1::CHAR(256) FROM generate_series(1, 500000);
+COMMIT;
+
+statement ok
+SET CLUSTER SETTING kv.raft.command.max_size to default
