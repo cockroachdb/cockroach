@@ -14,7 +14,6 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -53,13 +52,10 @@ func buildOpaque(
 		if err := p.checkNoConflictingCursors(stmt); err != nil {
 			return nil, err
 		}
-		// TODO (Chengxiong): Remove this version gate in 22.2
-		if evalCtx.Settings.Version.IsActive(ctx, clusterversion.EnableDeclarativeSchemaChanger) {
-			var err error
-			plan, err = p.SchemaChange(ctx, stmt)
-			if err != nil {
-				return nil, err
-			}
+		var err error
+		plan, err = p.SchemaChange(ctx, stmt)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if plan == nil {
