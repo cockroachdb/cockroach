@@ -62,14 +62,13 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
-	format := sstable.TableFormatRocksDBv2
+	format := sstable.TableFormatPebblev1
 	// Cases are ordered from newer to older versions.
 	switch {
 	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionRangeKeys):
 		format = sstable.TableFormatPebblev2 // Range keys.
-	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionBlockProperties):
-		format = sstable.TableFormatPebblev1 // Block properties.
 	}
+
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 	if format < sstable.TableFormatPebblev1 {
 		// Block properties aren't available at this version. Disable collection.

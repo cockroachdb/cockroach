@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/pebble/sstable"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,43 +72,6 @@ func makePebbleSST(t testing.TB, kvs []MVCCKeyValue, ingestion bool) []byte {
 	err := w.Finish()
 	require.NoError(t, err)
 	return f.Data()
-}
-
-func TestMakeIngestionWriterOptions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		name string
-		st   *cluster.Settings
-		want sstable.TableFormat
-	}{
-		{
-			name: "before feature gate",
-			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.EnablePebbleFormatVersionBlockProperties-1),
-				clusterversion.TestingBinaryMinSupportedVersion,
-				true,
-			),
-			want: sstable.TableFormatRocksDBv2,
-		},
-		{
-			name: "at feature gate",
-			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.EnablePebbleFormatVersionBlockProperties),
-				clusterversion.TestingBinaryMinSupportedVersion,
-				true,
-			),
-			want: sstable.TableFormatPebblev1,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			opts := MakeIngestionWriterOptions(ctx, tc.st)
-			require.Equal(t, tc.want, opts.TableFormat)
-		})
-	}
 }
 
 func TestSSTWriterRangeKeysUnsupported(t *testing.T) {
