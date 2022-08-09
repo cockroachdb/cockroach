@@ -86,8 +86,10 @@ EXECUTE a(3, 1)
 query error could not parse "foo" as type int
 EXECUTE a('foo', 1)
 
-query error expected EXECUTE parameter expression to have type int, but '3.5' has type decimal
+query I
 EXECUTE a(3.5, 1)
+----
+5
 
 query error aggregate functions are not allowed in EXECUTE parameter
 EXECUTE a(max(3), 1)
@@ -162,13 +164,15 @@ EXECUTE i(2)
 query error could not parse "foo" as type int
 EXECUTE i('foo')
 
-query error expected EXECUTE parameter expression to have type int, but '2.3' has type decimal
-EXECUTE i(2.3)
-
 query I
-EXECUTE i(3.3::int)
+EXECUTE i(3.3)
 ----
 4
+
+query I
+EXECUTE i(4.3::int)
+----
+5
 
 query I colnames
 EXECUTE s
@@ -177,6 +181,7 @@ a
 1
 2
 3
+4
 
 # DISCARD ROWS drops the results, but does not affect the schema or the
 # internal plan.
@@ -286,12 +291,13 @@ EXECUTE wrongTypeImpossibleCast('crabgas')
 statement ok
 PREPARE s AS SELECT a FROM t; PREPARE p1 AS UPSERT INTO t(a) VALUES($1) RETURNING a
 
-query I
+query I rowsort
 EXECUTE s
 ----
 1
 2
 3
+4
 
 query I
 EXECUTE p1(123)
@@ -301,31 +307,34 @@ EXECUTE p1(123)
 statement ok
 PREPARE p2 AS UPDATE t SET a = a + $1 RETURNING a
 
-query I
+query I rowsort
 EXECUTE s
 ----
 1
 2
 3
+4
 123
 
-query I
+query I rowsort
 EXECUTE p2(123)
 ----
 124
 125
 126
+127
 246
 
 statement ok
 PREPARE p3 AS DELETE FROM t WHERE a = $1 RETURNING a
 
-query I
+query I rowsort
 EXECUTE s
 ----
 124
 125
 126
+127
 246
 
 query I
@@ -1418,5 +1427,7 @@ CREATE TABLE t81315_2 (
 PREPARE q81315_2 AS SELECT * FROM t81315_2 WHERE k = $1;
 INSERT INTO t81315_2 VALUES (1, 1)
 
-statement error expected EXECUTE parameter expression to have type int
+query II
 EXECUTE q81315_2(1::DECIMAL)
+----
+1  1
