@@ -769,6 +769,9 @@ message SchemaChangeGCProgress {
     // This element has been deleted. The job is done when all elements are in
     // this state.
     CLEARED = 2;
+    // The index has been deleted, but we need to wait for the data to be
+    // removed before the relevant descriptors and zone configs can be deleted.
+    WAITING_FOR_MVCC_GC = 3;
   }
 
   message IndexProgress {

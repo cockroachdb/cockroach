@@ -14,6 +14,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -246,7 +247,12 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		Indexes:  droppedIndexes,
 		ParentID: tableDesc.ID,
 	}
-	record := CreateGCJobRecord(jobDesc, p.User(), details)
+	record := CreateGCJobRecord(
+		jobDesc, p.User(), details,
+		!p.execCfg.Settings.Version.IsActive(
+			ctx, clusterversion.UseDelRangeInGCJob,
+		),
+	)
 	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
 		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
 		return err

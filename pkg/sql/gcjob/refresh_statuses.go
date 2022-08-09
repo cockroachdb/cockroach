@@ -141,7 +141,7 @@ func updateStatusForGCElements(
 	}); err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			log.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
-			markTableGCed(ctx, tableID, progress)
+			markTableGCed(ctx, tableID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 			return false, true, maxDeadline
 		}
 		log.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)

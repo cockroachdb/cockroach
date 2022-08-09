@@ -58,6 +58,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 				<-asyncNotification
 				return nil
 			},
+			SkipWaitingForMVCCGC: true,
 		},
 	}
 	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
@@ -174,6 +175,12 @@ SELECT job_id
 		})
 	}
 
+	knobs := base.TestingKnobs{
+		GCJob: &sql.GCJobTestingKnobs{
+			SkipWaitingForMVCCGC: true,
+		},
+	}
+
 	// This is a regression test for a bug which was caused by not using hydrated
 	// descriptors in the index gc job to re-write zone config subzone spans.
 	// This test ensures that subzone spans can be re-written by creating a
@@ -191,7 +198,9 @@ SELECT job_id
 
 		defer log.Scope(t).Close(t)
 		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{Knobs: knobs},
+		})
 		defer tc.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -231,7 +240,9 @@ SELECT job_id
 
 		defer log.Scope(t).Close(t)
 		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{Knobs: knobs},
+		})
 		defer tc.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
