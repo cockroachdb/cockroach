@@ -17,7 +17,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -721,18 +720,6 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.IsLeaseRequest = ba.IsSingleRequestLeaseRequest()
 		if ba.AppliesTimestampCache() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
-		} else {
-			if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.DontProposeWriteTimestampForLeaseTransfers) {
-				// For misc requests, use WriteTimestamp to propagate a clock signal. This
-				// is particularly important for lease transfers, as it assures that the
-				// follower getting the lease will have a clock above the start time of
-				// its lease.
-				//
-				// This is no longer needed in v22.1 because nodes running v22.1 and
-				// above will update their clock directly from the new lease's start
-				// time.
-				res.Replicated.WriteTimestamp = r.store.Clock().Now()
-			}
 		}
 		res.Replicated.Delta = ms.ToStatsDelta()
 
