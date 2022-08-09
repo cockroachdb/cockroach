@@ -7,6 +7,7 @@ go_library(
         "alloc.go",
         "blocking_buffer.go",
         "chan_buffer.go",
+        "chunked_event_queue.go",
         "err_buffer.go",
         "event.go",
         "metrics.go",
@@ -38,6 +39,7 @@ go_test(
         "alloc_test.go",
         "bench_test.go",
         "blocking_buffer_test.go",
+        "chunked_event_queue_test.go",
     ],
     embed = [":kvevent"],
     deps = [
@@ -58,6 +60,7 @@ go_test(
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
