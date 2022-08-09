@@ -202,12 +202,6 @@ const (
 	// such as end_time, initial_scan_only, and setting the value of initial_scan
 	// to 'yes|no|only'
 	EnableNewChangefeedOptions
-	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
-	// accounting for incremental schema changes.
-	PreSeedSpanCountTable
-	// SeedSpanCountTable seeds system.span_count with the number of committed
-	// tenant spans.
-	SeedSpanCountTable
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -370,14 +364,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableNewChangefeedOptions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
-	},
-	{
-		Key:     PreSeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 110},
-	},
-	{
-		Key:     SeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
 	},
 	{
 		Key:     V22_1,
