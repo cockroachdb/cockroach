@@ -115,7 +115,7 @@ func TestSetMinVersion(t *testing.T) {
 
 	// Advancing the store cluster version to PebbleFormatBlockPropertyCollector
 	// should also advance the store's format major version.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector))
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.TODOPreV22_1))
 	require.NoError(t, err)
 	require.Equal(t, pebble.FormatBlockPropertyCollector, p.db.FormatMajorVersion())
 
