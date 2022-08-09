@@ -13,7 +13,6 @@ package stateloader
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -117,12 +116,9 @@ func WriteInitialRangeState(
 	initialGCThreshold := hlc.Timestamp{}
 	initialMS := enginepb.MVCCStats{}
 
-	writeRaftAppliedIndexTerm :=
-		clusterversion.ClusterVersion{Version: replicaVersion}.IsActiveVersion(
-			clusterversion.ByKey(clusterversion.AddRaftAppliedIndexTermMigration))
 	if _, err := WriteInitialReplicaState(
 		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
-		replicaVersion, writeRaftAppliedIndexTerm,
+		replicaVersion, true, /* 22.1:AddRaftAppliedIndexTermMigration */
 	); err != nil {
 		return err
 	}
