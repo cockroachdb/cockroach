@@ -284,14 +284,6 @@ func (w *wrappingCostController) getBackfillRangeCallback() func(int64) (func(),
 	return w.inner.getBackfillRangeCallback()
 }
 
-const (
-	changefeedCheckpointHistMaxLatency = 30 * time.Second
-	changefeedBatchHistMaxLatency      = 30 * time.Second
-	changefeedFlushHistMaxLatency      = 1 * time.Minute
-	admitLatencyMaxValue               = 1 * time.Minute
-	commitLatencyMaxValue              = 10 * time.Minute
-)
-
 var (
 	metaChangefeedForwardedResolvedMessages = metric.Metadata{
 		Name:        "changefeed.forwarded_resolved_messages",
@@ -450,20 +442,15 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 	a := &AggMetrics{
 		ErrorRetries:    b.Counter(metaChangefeedErrorRetries),
 		EmittedMessages: b.Counter(metaChangefeedEmittedMessages),
-		MessageSize: b.Histogram(metaMessageSize,
-			histogramWindow, 10<<20 /* 10MB max message size */, 1),
-		EmittedBytes: b.Counter(metaChangefeedEmittedBytes),
-		FlushedBytes: b.Counter(metaChangefeedFlushedBytes),
-		Flushes:      b.Counter(metaChangefeedFlushes),
+		MessageSize:     b.Histogram(metaMessageSize, histogramWindow, metric.DataSize16MBBuckets),
+		EmittedBytes:    b.Counter(metaChangefeedEmittedBytes),
+		FlushedBytes:    b.Counter(metaChangefeedFlushedBytes),
+		Flushes:         b.Counter(metaChangefeedFlushes),
 
-		BatchHistNanos: b.Histogram(metaChangefeedBatchHistNanos,
-			histogramWindow, changefeedBatchHistMaxLatency.Nanoseconds(), 1),
-		FlushHistNanos: b.Histogram(metaChangefeedFlushHistNanos,
-			histogramWindow, changefeedFlushHistMaxLatency.Nanoseconds(), 2),
-		CommitLatency: b.Histogram(metaCommitLatency,
-			histogramWindow, commitLatencyMaxValue.Nanoseconds(), 1),
-		AdmitLatency: b.Histogram(metaAdmitLatency, histogramWindow,
-			admitLatencyMaxValue.Nanoseconds(), 1),
+		BatchHistNanos:            b.Histogram(metaChangefeedBatchHistNanos, histogramWindow, metric.BatchProcessLatencyBuckets),
+		FlushHistNanos:            b.Histogram(metaChangefeedFlushHistNanos, histogramWindow, metric.BatchProcessLatencyBuckets),
+		CommitLatency:             b.Histogram(metaCommitLatency, histogramWindow, metric.BatchProcessLatencyBuckets),
+		AdmitLatency:              b.Histogram(metaAdmitLatency, histogramWindow, metric.BatchProcessLatencyBuckets),
 		BackfillCount:             b.Gauge(metaChangefeedBackfillCount),
 		BackfillPendingRanges:     b.Gauge(metaChangefeedBackfillPendingRanges),
 		RunningCount:              b.Gauge(metaChangefeedRunning),
@@ -566,17 +553,16 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		AggMetrics:        newAggregateMetrics(histogramWindow),
-		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
-		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
-		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
-		Failures:          metric.NewCounter(metaChangefeedFailures),
-		QueueTimeNanos:    metric.NewCounter(metaEventQueueTime),
-		CheckpointHistNanos: metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow,
-			changefeedCheckpointHistMaxLatency.Nanoseconds(), 2),
-		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
-		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
-		ReplanCount:     metric.NewCounter(metaChangefeedReplanCount),
+		AggMetrics:          newAggregateMetrics(histogramWindow),
+		KVFeedMetrics:       kvevent.MakeMetrics(histogramWindow),
+		SchemaFeedMetrics:   schemafeed.MakeMetrics(histogramWindow),
+		ResolvedMessages:    metric.NewCounter(metaChangefeedForwardedResolvedMessages),
+		Failures:            metric.NewCounter(metaChangefeedFailures),
+		QueueTimeNanos:      metric.NewCounter(metaEventQueueTime),
+		CheckpointHistNanos: metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow, metric.IOLatencyBuckets),
+		FrontierUpdates:     metric.NewCounter(metaChangefeedFrontierUpdates),
+		ThrottleMetrics:     cdcutils.MakeMetrics(histogramWindow),
+		ReplanCount:         metric.NewCounter(metaChangefeedReplanCount),
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)

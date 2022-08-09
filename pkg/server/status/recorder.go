@@ -529,26 +529,6 @@ type registryRecorder struct {
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
 	switch mtr := mtr.(type) {
 	case *metric.Histogram:
-		// TODO(mrtracy): Where should this comment go for better
-		// visibility?
-		//
-		// Proper support of Histograms for time series is difficult and
-		// likely not worth the trouble. Instead, we aggregate a windowed
-		// histogram at fixed quantiles. If the scraping window and the
-		// histogram's eviction duration are similar, this should give
-		// good results; if the two durations are very different, we either
-		// report stale results or report only the more recent data.
-		//
-		// Additionally, we can only aggregate max/min of the quantiles;
-		// roll-ups don't know that and so they will return mathematically
-		// nonsensical values, but that seems acceptable for the time
-		// being.
-		curr, _ := mtr.Windowed()
-		for _, pt := range recordHistogramQuantiles {
-			fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
-		}
-		fn(name+"-count", float64(curr.TotalCount()))
-	case *metric.HistogramV2:
 		n := float64(mtr.TotalCountWindowed())
 		fn(name+"-count", n)
 		avg := mtr.TotalSumWindowed() / n
