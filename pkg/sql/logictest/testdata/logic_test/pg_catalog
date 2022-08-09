@@ -3906,7 +3906,7 @@ objoid      classoid    objsubid  description
 4294967179  4294967123  0         foreign key constraints
 4294967178  4294967123  0         resource_groups was created for compatibility and is currently unimplemented
 4294967177  4294967123  0         role_column_grants was created for compatibility and is currently unimplemented
-4294967176  4294967123  0         role_routine_grants was created for compatibility and is currently unimplemented
+4294967176  4294967123  0         privileges granted on functions (incomplete; only contains privileges of user-defined functions)
 4294967175  4294967123  0         privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
 4294967174  4294967123  0         role_udt_grants was created for compatibility and is currently unimplemented
 4294967173  4294967123  0         role_usage_grants was created for compatibility and is currently unimplemented
