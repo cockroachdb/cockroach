@@ -495,6 +495,10 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	// -----------
 	// Inherit cardinality from input.
 	rel.Cardinality = inputProps.Cardinality
+	if indexJoin.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
 
 	// Statistics
 	// ----------
