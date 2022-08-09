@@ -37,10 +37,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.FuncName.ObjectNamePrefix = resName
 
+	// By default, we do early-binding to track cross references. User is allowed
+	// to set the "user_defined_function_early_binding" session data to false to
+	// have late-binding.
 	b.insideFuncDef = true
-	b.trackSchemaDeps = true
+	b.trackSchemaDeps = b.evalCtx.SessionData().UserDefinedFunctionEarlyBinding
 	// Make sure datasource names are qualified.
-	b.qualifyDataSourceNamesInAST = true
+	b.qualifyDataSourceNamesInAST = b.evalCtx.SessionData().UserDefinedFunctionEarlyBinding
 	defer func() {
 		b.insideFuncDef = false
 		b.trackSchemaDeps = false

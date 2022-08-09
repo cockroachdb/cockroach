@@ -271,6 +271,17 @@ message LocalOnlySessionData {
   // given probability. This should only be used in test scenarios and is very
   // much a non-production setting.
   double testing_optimizer_disable_rule_probability = 73;
+  // UserDefinedFunctionEarlyBinding is used to turn on/off early binding of
+  // referenced objects within a user-defined function body when a CREATE
+  // FUNCTION statement is run. With early binding on, cross-references are
+  // tracked at function definition time to prevent unexpected schema changes
+  // like dropping a table used by the function. Turning this switch off means
+  // we will have late binding with which references are not tracked. In that
+  // scene, schema changes to referenced objects could potentially break the
+  // function.
+  // Note that references of user-defined types, including table implicit types,
+  // used in function signature will still be tracked when early binding is off.
+  bool user_defined_function_early_binding = 74;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
