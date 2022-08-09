@@ -10,7 +10,7 @@ go_library(
 
 go_test(
     name = "serverccl_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "admin_test.go",
         "chart_catalog_test.go",
