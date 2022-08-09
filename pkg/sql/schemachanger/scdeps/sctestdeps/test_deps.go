@@ -859,6 +859,11 @@ func (s *TestState) CheckPausepoint(name string) error {
 	return nil
 }
 
+// UseLegacyGCJob is false.
+func (s *TestState) UseLegacyGCJob(ctx context.Context) bool {
+	return false
+}
+
 // UpdateSchemaChangeJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, fn scexec.JobUpdateCallback,

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -43,8 +44,12 @@ func TestDropTableLowersSpanCount(t *testing.T) {
 
 	tenantID := roachpb.MakeTenantID(10)
 	tenant, err := ts.StartTenant(ctx, base.TestTenantArgs{
-		TenantID:     tenantID,
-		TestingKnobs: base.TestingKnobs{},
+		TenantID: tenantID,
+		TestingKnobs: base.TestingKnobs{
+			GCJob: &sql.GCJobTestingKnobs{
+				SkipWaitingForMVCCGC: true,
+			},
+		},
 	})
 	require.NoError(t, err)
 

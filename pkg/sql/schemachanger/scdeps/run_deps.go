@@ -123,6 +123,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				statsRefresher:     d.statsRefresher,
 				schemaChangerJobID: d.job.ID(),
 				kvTrace:            d.kvTrace,
+				settings:           d.settings,
 			},
 			backfiller: d.backfiller,
 			merger:     d.merger,

@@ -27,12 +27,15 @@ import (
 // markTableGCed updates the job payload details to indicate that the specified
 // table was GC'd.
 func markTableGCed(
-	ctx context.Context, tableID descpb.ID, progress *jobspb.SchemaChangeGCProgress,
+	ctx context.Context,
+	tableID descpb.ID,
+	progress *jobspb.SchemaChangeGCProgress,
+	status jobspb.SchemaChangeGCProgress_Status,
 ) {
 	for i := range progress.Tables {
 		tableProgress := &progress.Tables[i]
 		if tableProgress.ID == tableID {
-			tableProgress.Status = jobspb.SchemaChangeGCProgress_CLEARED
+			tableProgress.Status = status
 			if log.V(2) {
 				log.Infof(ctx, "determined table %d is GC'd", tableID)
 			}
@@ -45,12 +48,13 @@ func markIndexGCed(
 	ctx context.Context,
 	garbageCollectedIndexID descpb.IndexID,
 	progress *jobspb.SchemaChangeGCProgress,
+	nextStatus jobspb.SchemaChangeGCProgress_Status,
 ) {
 	// Update the job details to remove the dropped indexes.
 	for i := range progress.Indexes {
 		indexToUpdate := &progress.Indexes[i]
 		if indexToUpdate.IndexID == garbageCollectedIndexID {
-			indexToUpdate.Status = jobspb.SchemaChangeGCProgress_CLEARED
+			indexToUpdate.Status = nextStatus
 			log.Infof(ctx, "marked index %d as GC'd", garbageCollectedIndexID)
 		}
 	}
@@ -104,10 +108,16 @@ func initializeProgress(
 	} else if len(progress.Tables) != len(details.Tables) || len(progress.Indexes) != len(details.Indexes) {
 		update = true
 		for _, table := range details.Tables {
-			progress.Tables = append(progress.Tables, jobspb.SchemaChangeGCProgress_TableProgress{ID: table.ID})
+			progress.Tables = append(progress.Tables, jobspb.SchemaChangeGCProgress_TableProgress{
+				ID:     table.ID,
+				Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR,
+			})
 		}
 		for _, index := range details.Indexes {
-			progress.Indexes = append(progress.Indexes, jobspb.SchemaChangeGCProgress_IndexProgress{IndexID: index.IndexID})
+			progress.Indexes = append(progress.Indexes, jobspb.SchemaChangeGCProgress_IndexProgress{
+				IndexID: index.IndexID,
+				Status:  jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR,
+			})
 		}
 	}
 
@@ -147,14 +157,23 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 // runningStatusGC generates a RunningStatus string which always remains under
 // a certain size, given any progress struct.
 func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus {
+	var anyWaitingForMVCCGC bool
+	maybeSetAnyDeletedOrWaitingForMVCCGC := func(status jobspb.SchemaChangeGCProgress_Status) {
+		switch status {
+		case jobspb.SchemaChangeGCProgress_WAITING_FOR_MVCC_GC:
+			anyWaitingForMVCCGC = true
+		}
+	}
 	tableIDs := make([]string, 0, len(progress.Tables))
 	indexIDs := make([]string, 0, len(progress.Indexes))
 	for _, table := range progress.Tables {
+		maybeSetAnyDeletedOrWaitingForMVCCGC(table.Status)
 		if table.Status == jobspb.SchemaChangeGCProgress_CLEARING {
 			tableIDs = append(tableIDs, strconv.Itoa(int(table.ID)))
 		}
 	}
 	for _, index := range progress.Indexes {
+		maybeSetAnyDeletedOrWaitingForMVCCGC(index.Status)
 		if index.Status == jobspb.SchemaChangeGCProgress_CLEARING {
 			indexIDs = append(indexIDs, strconv.Itoa(int(index.IndexID)))
 		}
@@ -203,11 +222,15 @@ func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus
 		flag = true
 	}
 
-	if !flag {
-		// `flag` not set implies we're not GCing anything.
-		return sql.RunningStatusWaitingGC
+	switch {
+	// `flag` not set implies we're not GCing anything.
+	case !flag && anyWaitingForMVCCGC:
+		return sql.RunningStatusWaitingForMVCCGC
+	case !flag:
+		return sql.RunningStatusWaitingGC // legacy status
+	default:
+		return jobs.RunningStatus(b.String())
 	}
-	return jobs.RunningStatus(b.String())
 }
 
 // getAllTablesWaitingForGC returns a slice with all of the table IDs which have
