@@ -21,9 +21,14 @@ import (
 // pattern, or NOT LIKE if the negate argument is true. The implementation
 // varies depending on the complexity of the pattern.
 func GetLikeOperator(
-	ctx *eval.Context, input colexecop.Operator, colIdx int, pattern string, negate bool,
+	ctx *eval.Context,
+	input colexecop.Operator,
+	colIdx int,
+	pattern string,
+	negate bool,
+	caseInsensitive bool,
 ) (colexecop.Operator, error) {
-	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, negate)
+	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, caseInsensitive)
 	if err != nil {
 		return nil, err
 	}
@@ -33,85 +38,69 @@ func GetLikeOperator(
 		colIdx:         colIdx,
 	}
 	switch likeOpType {
-	case colexeccmp.LikeConstant:
-		return &selEQBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       pat,
-		}, nil
-	case colexeccmp.LikeConstantNegate:
-		return &selNEBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       pat,
-		}, nil
-	case colexeccmp.LikeNeverMatch:
-		// Use an empty not-prefix operator to get correct NULL behavior.
-		return &selNotPrefixBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       []byte{},
-		}, nil
 	case colexeccmp.LikeAlwaysMatch:
-		// Use an empty prefix operator to get correct NULL behavior.
+		// Use an empty prefix operator to get correct NULL behavior. We don't
+		// need to pay attention to the case sensitivity here since the pattern
+		// will always match anyway.
 		return &selPrefixBytesBytesConstOp{
 			selConstOpBase: base,
 			constArg:       []byte{},
+			negate:         negate,
 		}, nil
-	case colexeccmp.LikeSuffix:
-		return &selSuffixBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       pat,
-		}, nil
-	case colexeccmp.LikeSuffixNegate:
-		return &selNotSuffixBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       pat,
-		}, nil
-	case colexeccmp.LikePrefix:
-		return &selPrefixBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       pat,
-		}, nil
-	case colexeccmp.LikePrefixNegate:
-		return &selNotPrefixBytesBytesConstOp{
+	case colexeccmp.LikeConstant:
+		if caseInsensitive {
+			// We don't have an equivalent projection operator that would
+			// convert the argument to capital letters, so for now we fall back
+			// to the default comparison operator.
+			return nil, errors.New("ILIKE and NOT ILIKE aren't supported with a constant pattern")
+		}
+		if negate {
+			return &selNEBytesBytesConstOp{
+				selConstOpBase: base,
+				constArg:       pat,
+			}, nil
+		}
+		return &selEQBytesBytesConstOp{
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
 	case colexeccmp.LikeContains:
 		return &selContainsBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       pat,
+			selConstOpBase:  base,
+			constArg:        pat,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
 		}, nil
-	case colexeccmp.LikeContainsNegate:
-		return &selNotContainsBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       pat,
-		}, nil
-	case colexeccmp.LikeSkeleton:
-		return &selSkeletonBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       patterns,
-		}, nil
-	case colexeccmp.LikeSkeletonNegate:
-		return &selNotSkeletonBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       patterns,
+	case colexeccmp.LikePrefix:
+		return &selPrefixBytesBytesConstOp{
+			selConstOpBase:  base,
+			constArg:        pat,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
 		}, nil
 	case colexeccmp.LikeRegexp:
-		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
+		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), caseInsensitive, '\\')
 		if err != nil {
 			return nil, err
 		}
 		return &selRegexpBytesBytesConstOp{
 			selConstOpBase: base,
 			constArg:       re,
+			negate:         negate,
 		}, nil
-	case colexeccmp.LikeRegexpNegate:
-		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
-		if err != nil {
-			return nil, err
-		}
-		return &selNotRegexpBytesBytesConstOp{
-			selConstOpBase: base,
-			constArg:       re,
+	case colexeccmp.LikeSkeleton:
+		return &selSkeletonBytesBytesConstOp{
+			selConstOpBase:  base,
+			constArg:        patterns,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
+		}, nil
+	case colexeccmp.LikeSuffix:
+		return &selSuffixBytesBytesConstOp{
+			selConstOpBase:  base,
+			constArg:        pat,
+			negate:          negate,
+			caseInsensitive: caseInsensitive,
 		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unsupported like op type %d", likeOpType)

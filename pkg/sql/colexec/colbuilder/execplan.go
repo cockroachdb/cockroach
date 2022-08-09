@@ -1795,6 +1795,12 @@ func addProjection(
 	return colexecbase.NewSimpleProjectOp(op, len(typs), projection), newTypes
 }
 
+func examineLikeOp(op treecmp.ComparisonOperator) (negate bool, caseInsensitive bool) {
+	negate = op.Symbol == treecmp.NotLike || op.Symbol == treecmp.NotILike
+	caseInsensitive = op.Symbol == treecmp.ILike || op.Symbol == treecmp.NotILike
+	return negate, caseInsensitive
+}
+
 func planSelectionOperators(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -1842,10 +1848,11 @@ func planSelectionOperators(
 		lTyp := ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
 			switch cmpOp.Symbol {
-			case treecmp.Like, treecmp.NotLike:
-				negate := cmpOp.Symbol == treecmp.NotLike
+			case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
+				negate, caseInsensitive := examineLikeOp(cmpOp)
 				op, err = colexecsel.GetLikeOperator(
-					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate,
+					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)),
+					negate, caseInsensitive,
 				)
 			case treecmp.In, treecmp.NotIn:
 				negate := cmpOp.Symbol == treecmp.NotIn
@@ -2370,7 +2377,8 @@ func planProjectionExpr(
 	var hasOptimizedOp bool
 	if isCmpProjOp {
 		switch cmpProjOp.Symbol {
-		case treecmp.Like, treecmp.NotLike, treecmp.In, treecmp.NotIn, treecmp.IsDistinctFrom, treecmp.IsNotDistinctFrom:
+		case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike,
+			treecmp.In, treecmp.NotIn, treecmp.IsDistinctFrom, treecmp.IsNotDistinctFrom:
 			hasOptimizedOp = true
 		}
 	}
@@ -2437,11 +2445,11 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			if isCmpProjOp {
 				switch cmpProjOp.Symbol {
-				case treecmp.Like, treecmp.NotLike:
-					negate := cmpProjOp.Symbol == treecmp.NotLike
+				case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
+					negate, caseInsensitive := examineLikeOp(cmpProjOp)
 					op, err = colexecprojconst.GetLikeProjectionOperator(
 						allocator, evalCtx, input, leftIdx, resultIdx,
-						string(tree.MustBeDString(rConstArg)), negate,
+						string(tree.MustBeDString(rConstArg)), negate, caseInsensitive,
 					)
 				case treecmp.In, treecmp.NotIn:
 					negate := cmpProjOp.Symbol == treecmp.NotIn

@@ -20812,7 +20812,7 @@ EXPLAIN (VEC) SELECT c_count, count(*) AS custdist FROM ( SELECT c_custkey, coun
     └ *colexec.hashAggregator
       └ *colexec.hashAggregator
         └ *colexecjoin.hashJoiner
-          ├ *colexecsel.selNotSkeletonBytesBytesConstOp
+          ├ *colexecsel.selSkeletonBytesBytesConstOp
           │ └ *colfetcher.ColBatchScan
           └ *colfetcher.ColBatchScan
 
@@ -20876,7 +20876,7 @@ EXPLAIN (VEC) SELECT p_brand, p_type, p_size, count(distinct ps_suppkey) AS supp
         └ *colexecjoin.hashJoiner
           ├ *rowexec.joinReader
           │ └ *colexec.selectInOpInt64
-          │   └ *colexecsel.selNotPrefixBytesBytesConstOp
+          │   └ *colexecsel.selPrefixBytesBytesConstOp
           │     └ *colexecsel.selNEBytesBytesConstOp
           │       └ *colfetcher.ColBatchScan
           └ *colexecsel.selSkeletonBytesBytesConstOp

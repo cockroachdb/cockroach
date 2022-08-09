@@ -137,6 +137,7 @@ type RestoreOptions struct {
 	NewDBName                 Expr
 	IncrementalStorage        StringOrPlaceholderOptList
 	AsTenant                  Expr
+	SchemaOnly                bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -407,6 +408,10 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("tenant = ")
 		ctx.FormatNode(o.AsTenant)
 	}
+	if o.SchemaOnly {
+		maybeAddSep()
+		ctx.WriteString("schema_only")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -502,6 +507,13 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("tenant option specified multiple times")
 	}
 
+	if o.SchemaOnly {
+		if other.SchemaOnly {
+			return errors.New("schema_only option specified multiple times")
+		}
+	} else {
+		o.SchemaOnly = other.SchemaOnly
+	}
 	return nil
 }
 
@@ -520,7 +532,8 @@ func (o RestoreOptions) IsDefault() bool {
 		o.DebugPauseOn == options.DebugPauseOn &&
 		o.NewDBName == options.NewDBName &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
-		o.AsTenant == options.AsTenant
+		o.AsTenant == options.AsTenant &&
+		o.SchemaOnly == options.SchemaOnly
 }
 
 // BackupTargetList represents a list of targets.

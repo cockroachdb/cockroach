@@ -1288,8 +1288,10 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	// DiskBackedIndexedRowContainer.
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = mon.DefaultPoolAllocationSize
 
-	// Input row is just a single 0.
+	// The two input rows are just a single 0 each. We use two input rows because
+	// matches to the first input row are never buffered.
 	inputRows := rowenc.EncDatumRows{
+		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 	}
 	var fetchSpec descpb.IndexFetchSpec
@@ -1341,7 +1343,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		require.Equal(t, expected, actual)
 		count++
 	}
-	require.Equal(t, numRows, count)
+	require.Equal(t, numRows*len(inputRows), count)
 	require.True(t, jr.(*joinReader).Spilled())
 }
 

@@ -93,6 +93,12 @@ type _OP_CONST_NAME struct {
 	// {{else}}
 	constArg _R_GO_TYPE
 	// {{end}}
+	// {{if .Negatable}}
+	negate bool
+	// {{end}}
+	// {{if .CaseInsensitive}}
+	caseInsensitive bool
+	// {{end}}
 }
 
 func (p _OP_CONST_NAME) Next() coldata.Batch {
@@ -103,6 +109,22 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 	//     variable of type `colexecutils.BinaryOverloadHelper`.
 	// */}}
 	_overloadHelper := p.BinaryOverloadHelper
+	// {{end}}
+	// {{if .Negatable}}
+	// {{/*
+	//     In order to inline the templated code of the LIKE overloads, we need
+	//     to have a `_negate` local variable indicating whether the assignment
+	//     should be negated.
+	// */}}
+	_negate := p.negate
+	// {{ end }}
+	// {{if .CaseInsensitive}}
+	// {{/*
+	//     In order to inline the templated code of the LIKE overloads, we need
+	//     to have a `_caseInsensitive` local variable indicating whether the
+	//     operator is case insensitive.
+	// */}}
+	_caseInsensitive := p.caseInsensitive
 	// {{end}}
 	batch := p.Input.Next()
 	n := batch.Length()

@@ -312,6 +312,12 @@ type twoArgsResolvedOverload struct {
 	*overloadBase
 	Left  *argWidthOverload
 	Right *lastArgWidthOverload
+
+	// Negatable and CaseInsensitive are only used by the LIKE overloads. We
+	// cannot easily extract out a separate struct for those since we're reusing
+	// the same templates as all of the selection / projection operators.
+	Negatable       bool
+	CaseInsensitive bool
 }
 
 // NeedsBinaryOverloadHelper returns true iff the overload is such that it needs
