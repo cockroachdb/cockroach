@@ -7,21 +7,43 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 ----
 StatementPhase stage 1 of 1 with 14 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> BACKFILL_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
-    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
   ops:
+    *scop.MakeDroppedColumnDeleteAndWriteOnly
+      ColumnID: 3
+      TableID: 104
+    *scop.LogEvent
+      Element:
+        Column:
+          columnId: 3
+          isHidden: true
+          pgAttributeNum: 3
+          tableId: 104
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 104
     *scop.MakeAddedIndexBackfilling
       Index:
         ConstraintID: 2
@@ -72,35 +94,17 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
         ConstraintID: 4
         IndexID: 4
         IsUnique: true
-        SourceIndexID: 1
+        SourceIndexID: 2
         TableID: 104
         TemporaryIndexID: 5
-      IsSecondaryIndex: true
-    *scop.MakeAddedTempIndexDeleteOnly
-      Index:
-        ConstraintID: 5
-        IndexID: 5
-        IsUnique: true
-        SourceIndexID: 1
-        TableID: 104
-      IsSecondaryIndex: true
-    *scop.AddColumnToIndex
-      ColumnID: 3
-      IndexID: 4
-      TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 3
-      IndexID: 5
-      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 4
-      Kind: 1
       TableID: 104
     *scop.AddColumnToIndex
-      ColumnID: 1
-      IndexID: 5
-      Kind: 1
+      ColumnID: 2
+      IndexID: 4
+      Kind: 2
       TableID: 104
 PreCommitPhase stage 1 of 1 with 2 MutationType ops
   transitions:
@@ -114,125 +118,88 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 7 with 2 MutationType ops pending
+      RunningStatus: PostCommitPhase stage 1 of 15 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k)
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS
           (‹k›)
         statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 7 with 4 MutationType ops
+PostCommitPhase stage 1 of 15 with 3 MutationType ops
   transitions:
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
-    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 3
       TableID: 104
-    *scop.MakeAddedIndexDeleteAndWriteOnly
-      IndexID: 5
-      TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 7 with 2 BackfillType ops
+PostCommitPhase stage 2 of 15 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], BACKFILL_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       SourceIndexID: 1
       TableID: 104
-    *scop.BackfillIndex
-      IndexID: 4
-      SourceIndexID: 1
-      TableID: 104
-PostCommitPhase stage 3 of 7 with 4 MutationType ops
+PostCommitPhase stage 3 of 15 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], BACKFILLED] -> DELETE_ONLY
   ops:
     *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 2
-      TableID: 104
-    *scop.MakeBackfillingIndexDeleteOnly
-      IndexID: 4
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 4 of 7 with 4 MutationType ops
+PostCommitPhase stage 4 of 15 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> MERGE_ONLY
   ops:
     *scop.MakeBackfilledIndexMerging
       IndexID: 2
-      TableID: 104
-    *scop.MakeBackfilledIndexMerging
-      IndexID: 4
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 5 of 7 with 2 BackfillType ops
+PostCommitPhase stage 5 of 15 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], MERGE_ONLY] -> MERGED
   ops:
     *scop.MergeIndex
       BackfilledIndexID: 2
       TableID: 104
       TemporaryIndexID: 3
-    *scop.MergeIndex
-      BackfilledIndexID: 4
-      TableID: 104
-      TemporaryIndexID: 5
-PostCommitPhase stage 6 of 7 with 4 MutationType ops
+PostCommitPhase stage 6 of 15 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeMergedIndexWriteOnly
       IndexID: 2
-      TableID: 104
-    *scop.MakeMergedIndexWriteOnly
-      IndexID: 4
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 7 of 7 with 2 ValidationType ops
+PostCommitPhase stage 7 of 15 with 1 ValidationType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 104
-    *scop.ValidateUniqueIndex
-      IndexID: 4
-      TableID: 104
-PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+PostCommitPhase stage 8 of 15 with 9 MutationType ops
   transitions:
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
-    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
-    [[IndexName:{DescID: 104, Name: t_rowid_key, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -245,16 +212,6 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
       IndexID: 2
       Name: t_pkey
       TableID: 104
-    *scop.MakeDroppedIndexDeleteOnly
-      IndexID: 3
-      TableID: 104
-    *scop.MakeDroppedIndexDeleteOnly
-      IndexID: 5
-      TableID: 104
-    *scop.SetIndexName
-      IndexID: 4
-      Name: t_rowid_key
-      TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       EventBase:
         Authorization:
@@ -266,43 +223,137 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
           SubWorkID: 1
       IndexID: 2
       TableID: 104
-    *scop.MakeAddedSecondaryIndexPublic
+    *scop.MakeAddedTempIndexDeleteOnly
+      Index:
+        ConstraintID: 5
+        IndexID: 5
+        IsUnique: true
+        SourceIndexID: 2
+        TableID: 104
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 5
+      TableID: 104
+    *scop.AddColumnToIndex
+      ColumnID: 2
+      IndexID: 5
+      Kind: 2
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitPhase stage 9 of 15 with 3 MutationType ops
+  transitions:
+    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 5
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitPhase stage 10 of 15 with 1 BackfillType op
+  transitions:
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 4
+      SourceIndexID: 2
+      TableID: 104
+PostCommitPhase stage 11 of 15 with 3 MutationType ops
+  transitions:
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+  ops:
+    *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 4
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
-      IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
+PostCommitPhase stage 12 of 15 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
-    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
   ops:
+    *scop.MakeBackfilledIndexMerging
+      IndexID: 4
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitPhase stage 13 of 15 with 1 BackfillType op
+  transitions:
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], MERGE_ONLY] -> MERGED
+  ops:
+    *scop.MergeIndex
+      BackfilledIndexID: 4
+      TableID: 104
+      TemporaryIndexID: 5
+PostCommitPhase stage 14 of 15 with 3 MutationType ops
+  transitions:
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], MERGED] -> WRITE_ONLY
+  ops:
+    *scop.MakeMergedIndexWriteOnly
+      IndexID: 4
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
+PostCommitPhase stage 15 of 15 with 1 ValidationType op
+  transitions:
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], WRITE_ONLY] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 4
+      TableID: 104
+PostCommitNonRevertiblePhase stage 1 of 4 with 6 MutationType ops
+  transitions:
+    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+  ops:
+    *scop.MakeDroppedColumnDeleteOnly
+      ColumnID: 3
+      TableID: 104
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 3
+      TableID: 104
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 5
+      TableID: 104
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
-      TableID: 104
-    *scop.CreateGcJobForIndex
-      IndexID: 3
-      TableID: 104
-    *scop.MakeIndexAbsent
-      IndexID: 3
-      TableID: 104
-    *scop.CreateGcJobForIndex
-      IndexID: 5
-      TableID: 104
-    *scop.MakeIndexAbsent
-      IndexID: 5
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 4 with 12 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_WRITE_ONLY
+    [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
+    [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
@@ -320,6 +371,94 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
           SubWorkID: 1
       IndexID: 1
       TableID: 104
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 2
+      Name: crdb_internal_index_2_name_placeholder
+      TableID: 104
+    *scop.CreateGcJobForIndex
+      IndexID: 3
+      TableID: 104
+    *scop.MakeIndexAbsent
+      IndexID: 3
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 4
+      Name: t_pkey
+      TableID: 104
+    *scop.CreateGcJobForIndex
+      IndexID: 5
+      TableID: 104
+    *scop.MakeIndexAbsent
+      IndexID: 5
+      TableID: 104
+    *scop.MakeAddedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      IndexID: 4
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 3 of 4 with 3 MutationType ops
+  transitions:
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 2
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 4 of 4 with 6 MutationType ops
+  transitions:
+    [[Column:{DescID: 104, ColumnID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+  ops:
+    *scop.CreateGcJobForIndex
+      IndexID: 2
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (k)
+      TableID: 104
+    *scop.MakeIndexAbsent
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      IndexID: 2
+      TableID: 104
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 104
+    *scop.MakeColumnAbsent
+      ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
@@ -330,6 +469,46 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
 deps
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 ----
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, ABSENT]
+  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  kind: SameStagePrecedence
+  rule: column type dependents removed right before column type
+- from: [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [dependents removed before column; column type removed right before column when not dropping relation]
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -342,6 +521,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -351,13 +534,21 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -370,6 +561,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -378,6 +573,26 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
+  kind: Precedence
+  rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -390,22 +605,26 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, BACKFILLED]
-  kind: Precedence
-  rule: index-column added to index before index is backfilled
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC]
-  kind: Precedence
-  rule: index dependents exist before index becomes public
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -414,10 +633,22 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rules: [index dependents exist before index becomes public; index named right before index becomes public]
-- from: [IndexName:{DescID: 104, Name: t_rowid_key, IndexID: 4}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC]
+- from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rules: [index dependents exist before index becomes public; index named right before index becomes public]
+- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: indexes containing column reach absent before column
+- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
+  kind: Precedence
+  rule: old index absent before new index public when swapping with transient
 - from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -454,16 +685,44 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, BACKFILL_ONLY]
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
+  kind: Precedence
+  rule: primary index with new columns should exist before temp indexes
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: indexes containing column reach absent before column
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
+  to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: primary index swap
+- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, BACKFILL_ONLY]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC]
+- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, BACKFILL_ONLY]
-  to:   [IndexName:{DescID: 104, Name: t_rowid_key, IndexID: 4}, PUBLIC]
+- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
+  to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, DELETE_ONLY]
@@ -482,15 +741,15 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill
-- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, DELETE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC]
   kind: Precedence
   rule: temp index existence precedes index dependents
-- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, DELETE_ONLY]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}, PUBLIC]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, PUBLIC]
   kind: Precedence
   rule: temp index existence precedes index dependents
-- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, BACKFILLED]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill
