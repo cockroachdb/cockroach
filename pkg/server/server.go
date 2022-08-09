@@ -365,6 +365,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeDialer:         nodeDialer,
 		FirstRangeProvider: g,
 		TestingKnobs:       clientTestingKnobs,
+		Locality:           cfg.Locality,
 	}
 	distSender := kvcoord.NewDistSender(distSenderCfg)
 	registry.AddMetricStruct(distSender.Metrics())
