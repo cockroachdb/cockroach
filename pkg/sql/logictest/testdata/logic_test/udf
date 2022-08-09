@@ -380,3 +380,171 @@ SELECT * FROM fetch_one_then_two()
 ----
 fetch_one_then_two
 2
+
+subtest udf_pg_proc
+
+statement ok
+CREATE FUNCTION proc_f(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement
+CREATE FUNCTION proc_f(STRING, b INT) RETURNS SETOF STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+statement ok
+CREATE FUNCTION proc_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+statement ok
+CREATE SCHEMA sc;
+
+statement
+CREATE FUNCTION sc.proc_f_2(STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+query TTTTTBBBTITTTTT
+SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
+----
+100124  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
+100125  proc_f    4101115737  1546506610  14  true   true   true   i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
+100128  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+
+subtest create_function_statements
+
+query TITITIT
+SELECT create_statement, database_id, database_name, schema_id, schema_name, function_id, function_name
+FROM crdb_internal.create_function_statements
+WHERE function_name IN ('proc_f', 'proc_f_2')
+ORDER BY function_name;
+----
+CREATE FUNCTION public.proc_f(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$  104  test  105  public  124  proc_f
+CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
+    RETURNS SETOF STRING
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$  104  test  105  public  125  proc_f
+CREATE FUNCTION sc.proc_f_2(IN STRING)
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$  104  test  127  sc  128  proc_f_2
+
+subtest show_create_function
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION proc_f];
+----
+CREATE FUNCTION public.proc_f(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
+    RETURNS SETOF STRING
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$
+
+statement error pq: unknown function: proc_f_2()
+SHOW CREATE FUNCTION proc_f_2;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION sc.proc_f_2];
+----
+CREATE FUNCTION sc.proc_f_2(IN STRING)
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$
+
+statement ok
+SET search_path = sc;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION proc_f_2];
+----
+CREATE FUNCTION sc.proc_f_2(IN STRING)
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$
+
+statement ok
+SET search_path = public;
+
+subtest udf_regproc
+
+query T
+SELECT 'proc_implicit'::REGPROC;
+----
+proc_implicit
+
+query I
+SELECT 'proc_implicit'::REGPROC::INT;
+----
+100126
+
+query T
+SELECT '100126'::REGPROC;
+----
+proc_implicit
+
+query T
+SELECT 'sc.proc_f_2'::REGPROC;
+----
+proc_f_2
+
+query I
+SELECT 'sc.proc_f_2'::REGPROC::INT;
+----
+100128
+
+statement error pq: unknown function: no_such_func()
+SELECT 'no_such_func'::REGPROC;
+
+statement error pq: more than one function named 'proc_f'
+SELECT 'proc_f'::REGPROC;
+
+query T
+SELECT 100126::regproc;
+----
+proc_implicit
+
+query I
+SELECT 100117::regproc::INT;
+----
+100117
+
+query T
+SELECT 999999::regproc;
+----
+999999

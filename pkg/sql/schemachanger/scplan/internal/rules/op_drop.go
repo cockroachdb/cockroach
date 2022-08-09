@@ -39,18 +39,21 @@ func init() {
 		"skip column removal ops on relation drop",
 		column.node,
 		screl.MustQuery(
-			relation.el.Type(
+			relation.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			column.el.Type(
+			column.Type(
 				(*scpb.Column)(nil),
 			),
-			joinOnDescID(relation.el, column.el, relationID),
+
+			joinOnDescID(relation, column, relationID),
+
 			relation.joinTarget(),
-			toAbsent(relation.target, column.target),
+			relation.targetStatus(scpb.ToAbsent),
 			column.joinTargetNode(),
-			column.node.AttrIn(screl.CurrentStatus,
+			column.targetStatus(scpb.ToAbsent),
+			column.currentStatus(
 				// All but DELETE_ONLY which is the status leading to ABSENT.
 				scpb.Status_PUBLIC,
 				scpb.Status_WRITE_ONLY,
@@ -62,24 +65,26 @@ func init() {
 		"skip column dependents removal ops on relation drop",
 		dep.node,
 		screl.MustQuery(
-			relation.el.Type(
+			relation.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			column.el.Type(
+			column.Type(
 				(*scpb.Column)(nil),
 			),
-			dep.el.Type(
+			dep.Type(
 				(*scpb.ColumnName)(nil),
 			),
 
-			joinOnDescID(relation.el, column.el, relationID),
-			joinOnColumnID(column.el, dep.el, relationID, columnID),
+			joinOnDescID(relation, column, relationID),
+			joinOnColumnID(column, dep, relationID, columnID),
+
 			relation.joinTarget(),
-			toAbsent(relation.target, column.target),
+			relation.targetStatus(scpb.ToAbsent),
 			column.joinTarget(),
+			column.targetStatus(scpb.ToAbsent),
 			dep.joinTargetNode(),
-			dep.target.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			dep.targetStatus(scpb.ToAbsent),
 		),
 	)
 }
@@ -97,20 +102,22 @@ func init() {
 		"skip index removal ops on relation drop",
 		index.node,
 		screl.MustQuery(
-			relation.el.Type(
+			relation.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			index.el.Type(
+			index.Type(
 				(*scpb.PrimaryIndex)(nil),
 				(*scpb.SecondaryIndex)(nil),
 				(*scpb.TemporaryIndex)(nil),
 			),
 
-			joinOnDescID(relation.el, index.el, relationID),
+			joinOnDescID(relation, index, relationID),
+
 			relation.joinTarget(),
+			relation.targetStatus(scpb.ToAbsent),
 			index.joinTargetNode(),
-			toAbsent(relation.target, index.target),
+			index.targetStatus(scpb.ToAbsent),
 		),
 	)
 
@@ -118,29 +125,26 @@ func init() {
 		"skip index dependents removal ops on relation drop",
 		dep.node,
 		screl.MustQuery(
-			relation.el.Type(
+			relation.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			index.el.Type(
-				(*scpb.PrimaryIndex)(nil),
-				(*scpb.SecondaryIndex)(nil),
-				(*scpb.TemporaryIndex)(nil),
-			),
-			dep.el.Type(
+			index.typeFilter(isIndex),
+			dep.Type(
 				(*scpb.IndexName)(nil),
 				(*scpb.IndexPartitioning)(nil),
 				(*scpb.IndexColumn)(nil),
 			),
 
-			joinOnDescID(relation.el, index.el, relationID),
-			joinOnIndexID(index.el, dep.el, relationID, indexID),
+			joinOnDescID(relation, index, relationID),
+			joinOnIndexID(index, dep, relationID, indexID),
 
 			relation.joinTarget(),
-			toAbsent(relation.target, index.target),
+			relation.targetStatus(scpb.ToAbsent),
 			index.joinTarget(),
+			index.targetStatus(scpb.ToAbsent),
 			dep.joinTargetNode(),
-			dep.target.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			dep.targetStatus(scpb.ToAbsent),
 		),
 	)
 }
@@ -159,18 +163,20 @@ func init() {
 		"skip constraint removal ops on relation drop",
 		constraint.node,
 		screl.MustQuery(
-			relation.el.Type(
+			relation.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			constraint.el.Type(
+			constraint.Type(
 				(*scpb.UniqueWithoutIndexConstraint)(nil),
 			),
 
-			joinOnDescID(relation.el, constraint.el, relationID),
+			joinOnDescID(relation, constraint, relationID),
+
 			relation.joinTarget(),
-			toAbsent(relation.target, constraint.target),
+			relation.targetStatus(scpb.ToAbsent),
 			constraint.joinTargetNode(),
+			constraint.targetStatus(scpb.ToAbsent),
 		),
 	)
 
@@ -178,26 +184,28 @@ func init() {
 		"skip constraint dependents removal ops on relation drop",
 		dep.node,
 		screl.MustQuery(
-			relation.el.Type(
+			relation.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			constraint.el.Type(
+			constraint.Type(
 				(*scpb.UniqueWithoutIndexConstraint)(nil),
 				(*scpb.CheckConstraint)(nil),
 				(*scpb.ForeignKeyConstraint)(nil),
 			),
-			dep.el.Type(
+			dep.Type(
 				(*scpb.ConstraintName)(nil),
 			),
 
-			joinOnDescID(relation.el, constraint.el, relationID),
-			joinOnConstraintID(constraint.el, dep.el, relationID, constraintID),
+			joinOnDescID(relation, constraint, relationID),
+			joinOnConstraintID(constraint, dep, relationID, constraintID),
+
 			relation.joinTarget(),
+			relation.targetStatus(scpb.ToAbsent),
 			constraint.joinTarget(),
-			toAbsent(relation.target, constraint.target),
+			constraint.targetStatus(scpb.ToAbsent),
 			dep.joinTargetNode(),
-			dep.target.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			dep.targetStatus(scpb.ToAbsent),
 		),
 	)
 }
@@ -219,25 +227,20 @@ func init() {
 		"skip element removal ops on descriptor drop",
 		dep.node,
 		screl.MustQuery(
-			desc.el.Type(
-				(*scpb.Database)(nil),
-				(*scpb.Schema)(nil),
-				(*scpb.Table)(nil),
-				(*scpb.View)(nil),
-				(*scpb.Sequence)(nil),
-				(*scpb.AliasType)(nil),
-				(*scpb.EnumType)(nil),
-			),
-			dep.el.Type(
+			desc.typeFilter(IsDescriptor),
+			dep.Type(
 				(*scpb.ColumnFamily)(nil),
 				(*scpb.Owner)(nil),
 				(*scpb.UserPrivileges)(nil),
 				(*scpb.EnumTypeValue)(nil),
 			),
-			joinOnDescID(desc.el, dep.el, descID),
+
+			joinOnDescID(desc, dep, descID),
+
 			desc.joinTarget(),
-			toAbsent(desc.target, dep.target),
+			desc.targetStatus(scpb.ToAbsent),
 			dep.joinTargetNode(),
+			dep.targetStatus(scpb.ToAbsent),
 		),
 	)
 }
@@ -253,22 +256,24 @@ func init() {
 		"skip table comment removal ops on descriptor drop",
 		dep.node,
 		screl.MustQuery(
-			desc.el.Type(
+			desc.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 				(*scpb.Sequence)(nil),
 			),
-			dep.el.Type(
+			dep.Type(
 				(*scpb.ColumnComment)(nil),
 				(*scpb.IndexComment)(nil),
 				(*scpb.ConstraintComment)(nil),
 				(*scpb.TableComment)(nil),
 			),
 
-			joinOnDescID(desc.el, dep.el, descID),
+			joinOnDescID(desc, dep, descID),
+
 			desc.joinTarget(),
-			toAbsent(desc.target, dep.target),
+			desc.targetStatus(scpb.ToAbsent),
 			dep.joinTargetNode(),
+			dep.targetStatus(scpb.ToAbsent),
 		),
 	)
 }

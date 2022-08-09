@@ -1160,7 +1160,7 @@ func (expr *FuncExpr) TypeCheck(
 			"%s()", errors.Safe(def.Name))
 	}
 	if resolver != nil && overloadImpl.UDFContainsOnlySignature {
-		overloadImpl, err = resolver.ResolveFunctionByOID(ctx, overloadImpl.Oid)
+		_, overloadImpl, err = resolver.ResolveFunctionByOID(ctx, overloadImpl.Oid)
 		if err != nil {
 			return nil, err
 		}

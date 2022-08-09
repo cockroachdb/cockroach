@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -457,6 +458,11 @@ func (desc *immutable) FuncDesc() *descpb.FunctionDescriptor {
 	return &desc.FunctionDescriptor
 }
 
+// GetLanguage implements the FunctionDescriptor interface.
+func (desc *immutable) GetLanguage() catpb.Function_Language {
+	return desc.Lang
+}
+
 // ContainsUserDefinedTypes implements the catalog.HydratableDescriptor interface.
 func (desc *immutable) ContainsUserDefinedTypes() bool {
 	for i := range desc.Args {
@@ -529,6 +535,86 @@ func (desc *immutable) calledOnNullInput() (bool, error) {
 	default:
 		return false, errors.Newf("unknown null input behavior")
 	}
+}
+
+// ToCreateExpr implements the FunctionDescriptor interface.
+func (desc *immutable) ToCreateExpr() (ret *tree.CreateFunction, err error) {
+	ret = &tree.CreateFunction{
+		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		ReturnType: tree.FuncReturnType{
+			Type:  desc.ReturnType.Type,
+			IsSet: desc.ReturnType.ReturnSet,
+		},
+	}
+	ret.Args = make(tree.FuncArgs, len(desc.Args))
+	for i := range desc.Args {
+		ret.Args[i] = tree.FuncArg{
+			Name:  tree.Name(desc.Args[i].Name),
+			Type:  desc.Args[i].Type,
+			Class: toTreeNodeArgClass(desc.Args[i].Class),
+		}
+		if desc.Args[i].DefaultExpr != nil {
+			ret.Args[i].DefaultVal, err = parser.ParseExpr(*desc.Args[i].DefaultExpr)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	// We only store 5 function attributes at the moment. We may extend the
+	// pre-allocated capacity in the future.
+	ret.Options = make(tree.FunctionOptions, 0, 5)
+	ret.Options = append(ret.Options, desc.getCreateExprVolatility())
+	ret.Options = append(ret.Options, tree.FunctionLeakproof(desc.LeakProof))
+	ret.Options = append(ret.Options, desc.getCreateExprNullInputBehavior())
+	ret.Options = append(ret.Options, tree.FunctionBodyStr(desc.FunctionBody))
+	ret.Options = append(ret.Options, desc.getCreateExprLang())
+	return ret, nil
+}
+
+func (desc *immutable) getCreateExprLang() tree.FunctionLanguage {
+	switch desc.Lang {
+	case catpb.Function_SQL:
+		return tree.FunctionLangSQL
+	}
+	return 0
+}
+
+func (desc *immutable) getCreateExprVolatility() tree.FunctionVolatility {
+	switch desc.Volatility {
+	case catpb.Function_IMMUTABLE:
+		return tree.FunctionImmutable
+	case catpb.Function_STABLE:
+		return tree.FunctionStable
+	case catpb.Function_VOLATILE:
+		return tree.FunctionVolatile
+	}
+	return 0
+}
+
+func (desc *immutable) getCreateExprNullInputBehavior() tree.FunctionNullInputBehavior {
+	switch desc.NullInputBehavior {
+	case catpb.Function_CALLED_ON_NULL_INPUT:
+		return tree.FunctionCalledOnNullInput
+	case catpb.Function_RETURNS_NULL_ON_NULL_INPUT:
+		return tree.FunctionReturnsNullOnNullInput
+	case catpb.Function_STRICT:
+		return tree.FunctionStrict
+	}
+	return 0
+}
+
+func toTreeNodeArgClass(class catpb.Function_Arg_Class) tree.FuncArgClass {
+	switch class {
+	case catpb.Function_Arg_IN:
+		return tree.FunctionArgIn
+	case catpb.Function_Arg_OUT:
+		return tree.FunctionArgOut
+	case catpb.Function_Arg_IN_OUT:
+		return tree.FunctionArgInOut
+	case catpb.Function_Arg_VARIADIC:
+		return tree.FunctionArgVariadic
+	}
+	return 0
 }
 
 // UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID. OID of a

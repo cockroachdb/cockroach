@@ -107,6 +107,9 @@ func RunSchemaChangesInJob(
 		})
 	})
 	if err != nil {
+		if knobs != nil && knobs.OnPostCommitPlanError != nil {
+			return knobs.OnPostCommitPlanError(nil, err)
+		}
 		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
 	}
 	sc, err := scplan.MakePlan(state, scplan.Params{
@@ -114,6 +117,9 @@ func RunSchemaChangesInJob(
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 	})
 	if err != nil {
+		if knobs != nil && knobs.OnPostCommitPlanError != nil {
+			return knobs.OnPostCommitPlanError(&state, err)
+		}
 		return err
 	}
 

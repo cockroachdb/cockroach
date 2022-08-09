@@ -331,13 +331,13 @@ func (oc *optCatalog) ResolveType(
 func (oc *optCatalog) ResolveFunction(
 	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	return nil, errors.AssertionFailedf("unimplemented")
+	return oc.planner.ResolveFunction(ctx, name, path)
 }
 
 func (oc *optCatalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.Overload, error) {
-	return nil, errors.AssertionFailedf("unimplemented")
+) (string, *tree.Overload, error) {
+	return oc.planner.ResolveFunctionByOID(ctx, oid)
 }
 
 func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {
