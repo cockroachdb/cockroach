@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -35,9 +36,9 @@ import (
 )
 
 const (
-	// mvccGCQueueTimerDuration is the duration between MVCC GCs of queued
-	// replicas.
-	mvccGCQueueTimerDuration = 1 * time.Second
+	// mvccGCQueueDefaultTimerDuration is the default duration between MVCC GCs
+	// of queued replicas.
+	mvccGCQueueDefaultTimerDuration = 1 * time.Second
 	// mvccGCQueueTimeout is the timeout for a single MVCC GC run.
 	mvccGCQueueTimeout = 10 * time.Minute
 	// mvccGCQueueIntentBatchTimeout is the timeout for resolving a single batch
@@ -62,6 +63,16 @@ const (
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
+)
+
+// mvccGCQueueInterval is a setting that controls how long the mvcc GC queue
+// waits between processing replicas.
+var mvccGCQueueInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc.queue_interval",
+	"how long the mvcc gc queue waits between processing replicas",
+	mvccGCQueueDefaultTimerDuration,
+	settings.NonNegativeDuration,
 )
 
 func largeAbortSpan(ms enginepb.MVCCStats) bool {
@@ -688,8 +699,8 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 
 // timer returns a constant duration to space out GC processing
 // for successive queued replicas.
-func (*mvccGCQueue) timer(_ time.Duration) time.Duration {
-	return mvccGCQueueTimerDuration
+func (mgcq *mvccGCQueue) timer(_ time.Duration) time.Duration {
+	return mvccGCQueueInterval.Get(&mgcq.store.ClusterSettings().SV)
 }
 
 // purgatoryChan returns nil.
