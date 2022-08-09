@@ -400,7 +400,7 @@ func makeTenantSQLServerArgs(
 	})
 
 	var dsKnobs kvcoord.ClientTestingKnobs
-	if dsKnobsP, ok := baseCfg.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
+	if dsKnobsP, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
 		dsKnobs = *dsKnobsP
 	}
 	rpcRetryOptions := base.DefaultRetryOptions()
@@ -440,6 +440,7 @@ func makeTenantSQLServerArgs(
 		RangeDescriptorDB: tenantConnect,
 		KVInterceptor:     costController,
 		TestingKnobs:      dsKnobs,
+		Locality:          baseCfg.Locality,
 	}
 	ds := kvcoord.NewDistSender(dsCfg)
 
