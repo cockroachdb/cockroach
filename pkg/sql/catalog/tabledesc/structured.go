@@ -1653,7 +1653,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				case descpb.ConstraintValidity_Validating:
 					// Constraint already added, just mark it as Validated.
 					for _, c := range desc.Checks {
-						if c.Name == t.Constraint.Name {
+						if c.ConstraintID == t.Constraint.Check.ConstraintID {
 							c.Validity = descpb.ConstraintValidity_Validated
 							break
 						}
@@ -1671,7 +1671,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 					// Constraint already added, just mark it as Validated.
 					for i := range desc.OutboundFKs {
 						fk := &desc.OutboundFKs[i]
-						if fk.Name == t.Constraint.Name {
+						if fk.ConstraintID == t.Constraint.ForeignKey.ConstraintID {
 							fk.Validity = descpb.ConstraintValidity_Validated
 							break
 						}
@@ -1689,7 +1689,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 					// Constraint already added, just mark it as Validated.
 					for i := range desc.UniqueWithoutIndexConstraints {
 						uc := &desc.UniqueWithoutIndexConstraints[i]
-						if uc.Name == t.Constraint.Name {
+						if uc.ConstraintID == t.Constraint.UniqueWithoutIndexConstraint.ConstraintID {
 							uc.Validity = descpb.ConstraintValidity_Validated
 							break
 						}
@@ -1709,7 +1709,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				// Remove the dummy check constraint that was in place during
 				// validation.
 				for i, c := range desc.Checks {
-					if c.Name == t.Constraint.Check.Name {
+					if c.ConstraintID == t.Constraint.Check.ConstraintID {
 						desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
 						break
 					}
