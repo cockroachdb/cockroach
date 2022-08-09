@@ -441,16 +441,16 @@ func (sr *schemaResolver) ResolveFunction(
 
 func (sr *schemaResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.Overload, error) {
+) (name string, fn *tree.Overload, err error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		name, ok := tree.OidToBuiltinName[oid]
 		if !ok {
-			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid)
+			return "", nil, pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid)
 		}
 		funcDef := tree.FunDefs[name]
 		for _, o := range funcDef.Definition {
 			if o.Oid == oid {
-				return o, nil
+				return funcDef.Name, o, nil
 			}
 		}
 	}
@@ -459,17 +459,17 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	flags.AvoidLeased = sr.skipDescriptorCache
 	descID, err := funcdesc.UserDefinedFunctionOIDToID(oid)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	funcDesc, err := sr.descCollection.GetImmutableFunctionByID(ctx, sr.txn, descID, flags)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	ret, err := funcDesc.ToOverload()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return ret, nil
+	return funcDesc.GetName(), ret, nil
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip

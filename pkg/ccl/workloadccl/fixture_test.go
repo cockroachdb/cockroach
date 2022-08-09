@@ -166,8 +166,6 @@ func TestFixture(t *testing.T) {
 func TestImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 81082, "flaky")
-
 	ctx := context.Background()
 
 	defer func(oldRefreshInterval, oldAsOf time.Duration) {
@@ -193,6 +191,10 @@ func TestImportFixture(t *testing.T) {
 	if err := gen.Flags().Parse([]string{"--" + flag}); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
+	// Wait for the `ensureAllTables` unconditional auto stats to run before
+	// starting the test, so we don't hit a timing window where 2 sets of auto
+	// stats are collected.
+	time.Sleep(2 * time.Second)
 
 	const filesPerNode = 1
 

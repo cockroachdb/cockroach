@@ -31,6 +31,7 @@ crdb_internal  cluster_settings                 table  admin  NULL  NULL
 crdb_internal  cluster_statement_statistics     table  admin  NULL  NULL
 crdb_internal  cluster_transaction_statistics   table  admin  NULL  NULL
 crdb_internal  cluster_transactions             table  admin  NULL  NULL
+crdb_internal  create_function_statements       table  admin  NULL  NULL
 crdb_internal  create_schema_statements         table  admin  NULL  NULL
 crdb_internal  create_statements                table  admin  NULL  NULL
 crdb_internal  create_type_statements           table  admin  NULL  NULL

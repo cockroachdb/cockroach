@@ -433,6 +433,23 @@ CREATE TABLE crdb_internal.cluster_transactions (
    num_auto_retries INT8 NULL,
    last_auto_retry_reason STRING NULL
 )  {}  {}
+CREATE TABLE crdb_internal.create_function_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_id INT8 NULL,
+   schema_name STRING NULL,
+   function_id INT8 NULL,
+   function_name STRING NULL,
+   create_statement STRING NULL
+)  CREATE TABLE crdb_internal.create_function_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_id INT8 NULL,
+   schema_name STRING NULL,
+   function_id INT8 NULL,
+   function_name STRING NULL,
+   create_statement STRING NULL
+)  {}  {}
 CREATE TABLE crdb_internal.create_schema_statements (
    database_id INT8 NULL,
    database_name STRING NULL,

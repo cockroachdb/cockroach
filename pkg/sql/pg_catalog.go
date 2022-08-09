@@ -2290,7 +2290,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 	schema: vtable.PGCatalogProc,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
+		// Build rows for builtin function. Normally, dbContext is not nil. So only
+		// dbContext is looked at and used to generate the NamespaceOid. However,
+		// the downside is that the NamespaceOid would change if pg_catalog.pg_proc
+		// is selected from a different database. But this is probably fine for
+		// builtin function since they don't really belong to any database.
+		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
 				for _, name := range builtins.AllBuiltinNames {
@@ -2413,6 +2418,83 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					}
 				}
 				return nil
+			})
+		if err != nil {
+			return err
+		}
+		return forEachDatabaseDesc(ctx, p, nil /* dbContext */, false, /* requiresPrivileges */
+			func(dbDesc catalog.DatabaseDescriptor) error {
+				return forEachSchema(ctx, p, dbDesc, func(scDesc catalog.SchemaDescriptor) error {
+					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(ctx, p.Txn(), overload.ID, tree.ObjectLookupFlags{})
+						if err != nil {
+							return err
+						}
+						isStrict := fnDesc.GetNullInputBehavior() != catpb.Function_CALLED_ON_NULL_INPUT
+						argTypes := tree.NewDArray(types.Oid)
+						argModes := tree.NewDArray(types.String)
+						var argNames tree.Datum
+						argNamesArray := tree.NewDArray(types.String)
+						foundAnyArgNames := false
+						for _, arg := range fnDesc.GetArgs() {
+							if err := argTypes.Append(tree.NewDOid(arg.Type.Oid())); err != nil {
+								return err
+							}
+							// We only support IN arguments at the moment.
+							if err := argModes.Append(tree.NewDString("i")); err != nil {
+								return err
+							}
+							if len(arg.Name) > 0 {
+								foundAnyArgNames = true
+							}
+							if err := argNamesArray.Append(tree.NewDString(arg.Name)); err != nil {
+								return err
+							}
+						}
+						argNames = tree.DNull
+						if foundAnyArgNames {
+							argNames = argNamesArray
+						}
+
+						return addRow(
+							tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())),  // oid
+							tree.NewDName(fnDesc.GetName()),                  // proname
+							h.NamespaceOid(dbDesc.GetID(), scDesc.GetName()), // pronamespace
+							h.UserOid(fnDesc.GetPrivileges().Owner()),        // proowner
+							// In postgres oid of sql language is 14, need to add a mapping if
+							// we are going to support more languages.
+							tree.NewDOid(14), // prolang
+							tree.DNull,       // procost
+							tree.DNull,       // prorows
+							oidZero,          // provariadic
+							tree.DNull,       // protransform
+							tree.DBoolFalse,  // proisagg
+							tree.DBoolFalse,  // proiswindow
+							tree.DBoolFalse,  // prosecdef
+							tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),            // proleakproof
+							tree.MakeDBool(tree.DBool(isStrict)),                         // proisstrict
+							tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)), // proretset
+							tree.NewDString(funcVolatility(fnDesc.GetVolatility())),      // provolatile
+							tree.DNull, // proparallel
+							tree.NewDInt(tree.DInt(len(fnDesc.GetArgs()))),  // pronargs
+							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
+							tree.NewDOid(fnDesc.GetReturnType().Type.Oid()), // prorettype
+							tree.NewDOidVectorFromDArray(argTypes),          // proargtypes
+							tree.DNull,                                      // proallargtypes
+							argModes,                                        // proargmodes
+							argNames,                                        // proargnames
+							tree.DNull,                                      // proargdefaults
+							tree.DNull,                                      // protrftypes
+							tree.NewDString(fnDesc.GetFunctionBody()),       // prosrc
+							tree.DNull,                                      // probin
+							tree.DNull,                                      // proconfig
+							tree.DNull,                                      // proacl
+							// These columns were automatically created by pg_catalog_test's missing column generator.
+							tree.DNull, // prokind
+							tree.DNull, // prosupport
+						)
+					})
+				})
 			})
 	},
 }
@@ -4571,4 +4653,17 @@ func (h oidHasher) CastOid(srcID oid.Oid, tgtID oid.Oid) *tree.DOid {
 	h.writeUInt32(uint32(srcID))
 	h.writeUInt32(uint32(tgtID))
 	return h.getOid()
+}
+
+func funcVolatility(v catpb.Function_Volatility) string {
+	switch v {
+	case catpb.Function_IMMUTABLE:
+		return "i"
+	case catpb.Function_STABLE:
+		return "s"
+	case catpb.Function_VOLATILE:
+		return "v"
+	default:
+		return ""
+	}
 }

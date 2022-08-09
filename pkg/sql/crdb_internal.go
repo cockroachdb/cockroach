@@ -116,6 +116,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterSessionsTableID:             crdbInternalClusterSessionsTable,
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
 		catconstants.CrdbInternalClusterStmtStatsTableID:            crdbInternalClusterStmtStatsTable,
+		catconstants.CrdbInternalCreateFunctionStmtsTableID:         crdbInternalCreateFunctionStmtsTable,
 		catconstants.CrdbInternalCreateSchemaStmtsTableID:           crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:                 crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:             crdbInternalCreateTypeStmtsTable,
@@ -2573,6 +2574,61 @@ CREATE TABLE crdb_internal.create_schema_statements (
 			})
 		}
 		return nil
+	},
+}
+
+var crdbInternalCreateFunctionStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user-defined functions",
+	schema: `
+CREATE TABLE crdb_internal.create_function_statements (
+ database_id INT,
+ database_name STRING,
+ schema_id INT,
+ schema_name STRING,
+ function_id INT,
+ function_name STRING,
+ create_statement STRING
+)
+`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
+			return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+				fnDesc, err := p.Descriptors().GetImmutableFunctionByID(ctx, p.txn, overload.ID, tree.ObjectLookupFlags{})
+				if err != nil {
+					return err
+				}
+				treeNode, err := fnDesc.ToCreateExpr()
+				treeNode.FuncName.ObjectNamePrefix = tree.ObjectNamePrefix{
+					ExplicitSchema: true,
+					SchemaName:     tree.Name(sc.GetName()),
+				}
+				if err != nil {
+					return err
+				}
+				for i := range treeNode.Options {
+					if body, ok := treeNode.Options[i].(tree.FunctionBodyStr); ok {
+						stmtStrs := strings.Split(string(body), "\n")
+						for i := range stmtStrs {
+							stmtStrs[i] = "\t" + stmtStrs[i]
+						}
+
+						p := &treeNode.Options[i]
+						// Add two new lines just for better formatting.
+						*p = "\n" + tree.FunctionBodyStr(strings.Join(stmtStrs, "\n")) + "\n"
+					}
+				}
+
+				return addRow(
+					tree.NewDInt(tree.DInt(db.GetID())),      // database_id
+					tree.NewDString(db.GetName()),            // database_name
+					tree.NewDInt(tree.DInt(sc.GetID())),      // schema_id
+					tree.NewDString(sc.GetName()),            // schema_name
+					tree.NewDInt(tree.DInt(fnDesc.GetID())),  // function_id
+					tree.NewDString(fnDesc.GetName()),        //function_name
+					tree.NewDString(tree.AsString(treeNode)), // create_statement
+				)
+			})
+		})
 	},
 }
 

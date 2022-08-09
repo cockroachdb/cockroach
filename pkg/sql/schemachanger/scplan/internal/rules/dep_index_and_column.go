@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // Special cases for removal of column types and index partial predicates,
@@ -44,16 +43,15 @@ func init() {
 		"column-type", "column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.ColumnType)(nil)),
-				to.el.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
-				rel.Filter("columnTypeIsNotBeingDropped", from.el)(func(
-					ct *scpb.ColumnType,
-				) bool {
-					return !ct.IsRelationBeingDropped
-				}),
+				from.Type((*scpb.ColumnType)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+				rel.Filter("RelationIsNotBeingDropped", from.el)(
+					func(ct *scpb.ColumnType) bool {
+						return !ct.IsRelationBeingDropped
+					},
+				),
 			}
 		},
 	)
@@ -65,22 +63,20 @@ func init() {
 		scgraph.Precedence,
 		"index", "column",
 		func(from, to nodeVars) rel.Clauses {
-			ct := rel.Var("column-type")
+			ic, ct := mkNodeVars("index-column"), mkNodeVars("column-type")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				to.el.Type((*scpb.Column)(nil)),
-				indexContainsColumn(
-					from.el, to.el, "index-column", "table-id", "column-id", "index-id",
-				),
+				from.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.Column)(nil)),
 				ct.Type((*scpb.ColumnType)(nil)),
-				joinOnColumnID(to.el, ct, "table-id", "column-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
-				rel.Filter("columnTypeIsNotBeingDropped", ct)(func(
-					ct *scpb.ColumnType,
-				) bool {
-					return !ct.IsRelationBeingDropped
-				}),
+				columnInIndex(ic, from, relationID, columnID, "index-id"),
+				joinOnColumnID(ic, to, relationID, columnID),
+				joinOnColumnID(ic, ct, relationID, columnID),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+				rel.Filter("RelationIsNotBeingDropped", ct.el)(
+					func(ct *scpb.ColumnType) bool {
+						return !ct.IsRelationBeingDropped
+					}),
 			}
 		})
 
@@ -90,16 +86,15 @@ func init() {
 		"partial-predicate", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.SecondaryIndexPartial)(nil)),
-				to.el.Type((*scpb.SecondaryIndex)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
-				rel.Filter("secondaryIndexPartialIsNotBeingDropped", from.el)(func(
-					ip *scpb.SecondaryIndexPartial,
-				) bool {
-					return !ip.IsRelationBeingDropped
-				}),
+				from.Type((*scpb.SecondaryIndexPartial)(nil)),
+				to.Type((*scpb.SecondaryIndex)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+				rel.Filter("RelationIsNotBeingDropped", from.el)(
+					func(ip *scpb.SecondaryIndexPartial) bool {
+						return !ip.IsRelationBeingDropped
+					},
+				),
 			}
 		},
 	)
@@ -114,16 +109,14 @@ func init() {
 		scgraph.Precedence,
 		"index", "column",
 		func(from, to nodeVars) rel.Clauses {
-			var status rel.Var = "status"
+			ic := mkNodeVars("index-column")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil)),
-				to.el.Type((*scpb.Column)(nil)),
-				columnInPrimaryIndexSwap(
-					from.el, to.el, "index-column", "table-id", "column-id", "index-id",
-				),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				status.In(scpb.Status_PUBLIC),
-				status.Entities(screl.CurrentStatus, from.node, to.node),
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				columnInPrimaryIndexSwap(ic, from, relationID, columnID, "index-id"),
+				joinOnColumnID(ic, to, relationID, columnID),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -133,16 +126,14 @@ func init() {
 		scgraph.Precedence,
 		"index", "column",
 		func(from, to nodeVars) rel.Clauses {
-			var status rel.Var = "status"
+			ic := mkNodeVars("index-column")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil)),
-				to.el.Type((*scpb.Column)(nil)),
-				toAbsent(from.target, to.target),
-				columnInPrimaryIndexSwap(
-					from.el, to.el, "indexColumn", "table-id", "column-id", "index-id",
-				),
-				status.Eq(scpb.Status_WRITE_ONLY),
-				status.Entities(screl.CurrentStatus, from.node, to.node),
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				columnInPrimaryIndexSwap(ic, from, relationID, columnID, "index-id"),
+				joinOnColumnID(ic, to, relationID, columnID),
+				statusesToAbsent(from, scpb.Status_WRITE_ONLY, to, scpb.Status_WRITE_ONLY),
 			}
 		})
 	registerDepRule(
@@ -150,15 +141,14 @@ func init() {
 		scgraph.Precedence,
 		"column", "index",
 		func(from, to nodeVars) rel.Clauses {
+			ic := mkNodeVars("index-column")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
-				from.el.Type((*scpb.Column)(nil)),
-				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				indexContainsColumn(
-					to.el, from.el, "index-column", "table-id", "column-id", "index-id",
-				),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_DELETE_ONLY),
-				currentStatus(to.node, scpb.Status_BACKFILL_ONLY),
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				joinOnColumnID(from, ic, relationID, columnID),
+				columnInIndex(ic, to, relationID, columnID, "index-id"),
+				statusesToPublic(from, scpb.Status_DELETE_ONLY, to, scpb.Status_BACKFILL_ONLY),
 			}
 		},
 	)
@@ -170,15 +160,17 @@ func init() {
 		scgraph.Precedence,
 		"column", "temp-index",
 		func(from, to nodeVars) rel.Clauses {
+			ic := mkNodeVars("index-column")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
-				from.el.Type((*scpb.Column)(nil)),
-				to.el.Type((*scpb.TemporaryIndex)(nil)),
-				indexContainsColumn(
-					to.el, from.el, "index-column", "table-id", "column-id", "index-id",
-				),
-				targetStatus(from.target, scpb.ToPublic),
-				targetStatus(to.target, scpb.Transient),
-				currentStatusEq(from.node, to.node, scpb.Status_DELETE_ONLY),
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.TemporaryIndex)(nil)),
+				columnInIndex(ic, to, relationID, columnID, "temp-index-id"),
+				joinOnColumnID(ic, from, relationID, columnID),
+				from.targetStatus(scpb.ToPublic),
+				to.targetStatus(scpb.Transient),
+				from.currentStatus(scpb.Status_DELETE_ONLY),
+				to.currentStatus(scpb.Status_DELETE_ONLY),
 			}
 		},
 	)
@@ -191,11 +183,10 @@ func init() {
 		"column-name-or-type", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.ColumnName)(nil), (*scpb.ColumnType)(nil)),
-				to.el.Type((*scpb.IndexColumn)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "column-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatusEq(from.node, to.node, scpb.Status_PUBLIC),
+				from.Type((*scpb.ColumnName)(nil), (*scpb.ColumnType)(nil)),
+				to.Type((*scpb.IndexColumn)(nil)),
+				joinOnColumnID(from, to, "table-id", "column-id"),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -205,12 +196,10 @@ func init() {
 		"index", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				to.el.Type((*scpb.IndexColumn)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_BACKFILL_ONLY),
-				currentStatus(to.node, scpb.Status_PUBLIC),
+				from.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.IndexColumn)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToPublic(from, scpb.Status_BACKFILL_ONLY, to, scpb.Status_PUBLIC),
 			}
 		})
 	// We need to make sure that no columns are added to the index after it
@@ -220,13 +209,10 @@ func init() {
 		"index-column", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.IndexColumn)(nil)),
-				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_PUBLIC),
-				currentStatus(to.node, scpb.Status_BACKFILLED),
+				from.Type((*scpb.IndexColumn)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_BACKFILLED),
 			}
 		})
 	registerDepRule("index-column added to index after temp index exists",
@@ -234,13 +220,13 @@ func init() {
 		"index", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.TemporaryIndex)(nil)),
-				to.el.Type((*scpb.IndexColumn)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatus(from.target, scpb.Transient),
-				targetStatus(to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_DELETE_ONLY),
-				currentStatus(to.node, scpb.Status_PUBLIC),
+				from.Type((*scpb.TemporaryIndex)(nil)),
+				to.Type((*scpb.IndexColumn)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				from.targetStatus(scpb.Transient),
+				to.targetStatus(scpb.ToPublic),
+				from.currentStatus(scpb.Status_DELETE_ONLY),
+				to.currentStatus(scpb.Status_PUBLIC),
 			}
 		})
 	// We need to make sure that no columns are added to the temp index after it
@@ -250,13 +236,13 @@ func init() {
 		"index-column", "index",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.el.Type((*scpb.IndexColumn)(nil)),
-				to.el.Type((*scpb.TemporaryIndex)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatus(from.target, scpb.ToPublic),
-				targetStatus(to.target, scpb.Transient),
-				currentStatus(from.node, scpb.Status_PUBLIC),
-				currentStatus(to.node, scpb.Status_WRITE_ONLY),
+				from.Type((*scpb.IndexColumn)(nil)),
+				to.Type((*scpb.TemporaryIndex)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				from.targetStatus(scpb.ToPublic),
+				to.targetStatus(scpb.Transient),
+				from.currentStatus(scpb.Status_PUBLIC),
+				to.currentStatus(scpb.Status_WRITE_ONLY),
 			}
 		})
 
@@ -270,14 +256,17 @@ func init() {
 		scgraph.Precedence,
 		"column", "index",
 		func(from, to nodeVars) rel.Clauses {
+			ic := mkNodeVars("index-column")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.el.Type((*scpb.Column)(nil)),
 				to.el.Type((*scpb.TemporaryIndex)(nil)),
-				indexContainsColumn(to.el, from.el, "index-column", "table-id", "column-id", "index-id"),
-				targetStatus(from.target, scpb.ToPublic),
-				targetStatus(to.target, scpb.Transient),
-				currentStatus(from.node, scpb.Status_WRITE_ONLY),
-				currentStatus(to.node, scpb.Status_WRITE_ONLY),
+				joinOnColumnID(ic, from, relationID, columnID),
+				columnInIndex(ic, to, relationID, columnID, "index-id"),
+				from.targetStatus(scpb.ToPublic),
+				to.targetStatus(scpb.Transient),
+				from.currentStatus(scpb.Status_WRITE_ONLY),
+				to.currentStatus(scpb.Status_WRITE_ONLY),
 			}
 		},
 	)
