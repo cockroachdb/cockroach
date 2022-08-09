@@ -207,20 +207,16 @@ type InternalRows interface {
 	Types() colinfo.ResultColumns
 }
 
-// InternalExecutorFactory is a function that produces an internal executor.
-type InternalExecutorFactory func(
-	context.Context, *sessiondata.SessionData,
-) InternalExecutor
-
-// WithoutTxn is to run SQL statements without a txn context.
-// Note that in this mode, each execution with the internal executor runs its
-// own descriptor collection, schema change job collection and transaction state
-// machine.
-func (f InternalExecutorFactory) WithoutTxn(
-	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
-) error {
-	ie := f(ctx, nil /* SessionData */)
-	return run(ctx, ie)
+// InternalExecutorFactory is an interface that allow the creation of an
+// internal executor, and run sql statement without a txn with the internal
+// executor.
+type InternalExecutorFactory interface {
+	// NewInternalExecutor constructs a new internal executor.
+	// TODO (janexing): this should be deprecated soon.
+	NewInternalExecutor(sd *sessiondata.SessionData) InternalExecutor
+	// RunWithoutTxn is to create an internal executor without binding to a txn,
+	// and run the passed function with this internal executor.
+	RunWithoutTxn(ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error) error
 }
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.

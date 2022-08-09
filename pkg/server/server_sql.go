@@ -951,13 +951,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// InternalExecutorFactory. The same applies for setting a
 	// SessionBoundInternalExecutor on the job registry.
-	ieFactory := func(
-		ctx context.Context, sessionData *sessiondata.SessionData,
-	) sqlutil.InternalExecutor {
-		ie := sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
-		ie.SetSessionData(sessionData)
-		return &ie
-	}
+	ieFactory := sql.NewInternalExecutorFactory(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
 
 	ieFactoryWithTxn := func(
 		ctx context.Context,

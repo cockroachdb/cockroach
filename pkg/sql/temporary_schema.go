@@ -587,7 +587,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	}
 
 	// Clean up temporary data for inactive sessions.
-	ie := c.makeSessionBoundInternalExecutor(ctx, &sessiondata.SessionData{})
+	ie := c.makeSessionBoundInternalExecutor.NewInternalExecutor(&sessiondata.SessionData{})
 	for sessionID := range sessionIDs {
 		if _, ok := activeSessions[sessionID.Uint128]; !ok {
 			log.Eventf(ctx, "cleaning up temporary object for session %q", sessionID)

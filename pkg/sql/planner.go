@@ -894,7 +894,7 @@ func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
 // Note that this function should only be used when using internal executor
 // to run sql statement under the planner context.
 func initInternalExecutor(ctx context.Context, p *planner) sqlutil.InternalExecutor {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(p.SessionData())
 	ie.(*InternalExecutor).extraTxnState = &extraTxnState{
 		txn:                    p.Txn(),
 		descCollection:         p.Descriptors(),

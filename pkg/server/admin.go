@@ -1759,7 +1759,7 @@ func (s *adminServer) SetUIData(
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 
-		if err := s.server.sqlServer.internalExecutorFactory.WithoutTxn(ctx, func(
+		if err := s.server.sqlServer.internalExecutorFactory.RunWithoutTxn(ctx, func(
 			ctx context.Context, ie sqlutil.InternalExecutor,
 		) error {
 			query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`

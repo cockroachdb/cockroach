@@ -103,7 +103,7 @@ func (iv indexValidator) makeHistoricalInternalExecTxnRunner() sqlutil.Historica
 		if err != nil {
 			return err
 		}
-		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
+		return fn(ctx, validationTxn, iv.ieFactory.NewInternalExecutor(iv.newFakeSessionData(&iv.settings.SV)))
 	}
 }
 
