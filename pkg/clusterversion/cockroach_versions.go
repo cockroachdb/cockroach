@@ -192,9 +192,6 @@ const (
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
-	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
-	// 22.1.
-	EnableNewStoreRebalancer
 	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
 	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
 	ClusterLocksVirtualTable
@@ -366,10 +363,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatSplitUserKeysMarked,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
-	},
-	{
-		Key:     EnableNewStoreRebalancer,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
 	},
 	{
 		Key:     ClusterLocksVirtualTable,
