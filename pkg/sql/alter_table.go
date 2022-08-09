@@ -611,8 +611,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
 					if err := validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx, params.ExecCfg().InternalExecutorFactory(
-							params.ctx, params.SessionData(),
+						params.ctx, params.ExecCfg().InternalExecutorFactory.NewInternalExecutor(
+							params.SessionData(),
 						), n.tableDesc, params.p.Txn(), params.p.User(), name,
 					); err != nil {
 						return err

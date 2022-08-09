@@ -1165,8 +1165,7 @@ func (e *urlOutputter) finish() (url.URL, error) {
 func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
 	var out urlOutputter
 
-	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
-		ef.planner.EvalContext().Context,
+	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
 	c := makeStmtEnvCollector(ef.planner.EvalContext().Context, ie.(*InternalExecutor))

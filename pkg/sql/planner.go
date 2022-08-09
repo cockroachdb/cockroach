@@ -901,7 +901,7 @@ func (p *planner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(p.SessionData())
 	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
@@ -918,7 +918,7 @@ func (p *planner) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(p.SessionData())
 	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
 }
