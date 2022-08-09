@@ -60,7 +60,7 @@ func NewExecutorDependencies(
 	merger scexec.Merger,
 	backfillTracker scexec.BackfillerTracker,
 	backfillFlusher scexec.PeriodicProgressFlusher,
-	indexValidator scexec.IndexValidator,
+	indexValidator scexec.Validator,
 	clock scmutationexec.Clock,
 	metadataUpdater scexec.DescriptorMetadataUpdater,
 	eventLogger scexec.EventLogger,
@@ -101,7 +101,7 @@ type txnDeps struct {
 	descsCollection     *descs.Collection
 	jobRegistry         JobRegistry
 	createdJobs         []jobspb.JobID
-	indexValidator      scexec.IndexValidator
+	indexValidator      scexec.Validator
 	statsRefresher      scexec.StatsRefresher
 	tableStatsToRefresh []descpb.ID
 	eventLogger         scexec.EventLogger
@@ -391,7 +391,7 @@ func (d *execDeps) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 	return d.periodicProgressFlusher
 }
 
-func (d *execDeps) IndexValidator() scexec.IndexValidator {
+func (d *execDeps) Validator() scexec.Validator {
 	return d.indexValidator
 }
 
