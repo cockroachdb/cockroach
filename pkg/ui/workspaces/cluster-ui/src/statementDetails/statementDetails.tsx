@@ -40,7 +40,6 @@ import {
 import { Loading } from "src/loading";
 import { Button } from "src/button";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { SortSetting } from "src/sortedtable";
 import { PlanDetails } from "./planDetails";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { DiagnosticsView } from "./diagnostics/diagnosticsView";
@@ -88,7 +87,6 @@ export type StatementDetailsProps = StatementDetailsOwnProps &
   RouteComponentProps<{ implicitTxn: string; statement: string }>;
 
 export interface StatementDetailsState {
-  plansSortSetting: SortSetting;
   currentTab?: string;
 }
 
@@ -210,10 +208,6 @@ export class StatementDetails extends React.Component<
     super(props);
     const searchParams = new URLSearchParams(props.history.location.search);
     this.state = {
-      plansSortSetting: {
-        ascending: false,
-        columnTitle: "lastExecTime",
-      },
       currentTab: searchParams.get("tab") || "overview",
     };
     this.activateDiagnosticsRef = React.createRef();
@@ -344,12 +338,6 @@ export class StatementDetails extends React.Component<
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
-  };
-
-  onChangePlansSortSetting = (ss: SortSetting): void => {
-    this.setState({
-      plansSortSetting: ss,
-    });
   };
 
   render(): React.ReactElement {
@@ -729,9 +717,8 @@ export class StatementDetails extends React.Component<
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />
           <PlanDetails
+            statementFingerprintID={this.props.statementFingerprintID}
             plans={statement_statistics_per_plan_hash}
-            sortSetting={this.state.plansSortSetting}
-            onChangeSortSetting={this.onChangePlansSortSetting}
           />
         </section>
       </>
