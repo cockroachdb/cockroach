@@ -15,7 +15,7 @@ import file=tpch_stats
 # committed date. The query lists the count of such orders for each order
 # priority sorted in ascending priority order.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q4
+stats-quality database=tpch set=save_tables_prefix=q4
 SELECT
     o_orderpriority,
     count(*) AS order_count
