@@ -1,2 +1,3 @@
 discard_stmt ::=
 	'DISCARD' 'ALL'
+	| 'DISCARD' 'SEQUENCES'

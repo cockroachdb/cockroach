@@ -83,6 +83,7 @@ deallocate_stmt ::=
 
 discard_stmt ::=
 	'DISCARD' 'ALL'
+	| 'DISCARD' 'SEQUENCES'
 
 grant_stmt ::=
 	'GRANT' privileges 'ON' grant_targets 'TO' role_spec_list opt_with_grant_option
