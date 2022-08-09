@@ -7821,46 +7821,6 @@ CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 	}
 }
 
-func TestMixedAddIndexStyleFails(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.Server = &server.TestingKnobs{
-		DisableAutomaticVersionUpgrade: make(chan struct{}),
-		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.MVCCIndexBackfiller - 1),
-	}
-
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	_, err := sqlDB.Exec("CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)")
-	require.NoError(t, err)
-
-	txn, err := sqlDB.Begin()
-	require.NoError(t, err)
-	_, err = txn.Exec("CREATE INDEX ON t (b)")
-	require.NoError(t, err)
-
-	waitOnce := &sync.Once{}
-	wait := make(chan struct{})
-	s.ClusterSettings().Version.SetOnChange(func(_ context.Context, newVersion clusterversion.ClusterVersion) {
-		if newVersion.IsActive(clusterversion.MVCCIndexBackfiller) {
-			waitOnce.Do(func() { close(wait) })
-		}
-	})
-	close(params.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade)
-	t.Log("waiting for version change")
-	<-wait
-	_, err = txn.Exec("CREATE INDEX ON t (c)")
-	require.NoError(t, err)
-
-	err = txn.Commit()
-	require.Error(t, err, "expected 1 temporary indexes, but found 2; schema change may have been constructed during cluster version upgrade")
-}
-
 func TestAddIndexResumeAfterSettingFlippedFails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

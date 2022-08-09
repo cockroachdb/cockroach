@@ -190,11 +190,6 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-	// MVCCIndexBackfiller supports MVCC-compliant index
-	// backfillers via a new BACKFILLING index state, delete
-	// preserving temporary indexes, and a post-backfill merging
-	// processing.
-	MVCCIndexBackfiller
 	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
 	// during joint configuration, including to VOTER_INCOMING replicas.
 	EnableLeaseHolderRemoval
@@ -388,10 +383,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionBlockProperties,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
-	},
-	{
-		Key:     MVCCIndexBackfiller,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
 	{
 		Key:     EnableLeaseHolderRemoval,
