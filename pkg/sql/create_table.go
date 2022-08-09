@@ -2432,16 +2432,6 @@ func newRowLevelTTLScheduledJob(
 	return sj, nil
 }
 
-func checkTTLEnabledForCluster(ctx context.Context, st *cluster.Settings) error {
-	if !st.Version.IsActive(ctx, clusterversion.RowLevelTTL) {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"row level TTL is only available once the cluster is fully upgraded",
-		)
-	}
-	return nil
-}
-
 func checkAutoStatsTableSettingsEnabledForCluster(ctx context.Context, st *cluster.Settings) error {
 	if !st.Version.IsActive(ctx, clusterversion.AutoStatsTableSettings) {
 		return pgerror.Newf(
