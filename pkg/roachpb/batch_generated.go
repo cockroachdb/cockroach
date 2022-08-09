@@ -182,6 +182,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.Barrier
 	case *RequestUnion_Probe:
 		return t.Probe
+	case *RequestUnion_IsSpanEmpty:
+		return t.IsSpanEmpty
 	default:
 		return nil
 	}
@@ -284,6 +286,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.Barrier
 	case *ResponseUnion_Probe:
 		return t.Probe
+	case *ResponseUnion_IsSpanEmpty:
+		return t.IsSpanEmpty
 	default:
 		return nil
 	}
@@ -467,6 +471,8 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_Barrier{t}
 	case *ProbeRequest:
 		union = &RequestUnion_Probe{t}
+	case *IsSpanEmptyRequest:
+		union = &RequestUnion_IsSpanEmpty{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
@@ -572,13 +578,15 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_Barrier{t}
 	case *ProbeResponse:
 		union = &ResponseUnion_Probe{t}
+	case *IsSpanEmptyResponse:
+		union = &ResponseUnion_IsSpanEmpty{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
 
-type reqCounts [48]int32
+type reqCounts [49]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -682,6 +690,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[46]++
 		case *RequestUnion_Probe:
 			counts[47]++
+		case *RequestUnion_IsSpanEmpty:
+			counts[48]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -738,6 +748,7 @@ var requestNames = []string{
 	"ScanInterleavedIntents",
 	"Barrier",
 	"Probe",
+	"IsSpanEmpty",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -961,6 +972,10 @@ type probeResponseAlloc struct {
 	union ResponseUnion_Probe
 	resp  ProbeResponse
 }
+type isSpanEmptyResponseAlloc struct {
+	union ResponseUnion_IsSpanEmpty
+	resp  IsSpanEmptyResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -1019,6 +1034,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf45 []scanInterleavedIntentsResponseAlloc
 	var buf46 []barrierResponseAlloc
 	var buf47 []probeResponseAlloc
+	var buf48 []isSpanEmptyResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1358,6 +1374,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf47[0].union.Probe = &buf47[0].resp
 			br.Responses[i].Value = &buf47[0].union
 			buf47 = buf47[1:]
+		case *RequestUnion_IsSpanEmpty:
+			if buf48 == nil {
+				buf48 = make([]isSpanEmptyResponseAlloc, counts[48])
+			}
+			buf48[0].union.IsSpanEmpty = &buf48[0].resp
+			br.Responses[i].Value = &buf48[0].union
+			buf48 = buf48[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -1464,6 +1487,8 @@ func CreateRequest(method Method) Request {
 		return &BarrierRequest{}
 	case Probe:
 		return &ProbeRequest{}
+	case IsSpanEmpty:
+		return &IsSpanEmptyRequest{}
 	default:
 		panic(fmt.Sprintf("unsupported method: %+v", method))
 	}

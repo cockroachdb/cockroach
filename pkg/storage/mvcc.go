@@ -5271,6 +5271,37 @@ func ComputeStatsForRangeWithVisitors(
 	return ms, nil
 }
 
+// MVCCIsSpanEmpty returns true if there are no MVCC keys whatsoever in the
+// key span in the requested time interval.
+func MVCCIsSpanEmpty(
+	ctx context.Context, reader Reader, opts MVCCIsSpanEmptyOptions,
+) (isEmpty bool, _ error) {
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "MVCCIsSpanEmpty")
+	defer span.Finish()
+
+	// If we're not exporting all revisions then we can mask point keys below any
+	// MVCC range tombstones, since we don't care about them.
+	var rangeKeyMasking hlc.Timestamp
+
+	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		StartKey:             opts.StartKey,
+		EndKey:               opts.EndKey,
+		StartTime:            opts.StartTS,
+		EndTime:              opts.EndTS,
+		RangeKeyMaskingBelow: rangeKeyMasking,
+		IntentPolicy:         MVCCIncrementalIterIntentPolicyEmit,
+	})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: opts.StartKey})
+	valid, err := iter.Valid()
+	if err != nil {
+		return false, err
+	}
+	return !valid, nil
+}
+
 // MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
 // interval (StartTS, EndTS] as a Pebble SST. See MVCCExportOptions for options.
 //
@@ -5667,6 +5698,16 @@ type MVCCExportOptions struct {
 	// resources. Export queries limiter in its iteration loop to break out once
 	// resources are exhausted.
 	ResourceLimiter ResourceLimiter
+}
+
+// MVCCIsSpanEmptyOptions configures the MVCCIsSpanEmpty function.
+type MVCCIsSpanEmptyOptions struct {
+	// StartKey determines start of the checked span.
+	StartKey roachpb.Key
+	// EndKey determines the end of exported interval (exclusive).
+	EndKey roachpb.Key
+	// StartTS and EndTS determine the scanned time range as (startTS, endTS].
+	StartTS, EndTS hlc.Timestamp
 }
 
 // PeekRangeKeysLeft peeks for any range keys to the left of the given key.

@@ -550,6 +550,19 @@ func (r *QueryLocksResponse) combine(c combinable) error {
 
 var _ combinable = &QueryLocksResponse{}
 
+// combine implements the combinable interface.
+func (r *IsSpanEmptyResponse) combine(c combinable) error {
+	otherR := c.(*IsSpanEmptyResponse)
+	if r != nil {
+		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ combinable = &IsSpanEmptyResponse{}
+
 // Header implements the Request interface.
 func (rh RequestHeader) Header() RequestHeader {
 	return rh
@@ -786,6 +799,9 @@ func (*ScanInterleavedIntentsRequest) Method() Method { return ScanInterleavedIn
 
 // Method implements the Request interface.
 func (*BarrierRequest) Method() Method { return Barrier }
+
+// Method implements the Request interface.
+func (*IsSpanEmptyRequest) Method() Method { return IsSpanEmpty }
 
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
@@ -1071,6 +1087,12 @@ func (r *ScanInterleavedIntentsRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *BarrierRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *IsSpanEmptyRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1454,6 +1476,7 @@ func (*QueryResolvedTimestampRequest) flags() flag {
 }
 func (*ScanInterleavedIntentsRequest) flags() flag { return isRead | isRange }
 func (*BarrierRequest) flags() flag                { return isWrite | isRange }
+func (*IsSpanEmptyRequest) flags() flag            { return isRead | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about
@@ -1655,6 +1678,10 @@ func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
 		StoreID:   storeID,
 	}
 	return sIdent, nil
+}
+
+func (r *IsSpanEmptyResponse) IsEmpty() bool {
+	return r.NumKeys == 0
 }
 
 // SafeFormat implements redact.SafeFormatter.

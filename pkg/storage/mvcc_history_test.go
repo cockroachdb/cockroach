@@ -662,6 +662,7 @@ var commands = map[string]cmd{
 	"put":            {typDataUpdate, cmdPut},
 	"put_rangekey":   {typDataUpdate, cmdPutRangeKey},
 	"scan":           {typReadOnly, cmdScan},
+	"is_span_empty":  {typReadOnly, cmdIsSpanEmpty},
 
 	"iter_new":                    {typReadOnly, cmdIterNew},
 	"iter_new_incremental":        {typReadOnly, cmdIterNewIncremental}, // MVCCIncrementalIterator
@@ -1148,6 +1149,21 @@ func cmdPut(e *evalCtx) error {
 		}
 		return nil
 	})
+}
+
+func cmdIsSpanEmpty(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	isEmpty, err := MVCCIsSpanEmpty(e.ctx, e.engine, MVCCIsSpanEmptyOptions{
+		StartKey: key,
+		EndKey:   endKey,
+		StartTS:  e.getTsWithName("startTs"),
+		EndTS:    e.getTs(nil),
+	})
+	if err != nil {
+		return err
+	}
+	e.results.buf.Print(isEmpty)
+	return nil
 }
 
 func cmdExport(e *evalCtx) error {
