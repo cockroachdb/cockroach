@@ -204,9 +204,6 @@ const (
 	// such as end_time, initial_scan_only, and setting the value of initial_scan
 	// to 'yes|no|only'
 	EnableNewChangefeedOptions
-	// SpanCountTable adds system.span_count to track the number of committed
-	// tenant spans.
-	SpanCountTable
 	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
 	// accounting for incremental schema changes.
 	PreSeedSpanCountTable
@@ -379,10 +376,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableNewChangefeedOptions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
-	},
-	{
-		Key:     SpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 108},
 	},
 	{
 		Key:     PreSeedSpanCountTable,
