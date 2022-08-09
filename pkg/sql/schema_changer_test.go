@@ -2645,7 +2645,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		wg.Add(1)
 		// Alter the primary key of the table.
 		go func() {
-			if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2)`); err != nil {
+			if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2);
+SET use_declarative_schema_changer = on;`); err != nil {
 				t.Error(err)
 			}
 			wg.Done()
@@ -2654,7 +2657,10 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		<-backfillNotif
 
 		// This must be rejected, because there is a primary key change already in progress.
-		_, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+		_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k);
+SET use_declarative_schema_changer = on;`)
 		if !testutils.IsError(err, "pq: unimplemented: table test is currently undergoing a schema change") {
 			t.Errorf("expected to concurrent primary key change to error, but got %+v", err)
 		}
@@ -2718,7 +2724,8 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	go func() {
 		if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer = off;
-ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k);
+SET use_declarative_schema_changer = on;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2729,7 +2736,8 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
 	// Test that trying different schema changes results an error.
 	_, err := sqlDB.Exec(`
 SET use_declarative_schema_changer = off;
-ALTER TABLE t.test ADD COLUMN z INT`)
+ALTER TABLE t.test ADD COLUMN z INT;
+SET use_declarative_schema_changer = on;`)
 	expected := fmt.Sprintf(`pq: relation "test" \(%d\): unimplemented: cannot perform a schema change operation while a primary key change is in progress`, tableID)
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected to find error %s but found %+v", expected, err)
@@ -3277,7 +3285,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 				if _, err := db.Exec(`CANCEL JOB (
 					SELECT job_id FROM [SHOW JOBS]
 					WHERE
-						job_type = 'SCHEMA CHANGE' AND
+						job_type = 'NEW SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
 				)`, jobs.StatusRunning); err != nil {
@@ -3372,7 +3380,8 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 `)
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+	_, err = sqlDB.Exec(`SET use_declarative_schema_changer = off; 
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
 	require.NoError(t, err)
 
 	// Wait until the testing knob has notified that canceling the job has been
@@ -6202,16 +6211,6 @@ ALTER TABLE t.public.test DROP COLUMN v;`)
 	require.Equal(t, [][]string{
 		{"1", "2"},
 	}, rows)
-
-	// Validate the job cancellation metrics.
-	rows = runner.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'job.%.canceled'")
-	if len(rows) != 1 ||
-		len(rows[0]) != 2 ||
-		rows[0][0] != "job.schema_change.canceled" {
-		require.Failf(t, "Unexpected result set", "Rows: %s", rows)
-	} else if val, err := strconv.ParseInt(rows[0][1], 10, 32); err != nil || val < 0 {
-		require.Failf(t, "Invalid integer or value", "Error: %s Val: %d", err, val)
-	}
 }
 
 // TestRetriableErrorDuringRollback tests that a retriable error while rolling
@@ -6651,16 +6650,6 @@ SELECT job_id FROM crdb_internal.jobs
 	withJobsToFail(func(m map[jobspb.JobID]struct{}) {
 		require.Len(t, m, 0)
 	})
-
-	// Validate the job cancellation metrics.
-	rows := tdb.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'job.%.canceled'")
-	if len(rows) != 1 ||
-		len(rows[0]) != 2 ||
-		rows[0][0] != "job.schema_change.canceled" {
-		require.Failf(t, "Unexpected result set", "Rows: %s", rows)
-	} else if val, err := strconv.ParseInt(rows[0][1], 10, 32); err != nil || val < 2 {
-		require.Failf(t, "Invalid integer or value", "Error: %s Val: %d", err, val)
-	}
 }
 
 // TestCancelMultipleQueued tests that canceling schema changes when there are
@@ -8113,11 +8102,13 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 	for _, tc := range []testCase{
 		{
 			name: "update during alter table with multiple column families",
-			setupSQL: `CREATE DATABASE t;
+			setupSQL: `SET use_declarative_schema_changer = off;
+CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, a INT NOT NULL, b INT, FAMILY (pk, a), FAMILY (b));
 INSERT INTO t.test (pk, a, b) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 `,
-			schemaChangeSQL: `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (a)`,
+			schemaChangeSQL: `SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (a)`,
 			operation: func(sqlDB *gosql.DB, kvDB *kv.DB) error {
 				_, err := sqlDB.Exec("UPDATE t.test SET b = 22 WHERE pk = 1")
 				return err

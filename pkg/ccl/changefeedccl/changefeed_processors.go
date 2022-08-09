@@ -1038,7 +1038,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 				// Detect whether this boundary should be used to kill or restart the
 				// changefeed.
 				if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
-					err = changefeedbase.MarkRetryableError(err)
+					err = changefeedbase.MarkRetryableErrorWithTimestamp(err, cf.frontier.boundaryTime)
 				}
 			}
 

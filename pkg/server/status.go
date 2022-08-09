@@ -800,9 +800,8 @@ func (s *statusServer) AllocatorRange(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
-		// already returns a proper gRPC error status.
+	err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1453,7 +1452,7 @@ func (s *statusServer) Nodes(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	err := s.privilegeChecker.requireViewActivityPermission(ctx)
+	err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1471,14 +1470,14 @@ func (s *statusServer) NodesUI(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	hasViewActivity := false
-	err := s.privilegeChecker.requireViewActivityPermission(ctx)
+	hasViewClusterMetadata := false
+	err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		if !grpcutil.IsAuthError(err) {
 			return nil, err
 		}
 	} else {
-		hasViewActivity = true
+		hasViewClusterMetadata = true
 	}
 
 	internalResp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
@@ -1490,13 +1489,13 @@ func (s *statusServer) NodesUI(
 		LivenessByNodeID: internalResp.LivenessByNodeID,
 	}
 	for i, nodeStatus := range internalResp.Nodes {
-		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewActivity)
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewClusterMetadata)
 	}
 
 	return resp, nil
 }
 
-func nodeStatusToResp(n *statuspb.NodeStatus, hasViewActivity bool) serverpb.NodeResponse {
+func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serverpb.NodeResponse {
 	tiers := make([]serverpb.Tier, len(n.Desc.Locality.Tiers))
 	for j, t := range n.Desc.Locality.Tiers {
 		tiers[j] = serverpb.Tier{
@@ -1552,7 +1551,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewActivity bool) serverpb.Nod
 			sfsprops := &roachpb.FileStoreProperties{
 				FsType: fsprops.FsType,
 			}
-			if hasViewActivity {
+			if hasViewClusterMetadata {
 				sfsprops.Path = fsprops.Path
 				sfsprops.BlockDevice = fsprops.BlockDevice
 				sfsprops.MountPoint = fsprops.MountPoint
@@ -1577,7 +1576,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewActivity bool) serverpb.Nod
 		NumCpus:           n.NumCpus,
 	}
 
-	if hasViewActivity {
+	if hasViewClusterMetadata {
 		resp.Args = n.Args
 		resp.Env = n.Env
 		resp.Desc.Attrs = n.Desc.Attrs
@@ -1916,7 +1915,8 @@ func (s *statusServer) rangesHelper(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx)
+	if err != nil {
 		return nil, 0, err
 	}
 

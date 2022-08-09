@@ -28,8 +28,9 @@ import (
 // declarative schema  changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedStatement{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):  {alterTableAddColumn, true},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)): {alterTableDropColumn, true},
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {alterTableAddColumn, true},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {alterTableDropColumn, true},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {alterTableAlterPrimaryKey, true},
 }
 
 func init() {

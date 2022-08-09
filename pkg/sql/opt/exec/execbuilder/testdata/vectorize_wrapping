@@ -1,0 +1,78 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t85632 (k INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t85632 INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "k"
+          ],
+          "created_at": "2022-08-09 09:00:00.00000",
+          "distinct_count": 1000,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1000
+      }
+  ]'
+
+# Use experimental_always vectorize mode so that we error out when trying to
+# wrap a row-by-row processor.
+statement ok
+SET vectorize=experimental_always;
+
+# Both the estimated row count exceeds the max wrapping row count and number of
+# render is smaller that the min render count, so we use native projection
+# operators.
+query T
+EXPLAIN (VEC) SELECT k + k + k + k FROM t85632
+----
+│
+└ Node 1
+  └ *colexecproj.projPlusInt64Int64Op
+    └ *colexecproj.projPlusInt64Int64Op
+      └ *colexecproj.projPlusInt64Int64Op
+        └ *colfetcher.ColBatchScan
+
+statement ok
+SET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.min_render_count = 3;
+
+# The estimated row count still exceeds the max wrapping row count.
+query T
+EXPLAIN (VEC) SELECT k + k + k + k FROM t85632
+----
+│
+└ Node 1
+  └ *colexecproj.projPlusInt64Int64Op
+    └ *colexecproj.projPlusInt64Int64Op
+      └ *colexecproj.projPlusInt64Int64Op
+        └ *colfetcher.ColBatchScan
+
+statement ok
+SET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.max_row_count = 1000;
+
+# Now both wrapping conditions are satisfied.
+query error falling back to wrapping a row-by-row processor
+EXPLAIN (VEC) SELECT k + k + k + k FROM t85632
+
+statement ok
+RESET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.min_render_count;
+
+# The render count isn't sufficient for wrapping to kick in.
+query T
+EXPLAIN (VEC) SELECT k + k + k + k FROM t85632
+----
+│
+└ Node 1
+  └ *colexecproj.projPlusInt64Int64Op
+    └ *colexecproj.projPlusInt64Int64Op
+      └ *colexecproj.projPlusInt64Int64Op
+        └ *colfetcher.ColBatchScan
+
+statement ok
+RESET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.max_row_count;
+
+statement ok
+RESET vectorize

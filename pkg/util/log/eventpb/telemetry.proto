@@ -137,6 +137,9 @@ message SampledQuery {
   // The number of zig zag joins in the query plan.
   int64 zig_zag_join_count = 36 [(gogoproto.jsontag) = ",omitempty"];
 
+  // The duration of time in nanoseconds that the query experienced contention.
+  int64 contention_nanos = 37 [(gogoproto.jsontag) = ',omitempty'];
+
   reserved 12;
 }
 
