@@ -1140,7 +1140,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
-	tests.CheckKeyCount(t, kvDB, tableSpan, 4)
 
 	// Allow async schema change waiting for GC to complete (when dropping an
 	// index) and clear the index keys.

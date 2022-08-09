@@ -16,6 +16,14 @@ google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 
+aws_access_key_id="$AWS_ACCESS_KEY_ID"
+aws_secret_access_key="$AWS_SECRET_ACCESS_KEY"
+aws_default_region="$AWS_DEFAULT_REGION"
+mkdir "$PWD/.aws"
+export AWS_SHARED_CREDENTIALS_FILE="$PWD/.aws/credentials"
+export AWS_CONFIG_FILE="$PWD/.aws/config"
+log_into_aws
+
 exit_status=0
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     test //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test //pkg/ccl/cloudccl/gcp:gcp_test -- \
@@ -37,6 +45,9 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     --test_env=AWS_KMS_REGION="$AWS_KMS_REGION" \
     --test_env=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
     --test_env=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+    --test_env=AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" \
+    --test_env=AWS_SHARED_CREDENTIALS_FILE="$AWS_SHARED_CREDENTIALS_FILE" \
+    --test_env=AWS_CONFIG_FILE="$AWS_CONFIG_FILE" \
     --test_timeout=900 \
     || exit_status=$?
 
