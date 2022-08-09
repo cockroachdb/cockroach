@@ -26,13 +26,14 @@ export type PlanHashStats =
 export class PlansSortedTable extends SortedTable<PlanHashStats> {}
 
 const planDetailsColumnLabels = {
-  planID: "Plan ID",
-  lastExecTime: "Last Execution Time",
   avgExecTime: "Average Execution Time",
-  execCount: "Execution Count",
   avgRowsRead: "Average Rows Read",
-  fullScan: "Full Scan",
   distSQL: "Distributed",
+  execCount: "Execution Count",
+  fullScan: "Full Scan",
+  insights: "Insights",
+  lastExecTime: "Last Execution Time",
+  planID: "Plan ID",
   vectorized: "Vectorized",
 };
 export type PlanDetailsTableColumnKeys = keyof typeof planDetailsColumnLabels;
@@ -130,7 +131,28 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       </Tooltip>
     );
   },
+  insights: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The amount of insights for the plan."}
+      >
+        {planDetailsColumnLabels.insights}
+      </Tooltip>
+    );
+  },
 };
+
+function formatInsights(recommendations: string[]): string {
+  if (!recommendations || recommendations.length == 0) {
+    return "None";
+  }
+  if (recommendations.length == 1) {
+    return "1 Insight";
+  }
+  return `${recommendations.length} Insights`;
+}
 
 export function makeExplainPlanColumns(
   handleDetails: (plan: PlanHashStats) => void,
@@ -146,6 +168,13 @@ export function makeExplainPlanColumns(
       ),
       sort: (item: PlanHashStats) => longToInt(item.plan_hash),
       alwaysShow: true,
+    },
+    {
+      name: "insights",
+      title: planDetailsTableTitles.insights(),
+      cell: (item: PlanHashStats) =>
+        formatInsights(item.stats.index_recommendations),
+      sort: (item: PlanHashStats) => item.stats.index_recommendations?.length,
     },
     {
       name: "lastExecTime",
