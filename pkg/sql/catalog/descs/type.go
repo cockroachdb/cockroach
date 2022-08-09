@@ -23,6 +23,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ErrMutableTableImplicitType indicates that a table implicit type was fetched
+// as a mutable, which is not allowed.
+var ErrMutableTableImplicitType = pgerror.Newf(pgcode.DependentObjectsStillExist, "table implicit type not mutable")
+
 // GetMutableTypeByName returns a mutable type descriptor with properties
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetMutableTypeByName(
@@ -91,7 +95,7 @@ func (tc *Collection) GetMutableTypeByID(
 	case *typedesc.Mutable:
 		return t, nil
 	case *typedesc.TableImplicitRecordType:
-		return nil, pgerror.Newf(pgcode.DependentObjectsStillExist, "cannot modify table record type %q", desc.GetName())
+		return nil, errors.Wrapf(ErrMutableTableImplicitType, "cannot modify table record type %q", desc.GetName())
 	}
 	return nil,
 		errors.AssertionFailedf("unhandled type descriptor type %T during GetMutableTypeByID", desc)
