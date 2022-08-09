@@ -42,10 +42,15 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	preFuncResolver := b.semaCtx.FunctionResolver
 	b.semaCtx.FunctionResolver = nil
 
+	// By default, we do early-binding to track cross references. User is allowed
+	// to set the "user_defined_function_early_binding" session data to false to
+	// have late-binding. Note that references of user-defined types, including
+	// table implicit types, used in function signature will still be tracked when
+	// early binding is off
 	b.insideFuncDef = true
-	b.trackSchemaDeps = true
+	b.trackSchemaDeps = b.evalCtx.SessionData().UserDefinedFunctionEarlyBinding
 	// Make sure datasource names are qualified.
-	b.qualifyDataSourceNamesInAST = true
+	b.qualifyDataSourceNamesInAST = b.evalCtx.SessionData().UserDefinedFunctionEarlyBinding
 	defer func() {
 		b.insideFuncDef = false
 		b.trackSchemaDeps = false

@@ -2120,6 +2120,23 @@ var varGen = map[string]sessionVar{
 			return formatFloatAsPostgresSetting(0)
 		},
 	},
+
+	// CockroachDB extension.
+	`user_defined_function_early_binding`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`user_defined_function_early_binding`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("user_defined_function_early_binding", s)
+			if err != nil {
+				return err
+			}
+			m.SetUserDefinedFunctionEarlyBinding(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, kv *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UserDefinedFunctionEarlyBinding), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

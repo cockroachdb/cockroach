@@ -294,6 +294,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
+	ot.evalCtx.SessionData().UserDefinedFunctionEarlyBinding = true
 
 	return ot
 }

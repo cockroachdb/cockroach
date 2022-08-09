@@ -3296,6 +3296,10 @@ func (m *sessionDataMutator) SetTroubleshootingModeEnabled(val bool) {
 	m.data.TroubleshootingMode = val
 }
 
+func (m *sessionDataMutator) SetUserDefinedFunctionEarlyBinding(val bool) {
+	m.data.UserDefinedFunctionEarlyBinding = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

@@ -4263,6 +4263,7 @@ transaction_status                                    NoTxn               NULL  
 troubleshooting_mode                                  off                 NULL      NULL        NULL        string
 unconstrained_non_covering_index_scan_enabled         off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                        on                  NULL      NULL        NULL        string
+user_defined_function_early_binding                   on                  NULL      NULL        NULL        string
 vectorize                                             on                  NULL      NULL        NULL        string
 xmloption                                             content             NULL      NULL        NULL        string
 
@@ -4388,6 +4389,7 @@ transaction_status                                    NoTxn               NULL  
 troubleshooting_mode                                  off                 NULL  user     NULL      off                 off
 unconstrained_non_covering_index_scan_enabled         off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                        on                  NULL  user     NULL      on                  on
+user_defined_function_early_binding                   on                  NULL  user     NULL      on                  on
 vectorize                                             on                  NULL  user     NULL      on                  on
 xmloption                                             content             NULL  user     NULL      content             content
 
@@ -4511,6 +4513,7 @@ transaction_status                                    NULL    NULL     NULL     
 troubleshooting_mode                                  NULL    NULL     NULL     NULL        NULL
 unconstrained_non_covering_index_scan_enabled         NULL    NULL     NULL     NULL        NULL
 use_declarative_schema_changer                        NULL    NULL     NULL     NULL        NULL
+user_defined_function_early_binding                   NULL    NULL     NULL     NULL        NULL
 vectorize                                             NULL    NULL     NULL     NULL        NULL
 xmloption                                             NULL    NULL     NULL     NULL        NULL
 
