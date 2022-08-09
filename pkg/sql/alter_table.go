@@ -1822,13 +1822,6 @@ func handleTTLStorageParamChange(
 	tableDesc *tabledesc.Mutable,
 	before, after *catpb.RowLevelTTL,
 ) error {
-
-	if before == nil && after != nil {
-		if err := checkTTLEnabledForCluster(params.ctx, params.p.ExecCfg().Settings); err != nil {
-			return err
-		}
-	}
-
 	// update existing config
 	if before != nil && after != nil {
 
