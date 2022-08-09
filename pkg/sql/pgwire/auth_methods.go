@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
@@ -29,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/xdg-go/scram"
 )
@@ -100,6 +103,7 @@ var _ AuthMethod = authCertScram
 var _ AuthMethod = authTrust
 var _ AuthMethod = authReject
 var _ AuthMethod = authSessionRevivalToken([]byte{})
+var _ AuthMethod = authJwtToken
 
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from
@@ -591,6 +595,16 @@ func authReject(
 
 // authSessionRevivalToken is the AuthMethod constructor for the CRDB-specific
 // session revival token.
+// The session revival token is passed in the crdb:session_revival_token_base64
+// field during initial connection. This value is then extracted, base64 decoded
+// and verified.
+// This field is only expected to be used in instances where we have a SQL proxy.
+// The SQL proxy prevents the end customer from sending this field.  In the future,
+// We may decide to pass the token in the password field with a boolean field to
+// indicate the contents of the password field is a sessionRevivalToken as an
+// additional method. This could reduce the risk of the sessionRevivalToken being
+// logged accidentally. This risk is already fairly low because it should only be
+// passed by the SQL proxy.
 func authSessionRevivalToken(token []byte) AuthMethod {
 	return func(
 		_ context.Context,
@@ -618,4 +632,96 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 		})
 		return b, nil
 	}
+}
+
+// JWTVerifier is an interface for the `jwtauthccl` library to add JWT login support.
+// This interface has a method that validates whether a given JWT token is a proper
+// credential for a given user to login.
+type JWTVerifier interface {
+	ValidateJWTLogin(_ *cluster.Settings,
+		_ username.SQLUsername,
+		_ []byte,
+	) error
+}
+
+var jwtVerifier JWTVerifier
+
+type noJWTConfigured struct{}
+
+func (c *noJWTConfigured) ValidateJWTLogin(
+	_ *cluster.Settings, _ username.SQLUsername, _ []byte,
+) error {
+	return errors.New("JWT token authentication requires CCL features")
+}
+
+// ConfigureJWTAuth is a hook for the `jwtauthccl` library to add JWT login support. It's called to
+// setup the JWTVerifier just as it is needed.
+var ConfigureJWTAuth = func(
+	serverCtx context.Context,
+	ambientCtx log.AmbientContext,
+	st *cluster.Settings,
+	clusterUUID uuid.UUID,
+) JWTVerifier {
+	return &noJWTConfigured{}
+}
+
+// authJwtToken is the AuthMethod constructor for the CRDB-specific
+// jwt auth token.
+// The method is triggered when the client passes a specific option indicating
+// that it is passing a token in the password field. The token is then extracted
+// from the password field and verified.
+// The decision was made to pass the token in the password field instead of in
+// the options parameter as some drivers may insecurely handle options parameters.
+// In contrast, all drivers SHOULD know not to log the password, for example.
+func authJwtToken(
+	_ context.Context,
+	c AuthConn,
+	_ tls.ConnectionState,
+	execCfg *sql.ExecutorConfig,
+	_ *hba.Entry,
+	_ *identmap.Conf,
+) (*AuthBehaviors, error) {
+	b := &AuthBehaviors{}
+	b.SetRoleMapper(UseProvidedIdentity)
+	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, pwRetrieveFn PasswordRetrievalFn) error {
+		c.LogAuthInfof(ctx, "JWT token detected; attempting to use it")
+		if !clientConnection {
+			err := errors.New("JWT token authentication is only available for client connections")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// Request password from client.
+		if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// Wait for the password response from the client.
+		pwdData, err := c.GetPwdData()
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+
+		// Extract the token response from the password field.
+		token, err := passwordString(pwdData)
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// If there is no token send the Password Auth Failed error to make the client prompt for a password.
+		if len(token) == 0 {
+			return security.NewErrPasswordUserAuthFailed(user)
+		}
+		// Initialize the jwt verifier if it hasn't been already.
+		if jwtVerifier == nil {
+			jwtVerifier = ConfigureJWTAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+		}
+		if err = jwtVerifier.ValidateJWTLogin(execCfg.Settings, user, []byte(token)); err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+			return err
+		}
+		c.LogAuthOK(ctx)
+		return nil
+	})
+	return b, nil
 }
