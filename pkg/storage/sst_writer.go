@@ -67,7 +67,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	switch {
 	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionRangeKeys):
 		format = sstable.TableFormatPebblev2 // Range keys.
-	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionBlockProperties):
+	default:
 		format = sstable.TableFormatPebblev1 // Block properties.
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
