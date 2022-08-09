@@ -65,6 +65,8 @@ message CSVOptions {
   // Indicates the number of rows to import per CSV file.
   // Must be a non-zero positive number. 
   optional int64 row_limit = 6 [(gogoproto.nullable) = false];
+  // allow_quoted_null
+  optional bool allow_quoted_null = 7 [(gogoproto.nullable) = false];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.

@@ -640,6 +640,68 @@ ORDER BY table_name
 				`SELECT * from t`: {{"NULL", "foop"}},
 			},
 		},
+		{
+			name: "zero string is the default for nullif with CSV",
+			create: `
+				i int primary key,
+        s string
+      `,
+			typ: "CSV",
+			data: `1,
+2,""`,
+			query: map[string][][]string{
+				`SELECT i, s from t`: {
+					{"1", "NULL"},
+					{"2", ""},
+				},
+			},
+		},
+		{
+			name: "zero string in not null",
+			create: `
+						i int primary key,
+		       s string,
+		       s2 string not null
+		     `,
+			typ: "CSV",
+			data: `1,,
+		2,"",""`,
+			err: "null value in column \"s2\" violates not-null constraint",
+		},
+		{
+			name: "quoted nullif is treated as a string",
+			create: `
+				i int primary key,
+        s string
+      `,
+			with: `WITH nullif = 'foo'`,
+			typ:  "CSV",
+			data: `1,foo
+2,"foo"`,
+			query: map[string][][]string{
+				`SELECT i, s from t`: {
+					{"1", "NULL"},
+					{"2", "foo"},
+				},
+			},
+		},
+		{
+			name: "quoted nullif is treated as a null if allow_quoted_null is used",
+			create: `
+				i int primary key,
+        s string
+      `,
+			with: `WITH nullif = 'foo', allow_quoted_null`,
+			typ:  "CSV",
+			data: `1,foo
+2,"foo"`,
+			query: map[string][][]string{
+				`SELECT i, s from t`: {
+					{"1", "NULL"},
+					{"2", "NULL"},
+				},
+			},
+		},
 
 		// PG COPY
 		{
@@ -2379,8 +2441,9 @@ func TestImportCSVStmt(t *testing.T) {
 					f STRING DEFAULT 's',
 					PRIMARY KEY (a, b, c)
 				)`
-			query  = `IMPORT INTO t CSV DATA ($1)`
-			nullif = ` WITH nullif=''`
+			query            = `IMPORT INTO t CSV DATA ($1)`
+			nullif           = ` WITH nullif=''`
+			allowQuotedNulls = `, allow_quoted_null`
 		)
 
 		sqlDB.Exec(t, create)
@@ -2388,12 +2451,31 @@ func TestImportCSVStmt(t *testing.T) {
 		data = ",5,e,7,,"
 		t.Run(data, func(t *testing.T) {
 			sqlDB.ExpectErr(
-				t, `row 1: parse "a" as INT8: could not parse ""`,
+				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
 				query, srv.URL,
 			)
 			sqlDB.ExpectErr(
 				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
 				query+nullif, srv.URL,
+			)
+			sqlDB.ExpectErr(
+				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
+				query+nullif+allowQuotedNulls, srv.URL,
+			)
+		})
+		data = "\"\",5,e,7,,"
+		t.Run(data, func(t *testing.T) {
+			sqlDB.ExpectErr(
+				t, `row 1: parse "a" as INT8: could not parse ""`,
+				query, srv.URL,
+			)
+			sqlDB.ExpectErr(
+				t, `row 1: parse "a" as INT8: could not parse ""`,
+				query+nullif, srv.URL,
+			)
+			sqlDB.ExpectErr(
+				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
+				query+nullif+allowQuotedNulls, srv.URL,
 			)
 		})
 		data = "2,5,e,,,"
@@ -3754,7 +3836,17 @@ func (s *csvBenchmarkStream) Read(buf []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		return copy(buf, strings.Join(r.([]string), "\t")+"\n"), nil
+		row := r.([]csv.Record)
+		if len(row) == 0 {
+			return copy(buf, "\n"), nil
+		}
+		var b strings.Builder
+		b.WriteString(row[0].String())
+		for _, v := range row[1:] {
+			b.WriteString("\t")
+			b.WriteString(v.String())
+		}
+		return copy(buf, b.String()+"\n"), nil
 	}
 	return 0, io.EOF
 }

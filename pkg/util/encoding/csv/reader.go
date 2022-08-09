@@ -308,6 +308,13 @@ type Record struct {
 	Quoted bool
 }
 
+func (r *Record) String() string {
+	if r.Quoted {
+		return "\"" + r.Val + "\""
+	}
+	return r.Val
+}
+
 func (r *Reader) readRecord(dst []Record) ([]Record, error) {
 	if r.Comma == r.Comment || !validDelim(r.Comma) || (r.Comment != 0 && !validDelim(r.Comment)) {
 		return nil, errInvalidDelim

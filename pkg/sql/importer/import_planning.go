@@ -56,12 +56,13 @@ import (
 )
 
 const (
-	csvDelimiter    = "delimiter"
-	csvComment      = "comment"
-	csvNullIf       = "nullif"
-	csvSkip         = "skip"
-	csvRowLimit     = "row_limit"
-	csvStrictQuotes = "strict_quotes"
+	csvDelimiter        = "delimiter"
+	csvComment          = "comment"
+	csvNullIf           = "nullif"
+	csvSkip             = "skip"
+	csvRowLimit         = "row_limit"
+	csvStrictQuotes     = "strict_quotes"
+	csvAllowQuotedNulls = "allow_quoted_null"
 
 	mysqlOutfileRowSep   = "rows_terminated_by"
 	mysqlOutfileFieldSep = "fields_terminated_by"
@@ -105,12 +106,13 @@ const (
 )
 
 var importOptionExpectValues = map[string]sql.KVStringOptValidate{
-	csvDelimiter:    sql.KVStringOptRequireValue,
-	csvComment:      sql.KVStringOptRequireValue,
-	csvNullIf:       sql.KVStringOptRequireValue,
-	csvSkip:         sql.KVStringOptRequireValue,
-	csvRowLimit:     sql.KVStringOptRequireValue,
-	csvStrictQuotes: sql.KVStringOptRequireNoValue,
+	csvDelimiter:        sql.KVStringOptRequireValue,
+	csvComment:          sql.KVStringOptRequireValue,
+	csvNullIf:           sql.KVStringOptRequireValue,
+	csvSkip:             sql.KVStringOptRequireValue,
+	csvRowLimit:         sql.KVStringOptRequireValue,
+	csvStrictQuotes:     sql.KVStringOptRequireNoValue,
+	csvAllowQuotedNulls: sql.KVStringOptRequireNoValue,
 
 	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
 	mysqlOutfileFieldSep: sql.KVStringOptRequireValue,
@@ -169,7 +171,7 @@ var avroAllowedOptions = makeStringSet(
 )
 
 var csvAllowedOptions = makeStringSet(
-	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes, csvRowLimit,
+	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes, csvRowLimit, csvAllowQuotedNulls,
 )
 
 var mysqlOutAllowedOptions = makeStringSet(
@@ -541,6 +543,10 @@ func importPlanHook(
 
 			if override, ok := opts[csvNullIf]; ok {
 				format.Csv.NullEncoding = &override
+			}
+
+			if _, ok := opts[csvAllowQuotedNulls]; ok {
+				format.Csv.AllowQuotedNull = true
 			}
 
 			if override, ok := opts[csvSkip]; ok {
