@@ -54,12 +54,12 @@ if [[ -n "${ALWAYS_RUN_GAZELLE}" ]]; then
     esac
 fi
 
-BASE="/private/var/tmp/_bazel_${USER}/bases/"
-
-# If we're not on macOS/haven't enabled multi-bases, just run bazel normally.
-if [ ! -d "${BASE}" ]; then 
-    exec $BAZEL_REAL "$@"
+INSTALL_ROOT="/private/var/tmp/_bazel_${USER}"
+# If we're not on macOS, just run bazel normally.
+if [ ! -d "${INSTALL_ROOT}" ]; then 
+  exec $BAZEL_REAL "$@"
 fi
+
 
 # If we got here, we are going to try to find an available output_base to pass
 # to bazel. Typically only one bazel server can be running in one output_base at
@@ -82,6 +82,21 @@ fi
 # end up queuing on its lock as it would if we did not assign a base at all, so
 # this is not critical and can be seen as best-effort.
 
+BASES="${INSTALL_ROOT}/bases"
+
+# If we've never run multi-base bazel here before, initialize two extra bases by
+# default, that will be used below if available before using the default base 
+# which could block. Deleting these directories, or making additional ones, will
+# reduce or increase the allowed bazel parallel invocations. Deleted bases will
+# not be automatically recreated unless the .setup file is removed, so deleting
+# both will mean we always use the default out-of-box bazel base.
+SETUP_FILE="${BASES}/.setup"
+if [ ! -f "${SETUP_FILE}" ]; then
+  touch "${SETUP_FILE}"
+  mkdir -p "${BASES}/1"
+  mkdir -p "${BASES}/2"
+fi
+
 # We need to use a unique output base for each workspace; if we weren't manually
 # specifying bazel would resolve the workspace root then hash it. Rather than 
 # resolve the root, we're going to pretend we're only run from the root, and if
@@ -91,20 +106,19 @@ SUFFIX="$(pwd | md5 | head -c12)"
 # Check if any of our extra bases are available: no pidfile or pidfile's PID is
 # no longer running. If we find one, claim it via a PID and then run bazel with
 # that as its output_base.
-for i in {1..3}; do
-  PIDFILE="${BASE}${i}/inuse"
+for BASE in ${BASES}/*; do
+  PIDFILE="${BASE}/inuse"
   if [ ! -f ${PIDFILE} ] || ! ps -p "$(cat ${PIDFILE} 2> /dev/null)" >/dev/null 2>/dev/null; then
     # Claim this base.
-    mkdir -p "${BASE}${i}"
     echo "$$" > "${PIDFILE}"
     # We don't need to cleanup claim files since we check pids, but doing so can
     # save us a ps call later.
     trap 'rm "${PIDFILE}"' EXIT
-    $BAZEL_REAL --output_base="${BASE}${i}/${SUFFIX}" "$@"
+    $BAZEL_REAL --output_base="${BASE}/${SUFFIX}" "$@"
     exit $?
   fi
 done
 
-# If all our bases are in-use, just use the default base and let bazel queue.
+# If all our bases are in-use, just use the default base and let bazel block.
 exec $BAZEL_REAL "$@"
 
