@@ -19,7 +19,7 @@ import file=tpch_stats
 # increase is equal to the sum of [l_extendedprice * l_discount] for all
 # lineitems with discounts and quantities in the qualifying range.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q6
+stats-quality database=tpch set=save_tables_prefix=q6
 SELECT
     sum(l_extendedprice * l_discount) AS revenue
 FROM
