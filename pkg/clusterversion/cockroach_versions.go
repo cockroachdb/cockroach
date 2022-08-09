@@ -196,9 +196,6 @@ const (
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
-	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
-	// can be used to construct schema change plan node.
-	EnableDeclarativeSchemaChanger
 	// RowLevelTTL is the version where we allow row level TTL tables.
 	RowLevelTTL
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
@@ -387,10 +384,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ChangefeedIdleness,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
-	},
-	{
-		Key:     EnableDeclarativeSchemaChanger,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
 	},
 	{
 		Key:     RowLevelTTL,
