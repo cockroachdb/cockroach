@@ -15,9 +15,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"            // register the sink External Connection implementations
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // register all the concrete External Connection implementations
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/utils"
+	ectestutils "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/testutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -33,16 +34,28 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+		dir, dirCleanupFn := testutils.TempDir(t)
+		defer dirCleanupFn()
+
+		var skipCheckExternalStorageConnection bool
+		ecTestingKnobs := &externalconn.TestingKnobs{
+			SkipCheckingExternalStorageConnection: func() bool {
+				return skipCheckExternalStorageConnection
+			},
+		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
+					JobsTestingKnobs:   jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
+					ExternalConnection: ecTestingKnobs,
 				},
+				ExternalIODirConfig: base.ExternalIODirConfig{},
+				ExternalIODir:       dir,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
 
-		externalConnTestCluster := utils.NewHandle(t, tc)
+		externalConnTestCluster := ectestutils.NewHandle(t, tc)
 		defer externalConnTestCluster.Cleanup()
 
 		externalConnTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
@@ -62,6 +75,12 @@ func TestDataDriven(t *testing.T) {
 			switch d.Cmd {
 			case "initialize":
 				externalConnTestCluster.InitializeTenant(ctx, tenantID)
+
+			case "enable-check-external-storage":
+				skipCheckExternalStorageConnection = false
+
+			case "disable-check-external-storage":
+				skipCheckExternalStorageConnection = true
 
 			case "exec-sql":
 				if d.HasArg("user") {
