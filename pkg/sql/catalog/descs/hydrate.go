@@ -264,11 +264,30 @@ func getMutableTypeLookupFunc(
 	tc *Collection, txn *kv.Txn, schema catalog.SchemaDescriptor,
 ) typedesc.TypeLookupFunc {
 	return func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
-		desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
+		var typDesc catalog.TypeDescriptor
+		typDesc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
 		if err != nil {
-			return tree.TypeName{}, nil, err
+			if !errors.Is(err, ErrMutableTableImplicitType) {
+				return tree.TypeName{}, nil, err
+			}
+			// Note that getting mutable table implicit type is not allowed. To
+			// hydrate table implicit types, we don't really need a mutable type
+			// descriptor since we are not going to mutate the table because we simply
+			// need the tuple type and some metadata. So it's adequate here to get a
+			// fresh immutable.
+			flags := tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidLeased: true,
+				},
+			}
+			typDesc, err = tc.GetImmutableTypeByID(ctx, txn, id, flags)
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
 		}
-		dbDesc, err := tc.GetMutableDescriptorByID(ctx, txn, desc.ParentID)
+
+		dbDesc, err := tc.GetMutableDescriptorByID(ctx, txn, typDesc.GetParentID())
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}
@@ -278,7 +297,7 @@ func getMutableTypeLookupFunc(
 			scName = schema.GetName()
 		} else {
 			sc, err := tc.getSchemaByID(
-				ctx, txn, desc.ParentSchemaID,
+				ctx, txn, typDesc.GetParentSchemaID(),
 				tree.SchemaLookupFlags{
 					Required:       true,
 					IncludeDropped: true,
@@ -291,8 +310,8 @@ func getMutableTypeLookupFunc(
 			}
 			scName = sc.GetName()
 		}
-		name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scName, desc.Name)
-		return name, desc, nil
+		name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
+		return name, typDesc, nil
 	}
 }
 
