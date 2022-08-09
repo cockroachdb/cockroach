@@ -480,6 +480,8 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		previousRemovalCount := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		previousDecommRemovals :=
 			store.ReplicateQueueMetrics().RemoveDecommissioningNonVoterReplicaCount.Count()
+		previousDecommReplacementSuccesses :=
+			store.ReplicateQueueMetrics().ReplaceDecommissioningReplicaSuccessCount.Count()
 
 		// Decommission each of the two nodes that have the non-voters and make sure
 		// that those non-voters are upreplicated elsewhere.
@@ -515,6 +517,8 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		currentRemoveCount := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		currentDecommRemovals :=
 			store.ReplicateQueueMetrics().RemoveDecommissioningNonVoterReplicaCount.Count()
+		currentDecommReplacementSuccesses :=
+			store.ReplicateQueueMetrics().ReplaceDecommissioningReplicaSuccessCount.Count()
 
 		require.GreaterOrEqualf(
 			t, currentAddCount, previousAddCount+2,
@@ -527,6 +531,9 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.GreaterOrEqualf(
 			t, currentDecommRemovals, previousDecommRemovals+2,
 			"expected decommissioning replica removals to increase by at least 2",
+		)
+		require.GreaterOrEqualf(t, currentDecommReplacementSuccesses, previousDecommReplacementSuccesses+2,
+			"expected decommissioning replica replacement successes to increase by at least 2",
 		)
 	})
 
@@ -558,9 +565,22 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		// Ensure leaseholder has updated span config with 0 non-voters.
+		require.Eventually(t, func() bool {
+			repl, err := store.GetReplica(scratchRange.RangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, conf := repl.DescAndSpanConfig()
+			return conf.GetNumNonVoters() == 0
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+
 		previousRemovalCount := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		previousDecommRemovals :=
 			store.ReplicateQueueMetrics().RemoveDecommissioningNonVoterReplicaCount.Count()
+		previousDecommRemovalSuccesses :=
+			store.ReplicateQueueMetrics().RemoveDecommissioningReplicaSuccessCount.Count()
 
 		require.NoError(t,
 			tc.Server(0).Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, nonVoterNodeIDs))
@@ -581,6 +601,8 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		currentRemoveCount := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		currentDecommRemovals :=
 			store.ReplicateQueueMetrics().RemoveDecommissioningNonVoterReplicaCount.Count()
+		currentDecommRemovalSuccesses :=
+			store.ReplicateQueueMetrics().RemoveDecommissioningReplicaSuccessCount.Count()
 		require.GreaterOrEqualf(
 			t, currentRemoveCount, previousRemovalCount+2,
 			"expected replica removals to increase by at least 2",
@@ -588,6 +610,9 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.GreaterOrEqualf(
 			t, currentDecommRemovals, previousDecommRemovals+2,
 			"expected replica removals to increase by at least 2",
+		)
+		require.GreaterOrEqualf(t, currentDecommRemovalSuccesses, previousDecommRemovalSuccesses+2,
+			"expected decommissioning replica removal successes to increase by at least 2",
 		)
 	})
 }
@@ -765,6 +790,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		prevAdditions := store.ReplicateQueueMetrics().AddNonVoterReplicaCount.Count()
 		prevRemovals := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		prevDeadRemovals := store.ReplicateQueueMetrics().RemoveDeadNonVoterReplicaCount.Count()
+		prevDeadReplacementSuccesses := store.ReplicateQueueMetrics().ReplaceDeadReplicaSuccessCount.Count()
 
 		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
 		markDead(beforeNodeIDs)
@@ -794,6 +820,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		addCount := store.ReplicateQueueMetrics().AddNonVoterReplicaCount.Count()
 		removeNonVoterCount := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		removeDeadNonVoterCount := store.ReplicateQueueMetrics().RemoveDeadNonVoterReplicaCount.Count()
+		replaceDeadSuccesses := store.ReplicateQueueMetrics().ReplaceDeadReplicaSuccessCount.Count()
 
 		require.GreaterOrEqualf(
 			t, addCount, prevAdditions+2,
@@ -806,6 +833,10 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.GreaterOrEqualf(
 			t, removeDeadNonVoterCount, prevDeadRemovals+2,
 			"expected replica removals to increase by at least 2",
+		)
+		require.GreaterOrEqualf(
+			t, replaceDeadSuccesses, prevDeadReplacementSuccesses+2,
+			"expected dead replica replacement successes to increase by at least 2",
 		)
 	})
 
@@ -838,9 +869,21 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		// Ensure leaseholder has updated span config with 0 non-voters.
+		require.Eventually(t, func() bool {
+			repl, err := store.GetReplica(scratchRange.RangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, conf := repl.DescAndSpanConfig()
+			return conf.GetNumNonVoters() == 0
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+
 		prevRemovals := store.ReplicateQueueMetrics().RemoveReplicaCount.Count()
 		prevNonVoterRemovals := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		prevDeadRemovals := store.ReplicateQueueMetrics().RemoveDeadNonVoterReplicaCount.Count()
+		prevDeadRemovalSuccesses := store.ReplicateQueueMetrics().RemoveDeadReplicaSuccessCount.Count()
 
 		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
 		markDead(beforeNodeIDs)
@@ -858,6 +901,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		removeCount := store.ReplicateQueueMetrics().RemoveReplicaCount.Count()
 		removeNonVoterCount := store.ReplicateQueueMetrics().RemoveNonVoterReplicaCount.Count()
 		removeDeadNonVoterCount := store.ReplicateQueueMetrics().RemoveDeadNonVoterReplicaCount.Count()
+		removeDeadSuccesses := store.ReplicateQueueMetrics().RemoveDeadReplicaSuccessCount.Count()
 		require.GreaterOrEqualf(
 			t, removeCount, prevRemovals+2,
 			"expected replica removals to increase by at least 2",
@@ -869,6 +913,10 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.GreaterOrEqualf(
 			t, removeDeadNonVoterCount, prevDeadRemovals+2,
 			"expected replica removals to increase by at least 2",
+		)
+		require.GreaterOrEqualf(
+			t, removeDeadSuccesses, prevDeadRemovalSuccesses+2,
+			"expected dead replica removal successes to increase by at least 2",
 		)
 	})
 }
