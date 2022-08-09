@@ -14,12 +14,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
@@ -53,16 +51,6 @@ var migrationRegistry = make(map[roachpb.Version]migration)
 
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
 
-func init() {
-	_ = registerMigration // prevent unused warning.
-	registerMigration(
-		clusterversion.AddRaftAppliedIndexTermMigration, addRaftAppliedIndexTermMigration)
-}
-
-func registerMigration(key clusterversion.Key, migration migration) {
-	migrationRegistry[clusterversion.ByKey(key)] = migration
-}
-
 // Migrate executes the below-raft migration corresponding to the given version.
 // See roachpb.MigrateRequest for more details.
 func Migrate(
@@ -95,25 +83,6 @@ func Migrate(
 	// after it.
 	pd.Replicated.State.Version = &migrationVersion
 	return pd, nil
-}
-
-// addRaftAppliedIndexTermMigration migrates the system to start populating
-// the RangeAppliedState.RaftAppliedIndexTerm field.
-func addRaftAppliedIndexTermMigration(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs,
-) (result.Result, error) {
-	return result.Result{
-		Replicated: kvserverpb.ReplicatedEvalResult{
-			State: &kvserverpb.ReplicaState{
-				// Signal the migration by sending a term on the new field that we
-				// want to migrate into. This term is chosen as one that would never
-				// be used in practice (since raftInitialLogTerm is 10), so we can
-				// special-case it below raft and start writing the (real) term to the
-				// AppliedState.
-				RaftAppliedIndexTerm: stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration,
-			},
-		},
-	}, nil
 }
 
 // TestingRegisterMigrationInterceptor is used in tests to register an
