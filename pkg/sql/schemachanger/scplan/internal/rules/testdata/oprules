@@ -141,7 +141,7 @@ oprules
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View']
     - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint']
-    - $constraint-dep[Type] = '*scpb.ConstraintName'
+    - $constraint-dep[Type] = '*scpb.ConstraintWithoutIndexName'
     - joinOnDescID($relation, $constraint, $relation-id)
     - joinOnConstraintID($constraint, $constraint-dep, $relation-id, $constraint-id)
     - joinTarget($relation, $relation-target)
