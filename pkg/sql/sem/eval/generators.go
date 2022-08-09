@@ -83,25 +83,6 @@ type ValueGenerator interface {
 	Close(ctx context.Context)
 }
 
-// streamingValueGenerator is a marker-type indicating that the wrapped
-// generator is of "streaming" nature, thus, projectSet processor must be
-// streaming too.
-type streamingValueGenerator struct {
-	ValueGenerator
-}
-
-// MakeStreamingValueGenerator marks the generator as "streaming".
-func MakeStreamingValueGenerator(gen ValueGenerator) ValueGenerator {
-	return streamingValueGenerator{ValueGenerator: gen}
-}
-
-// IsStreamingValueGenerator returns whether the generator is of the "streaming"
-// nature.
-func IsStreamingValueGenerator(gen ValueGenerator) bool {
-	_, ok := gen.(streamingValueGenerator)
-	return ok
-}
-
 // CallbackValueGenerator is a ValueGenerator that calls a supplied callback for
 // producing the values. To be used with
 // eval.TestingKnobs.CallbackGenerators.

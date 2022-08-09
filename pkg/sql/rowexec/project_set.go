@@ -43,6 +43,10 @@ type projectSetProcessor struct {
 	// The size of the slice is the same as `exprHelpers` though.
 	funcs []*tree.FuncExpr
 
+	// mustBeStreaming indicates whether at least one function in funcs is of
+	// "streaming" nature.
+	mustBeStreaming bool
+
 	// inputRowReady is set when there was a row of input data available
 	// from the source.
 	inputRowReady bool
@@ -116,6 +120,7 @@ func newProjectSetProcessor(
 		if tFunc, ok := helper.Expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
 			// Expr is a set-generating function.
 			ps.funcs[i] = tFunc
+			ps.mustBeStreaming = ps.mustBeStreaming || tFunc.IsVectorizeStreaming()
 		}
 		ps.exprHelpers[i] = &helper
 	}
@@ -124,13 +129,7 @@ func newProjectSetProcessor(
 
 // MustBeStreaming implements the execinfra.Processor interface.
 func (ps *projectSetProcessor) MustBeStreaming() bool {
-	// If we have a single streaming generator, then the processor is such too.
-	for _, gen := range ps.gens {
-		if eval.IsStreamingValueGenerator(gen) {
-			return true
-		}
-	}
-	return false
+	return ps.mustBeStreaming
 }
 
 // Start is part of the RowSource interface.
