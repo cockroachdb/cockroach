@@ -4,10 +4,8 @@ CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
-query T noticetrace
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y, z)
-----
-NOTICE: primary key changes are finalized asynchronously; further schema changes on this table may be restricted until the job completes
 
 query IIII rowsort
 SELECT * FROM t@t_pkey
@@ -1706,3 +1704,14 @@ t_pkey      i            ASC
 t_pkey      j            N/A
 t_j_key     j            ASC
 t_j_key     i            ASC
+
+
+subtest alter_primary_key_with_more_than_one_column_families
+statement ok
+CREATE TABLE t_multiple_cf (i INT PRIMARY KEY, j INT NOT NULL, FAMILY (i), FAMILY (j))
+
+statement ok
+INSERT INTO t_multiple_cf VALUES (23, 24)
+
+statement ok
+ALTER TABLE t_multiple_cf ALTER PRIMARY KEY USING COLUMNS (j)

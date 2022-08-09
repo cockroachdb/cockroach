@@ -53,6 +53,8 @@ const (
 	CANCELQUERY          Kind = 18
 	NOSQLLOGIN           Kind = 19
 	EXECUTE              Kind = 20
+	VIEWCLUSTERMETADATA  Kind = 21
+	VIEWDEBUG            Kind = 22
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -120,7 +122,7 @@ var (
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
 	SequencePrivileges           = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
-	SystemPrivileges             = List{ALL, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN}
+	SystemPrivileges             = List{ALL, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG}
 	VirtualTablePrivileges       = List{ALL, SELECT}
 	ExternalConnectionPrivileges = List{ALL, USAGE}
 )
@@ -137,8 +139,7 @@ func (k Kind) IsSetIn(bits uint32) bool {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE, MODIFYCLUSTERSETTING,
-	EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, EXECUTE,
+	ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, EXECUTE, VIEWCLUSTERMETADATA, VIEWDEBUG,
 }
 
 // ByName is a map of string -> kind value.
@@ -162,6 +163,8 @@ var ByName = map[string]Kind{
 	"CANCELQUERY":          CANCELQUERY,
 	"NOSQLLOGIN":           NOSQLLOGIN,
 	"EXECUTE":              EXECUTE,
+	"VIEWCLUSTERMETADATA":  VIEWCLUSTERMETADATA,
+	"VIEWDEBUG":            VIEWDEBUG,
 }
 
 // List is a list of privileges.

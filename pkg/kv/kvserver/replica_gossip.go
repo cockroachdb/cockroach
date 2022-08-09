@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -83,7 +84,9 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	}
 
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = r.store.Clock().Now()
+	// Read at the maximum timestamp to ensure that we see the most recent
+	// liveness record, regardless of what timestamp it is written at.
+	ba.Timestamp = hlc.MaxTimestamp
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(

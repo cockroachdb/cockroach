@@ -1515,14 +1515,17 @@ func (s *adminServer) RangeLog(
 	ctx = s.server.AnnotateCtx(ctx)
 
 	// Range keys, even when pretty-printed, contain PII.
-	userName, err := s.requireAdminUser(ctx)
+	user, _, err := s.getUserAndRole(ctx)
 	if err != nil {
-		// NB: not using serverError() here since the priv checker
-		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
-	r, err := s.rangeLogHelper(ctx, req, userName)
+	err = s.requireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := s.rangeLogHelper(ctx, req, user)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -3543,6 +3546,50 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 	return nil
 }
 
+// requireViewClusterMetadataPermission requires the user have admin or the VIEWCLUSTERMETADATA
+// system privilege and returns an error if the user does not have it.
+func (c *adminPrivilegeChecker) requireViewClusterMetadataPermission(
+	ctx context.Context,
+) (err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+	if !isAdmin {
+		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			if hasViewClusterMetadata := c.checkHasSystemPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA); !hasViewClusterMetadata {
+				return status.Errorf(
+					codes.PermissionDenied, "this operation requires the %s system privilege",
+					privilege.VIEWCLUSTERMETADATA)
+			}
+		} else {
+			return status.Error(codes.PermissionDenied, "this operation requires admin privilege")
+		}
+	}
+	return nil
+}
+
+// requireViewDebugPermission requires the user have admin or the VIEWDEBUG system privilege
+// and returns an error if the user does not have it.
+func (c *adminPrivilegeChecker) requireViewDebugPermission(ctx context.Context) (err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+	if !isAdmin {
+		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			if hasViewDebug := c.checkHasSystemPrivilege(ctx, userName, privilege.VIEWDEBUG); !hasViewDebug {
+				return status.Errorf(
+					codes.PermissionDenied, "this operation requires the %s system privilege",
+					privilege.VIEWDEBUG)
+			}
+		} else {
+			return status.Error(codes.PermissionDenied, "this operation requires admin privilege")
+		}
+	}
+	return nil
+}
+
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
 func (c *adminPrivilegeChecker) getUserAndRole(
@@ -3638,7 +3685,7 @@ func (s *adminServer) ListTracingSnapshots(
 	ctx context.Context, req *serverpb.ListTracingSnapshotsRequest,
 ) (*serverpb.ListTracingSnapshotsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewDebugPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3665,7 +3712,7 @@ func (s *adminServer) TakeTracingSnapshot(
 	ctx context.Context, req *serverpb.TakeTracingSnapshotRequest,
 ) (*serverpb.TakeTracingSnapshotResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewDebugPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3709,7 +3756,7 @@ func (s *adminServer) GetTracingSnapshot(
 	ctx context.Context, req *serverpb.GetTracingSnapshotRequest,
 ) (*serverpb.GetTracingSnapshotResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewDebugPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3768,7 +3815,7 @@ func (s *adminServer) GetTrace(
 	ctx context.Context, req *serverpb.GetTraceRequest,
 ) (*serverpb.GetTraceResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewDebugPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
