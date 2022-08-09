@@ -54,3 +54,25 @@ BEGIN
 
 statement error DISCARD ALL cannot run inside a transaction block
 DISCARD ALL
+
+statement ok
+ROLLBACK
+
+statement ok
+CREATE SEQUENCE lastval_test_2 START WITH 10
+
+query I
+SELECT nextval('lastval_test_2')
+----
+10
+
+query I
+SELECT lastval()
+----
+10
+
+statement ok
+DISCARD SEQUENCES
+
+statement error pgcode 55000 pq: lastval\(\): lastval is not yet defined in this session
+SELECT lastval()

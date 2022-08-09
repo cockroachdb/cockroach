@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,6 +41,13 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 
 		// DEALLOCATE ALL
 		p.preparedStatements.DeleteAll(ctx)
+
+		//DISCARD SEQUENCES
+		p.SessionData().SequenceState = sessiondata.NewSequenceState()
+
+	case tree.DiscardModeSequences:
+		p.SessionData().SequenceState = sessiondata.NewSequenceState()
+
 	default:
 		return nil, errors.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
 	}
