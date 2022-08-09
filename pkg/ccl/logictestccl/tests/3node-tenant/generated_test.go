@@ -463,6 +463,13 @@ func TestTenantLogic_create_as(
 	runLogicTest(t, "create_as")
 }
 
+func TestTenantLogic_create_as_non_metamorphic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_as_non_metamorphic")
+}
+
 func TestTenantLogic_create_index(
 	t *testing.T,
 ) {
