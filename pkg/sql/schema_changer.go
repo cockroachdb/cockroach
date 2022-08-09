@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -623,7 +622,7 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 		}
 
 		settings := sc.execCfg.Settings
-		mvccCompliantBackfillSupported := settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) && tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
+		mvccCompliantBackfillSupported := tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
 		if !mvccCompliantBackfillSupported {
 			return errors.Newf("schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
 		}
