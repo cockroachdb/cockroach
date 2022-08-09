@@ -127,7 +127,7 @@ type Registry struct {
 	// field. Modifying the TableCollection is basically a per-query operation
 	// and should be a per-query setting. #34304 is the issue for creating/
 	// improving this API.
-	sessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	internalExecutorFactory sqlutil.InternalExecutorFactory
 
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile string
@@ -226,14 +226,12 @@ func MakeRegistry(
 	return r
 }
 
-// SetSessionBoundInternalExecutorFactory sets the
-// SessionBoundInternalExecutorFactory that will be used by the job registry
+// SetInternalExecutorFactory sets the
+// InternalExecutorFactory that will be used by the job registry
 // executor. We expose this separately from the constructor to avoid a circular
 // dependency.
-func (r *Registry) SetSessionBoundInternalExecutorFactory(
-	factory sqlutil.SessionBoundInternalExecutorFactory,
-) {
-	r.sessionBoundInternalExecutorFactory = factory
+func (r *Registry) SetInternalExecutorFactory(factory sqlutil.InternalExecutorFactory) {
+	r.internalExecutorFactory = factory
 }
 
 // NewSpanConstrainer returns an instance of sql.SpanConstrainer as an interface{},

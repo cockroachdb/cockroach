@@ -1306,7 +1306,7 @@ type ExecutorConfig struct {
 	// InternalExecutorFactory is used to create an InternalExecutor binded with
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
-	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
 
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.

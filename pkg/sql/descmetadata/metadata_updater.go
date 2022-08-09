@@ -39,7 +39,7 @@ import (
 type metadataUpdater struct {
 	ctx          context.Context
 	txn          *kv.Txn
-	ieFactory    sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory    sqlutil.InternalExecutorFactory
 	sessionData  *sessiondata.SessionData
 	descriptors  *descs.Collection
 	cacheEnabled bool
@@ -50,7 +50,7 @@ type metadataUpdater struct {
 // schema objects.
 func NewMetadataUpdater(
 	ctx context.Context,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ieFactory sqlutil.InternalExecutorFactory,
 	descriptors *descs.Collection,
 	settings *settings.Values,
 	txn *kv.Txn,
@@ -76,7 +76,7 @@ func NewMetadataUpdater(
 func (mu metadataUpdater) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(context.Background(),
 		fmt.Sprintf("upsert-%s-comment", commentType),
 		mu.txn,
@@ -94,7 +94,7 @@ func (mu metadataUpdater) UpsertDescriptorComment(
 func (mu metadataUpdater) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(context.Background(),
 		fmt.Sprintf("delete-%s-comment", commentType),
 		mu.txn,
@@ -126,7 +126,7 @@ DELETE FROM system.comments
 		_, _ = fmt.Fprintf(&buf, ", %d", id)
 	}
 	buf.WriteString(")")
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(context.Background(),
 		"delete-all-comments-for-tables",
 		mu.txn,
@@ -152,7 +152,7 @@ func (mu metadataUpdater) DeleteConstraintComment(
 
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
 func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	rowsDeleted, err := ie.ExecEx(ctx,
 		"delete-db-role-setting",
 		mu.txn,
@@ -193,7 +193,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 func (mu metadataUpdater) SwapDescriptorSubComment(
 	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
 ) error {
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(context.Background(),
 		fmt.Sprintf("upsert-%s-comment", commentType),
 		mu.txn,
@@ -210,7 +210,7 @@ func (mu metadataUpdater) SwapDescriptorSubComment(
 
 // DeleteSchedule implement scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(
 		ctx,
 		"delete-schedule",
@@ -226,7 +226,7 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 func (mu metadataUpdater) DeleteZoneConfig(
 	ctx context.Context, id descpb.ID,
 ) (numAffected int, err error) {
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	return ie.Exec(ctx, "delete-zone", mu.txn,
 		"DELETE FROM system.zones WHERE id = $1", id)
 }
@@ -235,7 +235,7 @@ func (mu metadataUpdater) DeleteZoneConfig(
 func (mu metadataUpdater) UpsertZoneConfig(
 	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
 ) (numAffected int, err error) {
-	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	bytes, err := protoutil.Marshal(zone)
 	if err != nil {
 		return 0, pgerror.Wrap(err, pgcode.CheckViolation, "could not marshal zone config")

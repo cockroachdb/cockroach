@@ -984,3 +984,32 @@ func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
 	}
 	ncl.results = ncl.results[:i]
 }
+
+// InternalExecutorFactory stored information needed to construct a new
+// internal executor.
+type InternalExecutorFactory struct {
+	server     *Server
+	memMetrics MemoryMetrics
+	monitor    *mon.BytesMonitor
+}
+
+// NewInternalExecutorFactory returns a new internal executor factory.
+func NewInternalExecutorFactory(
+	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
+) *InternalExecutorFactory {
+	return &InternalExecutorFactory{
+		server:     s,
+		memMetrics: memMetrics,
+		monitor:    monitor,
+	}
+}
+
+// NewInternalExecutor constructs a new internal executor.
+// TODO (janexing): this should be deprecated soon.
+func (ief *InternalExecutorFactory) NewInternalExecutor(
+	sd *sessiondata.SessionData,
+) sqlutil.InternalExecutor {
+	ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
+	ie.SetSessionData(sd)
+	return &ie
+}
