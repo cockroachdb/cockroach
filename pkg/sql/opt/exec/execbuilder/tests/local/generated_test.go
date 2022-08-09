@@ -578,6 +578,13 @@ func TestExecBuild_vectorize_overloads(
 	runExecBuildLogicTest(t, "vectorize_overloads")
 }
 
+func TestExecBuild_vectorize_wrapping(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "vectorize_wrapping")
+}
+
 func TestExecBuild_virtual(
 	t *testing.T,
 ) {
