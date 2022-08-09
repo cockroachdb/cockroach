@@ -196,12 +196,6 @@ const (
 	// AutoStatsTableSettings is the version where we allow auto stats related
 	// table settings.
 	AutoStatsTableSettings
-	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
-	// accounting for incremental schema changes.
-	PreSeedSpanCountTable
-	// SeedSpanCountTable seeds system.span_count with the number of committed
-	// tenant spans.
-	SeedSpanCountTable
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -356,14 +350,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AutoStatsTableSettings,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
-	},
-	{
-		Key:     PreSeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 110},
-	},
-	{
-		Key:     SeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
 	},
 	{
 		Key:     V22_1,
