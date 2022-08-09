@@ -28,8 +28,8 @@ type ValidateUniqueIndex struct {
 // ValidateCheckConstraint validates a check constraint on a table's columns.
 type ValidateCheckConstraint struct {
 	validationOp
-	TableID descpb.ID
-	Name    string
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
 }
 
 // Make sure baseOp is used for linter.
