@@ -15,9 +15,9 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
+        "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_model//go",
     ],
 )

@@ -1073,15 +1073,12 @@ func checkTxnMetrics(
 	commits, commits1PC, aborts, restarts int64,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		return checkTxnMetricsOnce(t, metrics, name, commits, commits1PC, aborts, restarts)
+		return checkTxnMetricsOnce(metrics, name, commits, commits1PC, aborts, restarts)
 	})
 }
 
 func checkTxnMetricsOnce(
-	t *testing.T,
-	metrics kvcoord.TxnMetrics,
-	name string,
-	commits, commits1PC, aborts, restarts int64,
+	metrics kvcoord.TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
 ) error {
 	testcases := []struct {
 		name string
@@ -1091,28 +1088,13 @@ func checkTxnMetricsOnce(
 		{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
 		{"aborts", metrics.Aborts.Count(), aborts},
 		{"durations", metrics.Durations.TotalCount(), commits + aborts},
+		{"restarts", metrics.Restarts.TotalCount(), restarts},
 	}
 
 	for _, tc := range testcases {
 		if tc.a != tc.e {
 			return errors.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
 		}
-	}
-
-	// Handle restarts separately, because that's a histogram. Though the
-	// histogram is approximate, we're recording so few distinct values
-	// that we should be okay.
-	dist := metrics.Restarts.Snapshot().Distribution()
-	var actualRestarts int64
-	for _, b := range dist {
-		if b.From == b.To {
-			actualRestarts += b.From * b.Count
-		} else {
-			t.Fatalf("unexpected value in histogram: %d-%d", b.From, b.To)
-		}
-	}
-	if a, e := actualRestarts, restarts; a != e {
-		return errors.Errorf("%s: actual restarts %d != expected %d", name, a, e)
 	}
 
 	return nil
@@ -1324,10 +1306,13 @@ func TestTxnDurations(t *testing.T) {
 		t.Fatalf("durations %d != expected %d", a, e)
 	}
 
-	// Metrics lose fidelity, so we can't compare incr directly.
-	if min, thresh := hist.Min(), (incr - 10).Nanoseconds(); min < thresh {
-		t.Fatalf("min %d < %d", min, thresh)
+	for _, b := range hist.ToPrometheusMetric().GetHistogram().GetBucket() {
+		thresh := incr.Nanoseconds()
+		if *b.UpperBound < float64(thresh) && *b.CumulativeCount != 0 {
+			t.Fatalf("expected no values in bucket: %f", *b.UpperBound)
+		}
 	}
+
 }
 
 // TestTxnCommitWait tests the commit-wait sleep phase of transactions under
