@@ -445,17 +445,27 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	// admission control here, as we are bypassing server.Node.
 	var admissionHandle interface{}
 	if r.admissionController != nil {
+		pri := admissionpb.WorkPriority(gc.AdmissionPriority.Get(&r.repl.ClusterSettings().SV))
 		ba.AdmissionHeader = roachpb.AdmissionHeader{
-			// GC is currently assigned NormalPri.
+			// TODO(irfansharif): GC could be expected to be LowPri, so that it
+			// does not impact user-facing traffic when resources (e.g. CPU,
+			// write capacity of the store) are scarce. However long delays in
+			// GC can slow down user-facing traffic due to more versions in the
+			// store, and can increase write amplification of the store since
+			// there is more live data. Ideally, we should adjust this priority
+			// based on how far behind we are with respect to GC-ing data in
+			// this range. Keeping it static at NormalPri proved disruptive when
+			// a large volume of MVCC GC work is suddenly accrued (if an old
+			// protected timestamp record was just released for ex. following a
+			// long paused backup job being completed/canceled, or just an old,
+			// long running backup job finishing). For now, use a cluster
+			// setting that defaults to LowPri.
 			//
-			// TODO(kv): GC could be expected to be LowPri, so that it does not
-			// impact user-facing traffic when resources (e.g. CPU, write capacity
-			// of the store) are scarce. However long delays in GC can slow down
-			// user-facing traffic due to more versions in the store, and can
-			// increase write amplification of the store since there is more live
-			// data. Ideally, we should adjust this priority based on how far behind
-			// we are wrt GCing in this range.
-			Priority:                 int32(admissionpb.NormalPri),
+			// After we implement dynamic priority adjustment, it's not clear
+			// whether we need additional pacing mechanisms to provide better
+			// latency isolation similar to ongoing work for backups (since MVCC
+			// GC work is CPU intensive): #82955.
+			Priority:                 int32(pri),
 			CreateTime:               timeutil.Now().UnixNano(),
 			Source:                   roachpb.AdmissionHeader_ROOT_KV,
 			NoMemoryReservedAtSource: true,

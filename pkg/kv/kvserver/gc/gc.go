@@ -18,6 +18,7 @@ package gc
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"math"
 	"time"
 
@@ -113,6 +114,20 @@ var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	1e6,
 	settings.NonNegativeInt,
+)
+
+// AdmissionPriority determines the admission priority level to use for MVCC GC
+// work.
+var AdmissionPriority = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"kv.gc.admission_priority",
+	"the admission priority to use for mvcc gc work",
+	"low_pri",
+	map[int64]string{
+		int64(admissionpb.LowPri):    "low_pri",
+		int64(admissionpb.NormalPri): "normal_pri",
+		int64(admissionpb.HighPri):   "high_pri",
+	},
 )
 
 // CalculateThreshold calculates the GC threshold given the policy and the
