@@ -957,6 +957,30 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
 └ Node 1
   └ *colexec.sortOp
     └ *colexecjoin.hashJoiner
+      ├ *rowexec.joinReader
+      │ └ *colexec.unorderedDistinct
+      │   └ *rowexec.joinReader
+      │     └ *colexecsel.selGTInt64Float64Op
+      │       └ *colexecproj.projMultFloat64Float64ConstOp
+      │         └ *colexec.hashAggregator
+      │           └ *colexecjoin.hashJoiner
+      │             ├ *colfetcher.ColIndexJoin
+      │             │ └ *colfetcher.ColBatchScan
+      │             └ *colfetcher.ColBatchScan
+      └ *colexecsel.selEQBytesBytesConstOp
+        └ *colfetcher.ColBatchScan
+
+statement ok
+SET disable_80212 = true
+
+# projMultFloat64Float64ConstOp should be pulled up above hashAggregator.
+query T
+EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN ( SELECT ps_suppkey FROM partsupp WHERE ps_partkey IN ( SELECT p_partkey FROM part WHERE p_name LIKE 'forest%') AND ps_availqty > ( SELECT 0.5 * sum(l_quantity) FROM lineitem WHERE l_partkey = ps_partkey AND l_suppkey = ps_suppkey AND l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR)) AND s_nationkey = n_nationkey AND n_name = 'CANADA' ORDER BY s_name
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *colexecjoin.hashJoiner
       ├ *colexecsel.selEQBytesBytesConstOp
       │ └ *colfetcher.ColBatchScan
       └ *rowexec.joinReader
@@ -969,6 +993,9 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
                     ├ *colfetcher.ColIndexJoin
                     │ └ *colfetcher.ColBatchScan
                     └ *colfetcher.ColBatchScan
+
+statement ok
+RESET disable_80212
 
 # Query 21
 query T

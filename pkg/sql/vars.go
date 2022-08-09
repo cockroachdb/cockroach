@@ -2084,7 +2084,6 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
-
 	// CockroachDB extension.
 	`show_primary_key_constraint_on_not_visible_columns`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`show_primary_key_constraint_on_not_visible_columns`),
@@ -2100,6 +2099,22 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns), nil
 		},
 		GlobalDefault: globalTrue,
+	},
+	// CockroachDB extension.
+	`disable_80212`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_80212`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_80212", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisable80212(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().Disable_80212), nil
+		},
+		GlobalDefault: globalFalse,
 	},
 }
 

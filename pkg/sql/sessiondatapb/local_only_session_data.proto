@@ -255,6 +255,10 @@ message LocalOnlySessionData {
   // constraints that only include hidden columns.
   bool show_primary_key_constraint_on_not_visible_columns = 69;
 
+  // Disable_80212 disables the restrictions placed on projection hoisting
+  // during query planning in the optimizer by issue #80212.
+  bool disable_80212 = 70;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
