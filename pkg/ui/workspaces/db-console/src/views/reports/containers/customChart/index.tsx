@@ -42,8 +42,6 @@ import {
   TimeScale,
   setMetricsFixedWindow,
 } from "src/redux/timeScale";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -324,14 +322,14 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodesSummary: nodesSummarySelector(state),
   nodesQueryValid: state.cachedData.nodes.valid,
   metricsMetadata: metricsMetadataSelector(state),
-  timeScale: globalTimeScaleLocalSetting.selector(state),
+  timeScale: selectTimeScale(state),
 });
 
 const mapDispatchToProps = {
   refreshNodes,
   refreshMetricMetadata,
   setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale: setTimeScale,
 };
 
 export default withRouter(

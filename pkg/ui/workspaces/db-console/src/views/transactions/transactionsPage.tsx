@@ -26,9 +26,9 @@ import {
   util,
 } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
+import { selectTimeScale } from "src/redux/timeScale";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -87,7 +87,7 @@ const TransactionsPageConnected = withRouter(
     (state: AdminUIState) => ({
       columns: transactionColumnsLocalSetting.selectorToArray(state),
       data: selectData(state),
-      timeScale: globalTimeScaleLocalSetting.selector(state),
+      timeScale: selectTimeScale(state),
       error: selectLastError(state),
       filters: filtersLocalSetting.selector(state),
       lastReset: selectLastReset(state),
