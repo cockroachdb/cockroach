@@ -1642,12 +1642,8 @@ func (ns *prepStmtNamespace) resetTo(
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
-	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
-		mode: ex.sessionData().NewSchemaChangerMode,
-	}
 
 	if ex.extraTxnState.fromOuterTxn {
 		ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
@@ -1655,6 +1651,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
 		for k := range ex.extraTxnState.schemaChangeJobRecords {
 			delete(ex.extraTxnState.schemaChangeJobRecords, k)
+		}
+		ex.extraTxnState.jobs = nil
+		ex.extraTxnState.schemaChangerState = &SchemaChangerState{
+			mode: ex.sessionData().NewSchemaChangerMode,
 		}
 	}
 
