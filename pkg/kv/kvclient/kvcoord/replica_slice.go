@@ -188,21 +188,23 @@ type LatencyFunc func(string) (time.Duration, bool)
 // they're to be used for sending RPCs (meaning in the order in which
 // they'll be probed for the lease). Lower latency and "closer"
 // (matching in more attributes) replicas are ordered first. If the
-// current node is a replica, then it'll be the first one.
+// current node has a replica (and the current node's ID is supplied)
+// then it'll be the first one.
 //
-// nodeDesc is the descriptor of the current node. It can be nil, in
-// which case information about the current descriptor is not used in
-// optimizing the order.
+// nodeID is the ID of the current node the current node. It can be 0, in which
+// case information about the current node is not used in optimizing the order.
+// Similarly, latencyFn can be nil, in which case it will not be used.
 //
 // Note that this method is not concerned with any information the
 // node might have about who the lease holder might be. If the
 // leaseholder is known by the caller, the caller will move it to the
 // front if appropriate.
 func (rs ReplicaSlice) OptimizeReplicaOrder(
-	nodeDesc *roachpb.NodeDescriptor, latencyFn LatencyFunc,
+	nodeID roachpb.NodeID, latencyFn LatencyFunc, locality roachpb.Locality,
 ) {
-	// If we don't know which node we're on, send the RPCs randomly.
-	if nodeDesc == nil {
+	// If we don't know which node we're on or its locality, and we don't have
+	// latency information to other nodes, send the RPCs randomly.
+	if nodeID == 0 && latencyFn == nil && len(locality.Tiers) == 0 {
 		shuffle.Shuffle(rs)
 		return
 	}
@@ -214,10 +216,10 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 			return false // i == j
 		}
 		// Replicas on the local node sort first.
-		if rs[i].NodeID == nodeDesc.NodeID {
+		if rs[i].NodeID == nodeID {
 			return true // i < j
 		}
-		if rs[j].NodeID == nodeDesc.NodeID {
+		if rs[j].NodeID == nodeID {
 			return false // j < i
 		}
 
@@ -228,8 +230,8 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 				return latencyI < latencyJ
 			}
 		}
-		attrMatchI := localityMatch(nodeDesc.Locality.Tiers, rs[i].locality())
-		attrMatchJ := localityMatch(nodeDesc.Locality.Tiers, rs[j].locality())
+		attrMatchI := localityMatch(locality.Tiers, rs[i].locality())
+		attrMatchJ := localityMatch(locality.Tiers, rs[j].locality())
 		// Longer locality matches sort first (the assumption is that
 		// they'll have better latencies).
 		return attrMatchI > attrMatchJ

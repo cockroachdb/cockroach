@@ -175,7 +175,7 @@ func (o *closestOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	replicas.OptimizeReplicaOrder(&o.nodeDesc, o.latencyFunc)
+	replicas.OptimizeReplicaOrder(o.nodeDesc.NodeID, o.latencyFunc, o.nodeDesc.Locality)
 	return replicas[0].ReplicaDescriptor, nil
 }
 
@@ -229,7 +229,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	replicas.OptimizeReplicaOrder(&o.nodeDesc, o.latencyFunc)
+	replicas.OptimizeReplicaOrder(o.nodeDesc.NodeID, o.latencyFunc, o.nodeDesc.Locality)
 
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
 	minLoad := int(math.MaxInt32)

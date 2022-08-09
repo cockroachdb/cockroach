@@ -389,25 +389,15 @@ func TestSendRPCOrder(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			verifyCall = makeVerifier(tc.expReplica)
 
-			{
-				// The local node needs to get its attributes during sendRPC.
-				nd := &roachpb.NodeDescriptor{
-					NodeID:  6,
-					Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:6"),
-					Locality: roachpb.Locality{
-						Tiers: tc.tiers,
-					},
-				}
-				g.NodeID.Reset(nd.NodeID)
-				err := g.SetNodeDescriptor(nd)
-				require.NoError(t, err)
+			g.NodeID.Reset(6)
+			cfg.Locality = roachpb.Locality{
+				Tiers: tc.tiers,
 			}
+			ds := NewDistSender(cfg)
 
 			ds.rangeCache.Clear()
 			var lease roachpb.Lease
@@ -418,9 +408,6 @@ func TestSendRPCOrder(t *testing.T) {
 				Desc:  descriptor,
 				Lease: lease,
 			})
-
-			// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
-			ds.nodeDescriptor = nil
 
 			// Issue the request.
 			header := roachpb.Header{
