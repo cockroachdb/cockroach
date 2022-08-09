@@ -167,7 +167,7 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
+			ie := sc.ieFactory.NewInternalExecutor(NewFakeSessionData(sc.execCfg.SV()))
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -764,7 +764,7 @@ func (sc *SchemaChanger) validateConstraints(
 					}
 				} else if c.IsUniqueWithoutIndex() {
 					if err := validateUniqueWithoutIndexConstraintInTxn(
-						ctx, sc.ieFactory(ctx, evalCtx.SessionData()), desc, txn, evalCtx.SessionData().User(), c.GetName(),
+						ctx, sc.ieFactory.NewInternalExecutor(evalCtx.SessionData()), desc, txn, evalCtx.SessionData().User(), c.GetName(),
 					); err != nil {
 						return err
 					}
@@ -2480,7 +2480,7 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
+	ief sqlutil.InternalExecutorFactory,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2490,7 +2490,7 @@ func validateCheckInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
-	ie := ief(ctx, sessionData)
+	ie := ief.NewInternalExecutor(sessionData)
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateCheckExpr(ctx, semaCtx, sessionData, checkExpr, tableDesc, ie, txn)
 	})
@@ -2510,7 +2510,7 @@ func validateCheckInTxn(
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
+	ief sqlutil.InternalExecutorFactory,
 	sd *sessiondata.SessionData,
 	srcTable *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2543,7 +2543,7 @@ func validateFkInTxn(
 			targetTable = syntheticTable
 		}
 	}
-	ie := ief(ctx, sd)
+	ie := ief.NewInternalExecutor(sd)
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
 	})
