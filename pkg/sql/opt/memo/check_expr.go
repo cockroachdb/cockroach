@@ -204,6 +204,9 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if t.Cols.Empty() {
 			panic(errors.AssertionFailedf("index join with no columns"))
 		}
+		if scan, ok := t.Input.(*ScanExpr); ok && scan.Flags.NoIndexJoin {
+			panic(errors.AssertionFailedf("index join used with NoIndexJoin flag"))
+		}
 
 	case *LookupJoinExpr:
 		if len(t.KeyCols) == 0 && len(t.LookupExpr) == 0 {
