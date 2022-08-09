@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,6 +134,11 @@ func (f *pgConnReplicationFeedSource) Next() (streamingccl.Event, bool) {
 	e := f.codec.pop()
 	require.NotNil(f.t, e)
 	return e, true
+}
+
+// Error implements the streamingtest.FeedSource interface.
+func (f *pgConnReplicationFeedSource) Error() error {
+	return f.rows.Err()
 }
 
 // startReplication starts replication stream, specified as query and its args.
@@ -315,7 +321,9 @@ func TestStreamPartition(t *testing.T) {
 	srcTenant.SQL.Exec(t, `
 CREATE DATABASE d;
 CREATE TABLE d.t1(i int primary key, a string, b string);
+CREATE TABLE d.t2(i int primary key, a string, b string);
 INSERT INTO d.t1 (i) VALUES (42);
+INSERT INTO d.t2 (i) VALUES (42);
 USE d;
 `)
 
@@ -325,6 +333,31 @@ USE d;
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t1")
+	t2Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t2")
+
+	t.Run("stream-table-cursor-error", func(t *testing.T) {
+		_, feed := startReplication(t, h, makePartitionStreamDecoder,
+			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, hlc.Timestamp{}, "t2"))
+		defer feed.Close(ctx)
+
+		subscribedSpan := h.TableSpan(srcTenant.Codec, "t2")
+		// Send a ClearRange to trigger rows cursor to return internal error from rangefeed.
+		// Choose 't2' so that it doesn't trigger error on other registered span in rangefeeds,
+		// affecting other tests.
+		_, err := kv.SendWrapped(ctx, h.SysServer.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    subscribedSpan.Key,
+				EndKey: subscribedSpan.EndKey,
+			},
+		})
+		require.Nil(t, err)
+
+		expected := streamingtest.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
+		feed.ObserveKey(ctx, expected.Key)
+		feed.ObserveError(ctx, func(err error) bool {
+			return strings.Contains(err.Error(), "unexpected MVCC history mutation")
+		})
+	})
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,
@@ -373,7 +406,7 @@ USE d;
 
 	t.Run("stream-batches-events", func(t *testing.T) {
 		srcTenant.SQL.Exec(t, `
-CREATE TABLE t2(
+CREATE TABLE t3(
  i INT PRIMARY KEY, 
  a STRING, 
  b STRING,
@@ -384,7 +417,7 @@ CREATE TABLE t2(
 		addRows := func(start, n int) {
 			// Insert few more rows into the table.  We expect
 			for i := start; i < n; i++ {
-				srcTenant.SQL.Exec(t, "INSERT INTO t2 (i, a, b) VALUES ($1, $2, $3)",
+				srcTenant.SQL.Exec(t, "INSERT INTO t3 (i, a, b) VALUES ($1, $2, $3)",
 					i, fmt.Sprintf("i=%d", i), fmt.Sprintf("10-i=%d", 10-i))
 			}
 		}
@@ -615,13 +648,8 @@ USE d;
 	defer feed.Close(ctx)
 
 	// TODO(casper): Replace with DROP TABLE once drop table uses the MVCC-compatible DelRange
-	tableSpan := func(table string) roachpb.Span {
-		desc := desctestutils.TestingGetPublicTableDescriptor(
-			h.SysServer.DB(), srcTenant.Codec, "d", table)
-		return desc.PrimaryIndexSpan(srcTenant.Codec)
-	}
-
-	t1Span, t2Span, t3Span := tableSpan("t1"), tableSpan("t2"), tableSpan("t3")
+	t1Span, t2Span, t3Span := h.TableSpan(srcTenant.Codec, "t1"),
+		h.TableSpan(srcTenant.Codec, "t2"), h.TableSpan(srcTenant.Codec, "t3")
 	// Range deleted is outside the subscribed spans
 	require.NoError(t, h.SysServer.DB().DelRangeUsingTombstone(ctx, t2Span.EndKey, t3Span.Key))
 	// Range is t1s - t2e, emitting 2 events, t1s - t1e and t2s - t2e.

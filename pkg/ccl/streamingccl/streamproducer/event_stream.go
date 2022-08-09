@@ -50,6 +50,7 @@ type eventStream struct {
 	// Fields below initialized when Start called.
 	rf          *rangefeed.RangeFeed          // Currently running rangefeed.
 	streamGroup ctxgroup.Group                // Context group controlling stream execution.
+	doneChan    chan struct{}                 // Channel signaled to close the stream loop.
 	eventsCh    chan kvcoord.RangeFeedMessage // Channel receiving rangefeed events.
 	errCh       chan error                    // Signaled when error occurs in rangefeed.
 	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
@@ -88,6 +89,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	// Stream channel receives datums to be sent to the consumer.
 	s.streamCh = make(chan tree.Datums)
+
+	s.doneChan = make(chan struct{})
 
 	// Common rangefeed options.
 	opts := []rangefeed.Option{
@@ -216,6 +219,7 @@ func (s *eventStream) Close(ctx context.Context) {
 	s.rf.Close()
 	s.acc.Close(ctx)
 
+	close(s.doneChan)
 	if err := s.streamGroup.Wait(); err != nil {
 		// Note: error in close is normal; we expect to be terminated with context canceled.
 		log.Errorf(ctx, "partition stream %d terminated with error %v", s.streamID, err)
@@ -445,6 +449,8 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-s.doneChan:
+			return nil
 		case ev := <-s.eventsCh:
 			switch {
 			case ev.Val != nil:
