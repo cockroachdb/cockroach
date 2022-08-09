@@ -1,0 +1,138 @@
+# Verify JWT authentication works.
+
+config secure
+----
+
+sql
+CREATE USER jwt_user;
+CREATE USER test;
+CREATE USER test2;
+----
+ok
+
+subtest enable_jwt_auth
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjM5NTcsImlhdCI6MTY2MTI2Mzk1NywiaXNzIjoiaXNzdWVyIiwic3ViIjoidGVzdCJ9.Z0Hyi7YbnRZRfOJxjz0K9b1bFNA4eoWa4g8kH5LoYRivvARAZLdD7Ux0OQfsrFHAjK4eOtglF4nmY0usGl8diUsL86ifinyxMNC78xzaKrV620Kzt2k2kld0cwCPc-pRAjN8RSMw6Ypt9oIpnFTsFwIhB9QN_7t6KF4NRjgqdENI4UbBTgw0cR5kExk7PGpyEIxJ_6Y0cVwCBgosnKAEA7XpA2fHU_k61zX9MIiDgdnwWl0KuB3Csr37N998T-oxQPNI8o9JVwsSYGPPVvET70PankDUNhVWrU7rxKVVQ579khhdApPpDB82lypI7W8eVcZoamTWo19o1_CMUSzb2A
+----
+ERROR: JWT authentication: not enabled (SQLSTATE 28000)
+
+jwt_cluster_setting enabled=true
+----
+
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjM5NTcsImlhdCI6MTY2MTI2Mzk1NywiaXNzIjoiaXNzdWVyIiwic3ViIjoidGVzdCJ9.Z0Hyi7YbnRZRfOJxjz0K9b1bFNA4eoWa4g8kH5LoYRivvARAZLdD7Ux0OQfsrFHAjK4eOtglF4nmY0usGl8diUsL86ifinyxMNC78xzaKrV620Kzt2k2kld0cwCPc-pRAjN8RSMw6Ypt9oIpnFTsFwIhB9QN_7t6KF4NRjgqdENI4UbBTgw0cR5kExk7PGpyEIxJ_6Y0cVwCBgosnKAEA7XpA2fHU_k61zX9MIiDgdnwWl0KuB3Csr37N998T-oxQPNI8o9JVwsSYGPPVvET70PankDUNhVWrU7rxKVVQ579khhdApPpDB82lypI7W8eVcZoamTWo19o1_CMUSzb2A
+----
+ERROR: JWT authentication: invalid token (SQLSTATE 28000)
+
+subtest end
+
+subtest single_jwks_key
+
+# see authentication_jwt_test.go for examples of how to generate JWKS values.
+jwt_cluster_setting jwks={"kty":"RSA","use":"sig","alg":"RS256","kid":"test","n":"sJCwOk5gVjZZu3oaODecZaT_-Lee7J-q3rQIvCilg-7B8fFNJ2XHZCsF74JX2d7ePyjz7u9d2r5CvstufiH0qGPHBBm0aKrxGRILRGUTfqBs8Dnrnv9ymTEFsRUQjgy9ACUfwcgLVQIwv1NozySLb4Z5N8X91b0TmcJun6yKjBrnr1ynUsI_XXjzLnDpJ2Ng_shuj-z7DKSEeiFUg9eSFuTeg_wuHtnnhw4Y9pwT47c-XBYnqtGYMADSVEzKLQbUini0p4-tfYboF6INluKQsO5b1AZaaXgmStPIqteS7r2eR3LFL-XB7rnZOR4cAla773Cq5DD-8RnYamnmmLu_gQ","e":"AQAB"}
+----
+
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjM5NTcsImlhdCI6MTY2MTI2Mzk1NywiaXNzIjoiaXNzdWVyIiwic3ViIjoidGVzdCJ9.Z0Hyi7YbnRZRfOJxjz0K9b1bFNA4eoWa4g8kH5LoYRivvARAZLdD7Ux0OQfsrFHAjK4eOtglF4nmY0usGl8diUsL86ifinyxMNC78xzaKrV620Kzt2k2kld0cwCPc-pRAjN8RSMw6Ypt9oIpnFTsFwIhB9QN_7t6KF4NRjgqdENI4UbBTgw0cR5kExk7PGpyEIxJ_6Y0cVwCBgosnKAEA7XpA2fHU_k61zX9MIiDgdnwWl0KuB3Csr37N998T-oxQPNI8o9JVwsSYGPPVvET70PankDUNhVWrU7rxKVVQ579khhdApPpDB82lypI7W8eVcZoamTWo19o1_CMUSzb2A
+----
+ERROR: JWT authentication: invalid subject (SQLSTATE 28000)
+DETAIL: token issued for test but login was for jwt_user
+
+subtest end
+
+subtest multiple_jwks_key
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ERROR: JWT authentication: invalid token (SQLSTATE 28000)
+
+# see authentication_jwt_test.go for examples of how to generate JWKS values.
+jwt_cluster_setting jwks={"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"test","n":"sJCwOk5gVjZZu3oaODecZaT_-Lee7J-q3rQIvCilg-7B8fFNJ2XHZCsF74JX2d7ePyjz7u9d2r5CvstufiH0qGPHBBm0aKrxGRILRGUTfqBs8Dnrnv9ymTEFsRUQjgy9ACUfwcgLVQIwv1NozySLb4Z5N8X91b0TmcJun6yKjBrnr1ynUsI_XXjzLnDpJ2Ng_shuj-z7DKSEeiFUg9eSFuTeg_wuHtnnhw4Y9pwT47c-XBYnqtGYMADSVEzKLQbUini0p4-tfYboF6INluKQsO5b1AZaaXgmStPIqteS7r2eR3LFL-XB7rnZOR4cAla773Cq5DD-8RnYamnmmLu_gQ","e":"AQAB"},{"kty":"RSA","use":"sig","alg":"RS256","kid":"test2","n":"3gOrVdePypBAs6bTwD-6dZhMuwOSq8QllMihBfcsiRmo3c14_wfa_DRDy3kSsacwdih5-CaeF8ou-Dan6WqXzjDyJNekmGltPLfO2XB5FkHQoZ-X9lnXktsAgNLj3WsKjr-xUxrh8p8FFz62HJYN8QGaNttWBJZb3CgdzF7i8bPqVet4P1ekzs7mPBH2arEDy1f1q4o7fpmw0t9wuCrmtkj_g_eS6Hi2Rxm3m7HJUFVVbQeuZlT_W84FUzpSQCkNi2QDvoNVVCE2DSYZxDrzRxSZSv_fIh5XeJhwYY-f8iEfI4qx91ONGzGMvPn2GagrBnLBQRx-6RsORh4YmOOeeQ","e":"AQAB"}]}
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ERROR: JWT authentication: invalid subject (SQLSTATE 28000)
+DETAIL: token issued for test2 but login was for jwt_user
+
+subtest end
+
+subtest expired_token
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjE2NjEyNjQzOTgsImlhdCI6MTY2MTI2NDM5OCwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.1nWuqpwj4uPDk0pyyqEJhpIgyridv699B7OjEBGSyQ8iyrqryeG1yr7oP1qnKlrcqtbVmuB5ELJoXNUerd8BL0GQBMCkkxjG1cuLvLNOWo5yzifcfYHiiaCL25EblWG46eBrxAeHmqGigQiIpSUPjQTlZT_lRLrEI9h_xQhwNp5AnsY2S1f8N4oaMqjUjgREGdLhZT9sOyNmrf5uowTFcR3aWBkpIB5Ac5rvI8-U7-D1rY5KJ3Wez4G2L3Miyof_lOlK1g8XwAasCPKlhHea5qZNjqHLqgOb5EIQ_yd_KICT7pFLSgMXw_IJ9c68z-H1N7wEivnnLydgQUR3WVEytA
+----
+ERROR: JWT authentication: invalid token (SQLSTATE 28000)
+
+subtest end
+
+subtest key_id_mismatch
+
+# see authentication_jwt_test.go for examples of how to generate JWKS values.
+jwt_cluster_setting jwks={"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"unknownkid1","n":"sJCwOk5gVjZZu3oaODecZaT_-Lee7J-q3rQIvCilg-7B8fFNJ2XHZCsF74JX2d7ePyjz7u9d2r5CvstufiH0qGPHBBm0aKrxGRILRGUTfqBs8Dnrnv9ymTEFsRUQjgy9ACUfwcgLVQIwv1NozySLb4Z5N8X91b0TmcJun6yKjBrnr1ynUsI_XXjzLnDpJ2Ng_shuj-z7DKSEeiFUg9eSFuTeg_wuHtnnhw4Y9pwT47c-XBYnqtGYMADSVEzKLQbUini0p4-tfYboF6INluKQsO5b1AZaaXgmStPIqteS7r2eR3LFL-XB7rnZOR4cAla773Cq5DD-8RnYamnmmLu_gQ","e":"AQAB"},{"kty":"RSA","use":"sig","alg":"RS256","kid":"unknownkid2","n":"3gOrVdePypBAs6bTwD-6dZhMuwOSq8QllMihBfcsiRmo3c14_wfa_DRDy3kSsacwdih5-CaeF8ou-Dan6WqXzjDyJNekmGltPLfO2XB5FkHQoZ-X9lnXktsAgNLj3WsKjr-xUxrh8p8FFz62HJYN8QGaNttWBJZb3CgdzF7i8bPqVet4P1ekzs7mPBH2arEDy1f1q4o7fpmw0t9wuCrmtkj_g_eS6Hi2Rxm3m7HJUFVVbQeuZlT_W84FUzpSQCkNi2QDvoNVVCE2DSYZxDrzRxSZSv_fIh5XeJhwYY-f8iEfI4qx91ONGzGMvPn2GagrBnLBQRx-6RsORh4YmOOeeQ","e":"AQAB"}]}
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ERROR: JWT authentication: invalid token (SQLSTATE 28000)
+
+jwt_cluster_setting jwks={"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"test","n":"sJCwOk5gVjZZu3oaODecZaT_-Lee7J-q3rQIvCilg-7B8fFNJ2XHZCsF74JX2d7ePyjz7u9d2r5CvstufiH0qGPHBBm0aKrxGRILRGUTfqBs8Dnrnv9ymTEFsRUQjgy9ACUfwcgLVQIwv1NozySLb4Z5N8X91b0TmcJun6yKjBrnr1ynUsI_XXjzLnDpJ2Ng_shuj-z7DKSEeiFUg9eSFuTeg_wuHtnnhw4Y9pwT47c-XBYnqtGYMADSVEzKLQbUini0p4-tfYboF6INluKQsO5b1AZaaXgmStPIqteS7r2eR3LFL-XB7rnZOR4cAla773Cq5DD-8RnYamnmmLu_gQ","e":"AQAB"},{"kty":"RSA","use":"sig","alg":"RS256","kid":"test2","n":"3gOrVdePypBAs6bTwD-6dZhMuwOSq8QllMihBfcsiRmo3c14_wfa_DRDy3kSsacwdih5-CaeF8ou-Dan6WqXzjDyJNekmGltPLfO2XB5FkHQoZ-X9lnXktsAgNLj3WsKjr-xUxrh8p8FFz62HJYN8QGaNttWBJZb3CgdzF7i8bPqVet4P1ekzs7mPBH2arEDy1f1q4o7fpmw0t9wuCrmtkj_g_eS6Hi2Rxm3m7HJUFVVbQeuZlT_W84FUzpSQCkNi2QDvoNVVCE2DSYZxDrzRxSZSv_fIh5XeJhwYY-f8iEfI4qx91ONGzGMvPn2GagrBnLBQRx-6RsORh4YmOOeeQ","e":"AQAB"}]}
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ERROR: JWT authentication: invalid subject (SQLSTATE 28000)
+DETAIL: token issued for test2 but login was for jwt_user
+
+subtest end
+
+subtest subject_match
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ERROR: JWT authentication: invalid audience (SQLSTATE 28000)
+DETAIL: token issued with an audience of [test_cluster]
+
+subtest end
+
+subtest audience_match
+
+jwt_cluster_setting audience=test_cluster
+----
+
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ERROR: JWT authentication: invalid issuer (SQLSTATE 28000)
+DETAIL: token issued by issuer2
+
+subtest end
+
+subtest issuer_match
+
+jwt_cluster_setting issuers=issuer2
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ok defaultdb
+
+jwt_cluster_setting issuers=["issuer1","issuer2"]
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ok defaultdb
+
+subtest end
