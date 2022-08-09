@@ -2001,6 +2001,9 @@ type SessionArgs struct {
 	// authentication is skipped. Once the token is used to authenticate, this
 	// value should be zeroed out.
 	SessionRevivalToken []byte
+	// JWTAuthEnabled indicates if the customer is passing a JWT token in the
+	// password field.
+	JWTAuthEnabled bool
 }
 
 // SessionRegistry stores a set of all sessions on this node.

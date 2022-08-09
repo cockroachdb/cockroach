@@ -79,6 +79,8 @@ cockroachdb/jobs:
   aliases:
     cockroachdb/jobs-prs: other
   triage_column_id: 16360666
+cockroachdb/cloud-identity:
+  triage_column_id: 18588697
 cockroachdb/unowned:
   aliases:
     cockroachdb/rfc-prs: other
