@@ -2189,11 +2189,12 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 	// the host tenant to have fully populated `system.span_configurations`
 	// (read: reconciled) at least once before using it as a view for all
 	// split/config decisions.
-	_ = clusterversion.EnsureSpanConfigReconciliation
+	_ = clusterversion.TODOPreV22_1
 	//
 	// We also want to ensure that the KVSubscriber on each store is at least as
 	// up-to-date as some full reconciliation timestamp.
-	_ = clusterversion.EnsureSpanConfigSubscription
+	//
+	// _ = clusterversion.TODOPreV22_1
 	//
 	// Without a version gate, it would be possible for a replica on a
 	// new-binary-server to apply the static fallback config (assuming no
@@ -2205,7 +2206,9 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 	//
 	// We achieve all this through a three-step migration process, culminating
 	// in the following cluster version gate:
-	_ = clusterversion.EnableSpanConfigStore
+	//
+	// _ = clusterversion.TODOPreV22_1
+	//
 
 	if s.cfg.SpanConfigsDisabled ||
 		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
@@ -2395,8 +2398,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		}
 
 		if s.cfg.SpanConfigsDisabled ||
-			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-			!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) {
+			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
 			repl.SetSpanConfig(conf)
 		}
 

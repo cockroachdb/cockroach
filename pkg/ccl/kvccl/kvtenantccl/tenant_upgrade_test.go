@@ -17,16 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -34,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -366,116 +361,4 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			[][]string{{v2.String()}})
 		tenantInfo.v2onMigrationStopper.Stop(ctx)
 	})
-}
-
-// TestTenantSystemConfigUpgrade ensures that the tenant GC job uses the
-// appropriate view of the GC TTL.
-func TestTenantSystemConfigUpgrade(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
-		false, // initializeVersion
-	)
-	// Initialize the version to the BinaryMinSupportedVersion.
-	require.NoError(t, clusterversion.Initialize(ctx,
-		clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Settings: settings,
-			// Test is designed to run within a tenant. No need
-			// for the test tenant here.
-			DisableDefaultTestTenant: true,
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
-				},
-			},
-		},
-	})
-	hostDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	hostDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	hostDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	defer tc.Stopper().Stop(ctx)
-	connectToTenant := func(t *testing.T, addr string) (_ *gosql.DB, cleanup func()) {
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(username.RootUser))
-		tenantDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return tenantDB, func() {
-			tenantDB.Close()
-			cleanupPGUrl()
-		}
-	}
-	mkTenant := func(t *testing.T, id uint64) (
-		tenant serverutils.TestTenantInterface,
-	) {
-		settings := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.TestingBinaryVersion,
-			clusterversion.TestingBinaryMinSupportedVersion,
-			false, // initializeVersion
-		)
-		// Initialize the version to the minimum it could be.
-		require.NoError(t, clusterversion.Initialize(ctx,
-			clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
-		tenantArgs := base.TestTenantArgs{
-			TenantID:     roachpb.MakeTenantID(id),
-			TestingKnobs: base.TestingKnobs{},
-			Settings:     settings,
-		}
-		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
-		require.NoError(t, err)
-		return tenant
-	}
-	const tenantID = 10
-	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID))
-	tenant := mkTenant(t, tenantID)
-	tenantSQL, cleanup := connectToTenant(t, tenant.SQLAddr())
-	defer cleanup()
-	tenantDB := sqlutils.MakeSQLRunner(tenantSQL)
-	tenantDB.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{"21.2"}})
-	tenantDB.Exec(t, "CREATE TABLE foo ()")
-	fooID := sqlutils.QueryTableID(t, tenantSQL, "defaultdb", "public", "foo")
-	tenantP := tenant.SystemConfigProvider()
-	ch, _ := tenantP.RegisterSystemConfigChannel()
-
-	hostDB.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
-	hostDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 111")
-	hostDB.Exec(t,
-		"ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true;",
-		tenantID)
-	tenantDB.CheckQueryResultsRetry(
-		t, "SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
-		[][]string{{"true"}},
-	)
-	tenantVersion := func() clusterversion.ClusterVersion {
-		return tenant.ClusterSettings().Version.ActiveVersionOrEmpty(ctx)
-	}
-	checkConfigEqual := func(t *testing.T, exp int32) {
-		testutils.SucceedsSoon(t, func() error {
-			cfg := tenantP.GetSystemConfig()
-			if cfg == nil {
-				return errors.New("no config")
-			}
-			conf, err := tenantP.GetSystemConfig().GetZoneConfigForObject(codec, tenantVersion(), config.ObjectID(fooID))
-			if err != nil {
-				return err
-			}
-			if conf.GC.TTLSeconds != exp {
-				return errors.Errorf("got %d, expected %d", conf.GC.TTLSeconds, exp)
-			}
-			return nil
-		})
-	}
-	checkConfigEqual(t, 111)
-	<-ch
-	hostDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 112")
-	<-ch
-	checkConfigEqual(t, 112)
-	tenantDB.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
-	tenantDB.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 113")
-	<-ch
-	checkConfigEqual(t, 113)
 }
