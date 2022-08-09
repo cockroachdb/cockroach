@@ -15,11 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
 
 func parseAndValidateKafkaSinkURI(
-	ctx context.Context, uri *url.URL,
+	ctx context.Context, _ interface{}, _ username.SQLUsername, uri *url.URL,
 ) (externalconn.ExternalConnection, error) {
 	// Validate the kafka URI by creating a kafka sink and throwing it away.
 	//
@@ -32,7 +33,7 @@ func parseAndValidateKafkaSinkURI(
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_TypeKafka,
+		Provider: connectionpb.ConnectionProvider_kafka,
 		Details: &connectionpb.ConnectionDetails_SimpleURI{
 			SimpleURI: &connectionpb.SimpleURI{
 				URI: uri.String(),

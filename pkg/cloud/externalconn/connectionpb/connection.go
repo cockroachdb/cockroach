@@ -19,7 +19,7 @@ func (d *ConnectionDetails) Type() ConnectionType {
 		return TypeStorage
 	case ConnectionProvider_gs_kms:
 		return TypeKMS
-	case ConnectionProvider_TypeKafka:
+	case ConnectionProvider_kafka:
 		return TypeStorage
 	default:
 		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %T", d.Provider.String()))
