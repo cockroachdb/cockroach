@@ -974,8 +974,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.Codec,
 		execCfg.Settings,
 		ieFactory,
+		collectionFactory,
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
+		sql.ValidateCheckConstraint,
 		sql.NewFakeSessionData,
 	)
 	execCfg.InternalExecutorFactory = ieFactory
