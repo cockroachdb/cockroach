@@ -30,7 +30,7 @@ type ValidateForwardIndexesFn func(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -42,7 +42,7 @@ type ValidateInvertedIndexesFn func(
 	codec keys.SQLCodec,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -53,11 +53,8 @@ type ValidateCheckConstraintFn func(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	constraint *descpb.ConstraintDetail,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 	sessionData *sessiondata.SessionData,
-	db *kv.DB,
-	collectionFactory *descs.CollectionFactory,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) error
 
@@ -109,18 +106,31 @@ func (vd validator) ValidateInvertedIndexes(
 	)
 }
 
+func (vd validator) ValidateCheckConstraint(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return vd.validateCheckConstraint(ctx, tbl, constraint, vd.newFakeSessionData(&vd.settings.SV),
+		vd.makeHistoricalInternalExecTxnRunner(), override)
+}
+
 // makeHistoricalInternalExecTxnRunner creates a new transaction runner which
 // always runs at the same time and that time is the current time as of when
 // this constructor was called.
-func (vd validator) makeHistoricalInternalExecTxnRunner() sqlutil.HistoricalInternalExecTxnRunner {
+func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalInternalExecTxnRunner {
 	now := vd.db.Clock().Now()
-	return func(ctx context.Context, fn sqlutil.InternalExecFn) error {
-		validationTxn := vd.db.NewTxn(ctx, "validation")
-		err := validationTxn.SetFixedTimestamp(ctx, now)
-		if err != nil {
-			return err
-		}
-		return fn(ctx, validationTxn, vd.ieFactory(ctx, vd.newFakeSessionData(&vd.settings.SV)))
+	return func(ctx context.Context, fn descs.InternalExecFn) error {
+		ie := vd.ieFactory(ctx, vd.newFakeSessionData(&vd.settings.SV))
+		return vd.collectionFactory.Txn(ctx, ie, vd.db, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+				return err
+			}
+			return fn(ctx, txn, ie, descriptors)
+		})
 	}
 }
 
@@ -131,8 +141,10 @@ func NewValidator(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	collectionFactory *descs.CollectionFactory,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
+	validateCheckConstraint ValidateCheckConstraintFn,
 	newFakeSessionData NewFakeSessionDataFn,
 ) scexec.Validator {
 	return validator{
@@ -140,8 +152,10 @@ func NewValidator(
 		codec:                   codec,
 		settings:                settings,
 		ieFactory:               ieFactory,
+		collectionFactory:       collectionFactory,
 		validateForwardIndexes:  validateForwardIndexes,
 		validateInvertedIndexes: validateInvertedIndexes,
+		validateCheckConstraint: validateCheckConstraint,
 		newFakeSessionData:      newFakeSessionData,
 	}
 }

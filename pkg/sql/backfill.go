@@ -161,14 +161,14 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 // makeFixedTimestampRunner creates a HistoricalTxnRunner suitable for use by the helpers.
 func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
-) sqlutil.HistoricalInternalExecTxnRunner {
-	runner := func(ctx context.Context, retryable sqlutil.InternalExecFn) error {
+) descs.HistoricalInternalExecTxnRunner {
+	runner := func(ctx context.Context, retryable descs.InternalExecFn) error {
 		return sc.fixedTimestampTxn(ctx, readAsOf, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			// We need to re-create the evalCtx since the txn may retry.
 			ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
-			return retryable(ctx, txn, ie)
+			return retryable(ctx, txn, ie, nil /* descriptors */)
 		})
 	}
 	return runner
@@ -1501,7 +1501,7 @@ func ValidateInvertedIndexes(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -1527,7 +1527,9 @@ func ValidateInvertedIndexes(
 			span := tableDesc.IndexSpan(codec, idx.GetID())
 			key := span.Key
 			endKey := span.EndKey
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+			if err := runHistoricalTxn(ctx, func(
+				ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor, _ *descs.Collection,
+			) error {
 				for {
 					kvs, err := txn.Scan(ctx, key, endKey, 1000000)
 					if err != nil {
@@ -1590,11 +1592,23 @@ func ValidateInvertedIndexes(
 	return nil
 }
 
+func ValidateCheckConstraint(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	sessionData *sessiondata.SessionData,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) (err error) {
+	// TODO (xiang): implement this.
+	return nil
+}
+
 func countExpectedRowsForInvertedIndex(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
@@ -1633,7 +1647,9 @@ func countExpectedRowsForInvertedIndex(
 	}
 
 	var expectedCount int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, _ *descs.Collection,
+	) error {
 		var stmt string
 		geoConfig := idx.GetGeoConfig()
 		if geoConfig.IsEmpty() {
@@ -1688,7 +1704,7 @@ func ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -1790,7 +1806,7 @@ func populateExpectedCounts(
 	indexes []catalog.Index,
 	partialIndexExpectedCounts map[descpb.IndexID]int64,
 	withFirstMutationPublic bool,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
 	desc := tableDesc
@@ -1808,7 +1824,9 @@ func populateExpectedCounts(
 		desc = fakeDesc
 	}
 	var tableRowCount int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, _ *descs.Collection,
+	) error {
 		var s strings.Builder
 		for _, idx := range indexes {
 			// For partial indexes, count the number of rows in the table
@@ -1854,7 +1872,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
 	withFirstMutationPublic bool,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
 	// If we are doing a REGIONAL BY ROW locality change, we can
@@ -1919,7 +1937,9 @@ func countIndexRowsAndMaybeCheckUniqueness(
 
 	// Retrieve the row count in the index.
 	var idxLen int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, _ *descs.Collection,
+	) error {
 		query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.GetID())
 		// If the index is a partial index the predicate must be added
 		// as a filter to the query to force scanning the index.
