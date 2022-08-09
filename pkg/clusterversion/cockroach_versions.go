@@ -181,9 +181,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// PostAddRaftAppliedIndexTermMigration is used for asserting that
-	// RaftAppliedIndexTerm is populated.
-	PostAddRaftAppliedIndexTermMigration
 	// DontProposeWriteTimestampForLeaseTransfers stops setting the WriteTimestamp
 	// on lease transfer Raft proposals. New leaseholders now forward their clock
 	// directly to the new lease start time.
@@ -370,10 +367,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     PostAddRaftAppliedIndexTermMigration,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
 	},
 	{
 		Key:     DontProposeWriteTimestampForLeaseTransfers,
