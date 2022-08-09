@@ -680,6 +680,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 func (ih *instrumentationHelper) SetIndexRecommendations(
 	ctx context.Context, idxRec *idxrecommendations.IndexRecCache, planner *planner,
 ) {
+	return
 	opc := planner.optPlanningCtx
 	opc.reset(ctx)
 	stmtType := opc.p.stmt.AST.StatementType()

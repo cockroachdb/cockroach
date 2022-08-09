@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -331,12 +333,14 @@ func TestGCJobRetry(t *testing.T) {
 	ctx := context.Background()
 	var failed atomic.Value
 	failed.Store(false)
-	params := base.TestServerArgs{}
+	cs := cluster.MakeTestingClusterSettings()
+	gcjob.EmptySpanPollInterval.Override(ctx, &cs.SV, 100*time.Millisecond)
+	params := base.TestServerArgs{Settings: cs}
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
-			_, ok := request.GetArg(roachpb.ClearRange)
-			if !ok {
+			r, ok := request.GetArg(roachpb.DeleteRange)
+			if !ok || !r.(*roachpb.DeleteRangeRequest).UseRangeTombstone {
 				return nil
 			}
 			if failed.Load().(bool) {
@@ -355,17 +359,16 @@ func TestGCJobRetry(t *testing.T) {
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	tdb.Exec(t, "DROP TABLE foo CASCADE;")
-	var jobID int64
+	var jobID string
 	tdb.QueryRow(t, `
 SELECT job_id
   FROM [SHOW JOBS]
  WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
 	).Scan(&jobID)
-	var status jobs.Status
-	tdb.QueryRow(t,
-		"SELECT status FROM [SHOW JOB WHEN COMPLETE $1]", jobID,
-	).Scan(&status)
-	require.Equal(t, jobs.StatusSucceeded, status)
+	tdb.CheckQueryResultsRetry(t,
+		"SELECT running_status FROM crdb_internal.jobs WHERE job_id = "+jobID,
+		[][]string{{"waiting for GC TTL"}},
+	)
 }
 
 // TestGCTenant is lightweight test that tests the branching logic in Resume
@@ -374,7 +377,7 @@ func TestGCResumer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
-	gcjob.SetSmallMaxGCIntervalForTest()
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	ctx := context.Background()
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
@@ -500,7 +503,7 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(10, progress),
-			"Tenant id 10 is expired and should not be in state WAITING_FOR_GC",
+			"Tenant id 10 is expired and should not be in state WAITING_FOR_CLEAR",
 		)
 		require.Equal(t, jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR, progress.Tenant.Status)
 	})
@@ -575,20 +578,30 @@ func TestGCTenant(t *testing.T) {
 // no system config provided by the SystemConfigProvider. It is a regression
 // test for a panic which could occur due to a slow systemconfigwatcher
 // initialization.
+//
+// TODO(ajwerner): Remove this test in 23.1.
 func TestGCJobNoSystemConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	provider := fakeSystemConfigProvider{}
-	settings := cluster.MakeTestingClusterSettings()
-	stopper := stop.NewStopper()
+	var (
+		v0 = clusterversion.ByKey(clusterversion.UseDelRangeInGCJob - 1)
+		v1 = clusterversion.ByKey(clusterversion.UseDelRangeInGCJob)
+	)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
 	ctx := context.Background()
-
+	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
+	stopper := stop.NewStopper()
 	gcKnobs := &sql.GCJobTestingKnobs{}
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 		Stopper:  stopper,
 		Knobs: base.TestingKnobs{
 			GCJob: gcKnobs,
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          v0,
+			},
 		},
 	})
 	defer stopper.Stop(ctx)
