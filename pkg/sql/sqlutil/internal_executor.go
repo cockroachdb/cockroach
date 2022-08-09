@@ -144,6 +144,17 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) (InternalRows, error)
 
+	// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the computed
+	// ResultColumns of the input query.
+	QueryBufferedExWithCols(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, colinfo.ResultColumns, error)
+
 	// WithSyntheticDescriptors sets the synthetic descriptors before running the
 	// the provided closure and resets them afterward. Used for queries/statements
 	// that need to use in-memory synthetic descriptors different from descriptors
