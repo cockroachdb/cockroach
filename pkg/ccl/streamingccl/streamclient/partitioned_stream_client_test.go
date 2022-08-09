@@ -52,6 +52,11 @@ func (f *subscriptionFeedSource) Next() (streamingccl.Event, bool) {
 	return event, hasMore
 }
 
+// Error implements the streamingtest.FeedSource interface.
+func (f *subscriptionFeedSource) Error() error {
+	return f.sub.Err()
+}
+
 // Close implements the streamingtest.FeedSource interface.
 func (f *subscriptionFeedSource) Close(ctx context.Context) {}
 
@@ -201,6 +206,10 @@ INSERT INTO d.t2 VALUES (2);
 	// the subscribe function sees our local context cancellation.
 	err = cg.Wait()
 	require.True(t, errors.Is(err, context.Canceled) || isQueryCanceledError(err))
+
+	rf.ObserveError(ctx, func(err error) bool {
+		return errors.Is(err, context.Canceled) || isQueryCanceledError(err)
+	})
 
 	// Testing client.Complete()
 	err = client.Complete(ctx, streaming.StreamID(999), true)

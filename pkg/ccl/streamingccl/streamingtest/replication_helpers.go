@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,11 +32,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// FeedPredicate allows tests to search a ReplicationFeed.
-type FeedPredicate func(message streamingccl.Event) bool
+// FeedEventPredicate allows tests to search a ReplicationFeed.
+type FeedEventPredicate func(message streamingccl.Event) bool
 
-// KeyMatches makes a FeedPredicate that matches a given key.
-func KeyMatches(key roachpb.Key) FeedPredicate {
+// FeedErrorPredicate allows tests to match an error from ReplicationFeed.
+type FeedErrorPredicate func(err error) bool
+
+// KeyMatches makes a FeedEventPredicate that matches a given key.
+func KeyMatches(key roachpb.Key) FeedEventPredicate {
 	return func(msg streamingccl.Event) bool {
 		if msg.Type() != streamingccl.KVEvent {
 			return false
@@ -54,9 +58,9 @@ func minResolvedTimestamp(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
 	return minTimestamp
 }
 
-// ResolvedAtLeast makes a FeedPredicate that matches when a timestamp has been
+// ResolvedAtLeast makes a FeedEventPredicate that matches when a timestamp has been
 // reached.
-func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
+func ResolvedAtLeast(lo hlc.Timestamp) FeedEventPredicate {
 	return func(msg streamingccl.Event) bool {
 		if msg.Type() != streamingccl.CheckpointEvent {
 			return false
@@ -70,6 +74,11 @@ type FeedSource interface {
 	// Next returns the next event, and a flag indicating if there are more events
 	// to consume.
 	Next() (streamingccl.Event, bool)
+
+	// Error returns the error encountered in the feed. If present, it
+	// is set after Next() indicates there is no more event to consume.
+	Error() error
+
 	// Close shuts down the source.
 	Close(ctx context.Context)
 }
@@ -93,15 +102,27 @@ func MakeReplicationFeed(t *testing.T, f FeedSource) *ReplicationFeed {
 // Note: we don't do any buffering here.  Therefore, it is required that the key
 // we want to observe will arrive at some point in the future.
 func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roachpb.KeyValue {
-	require.NoError(rf.t, rf.consumeUntil(ctx, KeyMatches(key)))
+	require.NoError(rf.t, rf.consumeUntil(ctx, KeyMatches(key), func(err error) bool {
+		return true
+	}))
 	return *rf.msg.GetKV()
 }
 
 // ObserveResolved consumes the feed until we received resolved timestamp that's at least
 // as high as the specified low watermark.  Returns observed resolved timestamp.
 func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp) hlc.Timestamp {
-	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo)))
+	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo), func(err error) bool {
+		return true
+	}))
 	return minResolvedTimestamp(*rf.msg.GetResolvedSpans())
+}
+
+// ObserveError consumes the feed until the feed is exhausted, and the final error should
+// match 'errPred'.
+func (rf *ReplicationFeed) ObserveError(ctx context.Context, errPred FeedErrorPredicate) {
+	require.NoError(rf.t, rf.consumeUntil(ctx, func(message streamingccl.Event) bool {
+		return false
+	}, errPred))
 }
 
 // Close cleans up any resources.
@@ -109,7 +130,9 @@ func (rf *ReplicationFeed) Close(ctx context.Context) {
 	rf.f.Close(ctx)
 }
 
-func (rf *ReplicationFeed) consumeUntil(ctx context.Context, pred FeedPredicate) error {
+func (rf *ReplicationFeed) consumeUntil(
+	ctx context.Context, pred FeedEventPredicate, errPred FeedErrorPredicate,
+) error {
 	const maxWait = 20 * time.Second
 	doneCh := make(chan struct{})
 	mu := struct {
@@ -139,6 +162,9 @@ func (rf *ReplicationFeed) consumeUntil(ctx context.Context, pred FeedPredicate)
 			mu.Unlock()
 			if err != nil {
 				rf.t.Fatal(err)
+			} else if rf.f.Error() != nil {
+				require.True(rf.t, errPred(rf.f.Error()))
+				return nil
 			} else {
 				rf.t.Fatalf("ran out of rows after processing %d rows", rowCount)
 			}
@@ -224,4 +250,11 @@ func (rh *ReplicationHelper) CreateTenant(
 		}, func() {
 			require.NoError(t, tenantConn.Close())
 		}
+}
+
+// TableSpan returns primary index span for a table.
+func (rh *ReplicationHelper) TableSpan(codec keys.SQLCodec, table string) roachpb.Span {
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		rh.SysServer.DB(), codec, "d", table)
+	return desc.PrimaryIndexSpan(codec)
 }
