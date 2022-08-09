@@ -685,7 +685,8 @@ func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
 	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0 &&
-		s.PartialIndexPredicate(md) == nil
+		s.PartialIndexPredicate(md) == nil &&
+		s.Locking.WaitPolicy != tree.LockWaitSkipLocked
 }
 
 // IsFullIndexScan returns true if the ScanPrivate will produce all rows in the
