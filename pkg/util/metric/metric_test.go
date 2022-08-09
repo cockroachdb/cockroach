@@ -139,6 +139,69 @@ func TestHistogramPrometheus(t *testing.T) {
 	}
 }
 
+func TestHistogramV2(t *testing.T) {
+	u := func(v int) *uint64 {
+		n := uint64(v)
+		return &n
+	}
+
+	f := func(v int) *float64 {
+		n := float64(v)
+		return &n
+	}
+
+	h := NewHistogramV2(
+		Metadata{},
+		time.Hour,
+		prometheus.HistogramOpts{
+			Namespace:   "",
+			Subsystem:   "",
+			Name:        "",
+			Help:        "",
+			ConstLabels: nil,
+			Buckets: []float64{
+				1.0,
+				5.0,
+				10.0,
+				25.0,
+				100.0,
+			},
+		},
+	)
+
+	measurements := []int64{0, 4, 5, 10, 20, 25, 30, 40, 90, 200}
+	var expSum float64
+	for _, m := range measurements {
+		h.RecordValue(m)
+		expSum += float64(m)
+	}
+
+	act := *h.ToPrometheusMetric().Histogram
+	exp := prometheusgo.Histogram{
+		SampleCount: u(len(measurements)),
+		SampleSum:   &expSum,
+		Bucket: []*prometheusgo.Bucket{
+			{CumulativeCount: u(1), UpperBound: f(1)},
+			{CumulativeCount: u(3), UpperBound: f(5)},
+			{CumulativeCount: u(4), UpperBound: f(10)},
+			{CumulativeCount: u(6), UpperBound: f(25)},
+			{CumulativeCount: u(9), UpperBound: f(100)},
+			// NB: 200 is greater than the largest defined bucket so prometheus
+			// puts it in an implicit bucket with +Inf as the upper bound.
+		},
+	}
+
+	if !reflect.DeepEqual(act, exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
+
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+	require.Equal(t, 1.0, h.ValueAtQuantileWindowed(10))
+	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50))
+	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80))
+	require.Equal(t, 125.0, h.ValueAtQuantileWindowed(100))
+}
+
 func TestHistogramBuckets(t *testing.T) {
 	verifyAndPrint := func(t *testing.T, exp, act []float64) {
 		t.Helper()

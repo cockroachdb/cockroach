@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
-	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -528,23 +527,7 @@ type registryRecorder struct {
 }
 
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
-	// TODO(tschottdorf,ajwerner): consider moving this switch to a single
-	// interface implemented by the individual metric types.
-	type (
-		float64Valuer          interface{ Value() float64 }
-		int64Valuer            interface{ Value() int64 }
-		int64Counter           interface{ Count() int64 }
-		prometheusMetricValuer interface{ ToPrometheusMetric() *prometheusgo.Metric }
-	)
 	switch mtr := mtr.(type) {
-	case float64:
-		fn(name, mtr)
-	case float64Valuer:
-		fn(name, mtr.Value())
-	case int64Valuer:
-		fn(name, float64(mtr.Value()))
-	case int64Counter:
-		fn(name, float64(mtr.Count()))
 	case *metric.Histogram:
 		// TODO(mrtracy): Where should this comment go for better
 		// visibility?
@@ -566,19 +549,20 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		}
 		fn(name+"-count", float64(curr.TotalCount()))
 	case *metric.HistogramV2:
-		// NB: this branch is intentionally at the bottom since all metrics implement it.
-		cur := mtr.Windowed()
-		var m prometheusgo.Metric
-		_ = cur.Write(&m)
-		hist := m.Histogram
-		n := float64(*hist.SampleCount)
+		n := float64(mtr.TotalCountWindowed())
 		fn(name+"-count", n)
-		fn(name+"-avg", *hist.SampleSum/n)
-		// TODO(obs-inf): add quantiles like for the hdrhistogram.
-	case prometheusMetricValuer:
-		// TODO we should be able to handle all non-histogram branches using this, i.e.
-		// can delete the float, int, etc, cases above.
-		_ = mtr.ToPrometheusMetric()
+		fn(name+"-avg", mtr.TotalSumWindowed()/n)
+		for _, pt := range recordHistogramQuantiles {
+			fn(name+pt.suffix, mtr.ValueAtQuantileWindowed(pt.quantile))
+		}
+	case metric.PrometheusExportable:
+		// NB: this branch is intentionally at the bottom since all metrics implement it.
+		m := mtr.ToPrometheusMetric()
+		if m.Gauge != nil {
+			fn(name, *m.Gauge.Value)
+		} else if m.Counter != nil {
+			fn(name, *m.Counter.Value)
+		}
 
 	default:
 		return errors.Errorf("cannot extract value for type %T", mtr)
