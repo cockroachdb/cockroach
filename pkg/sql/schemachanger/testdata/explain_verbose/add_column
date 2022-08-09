@@ -383,7 +383,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
     │   │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
-    │   │   │         rule: "adding column depends on primary index"
+    │   │   │         rule: "adding column depends on swapped-in primary index"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC

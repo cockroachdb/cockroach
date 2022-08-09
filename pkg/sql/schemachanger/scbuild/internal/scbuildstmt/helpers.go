@@ -335,6 +335,38 @@ func statusPublicFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element)
 	return status == scpb.Status_PUBLIC
 }
 
+func hasIndexIDAttrFilter(
+	indexID catid.IndexID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		idI, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+		return idI != nil && idI.(catid.IndexID) == indexID
+	}
+}
+
+func hasColumnIDAttrFilter(
+	columnID catid.ColumnID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
+		return idI != nil && idI.(catid.ColumnID) == columnID
+	}
+}
+
+func referencesColumnIDFilter(
+	columnID catid.ColumnID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		_ = screl.WalkColumnIDs(e, func(id *catid.ColumnID) error {
+			if id != nil && *id == columnID {
+				included = true
+			}
+			return nil
+		})
+		return included
+	}
+}
+
 // getPrimaryIndexes returns the primary indexes of the current table.
 // Note that it assumes that there are at most two primary indexes and at
 // least one. The existing primary index is the primary index which is

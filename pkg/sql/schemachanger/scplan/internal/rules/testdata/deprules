@@ -6,9 +6,12 @@ columnInIndex(index-column, index, table-id, column-id, index-id):
     - $index-column[ColumnID] = $column-id
     - $index[IndexID] = $index-id
     - joinOnIndexID($index, $index-column, $table-id, $index-id)
-columnInPrimaryIndexSwap(index-column, index, table-id, column-id, index-id):
+columnInSwappedInPrimaryIndex(index-column, index, table-id, column-id, index-id):
     - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
-    - sourceIndexNotSet($index)
+    - sourceIndexIsSet($index)
+columnInSwappedOutPrimaryIndex(index-column, index, table-id, column-id, index-id):
+    - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
+    - sourceIndexIsNotSet($index)
 joinOnColumnID(a, b, desc-id, col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
@@ -35,7 +38,9 @@ joinTargetNode(element, target, node):
     - joinTarget($element, $target)
     - $node[Type] = '*screl.Node'
     - $node[Target] = $target
-sourceIndexNotSet(index):
+sourceIndexIsNotSet(index):
+    - $index[SourceIndexID] = 0
+sourceIndexIsSet(index):
     - $index[SourceIndexID] != 0
 toAbsent(target1, target2):
     - $target1[TargetStatus] = ABSENT
@@ -59,14 +64,14 @@ deprules
     - $column-node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($expr, $expr-target, $expr-node)
     - joinTargetNode($column, $column-target, $column-node)
-- name: adding column depends on primary index
+- name: adding column depends on swapped-in primary index
   from: index-node
   kind: Precedence
   to: column-node
   query:
     - $index[Type] = '*scpb.PrimaryIndex'
     - $column[Type] = '*scpb.Column'
-    - columnInPrimaryIndexSwap($index-column, $index, $table-id, $column-id, $index-id)
+    - columnInSwappedInPrimaryIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
     - toPublic($index-target, $column-target)
     - $index-node[CurrentStatus] = PUBLIC
@@ -472,7 +477,7 @@ deprules
   query:
     - $index[Type] = '*scpb.PrimaryIndex'
     - $column[Type] = '*scpb.Column'
-    - columnInPrimaryIndexSwap($index-column, $index, $table-id, $column-id, $index-id)
+    - columnInSwappedInPrimaryIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
     - toAbsent($index-target, $column-target)
     - $index-node[CurrentStatus] = WRITE_ONLY

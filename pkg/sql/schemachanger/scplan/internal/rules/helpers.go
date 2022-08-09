@@ -102,10 +102,16 @@ func columnInIndex(
 	return columnInIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
 }
 
-func columnInPrimaryIndexSwap(
+func columnInSwappedInPrimaryIndex(
 	indexColumn, index nodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
 ) rel.Clause {
-	return columnInPrimaryIndexSwapUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
+	return columnInSwappedInPrimaryIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
+}
+
+func columnInSwappedOutPrimaryIndex(
+	indexColumn, index nodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
+) rel.Clause {
+	return columnInSwappedOutPrimaryIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
 }
 
 var (
@@ -191,7 +197,7 @@ var (
 			}
 		})
 
-	sourceIndexNotSetUntyped = screl.Schema.Def1("sourceIndexNotSet", "index", func(
+	sourceIndexIsSetUntyped = screl.Schema.Def1("sourceIndexIsSet", "index", func(
 		index rel.Var,
 	) rel.Clauses {
 		return rel.Clauses{
@@ -199,8 +205,8 @@ var (
 		}
 	})
 
-	columnInPrimaryIndexSwapUntyped = screl.Schema.Def5(
-		"columnInPrimaryIndexSwap",
+	columnInSwappedInPrimaryIndexUntyped = screl.Schema.Def5(
+		"columnInSwappedInPrimaryIndex",
 		"index-column", "index", "table-id", "column-id", "index-id", func(
 			indexColumn, index, tableID, columnID, indexID rel.Var,
 		) rel.Clauses {
@@ -208,7 +214,28 @@ var (
 				columnInIndexUntyped(
 					indexColumn, index, tableID, columnID, indexID,
 				),
-				sourceIndexNotSetUntyped(index),
+				sourceIndexIsSetUntyped(index),
+			}
+		})
+
+	sourceIndexIsNotSetUntyped = screl.Schema.Def1("sourceIndexIsNotSet", "index", func(
+		index rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			index.AttrEq(screl.SourceIndexID, catid.IndexID(0)),
+		}
+	})
+
+	columnInSwappedOutPrimaryIndexUntyped = screl.Schema.Def5(
+		"columnInSwappedOutPrimaryIndex",
+		"index-column", "index", "table-id", "column-id", "index-id", func(
+			indexColumn, index, tableID, columnID, indexID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				columnInIndexUntyped(
+					indexColumn, index, tableID, columnID, indexID,
+				),
+				sourceIndexIsNotSetUntyped(index),
 			}
 		})
 )

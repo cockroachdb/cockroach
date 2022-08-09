@@ -940,6 +940,17 @@ func (desc *wrapper) validateColumns(
 			return errors.Newf("both generated identity and on update expression specified for column %q", column.GetName())
 		}
 	}
+	// Also collect dropped column name -> ID mappings
+	for _, column := range desc.DeletableColumns() {
+		if !column.Dropped() {
+			continue
+		}
+		if _, columnNameExists := columnNames[column.GetName()]; columnNameExists {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q is being dropped", column.GetName())
+		}
+		columnNames[column.GetName()] = column.GetID()
+	}
 	return nil
 }
 

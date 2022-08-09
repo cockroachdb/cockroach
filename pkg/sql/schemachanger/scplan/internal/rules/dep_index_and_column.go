@@ -105,7 +105,7 @@ func init() {
 func init() {
 
 	registerDepRule(
-		"adding column depends on primary index",
+		"adding column depends on swapped-in primary index",
 		scgraph.Precedence,
 		"index", "column",
 		func(from, to nodeVars) rel.Clauses {
@@ -114,7 +114,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				columnInPrimaryIndexSwap(ic, from, relationID, columnID, "index-id"),
+				columnInSwappedInPrimaryIndex(ic, from, relationID, columnID, "index-id"),
 				joinOnColumnID(ic, to, relationID, columnID),
 				statusesToPublic(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
@@ -131,7 +131,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				columnInPrimaryIndexSwap(ic, from, relationID, columnID, "index-id"),
+				columnInSwappedInPrimaryIndex(ic, from, relationID, columnID, "index-id"),
 				joinOnColumnID(ic, to, relationID, columnID),
 				statusesToAbsent(from, scpb.Status_WRITE_ONLY, to, scpb.Status_WRITE_ONLY),
 			}
@@ -270,5 +270,4 @@ func init() {
 			}
 		},
 	)
-
 }
