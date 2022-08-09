@@ -928,7 +928,9 @@ CREATE TABLE crdb_internal.node_execution_insights (
    rows_read INT8 NOT NULL,
    rows_written INT8 NOT NULL,
    priority FLOAT8 NOT NULL,
-   retries INT8 NOT NULL
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL
 )  CREATE TABLE crdb_internal.node_execution_insights (
    session_id STRING NOT NULL,
    txn_id UUID NOT NULL,
@@ -947,7 +949,9 @@ CREATE TABLE crdb_internal.node_execution_insights (
    rows_read INT8 NOT NULL,
    rows_written INT8 NOT NULL,
    priority FLOAT8 NOT NULL,
-   retries INT8 NOT NULL
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_inflight_trace_spans (
    trace_id INT8 NOT NULL,
