@@ -60,6 +60,9 @@ message Statement {
   int64 rows_read = 13;
   int64 rows_written = 14;
   int64 retries = 15;
+  string auto_retry_reason = 16;
+  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  repeated int64 nodes = 17;
 }
 
 message Insight {

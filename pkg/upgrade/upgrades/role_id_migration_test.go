@@ -132,7 +132,7 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		wg.Add(1)
 		// Create other users in parallel while the migration is happening.
 		go func() {
-			for i := 0; i < 1000; i++ {
+			for i := 0; i < 500; i++ {
 				tdb.Exec(t, fmt.Sprintf(`CREATE USER parallel_user_creation_%d`, i))
 			}
 			wg.Done()
@@ -168,7 +168,7 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 			{"admin", "", "true", "2"},
 			{"root", "", "false", "1"},
 		})
-		tdb.CheckQueryResults(t, `SELECT user_id > 100000 FROM system.users WHERE username = 'testuser_last'`, [][]string{
+		tdb.CheckQueryResults(t, `SELECT user_id > 10000 FROM system.users WHERE username = 'testuser_last'`, [][]string{
 			{"true"},
 		})
 	}
@@ -204,9 +204,10 @@ func TestRoleIDMigration100User(t *testing.T) {
 	runTestRoleIDMigration(t, 100)
 }
 
-func TestRoleIDMigration100000Users(t *testing.T) {
+func TestRoleIDMigration15000Users(t *testing.T) {
 	skip.UnderStress(t)
-	runTestRoleIDMigration(t, 100000)
+	// 15000 is 1.5x the batch size used in the migration.
+	runTestRoleIDMigration(t, 15000)
 }
 
 func getDeprecatedSystemUsersTable() *descpb.TableDescriptor {
