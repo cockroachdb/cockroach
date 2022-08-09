@@ -3,20 +3,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "utils",
-    srcs = [
-        "cluster.go",
-        "tenant_state.go",
-    ],
+    srcs = ["connection_utils.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/utils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/cloud",
         "//pkg/security/username",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
-        "@com_github_stretchr_testify//require",
+        "//pkg/sql",
+        "//pkg/util/ioctx",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

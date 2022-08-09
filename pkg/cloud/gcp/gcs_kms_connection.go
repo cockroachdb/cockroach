@@ -16,12 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 )
 
 func parseAndValidateGCSKMSConnectionURI(
-	_ context.Context, uri *url.URL,
+	_ context.Context, _ interface{}, _ username.SQLUsername, uri *url.URL,
 ) (externalconn.ExternalConnection, error) {
-	if err := validateKMSURI(*uri); err != nil {
+	if err := ValidateKMSURI(*uri); err != nil {
 		return nil, err
 	}
 
