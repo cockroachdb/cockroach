@@ -81,7 +81,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		n.job,
 		execCfg.Codec,
 		execCfg.Settings,
-		execCfg.IndexValidator,
+		execCfg.Validator,
 		func(ctx context.Context, descriptors *descs.Collection, txn *kv.Txn) scexec.DescriptorMetadataUpdater {
 			return descmetadata.NewMetadataUpdater(ctx,
 				execCfg.InternalExecutorFactory,

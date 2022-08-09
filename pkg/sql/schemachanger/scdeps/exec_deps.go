@@ -63,7 +63,7 @@ func NewExecutorDependencies(
 	merger scexec.Merger,
 	backfillTracker scexec.BackfillerTracker,
 	backfillFlusher scexec.PeriodicProgressFlusher,
-	indexValidator scexec.IndexValidator,
+	validator scexec.Validator,
 	clock scmutationexec.Clock,
 	metadataUpdater scexec.DescriptorMetadataUpdater,
 	eventLogger scexec.EventLogger,
@@ -79,7 +79,7 @@ func NewExecutorDependencies(
 			codec:              codec,
 			descsCollection:    descsCollection,
 			jobRegistry:        jobRegistry,
-			indexValidator:     indexValidator,
+			validator:          validator,
 			eventLogger:        eventLogger,
 			statsRefresher:     statsRefresher,
 			schemaChangerJobID: schemaChangerJobID,
@@ -105,7 +105,7 @@ type txnDeps struct {
 	descsCollection     *descs.Collection
 	jobRegistry         JobRegistry
 	createdJobs         []jobspb.JobID
-	indexValidator      scexec.IndexValidator
+	validator           scexec.Validator
 	statsRefresher      scexec.StatsRefresher
 	tableStatsToRefresh []descpb.ID
 	eventLogger         scexec.EventLogger
@@ -395,8 +395,8 @@ func (d *execDeps) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 	return d.periodicProgressFlusher
 }
 
-func (d *execDeps) IndexValidator() scexec.IndexValidator {
-	return d.indexValidator
+func (d *execDeps) Validator() scexec.Validator {
+	return d.validator
 }
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.

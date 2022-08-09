@@ -50,7 +50,7 @@ type ValidateInvertedIndexesFn func(
 // for the internal executor.
 type NewFakeSessionDataFn func(sv *settings.Values) *sessiondata.SessionData
 
-type indexValidator struct {
+type validator struct {
 	db                      *kv.DB
 	codec                   keys.SQLCodec
 	settings                *cluster.Settings
@@ -61,7 +61,7 @@ type indexValidator struct {
 }
 
 // ValidateForwardIndexes checks that the indexes have entries for all the rows.
-func (iv indexValidator) ValidateForwardIndexes(
+func (vd validator) ValidateForwardIndexes(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
@@ -70,14 +70,14 @@ func (iv indexValidator) ValidateForwardIndexes(
 
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
-	return iv.validateForwardIndexes(
-		ctx, tbl, indexes, iv.makeHistoricalInternalExecTxnRunner(),
+	return vd.validateForwardIndexes(
+		ctx, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
 		withFirstMutationPublic, gatherAllInvalid, override,
 	)
 }
 
 // ValidateInvertedIndexes checks that the indexes have entries for all the rows.
-func (iv indexValidator) ValidateInvertedIndexes(
+func (vd validator) ValidateInvertedIndexes(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
@@ -86,8 +86,8 @@ func (iv indexValidator) ValidateInvertedIndexes(
 
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
-	return iv.validateInvertedIndexes(
-		ctx, iv.codec, tbl, indexes, iv.makeHistoricalInternalExecTxnRunner(),
+	return vd.validateInvertedIndexes(
+		ctx, vd.codec, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
 		withFirstMutationPublic, gatherAllInvalid, override,
 	)
 }
@@ -95,21 +95,21 @@ func (iv indexValidator) ValidateInvertedIndexes(
 // makeHistoricalInternalExecTxnRunner creates a new transaction runner which
 // always runs at the same time and that time is the current time as of when
 // this constructor was called.
-func (iv indexValidator) makeHistoricalInternalExecTxnRunner() sqlutil.HistoricalInternalExecTxnRunner {
-	now := iv.db.Clock().Now()
+func (vd validator) makeHistoricalInternalExecTxnRunner() sqlutil.HistoricalInternalExecTxnRunner {
+	now := vd.db.Clock().Now()
 	return func(ctx context.Context, fn sqlutil.InternalExecFn) error {
-		validationTxn := iv.db.NewTxn(ctx, "validation")
+		validationTxn := vd.db.NewTxn(ctx, "validation")
 		err := validationTxn.SetFixedTimestamp(ctx, now)
 		if err != nil {
 			return err
 		}
-		return fn(ctx, validationTxn, iv.ieFactory.NewInternalExecutor(iv.newFakeSessionData(&iv.settings.SV)))
+		return fn(ctx, validationTxn, vd.ieFactory.NewInternalExecutor(vd.newFakeSessionData(&vd.settings.SV)))
 	}
 }
 
-// NewIndexValidator creates a IndexValidator interface
+// NewValidator creates a Validator interface
 // for the new schema changer.
-func NewIndexValidator(
+func NewValidator(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
@@ -117,8 +117,8 @@ func NewIndexValidator(
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
 	newFakeSessionData NewFakeSessionDataFn,
-) scexec.IndexValidator {
-	return indexValidator{
+) scexec.Validator {
+	return validator{
 		db:                      db,
 		codec:                   codec,
 		settings:                settings,
