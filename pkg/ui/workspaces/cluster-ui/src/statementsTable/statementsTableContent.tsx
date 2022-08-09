@@ -197,9 +197,10 @@ interface StatementLinkProps {
   implicitTxn: boolean;
   statement: string;
   statementSummary: string;
-  search: string;
+  search?: string;
   statementQuery?: string;
   onClick?: (statement: string) => void;
+  className?: string;
 }
 
 export const StatementLink = ({
@@ -211,6 +212,7 @@ export const StatementLink = ({
   statementSummary,
   search,
   onClick,
+  className,
 }: StatementLinkProps): React.ReactElement => {
   const onStatementClick = React.useCallback(() => {
     if (onClick) {
@@ -228,7 +230,11 @@ export const StatementLink = ({
   const summary = computeOrUseStmtSummary(statement, statementSummary);
 
   return (
-    <Link to={StatementLinkTarget(linkProps)} onClick={onStatementClick}>
+    <Link
+      to={StatementLinkTarget(linkProps)}
+      onClick={onStatementClick}
+      className={`${cx(className)}`}
+    >
       <div>
         <Tooltip
           placement="bottom"
