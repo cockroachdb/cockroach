@@ -181,10 +181,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// DontProposeWriteTimestampForLeaseTransfers stops setting the WriteTimestamp
-	// on lease transfer Raft proposals. New leaseholders now forward their clock
-	// directly to the new lease start time.
-	DontProposeWriteTimestampForLeaseTransfers
 	// EnablePebbleFormatVersionBlockProperties enables a new Pebble SSTable
 	// format version for block property collectors.
 	// NB: this cluster version is paired with PebbleFormatBlockPropertyCollector
@@ -370,10 +366,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     DontProposeWriteTimestampForLeaseTransfers,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
 	},
 	{
 		Key:     EnablePebbleFormatVersionBlockProperties,
