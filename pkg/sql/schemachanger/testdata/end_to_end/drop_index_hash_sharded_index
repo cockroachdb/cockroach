@@ -24,7 +24,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
-## StatementPhase stage 1 of 1 with 6 MutationType ops
+## StatementPhase stage 1 of 1 with 7 MutationType ops
 upsert descriptor #104
   ...
        - 3
@@ -36,7 +36,8 @@ upsert descriptor #104
   +      3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
   +      11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
        fromHashShardedColumn: true
-       name: check_crdb_internal_j_shard_16
+  -    name: check_crdb_internal_j_shard_16
+  +    name: crdb_internal_constraint_2_name_placeholder
   +    validity: Dropping
      columns:
      - id: 1
@@ -156,7 +157,7 @@ upsert descriptor #104
   +  version: "9"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 3 MutationType ops
+## PreCommitPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -200,7 +201,7 @@ upsert descriptor #104
   -      3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
   -      11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
   -    fromHashShardedColumn: true
-  -    name: check_crdb_internal_j_shard_16
+  -    name: crdb_internal_constraint_2_name_placeholder
   -    validity: Dropping
   +  checks: []
      columns:
