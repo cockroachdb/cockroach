@@ -57,12 +57,10 @@ func BuildOptAndHypTableMaps(
 			)
 
 			// Do not add hypothetical inverted indexes for which there is an existing
-			// index with the same key. Inverted indexes do not have stored columns,
-			// so we should not make a recommendation if the same index already
-			// exists.
-			// TODO(wenyihu6): We should still consider not visible indexes and make a
-			// recommendation to mark the index as visible if it is chosen.
-			if !inverted || hypTable.existingRedundantIndex(&hypIndex) == nil {
+			// visible index with the same key. Inverted indexes do not have stored
+			// columns, so there will never be a recommendation if the same index
+			// already exists, and the existing index is visible.
+			if !(inverted && hypTable.redundantHypotheticalIndex(&hypIndex)) {
 				hypIndexes = append(hypIndexes, hypIndex)
 			}
 		}
@@ -136,6 +134,13 @@ func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 		return ht.Table.Index(i)
 	}
 	return &ht.hypotheticalIndexes[i-existingIndexCount]
+}
+
+// existingRedundantIndex checks whether there already exists a visible index
+// with the same explicit columns as the index argument in the original table
+// (HypotheticalTable's embedded table).
+func (ht *HypotheticalTable) redundantHypotheticalIndex(index *hypotheticalIndex) bool {
+	return ht.existingRedundantIndex(index) != nil && !ht.existingRedundantIndex(index).IsNotVisible()
 }
 
 // existingRedundantIndex checks whether an index with the same explicit columns

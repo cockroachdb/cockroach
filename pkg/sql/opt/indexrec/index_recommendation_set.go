@@ -76,12 +76,14 @@ func (irs *IndexRecommendationSet) createIndexRecommendations(expr opt.Expr) {
 
 // pruneIndexRecommendations removes redundant index recommendations from the
 // recommendation set. These are recommendations where the existingIndex field
-// is not nil and no new columns are being stored.
+// is not nil and already visible, and no new columns are being stored.
 func (irs *IndexRecommendationSet) pruneIndexRecommendations() {
 	for t, indexRecs := range irs.indexRecs {
 		updatedIndexRecs := make([]indexRecommendation, 0, len(indexRecs))
 		for _, indexRec := range indexRecs {
-			if indexRec.existingIndex == nil || !indexRec.redundantRecommendation() {
+			// If existingIndex is not nil, already visible, and no new columns are
+			// being stored, remove this redundant index from recommendation set.
+			if !indexRec.redundantRecommendation() {
 				updatedIndexRecs = append(updatedIndexRecs, indexRec)
 			}
 		}
@@ -169,7 +171,13 @@ func (irs *IndexRecommendationSet) Output() []string {
 		for _, indexRec := range indexes {
 			recTypeStr := "index creation"
 			if indexRec.existingIndex != nil {
-				recTypeStr = "index replacement"
+
+				if indexRec.alterIndexRec() {
+					recTypeStr = "alter index visibility"
+				} else {
+					recTypeStr = "index replacement"
+				}
+
 			}
 			indexCols := indexRec.indexCols()
 			storing := indexRec.storingColumns()
@@ -233,10 +241,24 @@ func (ir *indexRecommendation) init(
 	ir.newStoredColOrds.UnionWith(ir.existingStoredColOrds)
 }
 
-// redundantRecommendation compares newStoredColOrds with the existing index's
-// stored columns. It returns true if there are no new columns being stored in
-// newStoredColOrds.
+// redundantRecommendation returns true if the index recommendation should
+// suggest alter index ... visible. It returns true if the existing index is
+// not nil, not visible, and stores the same column as newStoredColOrds.
+func (ir *indexRecommendation) alterIndexRec() bool {
+	return ir.existingIndex != nil && ir.existingIndex.IsNotVisible() && ir.sameStoredColOrds()
+}
+
+// redundantRecommendation returns true if the index recommendation is
+// redundant. If the existing index is not nil and visible and stores the same
+// columns, this index recommendation is redundant. Otherwise, return false.
 func (ir *indexRecommendation) redundantRecommendation() bool {
+	return ir.existingIndex != nil && !ir.existingIndex.IsNotVisible() && ir.sameStoredColOrds()
+}
+
+// sameStoredColOrds compares newStoredColOrds with the existing index's stored
+// columns. It returns true if there are no new columns being stored in
+// newStoredColOrds.
+func (ir *indexRecommendation) sameStoredColOrds() bool {
 	return ir.newStoredColOrds.Difference(ir.existingStoredColOrds).Empty()
 }
 
@@ -296,15 +318,28 @@ func (ir *indexRecommendation) indexRecommendationString(
 	tableName := tree.NewUnqualifiedTableName(ir.index.tab.Name())
 
 	var dropCmd tree.DropIndex
+	var alterCmd tree.AlterIndexVisible
 	unique := false
 	if ir.existingIndex != nil {
-		sb.WriteString("   SQL commands: ")
 		indexName := tree.UnrestrictedName(ir.existingIndex.Name())
-		dropCmd.IndexList = []*tree.TableIndexName{{Table: *tableName, Index: indexName}}
 
-		// Maintain uniqueness if the existing index is unique.
-		unique = ir.existingIndex.IsUnique()
+		if ir.alterIndexRec() {
+			// If existingIndex is not visible, output alter index ... visible.
+			sb.WriteString("   SQL command: ")
+			alterCmd.Index = tree.TableIndexName{Table: *tableName, Index: indexName}
+			sb.WriteString(alterCmd.String() + ";")
+			return sb.String()
+		} else {
+			// If existingIndex is already visible, output create index... and drop
+			// index...
+			sb.WriteString("   SQL commands: ")
+			dropCmd.IndexList = []*tree.TableIndexName{{Table: *tableName, Index: indexName}}
+			// Maintain uniqueness if the existing index is unique.
+			unique = ir.existingIndex.IsUnique()
+		}
+
 	} else {
+		// If existingIndex is nil, output create index ...
 		sb.WriteString("   SQL command: ")
 	}
 
