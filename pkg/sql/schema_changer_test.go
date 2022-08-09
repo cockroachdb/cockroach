@@ -6912,8 +6912,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 				go func(scStmt string) {
 					// This transaction will not return until the server is shutdown. Therefore,
 					// we run it in a separate goroutine and don't check the returned error.
-					sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
-					_, _ = db.Exec(scStmt)
+					_, _ = db.Exec(`SET use_declarative_schema_changer = 'off'; ` + scStmt)
 				}(tc.scStmt)
 				// Verify that the job is in retry state while reverting.
 				const query = `SELECT num_runs > 3 FROM crdb_internal.jobs WHERE status = '` + string(jobs.StatusReverting) + `' AND description ~ '%s'`
