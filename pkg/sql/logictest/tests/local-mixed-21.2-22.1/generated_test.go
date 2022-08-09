@@ -79,13 +79,6 @@ func TestLogic_row_level_ttl_mixed_21_2_22_1(
 	runLogicTest(t, "row_level_ttl_mixed_21.2_22.1")
 }
 
-func TestLogic_scram_221_upgrade(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "scram_221_upgrade")
-}
-
 func TestLogic_super_regions_mixed_version(
 	t *testing.T,
 ) {
