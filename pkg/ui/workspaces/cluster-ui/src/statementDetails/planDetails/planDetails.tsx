@@ -19,17 +19,35 @@ import {
 import { Button } from "../../button";
 import { SqlBox, SqlBoxSize } from "../../sql";
 import { SortSetting } from "../../sortedtable";
+import { Row } from "antd";
+import "antd/lib/row/style";
+import {
+  InsightRecommendation,
+  InsightsSortedTable,
+  InsightType,
+  makeInsightsColumns,
+} from "../../insightsTable/insightsTable";
+import classNames from "classnames/bind";
+import styles from "../statementDetails.module.scss";
+
+const cx = classNames.bind(styles);
 
 interface PlanDetailsProps {
   plans: PlanHashStats[];
-  sortSetting: SortSetting;
-  onChangeSortSetting: (ss: SortSetting) => void;
+  statementFingerprintID: string;
+  plansSortSetting: SortSetting;
+  onChangePlansSortSetting: (ss: SortSetting) => void;
+  insightsSortSetting: SortSetting;
+  onChangeInsightsSortSetting: (ss: SortSetting) => void;
 }
 
 export function PlanDetails({
   plans,
-  sortSetting,
-  onChangeSortSetting,
+  statementFingerprintID,
+  plansSortSetting,
+  onChangePlansSortSetting,
+  insightsSortSetting,
+  onChangeInsightsSortSetting,
 }: PlanDetailsProps): React.ReactElement {
   const [plan, setPlan] = useState<PlanHashStats | null>(null);
   const handleDetails = (plan: PlanHashStats): void => {
@@ -40,13 +58,19 @@ export function PlanDetails({
   };
 
   if (plan) {
-    return renderExplainPlan(plan, backToPlanTable);
+    return renderExplainPlan(
+      plan,
+      statementFingerprintID,
+      backToPlanTable,
+      insightsSortSetting,
+      onChangeInsightsSortSetting,
+    );
   } else {
     return renderPlanTable(
       plans,
       handleDetails,
-      sortSetting,
-      onChangeSortSetting,
+      plansSortSetting,
+      onChangePlansSortSetting,
     );
   }
 }
@@ -71,10 +95,14 @@ function renderPlanTable(
 
 function renderExplainPlan(
   plan: PlanHashStats,
+  statementFingerprintID: string,
   backToPlanTable: () => void,
+  sortSetting: SortSetting,
+  onChangeSortSetting: (ss: SortSetting) => void,
 ): React.ReactElement {
   const explainPlan =
     plan.explain_plan === "" ? "unavailable" : plan.explain_plan;
+  const hasInsights = plan.stats.index_recommendations?.length > 0;
   return (
     <div>
       <Helmet title="Plan Details" />
@@ -89,6 +117,82 @@ function renderExplainPlan(
         All Plans
       </Button>
       <SqlBox value={explainPlan} size={SqlBoxSize.large} />
+      {hasInsights &&
+        renderInsights(
+          plan.stats.index_recommendations,
+          plan,
+          statementFingerprintID,
+          sortSetting,
+          onChangeSortSetting,
+        )}
     </div>
+  );
+}
+
+function formatIdxRecommendations(
+  idxRecs: string[],
+  plan: PlanHashStats,
+  statementFingerprintID: string,
+): InsightRecommendation[] {
+  const recs = [];
+  for (let i = 0; i < idxRecs.length; i++) {
+    const rec = idxRecs[i];
+    let idxType: InsightType;
+    const t = rec.split(" : ")[0];
+    switch (t) {
+      case "creation":
+        idxType = "CREATE_INDEX";
+        break;
+      case "replacement":
+        idxType = "REPLACE_INDEX";
+        break;
+      case "drop":
+        idxType = "DROP_INDEX";
+        break;
+    }
+    const idxRec: InsightRecommendation = {
+      type: idxType,
+      database: plan.metadata.databases[0],
+      table: "",
+      index_id: 0,
+      query: rec.split(" : ")[1],
+      execution: {
+        statement: plan.metadata.query,
+        summary:
+          plan.metadata.query.length > 120
+            ? plan.metadata.query.slice(0, 120) + "..."
+            : plan.metadata.query,
+        fingerprintID: statementFingerprintID,
+        implicit: plan.metadata.implicit_txn,
+      },
+    };
+    recs.push(idxRec);
+  }
+
+  return recs;
+}
+
+function renderInsights(
+  idxRecommendations: string[],
+  plan: PlanHashStats,
+  statementFingerprintID: string,
+  sortSetting: SortSetting,
+  onChangeSortSetting: (ss: SortSetting) => void,
+): React.ReactElement {
+  const columns = makeInsightsColumns();
+  const data = formatIdxRecommendations(
+    idxRecommendations,
+    plan,
+    statementFingerprintID,
+  );
+  return (
+    <Row gutter={24} className={cx("margin-bottom")}>
+      <InsightsSortedTable
+        columns={columns}
+        data={data}
+        sortSetting={sortSetting}
+        onChangeSortSetting={onChangeSortSetting}
+      />
+    </Row>
   );
 }

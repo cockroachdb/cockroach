@@ -89,6 +89,7 @@ export type StatementDetailsProps = StatementDetailsOwnProps &
 
 export interface StatementDetailsState {
   plansSortSetting: SortSetting;
+  insightsSortSetting: SortSetting;
   currentTab?: string;
 }
 
@@ -213,6 +214,10 @@ export class StatementDetails extends React.Component<
       plansSortSetting: {
         ascending: false,
         columnTitle: "lastExecTime",
+      },
+      insightsSortSetting: {
+        ascending: false,
+        columnTitle: "insights",
       },
       currentTab: searchParams.get("tab") || "overview",
     };
@@ -349,6 +354,12 @@ export class StatementDetails extends React.Component<
   onChangePlansSortSetting = (ss: SortSetting): void => {
     this.setState({
       plansSortSetting: ss,
+    });
+  };
+
+  onChangeInsightsSortSetting = (ss: SortSetting): void => {
+    this.setState({
+      insightsSortSetting: ss,
     });
   };
 
@@ -729,9 +740,12 @@ export class StatementDetails extends React.Component<
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />
           <PlanDetails
+            statementFingerprintID={this.props.statementFingerprintID}
             plans={statement_statistics_per_plan_hash}
-            sortSetting={this.state.plansSortSetting}
-            onChangeSortSetting={this.onChangePlansSortSetting}
+            plansSortSetting={this.state.plansSortSetting}
+            onChangePlansSortSetting={this.onChangePlansSortSetting}
+            insightsSortSetting={this.state.insightsSortSetting}
+            onChangeInsightsSortSetting={this.onChangeInsightsSortSetting}
           />
         </section>
       </>
