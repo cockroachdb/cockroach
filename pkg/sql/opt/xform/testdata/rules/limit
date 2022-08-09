@@ -338,6 +338,36 @@ top-k
       └── filters
            └── (u:2 > 1) AND (u:2 < 10) [outer=(2), constraints=(/2: [/2 - /9]; tight)]
 
+# Ensure that the limit is not pushed down when using SKIP LOCKED.
+# We can push down a limit hint, though.
+opt expect-not=PushLimitIntoIndexJoin
+SELECT * FROM kuv WHERE k = 1 ORDER BY u LIMIT 5 FOR UPDATE SKIP LOCKED
+----
+limit
+ ├── columns: k:1!null u:2 v:3
+ ├── internal-ordering: +2 opt(1)
+ ├── cardinality: [0 - 5]
+ ├── volatile
+ ├── fd: ()-->(1)
+ ├── ordering: +2 opt(1) [actual: +2]
+ ├── index-join kuv
+ │    ├── columns: k:1!null u:2 v:3
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── fd: ()-->(1)
+ │    ├── ordering: +2 opt(1) [actual: +2]
+ │    ├── limit hint: 5.00
+ │    └── scan kuv@kuv_k_u_idx
+ │         ├── columns: k:1!null u:2 rowid:4!null
+ │         ├── constraint: /1/2/4: [/1 - /1]
+ │         ├── locking: for-update,skip-locked
+ │         ├── volatile
+ │         ├── key: (4)
+ │         ├── fd: ()-->(1), (4)-->(2)
+ │         ├── ordering: +2 opt(1) [actual: +2]
+ │         └── limit hint: 5.00
+ └── 5
+
 exec-ddl
 CREATE TABLE abcd (
   a INT PRIMARY KEY,

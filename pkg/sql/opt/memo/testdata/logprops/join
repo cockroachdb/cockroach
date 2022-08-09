@@ -1933,6 +1933,102 @@ inner-join (hash)
            ├── variable: x:7 [type=int]
            └── variable: r1:3 [type=int]
 
+# Foreign keys should be ignored when the referenced table uses SKIP LOCKED.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r1 FOR UPDATE SKIP LOCKED
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    └── interesting orderings: (+7) (-9,+10,+7)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r1 FOR SHARE OF xysd SKIP LOCKED
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── locking: for-share,skip-locked
+ │    ├── volatile
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    └── interesting orderings: (+7) (-9,+10,+7)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
+# Foreign keys are valid when only the referencing table uses SKIP LOCKED.
+norm
+SELECT * FROM fk INNER JOIN xysd ON x = r1 FOR UPDATE OF fk SKIP LOCKED
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (9,10)~~>(7,8), (3)==(7), (7)==(3)
+ ├── prune: (1,2,4,8-10)
+ ├── interesting orderings: (+1) (+7) (-9,+10,+7)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ ├── scan xysd
+ │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
+ │    ├── prune: (7-10)
+ │    ├── interesting orderings: (+7) (-9,+10,+7)
+ │    └── unfiltered-cols: (7-12)
+ └── filters
+      └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+           ├── variable: x:7 [type=int]
+           └── variable: r1:3 [type=int]
+
 # InnerJoin with a nullable foreign key equality condition.
 norm
 SELECT * FROM fk INNER JOIN xysd ON x = r2
