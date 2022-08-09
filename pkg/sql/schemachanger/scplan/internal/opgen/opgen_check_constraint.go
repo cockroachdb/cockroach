@@ -19,14 +19,43 @@ func init() {
 	opRegistry.register((*scpb.CheckConstraint)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
+			to(scpb.Status_Check_Constraint_Validating,
+				emit(func(this *scpb.CheckConstraint) *scop.AddCheckConstraint {
+					return &scop.AddCheckConstraint{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+						ColumnIDs:    this.ColumnIDs,
+						Expression:   this.Expression,
+					}
+				}),
+			),
+			to(scpb.Status_Check_Constraint_Validated,
+				emit(func(this *scpb.CheckConstraint) *scop.ValidateCheckConstraint {
+					return &scop.ValidateCheckConstraint{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
+				}),
+			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.CheckConstraint) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.CheckConstraint) *scop.MakeAddedCheckConstraintPublic {
+					return &scop.MakeAddedCheckConstraintPublic{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
+			to(scpb.Status_Check_Constraint_Validated,
+				emit(func(this *scpb.CheckConstraint) *scop.MakeDroppedCheckConstraintValidated {
+					return &scop.MakeDroppedCheckConstraintValidated{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
+				})),
+			equiv(scpb.Status_Check_Constraint_Validating),
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),

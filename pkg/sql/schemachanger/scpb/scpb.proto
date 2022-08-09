@@ -53,6 +53,10 @@ enum Status {
   // Intermediate states on the transient index dropping path
   TRANSIENT_DELETE_ONLY = 13;
   TRANSIENT_WRITE_ONLY = 14;
+
+  // Intermediate states on check constraint dropping and adding path.
+  Check_Constraint_Validating = 16;
+  Check_Constraint_Validated = 17;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where
