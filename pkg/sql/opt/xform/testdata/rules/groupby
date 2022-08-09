@@ -3517,3 +3517,28 @@ limit
  │    └── aggregations
  │         └── count-rows [as=count_rows:8]
  └── 10
+
+# GenerateLimitedGroupByScans will be triggered, but not add an index
+# scan to the memo since NO_INDEX_JOIN is specified.
+memo expect-not=GenerateLimitedGroupByScans
+SELECT d, e, count(*) FROM defg@{NO_INDEX_JOIN} GROUP BY d, e LIMIT 10
+----
+memo (optimized, ~5KB, required=[presentation: d:1,e:2,count:8])
+ ├── G1: (limit G2 G3)
+ │    └── [presentation: d:1,e:2,count:8]
+ │         ├── best: (limit G2="[limit hint: 10.00]" G3)
+ │         └── cost: 1145.01
+ ├── G2: (group-by G4 G5 cols=(1,2)) (group-by G4 G5 cols=(1,2),ordering=+1)
+ │    └── [limit hint: 10.00]
+ │         ├── best: (group-by G4 G5 cols=(1,2))
+ │         └── cost: 1144.90
+ ├── G3: (const 10)
+ ├── G4: (scan defg,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1334.20
+ │    └── []
+ │         ├── best: (scan defg,cols=(1,2))
+ │         └── cost: 1094.72
+ ├── G5: (aggregations G6)
+ └── G6: (count-rows)

@@ -68,7 +68,7 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 	if scanPrivate.IsVirtualTable(md) && !required.Any() {
 		return false
 	}
-	ok, _ := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
+	ok, _ := ordering.ScanPrivateCanProvide(md, scanPrivate, &required)
 	return ok
 }
 
@@ -295,6 +295,12 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 		// case does not need a limited top K and will be covered in
 		// GenerateIndexScans.
 		if isCovering {
+			return
+		}
+
+		// Otherwise, try to construct an IndexJoin operator that provides the
+		// columns missing from the index.
+		if sp.Flags.NoIndexJoin {
 			return
 		}
 
