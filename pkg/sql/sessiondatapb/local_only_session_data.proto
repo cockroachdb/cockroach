@@ -272,6 +272,10 @@ message LocalOnlySessionData {
   // much a non-production setting.
   double testing_optimizer_disable_rule_probability = 73;
 
+  // disable_hoist_projection_in_join_limitation disables the restrictions
+  // placed on projection hoisting during query planning in the optimizer.
+  bool disable_hoist_projection_in_join_limitation = 74;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
