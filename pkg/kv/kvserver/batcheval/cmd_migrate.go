@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -52,16 +51,6 @@ func declareKeysMigrate(
 var migrationRegistry = make(map[roachpb.Version]migration)
 
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
-
-func init() {
-	_ = registerMigration // prevent unused warning.
-	registerMigration(
-		clusterversion.AddRaftAppliedIndexTermMigration, addRaftAppliedIndexTermMigration)
-}
-
-func registerMigration(key clusterversion.Key, migration migration) {
-	migrationRegistry[clusterversion.ByKey(key)] = migration
-}
 
 // Migrate executes the below-raft migration corresponding to the given version.
 // See roachpb.MigrateRequest for more details.
