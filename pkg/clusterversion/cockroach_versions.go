@@ -173,8 +173,6 @@ const (
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
 	ProbeRequest
-	// PublicSchemasWithDescriptors backs public schemas with descriptors.
-	PublicSchemasWithDescriptors
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
 	// reconciliation process at least once.
 	EnsureSpanConfigReconciliation
@@ -351,6 +349,10 @@ const (
 // previously referenced a < 21.2 version until that check/gate can be removed.
 const TODOPreV21_2 = V21_2
 
+// TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
+// previously referenced a < 22.1 version until that check/gate can be removed.
+const TODOPreV22_1 = V22_1
+
 // versionsSingleton lists all historical versions here in chronological order,
 // with comments describing what backwards-incompatible features were
 // introduced.
@@ -387,10 +389,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
-	},
-	{
-		Key:     PublicSchemasWithDescriptors,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
 	},
 	{
 		Key:     EnsureSpanConfigReconciliation,
