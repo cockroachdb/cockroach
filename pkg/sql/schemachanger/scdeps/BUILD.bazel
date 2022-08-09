@@ -6,8 +6,8 @@ go_library(
     srcs = [
         "build_deps.go",
         "exec_deps.go",
-        "index_validator.go",
         "run_deps.go",
+        "validator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps",
     visibility = ["//visibility:public"],

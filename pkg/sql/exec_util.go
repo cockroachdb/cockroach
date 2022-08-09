@@ -1257,8 +1257,8 @@ type ExecutorConfig struct {
 	// IndexMerger is also used to backfill indexes and is also rather circular.
 	IndexMerger *IndexBackfillerMergePlanner
 
-	// IndexValidator is used to validate indexes.
-	IndexValidator scexec.IndexValidator
+	// Validator is used to validate indexes and check constraints.
+	Validator scexec.Validator
 
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.

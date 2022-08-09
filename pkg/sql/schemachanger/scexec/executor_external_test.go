@@ -75,7 +75,7 @@ func (ti testInfra) newExecDeps(
 		noopMerger{},
 		scdeps.NewNoOpBackfillerTracker(ti.lm.Codec()),
 		scdeps.NewNoopPeriodicProgressFlusher(),
-		noopIndexValidator{},
+		noopValidator{},
 		scdeps.NewConstantClock(timeutil.Now()),
 		noopMetadataUpdater{},
 		noopEventLogger{},
@@ -461,11 +461,11 @@ func (n noopMerger) MergeIndexes(
 	return nil
 }
 
-type noopIndexValidator struct{}
+type noopValidator struct{}
 
-var _ scexec.IndexValidator = noopIndexValidator{}
+var _ scexec.Validator = noopValidator{}
 
-func (noopIndexValidator) ValidateForwardIndexes(
+func (noopValidator) ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
@@ -474,7 +474,7 @@ func (noopIndexValidator) ValidateForwardIndexes(
 	return nil
 }
 
-func (noopIndexValidator) ValidateInvertedIndexes(
+func (noopValidator) ValidateInvertedIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
@@ -571,7 +571,7 @@ func (noopMetadataUpdater) UpsertZoneConfig(
 }
 
 var _ scexec.Backfiller = noopBackfiller{}
-var _ scexec.IndexValidator = noopIndexValidator{}
+var _ scexec.Validator = noopValidator{}
 var _ scexec.EventLogger = noopEventLogger{}
 var _ scexec.StatsRefresher = noopStatsReferesher{}
 var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}
