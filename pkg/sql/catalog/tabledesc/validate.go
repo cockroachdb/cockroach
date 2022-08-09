@@ -823,9 +823,6 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 }
 
 func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulator) {
-	if !vea.IsActive(ConstraintIDsAddedToTableDescsVersion) {
-		return
-	}
 	if !desc.IsTable() {
 		return
 	}
