@@ -58,6 +58,7 @@ var (
 	errNoSchema          = pgerror.Newf(pgcode.InvalidName, "no schema specified")
 	errNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
 	errNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
+	errNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
 
