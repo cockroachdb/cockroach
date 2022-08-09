@@ -347,6 +347,19 @@ func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error 
 	return nil
 }
 
+func (m *visitor) SetConstraintName(ctx context.Context, op scop.SetConstraintName) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	constraint, err := tbl.FindConstraintWithID(op.ConstraintID)
+	if err != nil {
+		return err
+	}
+	constraint.SetConstraintName(op.Name)
+	return nil
+}
+
 func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {

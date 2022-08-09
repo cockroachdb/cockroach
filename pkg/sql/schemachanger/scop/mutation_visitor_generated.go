@@ -74,6 +74,7 @@ type MutationVisitor interface {
 	RemoveViewBackReferencesInRelations(context.Context, RemoveViewBackReferencesInRelations) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
+	SetConstraintName(context.Context, SetConstraintName) error
 	DeleteDescriptor(context.Context, DeleteDescriptor) error
 	RemoveJobStateFromDescriptor(context.Context, RemoveJobStateFromDescriptor) error
 	SetJobStateOnDescriptor(context.Context, SetJobStateOnDescriptor) error
@@ -358,6 +359,11 @@ func (op SetColumnName) Visit(ctx context.Context, v MutationVisitor) error {
 // Visit is part of the MutationOp interface.
 func (op SetIndexName) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.SetIndexName(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op SetConstraintName) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetConstraintName(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
