@@ -1485,6 +1485,10 @@ type ExecutorTestingKnobs struct {
 	// to use a transaction, and, in doing so, more deterministically allocate
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
+
+	// NoStatsCollectionWithVerboseTracing is used to disable the execution
+	// statistics collection in presence of the verbose tracing.
+	NoStatsCollectionWithVerboseTracing bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
