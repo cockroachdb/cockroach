@@ -299,6 +299,13 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
+		// This test may probabilistically execute its SQL as a secondary tenant. It
+		// also traces queries and makes assertions on whether log lines indicate
+		// requests were served via follower reads. As these log lines originate
+		// down in kvserver we disable their redaction.
+		systemTenantSQL := sqlutils.MakeSQLRunner(tc.StorageClusterConn())
+		systemTenantSQL.Exec(t, `SET CLUSTER SETTING server.secondary_tenants.redact_trace.enabled = 'false'`)
+
 		savedTraceStmt := ""
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			// Early exit non-query execution related commands.
