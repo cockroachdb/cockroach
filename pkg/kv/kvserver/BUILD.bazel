@@ -27,6 +27,7 @@ go_library(
         "raft_log_truncator.go",
         "raft_snapshot_queue.go",
         "raft_transport.go",
+        "raft_transport_metrics.go",
         "raft_truncator_replica.go",
         "replica.go",
         "replica_application_cmd.go",
