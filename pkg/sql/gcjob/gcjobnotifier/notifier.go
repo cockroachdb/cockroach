@@ -17,6 +17,7 @@ package gcjobnotifier
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -69,6 +70,8 @@ func (n *Notifier) SystemConfigProvider() config.SystemConfigProvider {
 func noopFunc() {}
 
 // AddNotifyee should be called prior to the first reading of the system config.
+// The returned channel will also receive a notification if the cluster version
+// UseDelRangeInGCJob is activated.
 //
 // TODO(lucy,ajwerner): Currently we're calling refreshTables on every zone
 // config update to any table. We should really be only updating a cached
@@ -141,10 +144,21 @@ func (n *Notifier) Start(ctx context.Context) {
 func (n *Notifier) run(_ context.Context) {
 	defer n.markStopped()
 	systemConfigUpdateCh, _ := n.provider.RegisterSystemConfigChannel()
+	var haveNotified bool
+	versionSettingChanged := make(chan struct{}, 1)
+	versionBeingWaited := clusterversion.ByKey(clusterversion.UseDelRangeInGCJob)
+	n.settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
+		if !haveNotified && versionBeingWaited.LessEq(newVersion.Version) {
+			haveNotified = true
+			versionSettingChanged <- struct{}{}
+		}
+	})
 	for {
 		select {
 		case <-n.stopper.ShouldQuiesce():
 			return
+		case <-versionSettingChanged:
+			n.notify()
 		case <-systemConfigUpdateCh:
 			n.maybeNotify()
 		}
@@ -170,7 +184,10 @@ func (n *Notifier) maybeNotify() {
 	if !zoneConfigUpdated {
 		return
 	}
+	n.notify()
+}
 
+func (n *Notifier) notify() {
 	for c := range n.mu.notifyees {
 		select {
 		case c <- struct{}{}:
