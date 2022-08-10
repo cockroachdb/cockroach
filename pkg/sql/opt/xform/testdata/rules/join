@@ -10133,8 +10133,32 @@ inner-join (merge)
  │         └── columns: m:1 n:2
  └── filters (true)
 
+# The rule should be allowed to fire when the projection is from a join if the
+# session flag disable_hoist_projection_in_join_limitation is true.
+opt expect=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=true
+SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m;
+----
+project
+ ├── columns: a:1!null "?column?":13 m:14!null n:15
+ ├── immutable
+ ├── fd: (1)==(14), (14)==(1)
+ ├── inner-join (cross)
+ │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    ├── fd: (1)==(14), (14)==(1)
+ │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    ├── inner-join (lookup abcd@abcd_a_b_idx [as=tab1])
+ │    │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    │    ├── key columns: [14] = [1]
+ │    │    ├── fd: (1)==(14), (14)==(1)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:14 n:15
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
+
 # The rule should not fire when the projection is from a join.
-opt expect-not=HoistProjectFromInnerJoin
+opt expect-not=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=false
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m
 ----
 inner-join (hash)
