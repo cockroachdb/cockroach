@@ -3151,26 +3151,40 @@ func TestImportIntoCSV(t *testing.T) {
 
 	// Verify a failed IMPORT INTO won't prevent a subsequent IMPORT INTO.
 	t.Run("import-into-checkpoint-leftover", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer sqlDB.Exec(t, `DROP TABLE t`)
 
-		// Insert the test data
-		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
+		for _, emptyTable := range []bool{true, false} {
+			subtestName := "empty-table"
+			if emptyTable == true {
+				subtestName = "nonEmptyTable"
+			}
+			t.Run(subtestName, func(t *testing.T) {
+				sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+				defer sqlDB.Exec(t, `DROP TABLE t`)
 
-		for i, v := range insert {
-			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
+				if emptyTable != false {
+					// Insert the test data
+					insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
+
+					for i, v := range insert {
+						sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
+					}
+				}
+				preImportData := sqlDB.QueryStr(t, `SELECT * FROM t`)
+
+				// Hit a failure during import.
+				forceFailure = true
+				sqlDB.ExpectErr(
+					t, `testing injected failure`,
+					fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]),
+				)
+				forceFailure = false
+
+				sqlDB.CheckQueryResults(t, `SELECT * FROM t`, preImportData)
+
+				// Expect it to succeed on re-attempt.
+				sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
+			})
 		}
-
-		// Hit a failure during import.
-		forceFailure = true
-		sqlDB.ExpectErr(
-			t, `testing injected failure`,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]),
-		)
-		forceFailure = false
-
-		// Expect it to succeed on re-attempt.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
 	})
 
 	// Verify that during IMPORT INTO the table is offline.
@@ -3558,10 +3572,12 @@ func TestImportIntoCSV(t *testing.T) {
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
 		)
 
+		preCollisionData := sqlDB.QueryStr(t, `SELECT * FROM t`)
 		sqlDB.ExpectErr(
 			t, `ingested key collides with an existing one: /Table/\d+/1/0/0`,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.fileWithShadowKeys[0]),
 		)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, preCollisionData)
 	})
 
 	// Tests that IMPORT INTO invalidates FK and CHECK constraints.
