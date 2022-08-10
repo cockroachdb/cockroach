@@ -118,7 +118,6 @@ type SpanResolverIterator interface {
 type spanResolver struct {
 	st         *cluster.Settings
 	distSender *kvcoord.DistSender
-	nodeDesc   roachpb.NodeDescriptor
 	oracle     replicaoracle.Oracle
 }
 
@@ -129,17 +128,18 @@ func NewSpanResolver(
 	st *cluster.Settings,
 	distSender *kvcoord.DistSender,
 	nodeDescs kvcoord.NodeDescStore,
-	nodeDesc roachpb.NodeDescriptor,
+	nodeID roachpb.NodeID,
+	locality roachpb.Locality,
 	clock *hlc.Clock,
 	rpcCtx *rpc.Context,
 	policy replicaoracle.Policy,
 ) SpanResolver {
 	return &spanResolver{
-		st:       st,
-		nodeDesc: nodeDesc,
+		st: st,
 		oracle: replicaoracle.NewOracle(policy, replicaoracle.Config{
 			NodeDescs:  nodeDescs,
-			NodeDesc:   nodeDesc,
+			NodeID:     nodeID,
+			Locality:   locality,
 			Settings:   st,
 			Clock:      clock,
 			RPCContext: rpcCtx,
