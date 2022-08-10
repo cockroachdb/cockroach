@@ -12,6 +12,7 @@ package stats
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -597,6 +598,8 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 		// make histograms easier to work with. The length of res.Histogram
 		// is therefore 1 greater than the length of the histogram data
 		// buckets.
+		// TODO(michae2): Combine this with setHistogramBuckets, especially if we
+		// need to change both after #6224 is fixed (NULLS LAST in index ordering).
 		tabStat.Histogram = make([]cat.HistogramBucket, len(tabStat.HistogramData.Buckets)+1)
 		tabStat.Histogram[0] = cat.HistogramBucket{
 			NumEq:         float64(tabStat.NullCount),
@@ -626,6 +629,36 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 		}
 	}
 	return nil
+}
+
+// setHistogramBuckets shallow-copies the passed histogram into the
+// TableStatistic, and prepends a bucket for NULL rows using the
+// TableStatistic's null count. The resulting TableStatistic looks the same as
+// if DecodeHistogramBuckets had been called.
+func (tabStat *TableStatistic) setHistogramBuckets(hist histogram) {
+	tabStat.Histogram = hist.buckets
+	if tabStat.NullCount > 0 {
+		tabStat.Histogram = append([]cat.HistogramBucket{{
+			NumEq:      float64(tabStat.NullCount),
+			UpperBound: tree.DNull,
+		}}, tabStat.Histogram...)
+	}
+}
+
+// nonNullHistogram returns the TableStatistic histogram with the NULL bucket
+// removed.
+func (tabStat *TableStatistic) nonNullHistogram() histogram {
+	if len(tabStat.Histogram) > 0 && tabStat.Histogram[0].UpperBound == tree.DNull {
+		return histogram{buckets: tabStat.Histogram[1:]}
+	}
+	return histogram{buckets: tabStat.Histogram}
+}
+
+// String implements the fmt.Stringer interface.
+func (tabStat *TableStatistic) String() string {
+	return fmt.Sprintf(
+		"%s histogram:%s", &tabStat.TableStatisticProto, histogram{buckets: tabStat.Histogram},
+	)
 }
 
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
