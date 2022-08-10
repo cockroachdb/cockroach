@@ -2266,39 +2266,6 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 	require.Equal(t, leaseholderStoreID, rng.Lease().Replica.StoreID)
 }
 
-// TestGetNodeDescriptor checks that the Node descriptor automatically gets
-// looked up from Gossip.
-func TestGetNodeDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:              clock,
-		NodeDescs:          g,
-		RPCContext:         rpcContext,
-		FirstRangeProvider: g,
-		Settings:           cluster.MakeTestingClusterSettings(),
-	})
-	g.NodeID.Reset(5)
-	if err := g.SetNodeDescriptor(newNodeDesc(5)); err != nil {
-		t.Fatal(err)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		desc := ds.getNodeDescriptor()
-		if desc != nil && desc.NodeID == 5 {
-			return nil
-		}
-		return errors.Errorf("wanted NodeID 5, got %v", desc)
-	})
-}
-
 func TestMultiRangeGapReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
