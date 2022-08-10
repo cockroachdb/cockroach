@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1277,6 +1278,17 @@ func injectTableStats(
 	var jsonStats []stats.JSONStatistic
 	if err := gojson.Unmarshal([]byte(jsonStr), &jsonStats); err != nil {
 		return err
+	}
+
+	// Check that we're not injecting any forecasted stats.
+	for i := range jsonStats {
+		if jsonStats[i].Name == jobspb.ForecastStatsName {
+			return errors.WithHintf(
+				pgerror.New(pgcode.InvalidName, "cannot inject forecasted statistics"),
+				"either remove forecasts from the statement, or rename them from %q to something else",
+				jobspb.ForecastStatsName,
+			)
+		}
 	}
 
 	// First, delete all statistics for the table.
