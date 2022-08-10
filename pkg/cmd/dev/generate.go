@@ -47,6 +47,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate optgen        # optgen targets (subset of 'dev generate go')
         dev generate execgen       # execgen targets (subset of 'dev generate go')
         dev generate schemachanger # schemachanger targets (subset of 'dev generate go')
+        dev generate stringer      # stringer targets (subset of 'dev generate go')
         dev generate testlogic     # logictest generated code (subset of 'dev generate bazel')
 `,
 		Args: cobra.MinimumNArgs(0),
@@ -82,6 +83,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"parser":        d.generateParser,
 		"optgen":        d.generateOptGen,
 		"schemachanger": d.generateSchemaChanger,
+		"stringer":      d.generateStringer,
 		"testlogic":     d.generateLogicTest,
 	}
 
@@ -231,6 +233,10 @@ func (d *dev) generateOptGen(cmd *cobra.Command) error {
 
 func (d *dev) generateSchemaChanger(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:schemachanger")
+}
+
+func (d *dev) generateStringer(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:stringer")
 }
 
 func (d *dev) generateDiagrams(cmd *cobra.Command) error {
