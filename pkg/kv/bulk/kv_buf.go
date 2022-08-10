@@ -11,11 +11,12 @@
 package bulk
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,8 +36,9 @@ type kvBuf struct {
 // the slab, packing these together into a uint64 for each. The length is stored
 // in the lower `lenBits` and the offset in the higher `64-lenBits`.
 type kvBufEntry struct {
-	keySpan uint64
-	valSpan uint64
+	keySpan       uint64
+	valSpan       uint64
+	timestampSpan uint64
 }
 
 const entrySizeShift = 4     // sizeof(kvBufEntry) is 16, or shift 4.
@@ -134,7 +136,7 @@ func (b *kvBuf) fits(ctx context.Context, toAdd sz, maxUsed sz, acc *mon.BoundAc
 	return true
 }
 
-func (b *kvBuf) append(k, v []byte) error {
+func (b *kvBuf) append(k, v, ts []byte) error {
 	if len(b.slab) > maxOffset {
 		return errors.Errorf("buffer size %d exceeds limit %d", len(b.slab), maxOffset)
 	}
@@ -144,12 +146,17 @@ func (b *kvBuf) append(k, v []byte) error {
 	if len(v) > maxLen {
 		return errors.Errorf("length %d exceeds limit %d", len(v), maxLen)
 	}
+	if len(ts) > maxLen {
+		return errors.Errorf("length %d exceeds limit %d", len(ts), maxLen)
+	}
 
 	var e kvBufEntry
 	e.keySpan = uint64(len(b.slab)<<lenBits) | uint64(len(k)&lenMask)
 	b.slab = append(b.slab, k...)
 	e.valSpan = uint64(len(b.slab)<<lenBits) | uint64(len(v)&lenMask)
 	b.slab = append(b.slab, v...)
+	e.timestampSpan = uint64(len(b.slab)<<lenBits) | uint64(len(ts)&lenMask)
+	b.slab = append(b.slab, ts...)
 
 	b.entries = append(b.entries, e)
 	return nil
@@ -168,6 +175,10 @@ func (b *kvBuf) Key(i int) roachpb.Key {
 	return b.read(b.entries[i].keySpan)
 }
 
+func (b *kvBuf) Timestamp(i int) []byte {
+	return b.read(b.entries[i].timestampSpan)
+}
+
 func (b *kvBuf) Value(i int) []byte {
 	return b.read(b.entries[i].valSpan)
 }
@@ -177,10 +188,29 @@ func (b *kvBuf) Len() int {
 	return len(b.entries)
 }
 
+func compareKeyTimestamp(
+	leftKey roachpb.Key, leftTS []byte, rightKey roachpb.Key, rightTS []byte,
+) int {
+	unmarshalTimestamp := func(timestampBytes []byte) hlc.Timestamp {
+		res := hlc.Timestamp{}
+		if timestampBytes == nil {
+			return res
+		}
+		if err := protoutil.Unmarshal(timestampBytes, &res); err != nil {
+			panic(err)
+		}
+		return res
+	}
+
+	if c := leftKey.Compare(rightKey); c != 0 {
+		return c
+	}
+	return unmarshalTimestamp(leftTS).Compare(unmarshalTimestamp(rightTS))
+}
+
 // Less implements sort.Interface.
 func (b *kvBuf) Less(i, j int) bool {
-
-	return bytes.Compare(b.read(b.entries[i].keySpan), b.read(b.entries[j].keySpan)) < 0
+	return compareKeyTimestamp(b.Key(i), b.Timestamp(i), b.Key(j), b.Timestamp(j)) < 0
 }
 
 // Swap implements sort.Interface.
@@ -188,7 +218,7 @@ func (b *kvBuf) Swap(i, j int) {
 	b.entries[i], b.entries[j] = b.entries[j], b.entries[i]
 }
 
-func (b kvBuf) MemSize() sz {
+func (b *kvBuf) MemSize() sz {
 	return sz(cap(b.entries)<<entrySizeShift) + sz(cap(b.slab))
 }
 

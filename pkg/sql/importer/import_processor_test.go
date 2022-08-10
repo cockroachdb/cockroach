@@ -214,6 +214,15 @@ func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) erro
 	return nil
 }
 
+func (a *doNothingKeyAdder) AddWithTimestamp(
+	_ context.Context, k roachpb.Key, _ []byte, _ hlc.Timestamp,
+) error {
+	if a.onKeyAdd != nil {
+		a.onKeyAdd(k)
+	}
+	return nil
+}
+
 func (a *doNothingKeyAdder) Flush(_ context.Context) error {
 	if a.onFlush != nil {
 		a.onFlush(roachpb.BulkOpSummary{})
@@ -451,6 +460,12 @@ type duplicateKeyErrorAdder struct {
 var _ kvserverbase.BulkAdder = &duplicateKeyErrorAdder{}
 
 func (a *duplicateKeyErrorAdder) Add(_ context.Context, k roachpb.Key, v []byte) error {
+	return &kvserverbase.DuplicateKeyError{Key: k, Value: v}
+}
+
+func (a *duplicateKeyErrorAdder) AddWithTimestamp(
+	_ context.Context, k roachpb.Key, v []byte, _ hlc.Timestamp,
+) error {
 	return &kvserverbase.DuplicateKeyError{Key: k, Value: v}
 }
 

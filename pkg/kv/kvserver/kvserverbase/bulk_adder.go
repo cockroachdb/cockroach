@@ -78,7 +78,12 @@ type BulkAdderFactory func(
 // BulkAdder describes a bulk-adding helper that can be used to add lots of KVs.
 type BulkAdder interface {
 	// Add adds a KV pair to the adder's buffer, potentially flushing if needed.
+	// Used when keys added share the same timestamp specified at creation.
 	Add(ctx context.Context, key roachpb.Key, value []byte) error
+	// AddWithTimestamp adds a KV pair with timestamp to the adder's buffer,
+	// potentially flushing if needed. Used when keys added don't share the same
+	// timestamp.
+	AddWithTimestamp(ctx context.Context, key roachpb.Key, value []byte, ts hlc.Timestamp) error
 	// Flush explicitly flushes anything remaining in the adder's buffer.
 	Flush(ctx context.Context) error
 	// IsEmpty returns whether or not this BulkAdder has data buffered.
