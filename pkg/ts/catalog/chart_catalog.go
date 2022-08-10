@@ -1729,10 +1729,6 @@ var charts = []sectionDescription{
 				Metrics: []string{"raft.commandsapplied"},
 			},
 			{
-				Title:   "Enqueued",
-				Metrics: []string{"raft.enqueued.pending"},
-			},
-			{
 				Title:   "Keys/Sec Avg.",
 				Metrics: []string{"rebalancing.writespersecond"},
 			},

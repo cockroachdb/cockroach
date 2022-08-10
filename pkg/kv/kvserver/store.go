@@ -3287,8 +3287,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		s.metrics.ClosedTimestampMaxBehindNanos.Update(nanos)
 	}
 
-	s.metrics.RaftEnqueuedPending.Update(s.cfg.Transport.queuedMessageCount())
-
 	return nil
 }
 
