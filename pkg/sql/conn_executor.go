@@ -1844,16 +1844,19 @@ func (ex *connExecutor) run(
 	ex.onCancelSession = onCancel
 
 	ex.sessionID = ex.generateID()
-	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
 
-	defer func() {
-		ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
-		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, ex.sessionID, ex.serialize())
-		if addErr != nil {
-			err = errors.CombineErrors(err, addErr)
-		}
-	}()
+	if ex.executorType != executorTypeInternal {
+		// Only register this session if it didn't originate internally.
+		ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
+		defer func() {
+			ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
+			addErr := ex.server.cfg.ClosedSessionCache.add(ctx, ex.sessionID, ex.serialize())
+			if addErr != nil {
+				err = errors.CombineErrors(err, addErr)
+			}
+		}()
+	}
 
 	for {
 		ex.curStmtAST = nil
