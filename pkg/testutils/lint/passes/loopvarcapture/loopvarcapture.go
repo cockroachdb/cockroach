@@ -94,6 +94,11 @@ var (
 		{Func: ctxgroupGoCtx, WaitFuncName: "Wait"},
 		{Func: monitorGo, WaitFuncName: "Wait"},
 	}
+
+	// test-related function locations. We are interested in calls to
+	// t.Run() and t.Parallel()
+	testRun      = Function{Pkg: "testing", Type: "T", Name: "Run"}
+	testParallel = Function{Pkg: "testing", Type: "T", Name: "Parallel"}
 )
 
 // Functions returns a list of function definitions for the target
@@ -138,7 +143,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			return
 		}
 
-		v := NewVisitor(pass, loop, false)
+		v := NewVisitor(pass, loop)
 		for _, issue := range v.FindCaptures() {
 			pass.Report(issue)
 		}
@@ -180,6 +185,10 @@ type Visitor struct {
 	loop *Loop
 	pass *analysis.Pass
 
+	// pos is the position of the statement the visitor is currently
+	// visiting
+	pos int
+
 	// closures maps a closure assigned to a variable to the
 	// loop variable that may have been captured by reference.
 	closures map[*ast.Object]*suspectReference
@@ -188,12 +197,10 @@ type Visitor struct {
 	// reported to the user.
 	suspects []*suspectReference
 
-	// withinClosure indicates whether the visitor is within a closure
-	// that is defined in the loop. In this case, we want the linter's
-	// behavior to be slightly different. For example, references to
-	// loop variables in `defer` calls are safe because they are called
-	// in a closure that is called within an interation of the loop. One
-	// simple example of this is the following idiom:
+	// safeDefer indicates whether the visitor is within a closure that
+	// is defined in the loop, making references to loop variables in
+	// `defer` statements safe. One common example of this situation is
+	// following idiom:
 	//
 	// for _, loopVar := range ... {
 	//     func() {
@@ -202,25 +209,34 @@ type Visitor struct {
 	//        // ...
 	//     }()
 	// }
-	withinClosure bool
+	safeDefer bool
+
+	// isTestRun indicates if the visitor is inside a `t.Run()`
+	// closure. We encode the semantics of that call in this linter
+	// since the pattern of calling t.Run() is one of the most common
+	// ones, and not taking it into account can lead to lots of false
+	// reports.
+	isTestRun bool
+	// isTestParallel indicates that the visitor is inside a `t.Run()`
+	// test that called `t.Parallel()`. In such cases, synchronization
+	// mechanisms in the closure itself should be ignored, since the
+	// closure passed is invoked asynchronously
+	isTestParallel bool
 }
 
 // NewVisitor creates a new Visitor instance for the given loop.
-func NewVisitor(pass *analysis.Pass, loop *Loop, withinClosure bool) *Visitor {
+func NewVisitor(pass *analysis.Pass, loop *Loop) *Visitor {
 	return &Visitor{
-		loop:          loop,
-		pass:          pass,
-		withinClosure: withinClosure,
-		closures:      map[*ast.Object]*suspectReference{},
+		loop:     loop,
+		pass:     pass,
+		closures: map[*ast.Object]*suspectReference{},
 	}
 }
 
 // FindCaptures returns a list of Diagnostic instances to be reported
 // to the user
 func (v *Visitor) FindCaptures() []analysis.Diagnostic {
-	for pos, stmt := range v.loop.Body.List {
-		ast.Inspect(stmt, v.loopStatementInspector(pos))
-	}
+	v.runOnStatementBlock(v.loop.Body)
 
 	// at the end of the analysis, a list of suspect references will
 	// exist in the visitor's `suspects` field. For each suspect
@@ -247,6 +263,16 @@ func (v *Visitor) FindCaptures() []analysis.Diagnostic {
 	}
 
 	return issues
+}
+
+// runOnStatementBlock takes a collection of statements and runs the
+// visitor on them, incrementing the internal visitor position
+// accordingly.
+func (v *Visitor) runOnStatementBlock(block *ast.BlockStmt) {
+	for _, stmt := range block.List {
+		v.pos++
+		ast.Inspect(stmt, v.loopStatementInspector())
+	}
 }
 
 // loopStatementInspector visits statement at position `pos` in a loop.
@@ -314,51 +340,85 @@ func (v *Visitor) FindCaptures() []analysis.Diagnostic {
 //
 // If a `go` routine (or `defer`) calls a previously-defined closure
 // that captures a loop variable, that is also reported.
-func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
+func (v *Visitor) loopStatementInspector() func(n ast.Node) bool {
 	return func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.GoStmt:
-			v.findLoopVarRefsInCall(goCall, pos, node.Call, false /* go routine wrapper */)
+			// if we are in the context of a parallel test, we should ignore
+			// `go` AST nodes, as the entire test function is
+			// asynchronous. If we eventually hit an identifier node that
+			// matches a loop variable, a suspect reference will be created
+			if v.isTestParallel {
+				return true
+			}
+
+			v.findLoopVarRefsInCall(goCall, node.Call, false /* go routine wrapper */)
 			// no need to keep traversing the AST, the function above is
 			// already doing that.
 			return false
 
 		case *ast.CallExpr:
 			if v.matchFunctionCall(node, GoRoutineFunctions.Functions()) {
-				v.findLoopVarRefsInCall(goCall, pos, node, true /* go routine wrapper */)
+				// see comments on `*ast.GotStmt` branch
+				if v.isTestParallel {
+					return true
+				}
+
+				v.findLoopVarRefsInCall(goCall, node, true /* go routine wrapper */)
 				// no need to keep traversing the AST, the function above is
 				// already doing that.
 				return false
-			}
-
-			// if this is a call to a go wrapper wait function, extract the
-			// identifier object from this call, and mark references guarded
-			// by this object as synchronized
-			if v.matchFunctionCall(node, GoRoutineFunctions.WaitFunctions()) {
+			} else if v.matchFunctionCall(node, GoRoutineFunctions.WaitFunctions()) {
+				// if this is a call to a go wrapper wait function, extract the
+				// identifier object from this call, and mark references guarded
+				// by this object as synchronized
 				if ident := objFromCall(node); ident != nil {
-					v.markSynchronized(ident, pos)
+					v.markSynchronized(ident)
 				}
-			}
+			} else if v.matchFunctionCall(node, []Function{testRun}) {
+				// if this is a call to t.Run(), treat the closure passed as
+				// argument as if it were the body of the loop itself, since
+				// we know that the semantics of t.Run is to execute the
+				// closure passed as soon as t.Run() is called.
+				if len(node.Args) == 2 {
+					if funcLit, ok := node.Args[1].(*ast.FuncLit); ok {
+						v.ForkAndRun(func(visitor *Visitor) {
+							visitor.isTestRun = true
+							visitor.safeDefer = true
 
-			// if this is a call to Done() on a WaitGroup variable, mark
-			// references that are associated with that wait group as
-			// synchronized
-			if ident := v.waitGroupCallee(node, "Wait"); ident != nil {
-				v.markSynchronized(ident, pos)
+							visitor.runOnStatementBlock(funcLit.Body)
+						})
+
+						return false
+					}
+				}
+			} else if v.isTestRun && v.matchFunctionCall(node, []Function{testParallel}) {
+				// if this is a call to t.Parallel(), update the visitor's
+				// state so that synchronization can be dealt with accordingly.
+				v.isTestParallel = true
+				v.safeDefer = false
+			} else if ident := v.waitGroupCallee(node, "Wait"); ident != nil {
+				// if this is a call to Done() on a WaitGroup variable, mark
+				// references that are associated with that wait group as
+				// synchronized
+				v.markSynchronized(ident)
 			}
 
 		case *ast.FuncLit:
 			// when a function literal is found in the body of the loop (i.e.,
 			// not a part of a `defer` or `go` statements), visit the closure
 			// recursively
-			v.visitLoopClosure(node, pos)
+			v.ForkAndRun(func(visitor *Visitor) {
+				visitor.safeDefer = true
+				ast.Inspect(node.Body, visitor.loopStatementInspector())
+			})
 			// no need to keep traversing the AST using this visitor, as the
 			// previous function is doing that.
 			return false
 
 		case *ast.DeferStmt:
-			if !v.withinClosure {
-				v.findLoopVarRefsInCall(deferCall, pos, node.Call, false /* go routine wrapper */)
+			if !v.safeDefer {
+				v.findLoopVarRefsInCall(deferCall, node.Call, false /* go routine wrapper */)
 				// no need to keep traversing the AST, the function above is
 				// already doing that.
 				return false
@@ -374,7 +434,7 @@ func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
 				// inspect closure's body, looking for captured variables; if
 				// found, store the mapping below.
 				if funcLit, ok := rhs.(*ast.FuncLit); ok {
-					for _, suspect := range v.funcLitSuspectRefs(closure, pos, funcLit) {
+					for _, suspect := range v.funcLitSuspectRefs(closure, funcLit) {
 						v.closures[lhs.Obj] = suspect
 					}
 				}
@@ -384,7 +444,15 @@ func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
 			// if the loop body is reading from a channel, mark all loop variable
 			// references that write to this channel (or close it) as synchronized
 			if ident, ok := node.X.(*ast.Ident); ok && node.Op == token.ARROW {
-				v.markSynchronized(ident, pos)
+				v.markSynchronized(ident)
+			}
+
+		case *ast.Ident:
+			// if we are in a parallel test and a reference to a loop
+			// variable is made, flag it as unsafe
+			if v.isTestParallel && v.isLoopVar(node) {
+				v.maybeAddSuspect(&suspectReference{stmtType: goCall, stmtPos: v.pos, ref: node})
+				return false
 			}
 
 		case *ast.RangeStmt:
@@ -392,7 +460,7 @@ func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
 			// variables guarded by that channel as synchronized
 			if ident, ok := node.X.(*ast.Ident); ok {
 				if _, isChan := v.pass.TypesInfo.TypeOf(ident).Underlying().(*types.Chan); isChan {
-					v.markSynchronized(ident, pos)
+					v.markSynchronized(ident)
 				}
 			}
 		}
@@ -409,7 +477,7 @@ func (v *Visitor) loopStatementInspector(pos int) func(n ast.Node) bool {
 // in any of the arguments passed to it. Any references are saved the
 // visitor's `suspects` field.
 func (v *Visitor) findLoopVarRefsInCall(
-	stmtType statementType, stmtPos int, call *ast.CallExpr, isWrapper bool,
+	stmtType statementType, call *ast.CallExpr, isWrapper bool,
 ) {
 	var wrapperIdent *ast.Ident
 	if isWrapper {
@@ -418,11 +486,21 @@ func (v *Visitor) findLoopVarRefsInCall(
 
 	// add suspect is a convenience function called in the ast.Inspect
 	// call below; other than calling the appropriate function in the
-	// visitor, it also ensures we add the go routine wrapper object to
-	// the list of synchronization objects if this function is being
-	// called in the context of a Go routine wrapper.
+	// visitor, it also ensures the suspect has the right
+	// synchronization objects attached to it.
+
 	addSuspect := func(suspect *suspectReference) {
-		if wrapperIdent != nil {
+		if v.isTestParallel {
+			// if this is a test case that called `t.Parallel()`, adding
+			// synchronization mechanisms is not a reliable way to ensure
+			// the loop variable will not change in the closure passed to
+			// `t.Run()`, so we ignore any synchronization found in the body
+			// of the closure
+			suspect.synchronizationObjs = nil
+		} else if wrapperIdent != nil {
+			// we add the go routine wrapper object to the list of
+			// synchronization objects if this function is being called in
+			// the context of a Go routine wrapper.
 			suspect.synchronizationObjs = append(suspect.synchronizationObjs, wrapperIdent)
 		}
 		v.maybeAddSuspect(suspect)
@@ -434,7 +512,7 @@ func (v *Visitor) findLoopVarRefsInCall(
 		case *ast.FuncLit:
 			// when a function literal is found, traverse it, and add any
 			// suspect references found in the body of the closure
-			for _, suspect := range v.funcLitSuspectRefs(stmtType, stmtPos, node) {
+			for _, suspect := range v.funcLitSuspectRefs(stmtType, node) {
 				addSuspect(suspect)
 			}
 
@@ -448,7 +526,7 @@ func (v *Visitor) findLoopVarRefsInCall(
 			// check if it is known to capture a loop variable. If so, add
 			// the suspect reference accordingly
 			if _, ok := v.closures[node.Obj]; ok {
-				addSuspect(&suspectReference{stmtType: stmtType, stmtPos: stmtPos, ref: node})
+				addSuspect(&suspectReference{stmtType: stmtType, stmtPos: v.pos, ref: node})
 			}
 		}
 
@@ -473,16 +551,10 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]*ast.Ident, []*ast.Ident
 				return true
 			}
 
-			for _, loopVar := range v.loop.Vars {
-				// Comparing the *ast.Object associated with the identifiers
-				// frees us from having to keep tracking of shadowing. If the
-				// comparison below returns true, it means that the closure
-				// directly references a loop variable.
-				if expr.Obj == loopVar.Obj {
-					refs = append(refs, expr)
-					break
-				}
+			if v.isLoopVar(expr) {
+				refs = append(refs, expr)
 			}
+
 			// `Ident` is a child node; stopping the traversal here
 			// shouldn't matter
 			return false
@@ -533,10 +605,10 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]*ast.Ident, []*ast.Ident
 // funcLitSuspectRefs returns a collection of `suspectReference`
 // objects found in a closure (function literal)
 func (v *Visitor) funcLitSuspectRefs(
-	stmtType statementType, stmtPos int, funcLit *ast.FuncLit,
+	stmtType statementType, funcLit *ast.FuncLit,
 ) []*suspectReference {
 	newSuspect := func(ref *ast.Ident, syncObjs []*ast.Ident) *suspectReference {
-		return &suspectReference{stmtPos: stmtPos, stmtType: stmtType, ref: ref, synchronizationObjs: syncObjs}
+		return &suspectReference{stmtPos: v.pos, stmtType: stmtType, ref: ref, synchronizationObjs: syncObjs}
 	}
 
 	refs, syncObjs := v.visitFuncLit(funcLit)
@@ -563,7 +635,7 @@ func (v *Visitor) funcLitSuspectRefs(
 // is ignored.
 func (v *Visitor) maybeAddSuspect(suspect *suspectReference) {
 	if passesutil.HasNolintComment(v.pass, suspect.ref, name) ||
-		(suspect.stmtType == deferCall && v.withinClosure) {
+		(suspect.stmtType == deferCall && v.safeDefer) {
 		return
 	}
 
@@ -573,12 +645,11 @@ func (v *Visitor) maybeAddSuspect(suspect *suspectReference) {
 // markSynchronized takes an identifier that is considered to be
 // providing synchronization for loop variable references (waiting for
 // a Go routine), and marks every known suspect associated with that
-// object as 'synchronized'. `syncPos` represents the position (within
-// the loop being analyzed) where the synchronization happens:
-// references are only marked synchronized if they happened in a
-// previous statement. References that are marked synchronized are not
+// object as 'synchronized'. Note that references are only marked
+// synchronized if they happened in a statement prior to the visitor's
+// current position. References that are marked synchronized are not
 // reported to the user at the end of the analysis.
-func (v *Visitor) markSynchronized(syncIdent *ast.Ident, syncPos int) {
+func (v *Visitor) markSynchronized(syncIdent *ast.Ident) {
 	synchronizesOn := func(suspect *suspectReference, syncObj *ast.Object) bool {
 		for _, suspectSyncIdent := range suspect.synchronizationObjs {
 			if suspectSyncIdent.Obj == syncObj {
@@ -590,13 +661,13 @@ func (v *Visitor) markSynchronized(syncIdent *ast.Ident, syncPos int) {
 	}
 
 	for _, suspect := range v.suspects {
-		if synchronizesOn(suspect, syncIdent.Obj) && suspect.stmtPos < syncPos {
+		if synchronizesOn(suspect, syncIdent.Obj) && suspect.stmtPos < v.pos {
 			suspect.synchronized = true
 		}
 	}
 
 	for _, suspect := range v.closures {
-		if synchronizesOn(suspect, syncIdent.Obj) && suspect.stmtPos < syncPos {
+		if synchronizesOn(suspect, syncIdent.Obj) && suspect.stmtPos < v.pos {
 			suspect.synchronized = true
 		}
 	}
@@ -641,20 +712,27 @@ func reportMessage(stmtType statementType, stack []*suspectReference) string {
 	)
 }
 
-// visitLoopClosure traverses the subtree of a function literal
-// (closure) present in the body of the loop (outside `go` or `defer`
-// statements). A new Visitor instance is created to do the traversal,
-// with the `withinClosure` field set to `true`.
-func (v *Visitor) visitLoopClosure(closure *ast.FuncLit, stmtPos int) {
-	closureVisitor := NewVisitor(v.pass, v.loop, true)
-	ast.Inspect(closure.Body, closureVisitor.loopStatementInspector(stmtPos))
-
-	// merge the `suspects` and `closures` fields back to the
-	// calling Visitor
-	v.suspects = append(v.suspects, closureVisitor.suspects...)
-	for obj, loopVarObj := range closureVisitor.closures {
-		v.closures[obj] = loopVarObj
+// ForkAndRun is a convenience function to create a copy of the
+// visitor, starting with the caller's state. The copy is passed to
+// the function `f`, which is expected to change the state of the
+// visitor as desired, and the visit a specific subtree. Once the
+// function returns, any suspect references found are merged back to
+// the caller.
+func (v *Visitor) ForkAndRun(f func(*Visitor)) {
+	fork := &Visitor{
+		loop:           v.loop,
+		pass:           v.pass,
+		pos:            v.pos,
+		closures:       v.closures,
+		safeDefer:      v.safeDefer,
+		isTestRun:      v.isTestRun,
+		isTestParallel: v.isTestParallel,
 	}
+
+	f(fork)
+
+	// merge the `suspects` field back to the calling Visitor
+	v.suspects = append(v.suspects, fork.suspects...)
 }
 
 // waitGroupCallee checks if the function being called in the given
@@ -768,6 +846,21 @@ func (v *Visitor) matchFunctionCall(call *ast.CallExpr, functions []Function) bo
 	}
 
 	return matchFunctions(calleePkg, calleeObj, calleeFunc, functions)
+}
+
+// isLoopVar checks if the identifier passed is a loop variable
+func (v *Visitor) isLoopVar(ident *ast.Ident) bool {
+	for _, loopVar := range v.loop.Vars {
+		// Comparing the *ast.Object associated with the identifiers
+		// frees us from having to keep tracking of shadowing. If the
+		// comparison below returns true, it means that the closure
+		// directly references a loop variable.
+		if ident.Obj == loopVar.Obj {
+			return true
+		}
+	}
+
+	return false
 }
 
 func matchFunctions(pkg, obj, name string, functions []Function) bool {

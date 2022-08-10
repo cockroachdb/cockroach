@@ -23,6 +23,7 @@ import (
 
 var (
 	intID         = func(n int) int { return n }
+	intRef        = func(n *int) int { return *n }
 	boolID        = func(b bool) bool { return b }
 	doWork        = func() {}
 	runFunc       = func(f func()) { f() }
@@ -52,28 +53,6 @@ func OutOfScope() {
 			// it's a much less common pattern.
 			s.closure()
 		}()
-	}
-}
-
-// TableDriven ensures that we are able to flag a common pattern in
-// table-driven tests. If a Go routine is spawned while iterating over
-// the test cases, it's easy to accidentally reference the test case
-// variable, leading to flaky tests if the test cases run in parallel.
-func TableDriven(t *testing.T) {
-	values := [][]byte{{0x08, 0x00, 0x00, 0xff, 0xff}}
-
-	for _, tc := range values {
-		t.Run("", func(t *testing.T) {
-			w, _ := net.Pipe()
-			errChan := make(chan error, 1)
-
-			go func() {
-				if _, err := w.Write(tc); err != nil { // want `loop variable 'tc' captured by reference`
-					errChan <- err
-					return
-				}
-			}()
-		})
 	}
 }
 
@@ -294,6 +273,19 @@ func Synchronization() {
 		go intID(intProducer("bad", notSynchronized)) // want `'notSynchronized' function captures loop variable 'n' by reference`
 		go intID(intProduder("ok", synchronized))     // this is OK
 
+		// inline functions
+		func() {
+			doWork()
+			go func() {
+				intID(n) // want `loop variable 'n' captured by reference`
+			}()
+
+			go func() {
+				defer wg1.Done()
+				intID(n) // this is OK
+			}()
+		}()
+
 		// reading from a channel in a `range` loop is also a way to
 		// provide synchronization
 		rangeChan := make(chan error)
@@ -376,6 +368,139 @@ func GoWrapperWait() {
 
 	cg1.Wait()
 	concurrency.Await()
+}
+
+// TestRunner exercises common patterns in Go tests, including the
+// 'table-driven' style.
+func TestRunner(t *testing.T) {
+	values := [][]byte{{0x08, 0x00, 0x00, 0xff, 0xff}}
+
+	for _, tc := range values {
+		t.Run("", func(t *testing.T) {
+			w, _ := net.Pipe()
+			errChan := make(chan error, 1)
+
+			go func() {
+				if _, err := w.Write(tc); err != nil { // want `loop variable 'tc' captured by reference`
+					errChan <- err
+					return
+				}
+			}()
+		})
+	}
+
+	testCases := []int{1, 2, 3}
+	ch := make(chan error)
+	for _, tc := range testCases {
+		t.Run("sequential", func(t *testing.T) {
+			doWork()
+			go func() {
+				fmt.Printf("working...\n")
+				intID(tc) // this is OK due to synchronization via `ch`
+				ch <- nil
+			}()
+
+			<-ch
+		})
+	}
+
+	for _, tc := range testCases {
+		t.Run("parallel", func(t *testing.T) {
+			t.Parallel()
+			doWork()
+			go func() {
+				fmt.Printf("working...\n")
+				intID(tc) // want `loop variable 'tc' captured by reference`
+				ch <- nil
+			}()
+
+			<-ch
+		})
+
+		// `Parallel` setting is reset in a new Run() call
+		t.Run("sequential 2", func(t *testing.T) {
+			doWork()
+			go func() {
+				intID(tc) // this is OK
+				ch <- nil
+			}()
+
+			<-ch
+		})
+	}
+
+	// `Parallel` setting is reset in a new loop
+	for _, tc := range testCases {
+		t.Run("sequential 3", func(t *testing.T) {
+			doWork()
+			go func() {
+				intID(tc) // this is OK
+				ch <- nil
+			}()
+
+			<-ch
+		})
+	}
+
+	for _, tc := range testCases {
+		t.Run("sequential defer", func(t *testing.T) {
+			doWork()
+			defer func() {
+				intID(tc) // this is OK
+			}()
+		})
+	}
+
+	for _, tc := range testCases {
+		t.Run("sequential defer", func(t *testing.T) {
+			t.Parallel()
+			doWork()
+			defer func() {
+				intID(tc) // want `loop variable 'tc' captured by reference`
+			}()
+		})
+	}
+
+	for _, tc := range testCases {
+		t.Run("parallel group", func(t *testing.T) {
+			t.Parallel()
+			t.Run("p1", func(t *testing.T) {
+				go func() {
+					defer close(ch)
+					intID(tc) // want `loop variable 'tc' captured by reference`
+				}()
+
+				<-ch
+			})
+
+			t.Run("p2", func(t *testing.T) {
+				go func() {
+					defer close(ch)
+					intID(tc) // want `loop variable 'tc' captured by reference`
+				}()
+
+				<-ch
+			})
+		})
+	}
+
+	// when the test is parallel, any references to loop variables are
+	// invalid
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s", tc), func(t *testing.T) {
+			t.Parallel()
+
+			n := intID(tc) // want `loop variable 'tc' captured by reference`
+			fmt.Printf("n = %d\n", n)
+
+			// having synchronization code does not change the fact that
+			// references are not safe
+			var wg sync.WaitGroup
+			defer wg.Done()
+			intID(tc) // want `loop variable 'tc' captured by reference`
+			wg.Wait()
+		})
+	}
 }
 
 // Select tests for common patterns using `select`, inspired by real
