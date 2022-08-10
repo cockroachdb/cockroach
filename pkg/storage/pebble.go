@@ -1641,6 +1641,13 @@ func (p *Pebble) IngestExternalFiles(ctx context.Context, paths []string) error 
 	return p.db.Ingest(paths)
 }
 
+// IngestExternalFilesWithStats implements the Engine interface.
+func (p *Pebble) IngestExternalFilesWithStats(
+	ctx context.Context, paths []string,
+) (pebble.IngestOperationStats, error) {
+	return p.db.IngestWithStats(paths)
+}
+
 // PreIngestDelay implements the Engine interface.
 func (p *Pebble) PreIngestDelay(ctx context.Context) {
 	preIngestDelay(ctx, p, p.settings)

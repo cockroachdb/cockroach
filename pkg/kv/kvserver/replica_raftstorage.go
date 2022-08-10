@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -959,8 +960,13 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
-	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+	var ingestStats pebble.IngestOperationStats
+	if ingestStats, err =
+		r.store.engine.IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+	}
+	if r.store.cfg.KVAdmissionController != nil {
+		r.store.cfg.KVAdmissionController.SnapshotIngested(r.store.StoreID(), ingestStats)
 	}
 	stats.ingestion = timeutil.Now()
 
