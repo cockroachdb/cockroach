@@ -219,8 +219,6 @@ func filtersMatchLeftRowsAtMostOnce(left, right RelExpr, filters FiltersExpr) bo
 // according to the join filters. This is true when the following conditions are
 // satisfied:
 //
-// 0. No table on the right side is using SELECT FOR {UPDATE,SHARE} SKIP LOCKED.
-//
 // 1. If this is a cross join (there are no filters), then either:
 //   a. The minimum cardinality of the right input is greater than zero. There
 //      must be at least one right row for the left rows to be preserved.
@@ -259,9 +257,6 @@ func filtersMatchLeftRowsAtMostOnce(left, right RelExpr, filters FiltersExpr) bo
 // columns in the foreign key must be not-null in order to guarantee that all
 // rows will have a match in the referenced table.
 func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
-	if checkIsSkipLocked(right.Memo().Metadata(), right) {
-		return false
-	}
 	if filters.IsTrue() {
 		// Cross join case.
 		if !right.Relational().Cardinality.CanBeZero() {
@@ -449,19 +444,6 @@ func rightHasSingleFilterThatMatchesLeft(left, right RelExpr, leftCol, rightCol 
 		return false
 	}
 	return leftConst == rightConst
-}
-
-// checkIsSkipLocked checks whether any table scanned by the right expression is
-// using SELECT FOR {UPDATE,SHARE} SKIP LOCKED.
-func checkIsSkipLocked(md *opt.Metadata, right RelExpr) (isSkipLocked bool) {
-	right.Relational().OutputCols.ForEach(func(colID opt.ColumnID) {
-		tableID := md.ColumnMeta(colID).Table
-		if tableID != 0 && md.TableMeta(tableID).IsSkipLocked {
-			isSkipLocked = true
-			return
-		}
-	})
-	return isSkipLocked
 }
 
 // checkSelfJoinCase returns true if all equalities in the given FiltersExpr
