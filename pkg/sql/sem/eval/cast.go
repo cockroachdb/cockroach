@@ -940,12 +940,15 @@ func performIntToOidCast(
 		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
 	case oid.T_regproc, oid.T_regprocedure:
+		if v == 0 {
+			return tree.WrapAsZeroOid(t), nil
+		}
 		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
 		if err != nil {
-			if v == 0 {
-				return tree.WrapAsZeroOid(t), nil
+			if errors.Is(err, tree.ErrFunctionUndefined) {
+				return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
 			}
-			return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
+			return nil, err
 		}
 		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
