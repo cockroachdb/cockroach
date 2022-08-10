@@ -120,6 +120,19 @@ func (tc *Collection) GetImmutableSchemaByID(
 	return tc.getSchemaByID(ctx, txn, schemaID, flags)
 }
 
+// GetMutableSchemaByID returns a mutable schema descriptor with the given
+// schema ID.
+func (tc *Collection) GetMutableSchemaByID(
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
+) (*schemadesc.Mutable, error) {
+	flags.RequireMutable = true
+	desc, err := tc.getSchemaByID(ctx, txn, schemaID, flags)
+	if err != nil {
+		return nil, err
+	}
+	return desc.(*schemadesc.Mutable), nil
+}
+
 // GetImmutableSchemaByName returns a ResolvedSchema wrapping an immutable
 // descriptor, if applicable. RequireMutable is ignored.
 // Required is ignored, and an error is always returned if no descriptor with

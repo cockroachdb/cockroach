@@ -11,10 +11,13 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
@@ -22,6 +25,9 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	sch, resName := b.resolveSchemaForCreateTable(&cv.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
 	viewName := tree.MakeTableNameFromPrefix(resName, tree.Name(cv.Name.Object()))
+
+	preFuncResolver := b.semaCtx.FunctionResolver
+	b.semaCtx.FunctionResolver = nil
 
 	// We build the select statement to:
 	//  - check the statement semantically,
@@ -37,6 +43,9 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.schemaDeps = nil
 		b.schemaTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
+
+		b.semaCtx.FunctionResolver = preFuncResolver
+		maybePanicOnUnknownFunction("view query")
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
@@ -91,4 +100,26 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		},
 	)
 	return outScope
+}
+
+func maybePanicOnUnknownFunction(target string) {
+	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in view and
+	// we will need to lift this hack when we plan to allow it.
+	switch recErr := recover().(type) {
+	case nil:
+		// No error.
+	case error:
+		if errors.Is(recErr, tree.ErrFunctionUndefined) {
+			panic(
+				errors.WithHint(
+					recErr,
+					fmt.Sprintf("There is probably a typo in function name. Or the intention was to use a user-defined "+
+						"function in the %s, which is currently not supported.", target),
+				),
+			)
+		}
+		panic(recErr)
+	default:
+		panic(recErr)
+	}
 }

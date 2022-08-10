@@ -37,6 +37,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.FuncName.ObjectNamePrefix = resName
 
+	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in UDF and
+	// we will need to lift this hack when we plan to allow it.
+	preFuncResolver := b.semaCtx.FunctionResolver
+	b.semaCtx.FunctionResolver = nil
+
 	b.insideFuncDef = true
 	b.trackSchemaDeps = true
 	// Make sure datasource names are qualified.
@@ -47,6 +52,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		b.schemaDeps = nil
 		b.schemaTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
+
+		b.semaCtx.FunctionResolver = preFuncResolver
+		maybePanicOnUnknownFunction("function body")
 	}()
 
 	if cf.RoutineBody != nil {

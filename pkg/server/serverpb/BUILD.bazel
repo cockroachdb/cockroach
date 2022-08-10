@@ -29,12 +29,14 @@ proto_library(
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
+        "//pkg/sql/sqlstats/insights:insights_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/ts/catalog:catalog_proto",
         "//pkg/util:util_proto",
         "//pkg/util/log/logpb:logpb_proto",
         "//pkg/util/metric:metric_proto",
         "//pkg/util/tracing/tracingpb:tracingpb_proto",
+        "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
@@ -68,6 +70,7 @@ go_proto_library(
         "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/pgwire/pgwirecancel",  # keep
+        "//pkg/sql/sqlstats/insights",
         "//pkg/storage/enginepb",
         "//pkg/ts/catalog",
         "//pkg/util",
@@ -75,6 +78,7 @@ go_proto_library(
         "//pkg/util/metric",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",  # keep
+        "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
         # NB: The grpc-gateway compiler injects a dependency on the descriptor
         # package that Gazelle isn't prepared to deal with.

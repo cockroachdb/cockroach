@@ -4,10 +4,10 @@ statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
 
 statement ok
-CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e))
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e), INDEX desc_idx (f, e DESC) STORING (d))
 
 statement ok
-CREATE TABLE def_e_decimal (d INT, e DECIMAL, f INT, PRIMARY KEY (f, e))
+CREATE TABLE def_e_decimal (d INT, e DECIMAL, f INT, PRIMARY KEY (f, e), INDEX desc_idx (f, e DESC) STORING (d))
 
 # Set up the statistics as if the first table is much smaller than the second.
 # This will make lookup join into the second table be the best plan.
@@ -96,9 +96,26 @@ vectorized: true
       table: abc@abc_pkey
       spans: /2-
 
-# The filter on 'e' is a contradiction. At the moment, we're handling it as the
-# ON expression (the optimizer should be smart enough to avoid execution
-# altogether, #80402).
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a > 1 AND e > 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (b = f) AND (e > 1)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# The filter on 'e' is a contradiction. The optimizer should be smart enough to
+# avoid execution altogether, #80402.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 9223372036854775807
 ----
@@ -109,8 +126,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ equality: (b) = (f)
-│ pred: e > 9223372036854775807
+│ lookup condition: (b = f) AND (e > 9223372036854775807)
 │
 └── • scan
       columns: (a, b, c)
@@ -118,8 +134,8 @@ vectorized: true
       table: abc@abc_pkey
       spans: /2-
 
-# Decimals don't support Next / Prev calls, so we handle the filter on 'e' as
-# the ON expression.
+# Decimals don't support Next / Prev calls, but the index column is ASC so
+# we can still use the (e > 1) filter in the lookup condition.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b WHERE a > 1 AND e > 1
 ----
@@ -130,8 +146,48 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def_e_decimal@def_e_decimal_pkey
+│ lookup condition: (b = f) AND (e > 1)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls, but the inequality is inclusive so
+# we can still use the (e >= 1) filter in the lookup condition.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e >= 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@desc_idx
+│ lookup condition: (b = f) AND (e >= 1)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls and the index column is DESC so
+# we handle the (e < 1) filter in the ON expression.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e < 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@desc_idx
 │ equality: (b) = (f)
-│ pred: e > 1
+│ pred: e < 1
 │
 └── • scan
       columns: (a, b, c)
@@ -158,6 +214,7 @@ vectorized: true
       table: abc@abc_pkey
       spans: /2-
 
+# Inclusive inequality referencing an input column.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
@@ -168,8 +225,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ equality: (b) = (f)
-│ pred: a >= e
+│ lookup condition: (b = f) AND (a >= e)
 │
 └── • scan
       columns: (a, b, c)
@@ -177,8 +233,28 @@ vectorized: true
       table: abc@abc_pkey
       spans: FULL SCAN
 
+# Inclusive inequality on a descending index column referencing an input column.
 query T
-EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a >= e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (b = f) AND (a >= e)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Exclusive inequality referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a > e
 ----
 distribution: local
 vectorized: true
@@ -187,8 +263,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ equality: (b) = (f)
-│ pred: a >= e
+│ lookup condition: (b = f) AND (a > e)
 │
 └── • scan
       columns: (a, b, c)
@@ -196,6 +271,85 @@ vectorized: true
       table: abc@abc_pkey
       spans: FULL SCAN
 
+# Exclusive inequality on a descending index column referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b AND a > e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (b = f) AND (a > e)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Inequality on a decimal column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a::DECIMAL >= e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column11, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@def_e_decimal_pkey
+    │ lookup condition: (b = f) AND (column11 >= e)
+    │
+    └── • render
+        │ columns: (column11, a, b, c)
+        │ render column11: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+# Inequality on a descending decimal index column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL >= e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column11, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@desc_idx
+    │ lookup condition: (b = f) AND (column11 >= e)
+    │
+    └── • render
+        │ columns: (column11, a, b, c)
+        │ render column11: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+# The inequality has to be in the ON condition because the columns are
+# different types.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a >= e
 ----
@@ -214,6 +368,37 @@ vectorized: true
       estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@abc_pkey
       spans: FULL SCAN
+
+# The inequality has to be in the ON condition because decimals don't support
+# Prev calls.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL > e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column11, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@desc_idx
+    │ equality: (b) = (f)
+    │ pred: column11 > e
+    │
+    └── • render
+        │ columns: (column11, a, b, c)
+        │ render column11: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
 
 # Verify a distsql plan.
 statement ok

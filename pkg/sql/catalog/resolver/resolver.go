@@ -43,6 +43,7 @@ type SchemaResolver interface {
 	ObjectNameTargetResolver
 	tree.QualifiedNameResolver
 	tree.TypeReferenceResolver
+	tree.FunctionReferenceResolver
 
 	// Accessor is a crufty name and interface that wraps the *descs.Collection.
 	Accessor() catalog.Accessor

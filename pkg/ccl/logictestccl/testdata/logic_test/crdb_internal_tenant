@@ -44,6 +44,7 @@ crdb_internal  cluster_contended_tables         view   admin  NULL  NULL
 crdb_internal  cluster_contention_events        table  admin  NULL  NULL
 crdb_internal  cluster_database_privileges      table  admin  NULL  NULL
 crdb_internal  cluster_distsql_flows            table  admin  NULL  NULL
+crdb_internal  cluster_execution_insights       table  admin  NULL  NULL
 crdb_internal  cluster_inflight_traces          table  admin  NULL  NULL
 crdb_internal  cluster_locks                    table  admin  NULL  NULL
 crdb_internal  cluster_queries                  table  admin  NULL  NULL

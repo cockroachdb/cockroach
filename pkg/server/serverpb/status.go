@@ -40,6 +40,7 @@ type SQLStatusServer interface {
 	TxnIDResolution(context.Context, *TxnIDResolutionRequest) (*TxnIDResolutionResponse, error)
 	TransactionContentionEvents(context.Context, *TransactionContentionEventsRequest) (*TransactionContentionEventsResponse, error)
 	NodesList(context.Context, *NodesListRequest) (*NodesListResponse, error)
+	ListExecutionInsights(context.Context, *ListExecutionInsightsRequest) (*ListExecutionInsightsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present

@@ -414,7 +414,7 @@ func (sr *schemaResolver) ResolveFunction(
 				extraMsg = fmt.Sprintf(", but %s() exists", alternative.Name)
 			}
 		}
-		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s()%s", tree.ErrString(name), extraMsg)
+		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "unknown function: %s()%s", tree.ErrString(name), extraMsg)
 	}
 	if builtinDef == nil {
 		return udfDef, nil
@@ -445,7 +445,7 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		name, ok := tree.OidToBuiltinName[oid]
 		if !ok {
-			return "", nil, pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid)
+			return "", nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
 		}
 		funcDef := tree.FunDefs[name]
 		for _, o := range funcDef.Definition {

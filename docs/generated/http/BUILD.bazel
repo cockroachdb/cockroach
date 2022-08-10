@@ -26,6 +26,7 @@ genrule(
         "//pkg/sql/pgwire/pgerror:pgerror_proto",
         "//pkg/sql/schemachanger/scpb:scpb_proto",
         "//pkg/sql/sessiondatapb:sessiondatapb_proto",
+        "//pkg/sql/sqlstats/insights:insights_proto",
         "//pkg/sql/types:types_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/ts/catalog:catalog_proto",

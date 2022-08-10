@@ -295,9 +295,6 @@ WHERE id = $max_desc_id;
     }
 }
 
-statement error pq: unimplemented: drop function not supported.*
-DROP FUNCTION f
-
 statement error pq: unimplemented: alter function not supported.*
 ALTER FUNCTION f() IMMUTABLE
 
@@ -548,3 +545,254 @@ query T
 SELECT 999999::regproc;
 ----
 999999
+
+subtest drop_function
+
+statement ok
+CREATE FUNCTION f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_drop(int) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE SCHEMA sc1
+
+statement ok
+CREATE FUNCTION sc1.f_test_drop(int) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+SET search_path = public,sc1
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+----
+CREATE FUNCTION public.f_test_drop()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+CREATE FUNCTION public.f_test_drop(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement error pq: function name \"f_test_drop\" is not unique
+DROP FUNCTION f_test_drop;
+
+statement ok
+DROP FUNCTION IF EXISTS f_not_existing;
+
+statement error pq: unknown function: f_not_existing\(\): function undefined
+DROP FUNCTION f_not_existing;
+
+# drop a function twice should fail.
+statement error pq: function f_test_drop\(\) does not exist: function undefined
+BEGIN;
+DROP FUNCTION f_test_drop();
+DROP FUNCTION f_test_drop();
+COMMIT;
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP FUNCTION f_test_drop();
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+----
+CREATE FUNCTION public.f_test_drop(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+# Drop with two identical function signatures should be ok. And only first match
+# in path should be drop.
+statement ok
+DROP FUNCTION f_test_drop(INT), f_test_drop(INT);
+
+statement error pq: function public.f_test_drop does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement ok
+DROP FUNCTION f_test_drop(INT);
+
+statement error pq: function sc1.f_test_drop does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+
+# If there are identical function signatures in different schemas, multiple drop
+# statements should drop them all. This matches postgres behavior.
+statement ok
+CREATE FUNCTION public.f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION sc1.f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+----
+CREATE FUNCTION public.f_test_drop()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement ok;
+BEGIN;
+DROP FUNCTION f_test_drop();
+DROP FUNCTION f_test_drop();
+COMMIT;
+
+statement error pq: function public.f_test_drop does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+
+statement error pq: function sc1.f_test_drop does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+
+statement ok
+SET search_path = public
+
+statement ok
+DROP SCHEMA sc1;
+
+subtest disallow_udf_in_table
+
+statement ok
+CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT DEFAULT (test_tbl_f() + 1));
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT ON UPDATE (test_tbl_f() + 1));
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT AS (test_tbl_f() + 1) STORED);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT CHECK (test_tbl_f() > 0));
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT, INDEX idx_b(test_tbl_f()));
+
+statement ok
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(test_tbl_f());
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(b) WHERE test_tbl_f() > 0;
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD CONSTRAINT bgt CHECK (test_tbl_f() > 1);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int CHECK (test_tbl_f() > 0);
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int ON UPDATE (test_tbl_f());
+
+subtest disallow_udf_in_views_and_udf
+
+statement ok
+CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement error pq: unknown function: test_vf_f\(\): function undefined
+CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT test_vf_f() $$;
+
+statement ok
+CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement error pq: unknown function: test_vf_f\(\): function undefined
+CREATE VIEW v AS SELECT test_vf_f();
+
+statement ok
+CREATE VIEW v AS SELECT lower('hello');
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION test_vf_f];
+----
+CREATE FUNCTION public.test_vf_f()
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT lower('hello');
+$$

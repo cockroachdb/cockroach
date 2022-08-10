@@ -447,3 +447,17 @@ func (r fkResolver) GetQualifiedTableNameByID(
 ) (*tree.TableName, error) {
 	return nil, errSchemaResolver
 }
+
+// ResolveFunction implements the resolver.SchemaResolver interface.
+func (r fkResolver) ResolveFunction(
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	return nil, errSchemaResolver
+}
+
+// ResolveFunctionByOID implements the resolver.SchemaResolver interface.
+func (r fkResolver) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (string, *tree.Overload, error) {
+	return "", nil, errSchemaResolver
+}

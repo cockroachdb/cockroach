@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -836,7 +837,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			depViewRenameError := func(objType string, refTableID descpb.ID) error {
-				return params.p.dependentViewError(params.ctx,
+				return params.p.dependentError(params.ctx,
 					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, "rename",
 				)
 			}
@@ -1589,9 +1590,6 @@ func dropColumnImpl(
 	// You can't drop a column depended on by a view unless CASCADE was
 	// specified.
 	for _, ref := range tableDesc.DependedOnBy {
-		if err := params.p.maybeFailOnDroppingFunction(params.ctx, ref.ID); err != nil {
-			return nil, err
-		}
 		found := false
 		for _, colID := range ref.ColumnIDs {
 			if colID == colToDrop.GetID() {
@@ -1602,31 +1600,38 @@ func dropColumnImpl(
 		if !found {
 			continue
 		}
-		err := params.p.canRemoveDependentViewGeneric(
+		err := params.p.canRemoveDependent(
 			params.ctx, "column", string(t.Column), tableDesc.ParentID, ref, t.DropBehavior,
 		)
 		if err != nil {
 			return nil, err
 		}
-		viewDesc, err := params.p.getViewDescForCascade(
+		depDesc, err := params.p.getDescForCascade(
 			params.ctx, "column", string(t.Column), tableDesc.ParentID, ref.ID, t.DropBehavior,
 		)
 		if err != nil {
 			return nil, err
 		}
-		jobDesc := fmt.Sprintf("removing view %q dependent on column %q which is being dropped",
-			viewDesc.Name, colToDrop.ColName())
-		cascadedViews, err := params.p.removeDependentView(params.ctx, tableDesc, viewDesc, jobDesc)
-		if err != nil {
-			return nil, err
-		}
-		qualifiedView, err := params.p.getQualifiedTableName(params.ctx, viewDesc)
-		if err != nil {
-			return nil, err
-		}
+		switch t := depDesc.(type) {
+		case *tabledesc.Mutable:
+			jobDesc := fmt.Sprintf("removing view %q dependent on column %q which is being dropped",
+				t.Name, colToDrop.ColName())
+			cascadedViews, err := params.p.removeDependentView(params.ctx, tableDesc, t, jobDesc)
+			if err != nil {
+				return nil, err
+			}
+			qualifiedView, err := params.p.getQualifiedTableName(params.ctx, t)
+			if err != nil {
+				return nil, err
+			}
 
-		droppedViews = append(droppedViews, cascadedViews...)
-		droppedViews = append(droppedViews, qualifiedView.FQString())
+			droppedViews = append(droppedViews, cascadedViews...)
+			droppedViews = append(droppedViews, qualifiedView.FQString())
+		case *funcdesc.Mutable:
+			if err := params.p.removeDependentFunction(params.ctx, tableDesc, t); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// We cannot remove this column if there are computed columns that use it.

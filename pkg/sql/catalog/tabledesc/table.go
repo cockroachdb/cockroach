@@ -166,6 +166,9 @@ func MakeColumnDefDescs(
 		if err != nil {
 			return nil, err
 		}
+		if err := tree.MaybeFailOnUDFUsage(ret.DefaultExpr); err != nil {
+			return nil, err
+		}
 
 		// Keep the type checked expression so that the type annotation gets
 		// properly stored, only if the default expression is not NULL.
@@ -184,6 +187,9 @@ func MakeColumnDefDescs(
 			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
 		)
 		if err != nil {
+			return nil, err
+		}
+		if err := tree.MaybeFailOnUDFUsage(ret.OnUpdateExpr); err != nil {
 			return nil, err
 		}
 

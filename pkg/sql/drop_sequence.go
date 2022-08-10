@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -228,62 +229,83 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 // This is called when the DropBehavior is DropCascade.
 func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc.Mutable) error {
 	for _, dependent := range seqDesc.DependedOnBy {
-		if err := p.maybeFailOnDroppingFunction(ctx, dependent.ID); err != nil {
-			return err
-		}
-
-		tblDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, dependent.ID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					IncludeOffline: true,
-					IncludeDropped: true,
-				},
-			})
+		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependent.ID)
 		if err != nil {
 			return err
 		}
-
-		// If the table that uses the sequence has been dropped already,
-		// no need to update, so skip.
-		if tblDesc.Dropped() {
-			continue
+		switch t := desc.(type) {
+		case *tabledesc.Mutable:
+			return dropDepTableOnSequence(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)
+		case *funcdesc.Mutable:
+			return p.dropFunctionImpl(ctx, t)
+		default:
+			return errors.AssertionFailedf(
+				"unexpected dependent %s %s on sequence %s",
+				desc.DescriptorType(), desc.GetName(), seqDesc.Name,
+			)
 		}
+	}
+	return nil
+}
 
-		// If the dependent object is a view, drop the view.
-		if tblDesc.IsView() {
-			_, err = p.dropViewImpl(ctx, tblDesc, false /* queueJob */, "", tree.DropCascade)
-			if err != nil {
-				return err
-			}
-			continue
-		}
+func dropDepTableOnSequence(
+	ctx context.Context,
+	p *planner,
+	tblDesc *tabledesc.Mutable,
+	seqName string,
+	depColIDs []descpb.ColumnID,
+) error {
+	tblDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, tblDesc.ID,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				IncludeOffline: true,
+				IncludeDropped: true,
+			},
+		})
+	if err != nil {
+		return err
+	}
 
-		// Set of column IDs which will have their default values dropped.
-		colsToDropDefault := make(map[descpb.ColumnID]struct{})
-		for _, colID := range dependent.ColumnIDs {
-			colsToDropDefault[colID] = struct{}{}
-		}
+	// If the table that uses the sequence has been dropped already,
+	// no need to update, so skip.
+	if tblDesc.Dropped() {
+		return nil
+	}
 
-		// Iterate over all columns in the table, drop affected columns' default values
-		// and update back references.
-		for _, column := range tblDesc.PublicColumns() {
-			if _, ok := colsToDropDefault[column.GetID()]; ok {
-				column.ColumnDesc().DefaultExpr = nil
-				if err := p.removeSequenceDependencies(ctx, tblDesc, column); err != nil {
-					return err
-				}
-			}
-		}
-
-		jobDesc := fmt.Sprintf(
-			"removing default expressions using sequence %q since it is being dropped",
-			seqDesc.Name,
-		)
-		if err := p.writeSchemaChange(
-			ctx, tblDesc, descpb.InvalidMutationID, jobDesc,
-		); err != nil {
+	// If the dependent object is a view, drop the view.
+	if tblDesc.IsView() {
+		_, err = p.dropViewImpl(ctx, tblDesc, false /* queueJob */, "", tree.DropCascade)
+		if err != nil {
 			return err
 		}
+		return nil
+	}
+
+	// Set of column IDs which will have their default values dropped.
+	colsToDropDefault := make(map[descpb.ColumnID]struct{})
+	for _, colID := range depColIDs {
+		colsToDropDefault[colID] = struct{}{}
+	}
+
+	// Iterate over all columns in the table, drop affected columns' default values
+	// and update back references.
+	for _, column := range tblDesc.PublicColumns() {
+		if _, ok := colsToDropDefault[column.GetID()]; ok {
+			column.ColumnDesc().DefaultExpr = nil
+			if err := p.removeSequenceDependencies(ctx, tblDesc, column); err != nil {
+				return err
+			}
+		}
+	}
+
+	jobDesc := fmt.Sprintf(
+		"removing default expressions using sequence %q since it is being dropped",
+		seqName,
+	)
+	if err := p.writeSchemaChange(
+		ctx, tblDesc, descpb.InvalidMutationID, jobDesc,
+	); err != nil {
+		return err
 	}
 	return nil
 }
