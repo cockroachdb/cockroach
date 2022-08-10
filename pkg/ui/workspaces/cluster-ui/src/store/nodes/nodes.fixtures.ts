@@ -806,7 +806,6 @@ export const getNodeStatus = () => {
           "queue.tsmaintenance.process.success": 3,
           "queue.tsmaintenance.processingnanos": 174301000,
           "raft.commandsapplied": 0,
-          "raft.enqueued.pending": 0,
           "raft.entrycache.accesses": 485,
           "raft.entrycache.bytes": 217172,
           "raft.entrycache.hits": 331,
