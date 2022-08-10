@@ -2768,12 +2768,12 @@ func TestURIRequiresAdminRole(t *testing.T) {
 		},
 		{
 			name:          "s3-specified",
-			uri:           "s3://foo/bar?AUTH=specified",
+			uri:           "s3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456",
 			requiresAdmin: false,
 		},
 		{
 			name:          "s3-custom",
-			uri:           "s3://foo/bar?AUTH=specified&AWS_ENDPOINT=baz",
+			uri:           "s3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&AWS_ENDPOINT=baz",
 			requiresAdmin: true,
 		},
 		{
@@ -2819,7 +2819,7 @@ func TestURIRequiresAdminRole(t *testing.T) {
 		t.Run(tc.name+"-direct", func(t *testing.T) {
 			conf, err := cloud.ExternalStorageConfFromURI(tc.uri, username.RootUserName())
 			require.NoError(t, err)
-			require.Equal(t, conf.AccessIsWithExplicitAuth(), !tc.requiresAdmin)
+			require.Equal(t, !tc.requiresAdmin, conf.AccessIsWithExplicitAuth())
 		})
 	}
 }

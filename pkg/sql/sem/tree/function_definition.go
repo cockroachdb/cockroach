@@ -127,6 +127,10 @@ type FunctionProperties struct {
 	//
 	// See memo.CanBeCompositeSensitive.
 	CompositeInsensitive bool
+
+	// VectorizeStreaming indicates that the function is of "streaming" nature
+	// from the perspective of the vectorized execution engine.
+	VectorizeStreaming bool
 }
 
 // ShouldDocument returns whether the built-in function should be included in

@@ -76,6 +76,9 @@ const (
 	// AssumeRoleParam is the query parameter for the chain of AWS Role ARNs to
 	// assume.
 	AssumeRoleParam = "ASSUME_ROLE"
+
+	// scheme component of an S3 URI.
+	scheme = "s3"
 )
 
 type s3Storage struct {
@@ -211,21 +214,26 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 }
 
 func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+	s3URL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
+	if s3URL.Host == "" {
+		return conf, errors.New("empty host component; s3 URI must specify a target bucket")
+	}
+
 	conf.Provider = cloudpb.ExternalStorageProvider_s3
-	assumeRole, delegateRoles := cloud.ParseRoleString(uri.Query().Get(AssumeRoleParam))
+	assumeRole, delegateRoles := cloud.ParseRoleString(s3URL.ConsumeParam(AssumeRoleParam))
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
-		Bucket:           uri.Host,
-		Prefix:           uri.Path,
-		AccessKey:        uri.Query().Get(AWSAccessKeyParam),
-		Secret:           uri.Query().Get(AWSSecretParam),
-		TempToken:        uri.Query().Get(AWSTempTokenParam),
-		Endpoint:         uri.Query().Get(AWSEndpointParam),
-		Region:           uri.Query().Get(S3RegionParam),
-		Auth:             uri.Query().Get(cloud.AuthParam),
-		ServerEncMode:    uri.Query().Get(AWSServerSideEncryptionMode),
-		ServerKMSID:      uri.Query().Get(AWSServerSideEncryptionKMSID),
-		StorageClass:     uri.Query().Get(S3StorageClassParam),
+		Bucket:           s3URL.Host,
+		Prefix:           s3URL.Path,
+		AccessKey:        s3URL.ConsumeParam(AWSAccessKeyParam),
+		Secret:           s3URL.ConsumeParam(AWSSecretParam),
+		TempToken:        s3URL.ConsumeParam(AWSTempTokenParam),
+		Endpoint:         s3URL.ConsumeParam(AWSEndpointParam),
+		Region:           s3URL.ConsumeParam(S3RegionParam),
+		Auth:             s3URL.ConsumeParam(cloud.AuthParam),
+		ServerEncMode:    s3URL.ConsumeParam(AWSServerSideEncryptionMode),
+		ServerKMSID:      s3URL.ConsumeParam(AWSServerSideEncryptionKMSID),
+		StorageClass:     s3URL.ConsumeParam(S3StorageClassParam),
 		RoleARN:          assumeRole,
 		DelegateRoleARNs: delegateRoles,
 		/* NB: additions here should also update s3QueryParams() serializer */
@@ -239,6 +247,54 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 	// contain spaces. We can convert any space characters we see to +
 	// characters to recover the original secret.
 	conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
+
+	// Validate that all the passed in parameters are supported.
+	if unknownParams := s3URL.RemainingQueryParams(); len(unknownParams) > 0 {
+		return cloudpb.ExternalStorage{}, errors.Errorf(
+			`unknown S3 query parameters: %s`, strings.Join(unknownParams, ", "))
+	}
+
+	// Validate the authentication parameters are set correctly.
+	switch conf.S3Config.Auth {
+	case "", cloud.AuthParamSpecified:
+		if conf.S3Config.AccessKey == "" {
+			return cloudpb.ExternalStorage{}, errors.Errorf(
+				"%s is set to '%s', but %s is not set",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				AWSAccessKeyParam,
+			)
+		}
+		if conf.S3Config.Secret == "" {
+			return cloudpb.ExternalStorage{}, errors.Errorf(
+				"%s is set to '%s', but %s is not set",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				AWSSecretParam,
+			)
+		}
+	case cloud.AuthParamImplicit:
+	default:
+		return cloudpb.ExternalStorage{}, errors.Errorf("unsupported value %s for %s",
+			conf.S3Config.Auth, cloud.AuthParam)
+	}
+
+	// Ensure that a KMS ID is specified if server side encryption is set to use
+	// KMS.
+	if conf.S3Config.ServerEncMode != "" {
+		switch conf.S3Config.ServerEncMode {
+		case string(aes256Enc):
+		case string(kmsEnc):
+			if conf.S3Config.ServerKMSID == "" {
+				return cloudpb.ExternalStorage{}, errors.New("AWS_SERVER_KMS_ID param must be set" +
+					" when using aws:kms server side encryption mode.")
+			}
+		default:
+			return cloudpb.ExternalStorage{}, errors.Newf("unsupported server encryption mode %s. "+
+				"Supported values are `aws:kms` and `AES256`.", conf.S3Config.ServerEncMode)
+		}
+	}
+
 	return conf, nil
 }
 
@@ -695,5 +751,5 @@ func s3ErrDelay(err error) time.Duration {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_s3,
-		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), "s3")
+		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), scheme)
 }

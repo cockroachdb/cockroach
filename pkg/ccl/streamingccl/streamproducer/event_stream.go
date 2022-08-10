@@ -532,11 +532,11 @@ func streamPartition(
 	for _, sp := range spec.Spans {
 		subscribedSpans.Add(sp)
 	}
-	return eval.MakeStreamingValueGenerator(&eventStream{
+	return &eventStream{
 		streamID:        streamID,
 		spec:            spec,
 		subscribedSpans: subscribedSpans,
 		execCfg:         execCfg,
 		mon:             evalCtx.Mon,
-	}), nil
+	}, nil
 }

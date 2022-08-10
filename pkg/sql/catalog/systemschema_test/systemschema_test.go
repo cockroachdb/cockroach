@@ -43,7 +43,7 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	wallTimeRE, err := regexp.Compile(`"wallTime":"\d*"`)
+	hlcRE, err := regexp.Compile(`"wallTime":"\d*"(,"logical":\d*)?`)
 	require.NoError(t, err)
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "bootstrap"), func(t *testing.T, path string) {
@@ -114,7 +114,7 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 					require.NotNilf(t, ev.Desc, "unexpectedly missing descriptor in %s", ev)
 					str, err := je.MarshalToString(ev.Desc)
 					require.NoError(t, err, "unexpected descriptor marshal error")
-					str = wallTimeRE.ReplaceAllString(str, `"wallTime":"0"`)
+					str = hlcRE.ReplaceAllString(str, `"wallTime":"0"`)
 					sb.WriteString(str)
 					sb.WriteRune('\n')
 				}
