@@ -161,12 +161,12 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			expected: "left-rows(exactly-one), right-rows(exactly-one)",
 		},
 		{ // 9
-			// SELECT * FROM xy LEFT JOIN uv ON x = u;
-			joinOp:   opt.LeftJoinOp,
+			// SELECT * FROM xy INNER JOIN uv ON x = u;
+			joinOp:   opt.InnerJoinOp,
 			left:     xyScan,
 			right:    uvScan,
 			on:       ob.makeFilters(ob.makeEquality(xyCols[0], uvCols[0])),
-			expected: "left-rows(exactly-one), right-rows(zero-or-one)",
+			expected: "left-rows(zero-or-one), right-rows(zero-or-one)",
 		},
 		{ // 10
 			// SELECT *
