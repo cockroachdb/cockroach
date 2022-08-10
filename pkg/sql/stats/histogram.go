@@ -45,7 +45,7 @@ type HistogramVersion uint32
 //
 // ATTENTION: When updating this field, add a brief description of what
 // changed to the version history below.
-const histVersion HistogramVersion = 1
+const histVersion HistogramVersion = 2
 
 /*
 
@@ -53,7 +53,14 @@ const histVersion HistogramVersion = 1
 
 Please add new entries at the top.
 
+- Version: 2
+- Introduced in 22.2.
+- String columns indexed by an inverted (trigram) index now have two sets of
+  statistics created by each statistics collection: one with the normal STRING
+  histogram, and one with the inverted BYTES histogram.
+
 - Version: 1
+- Introduced in 21.2.
 - The histogram creation logic was changed so the number of distinct values in
   the histogram matched the estimated distinct count from the HyperLogLog sketch.
 

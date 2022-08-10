@@ -44,7 +44,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	rng, seed := randutil.NewTestRand()
 	for _, colType := range colTypes {
-		if canMakeQuantile(colType) {
+		if canMakeQuantile(histVersion, colType) {
 			for i := 0; i < 5; i++ {
 				t.Run(fmt.Sprintf("%v/%v", colType.Name(), i), func(t *testing.T) {
 					hist, rowCount := randHist(evalCtx, colType, rng)
