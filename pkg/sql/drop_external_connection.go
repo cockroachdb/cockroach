@@ -13,10 +13,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,16 +58,10 @@ func (p *planner) makeDropExternalConnectionEval(
 }
 
 func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalConnection) error {
-	// TODO(adityamaru): Check that the user has `DROP` privileges on the External
-	// Connection once we add support for it. Remove admin only check.
-	hasAdmin, err := params.p.HasAdminRole(params.ctx)
-	if err != nil {
-		return err
-	}
-	if !hasAdmin {
-		return pgerror.New(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to DROP EXTERNAL CONNECTION")
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.SystemExternalConnectionsTable) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"External Connections are not supported until upgrade to version %v is finalized",
+			clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
 	}
 
 	// TODO(adityamaru): Add some metrics to track DROP EXTERNAL CONNECTION
@@ -79,11 +77,22 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 		return errors.Wrap(err, "failed to resolve External Connection name")
 	}
 
+	// Check that the user has DROP privileges on the External Connection object.
+	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+		ConnectionName: name,
+	}
+	if err := p.CheckPrivilege(params.ctx, ecPrivilege, privilege.DROP); err != nil {
+		return err
+	}
+
+	// DROP EXTERNAL CONNECTION is only allowed for users with the `DROP`
+	// privilege on this object. We run the query as `node` since the user might
+	// not have `SELECT` on the system table.
 	if _ /* rows */, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 		params.ctx,
 		dropExternalConnectionOp,
 		params.p.Txn(),
-		sessiondata.InternalExecutorOverride{User: params.p.User()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		`DELETE FROM system.external_connections WHERE connection_name = $1`, name,
 	); err != nil {
 		return errors.Wrapf(err, "failed to delete external connection")

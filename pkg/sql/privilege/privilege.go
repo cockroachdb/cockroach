@@ -124,7 +124,7 @@ var (
 	SequencePrivileges           = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
 	SystemPrivileges             = List{ALL, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG}
 	VirtualTablePrivileges       = List{ALL, SELECT}
-	ExternalConnectionPrivileges = List{ALL, USAGE}
+	ExternalConnectionPrivileges = List{ALL, USAGE, DROP}
 )
 
 // Mask returns the bitmask for a given privilege.
