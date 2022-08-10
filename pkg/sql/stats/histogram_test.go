@@ -568,6 +568,51 @@ func TestAdjustCounts(t *testing.T) {
 				{NumRange: 50, NumEq: 0, DistinctRange: 32.5, UpperBound: f(200)},
 			},
 		},
+		{ // Adjust a leading bucket to zero.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: f(52)},
+				{NumRange: 1, NumEq: 10, DistinctRange: 1, UpperBound: f(62)},
+			},
+			rowCount:      1,
+			distinctCount: 1,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: f(62)},
+			},
+		},
+		{ // Adjust a trailing bucket to zero.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 10, DistinctRange: 0, UpperBound: f(42)},
+				{NumRange: 1, NumEq: 0, DistinctRange: 1, UpperBound: f(52)},
+			},
+			rowCount:      1,
+			distinctCount: 1,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: f(42)},
+			},
+		},
+		{ // Adjust a middle bucket to zero.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 10, DistinctRange: 0, UpperBound: f(42)},
+				{NumRange: 1, NumEq: 0, DistinctRange: 1, UpperBound: f(52)},
+				{NumRange: 0, NumEq: 10, DistinctRange: 0, UpperBound: f(62)},
+			},
+			rowCount:      1,
+			distinctCount: 1,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: .5, DistinctRange: 0, UpperBound: f(42)},
+				{NumRange: 0, NumEq: .5, DistinctRange: 0, UpperBound: f(62)},
+			},
+		},
+		{ // Adjust all buckets to zero.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 10, DistinctRange: 0, UpperBound: f(42)},
+				{NumRange: 0, NumEq: 10, DistinctRange: 0, UpperBound: f(52)},
+				{NumRange: 0, NumEq: 10, DistinctRange: 0, UpperBound: f(62)},
+			},
+			rowCount:      0,
+			distinctCount: 0,
+			expected:      []cat.HistogramBucket{},
+		},
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
