@@ -568,40 +568,6 @@ func (ds *DistSender) getNodeID() roachpb.NodeID {
 	return g.NodeID.Get()
 }
 
-// getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
-// it from the Gossip network if a nil value is found.
-// We must jump through hoops here to get the node descriptor because it's not available
-// until after the node has joined the gossip network and been allowed to initialize
-// its stores.
-func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
-	if desc := atomic.LoadPointer(&ds.nodeDescriptor); desc != nil {
-		return (*roachpb.NodeDescriptor)(desc)
-	}
-	// TODO(nvanbenschoten): open an issue about the effect of this.
-	g, ok := ds.nodeDescs.(*gossip.Gossip)
-	if !ok {
-		return nil
-	}
-
-	ownNodeID := g.NodeID.Get()
-	if ownNodeID > 0 {
-		// TODO(tschottdorf): Consider instead adding the NodeID of the
-		// coordinator to the header, so we can get this from incoming
-		// requests. Just in case we want to mostly eliminate gossip here.
-		nodeDesc := &roachpb.NodeDescriptor{}
-		if err := g.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), nodeDesc); err == nil {
-			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc))
-			return nodeDesc
-		}
-	}
-	if log.V(1) {
-		ctx := ds.AnnotateCtx(context.TODO())
-		log.Infof(ctx, "unable to determine this node's attributes for replica "+
-			"selection; node is most likely bootstrapping")
-	}
-	return nil
-}
-
 // CountRanges returns the number of ranges that encompass the given key span.
 func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
