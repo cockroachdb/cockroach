@@ -224,6 +224,7 @@ func (h *histogram) adjustCounts(
 			h.buckets[i].DistinctRange = 0
 			h.buckets[i].NumEq *= adjustmentFactorNumEq
 		}
+		h.removeZeroBuckets()
 		return
 	}
 
@@ -312,6 +313,29 @@ func (h *histogram) adjustCounts(
 		h.buckets[i].NumRange *= adjustmentFactorRowCount
 		h.buckets[i].NumEq *= adjustmentFactorRowCount
 	}
+
+	h.removeZeroBuckets()
+}
+
+// removeZeroBuckets removes any extra zero buckets if we don't need them
+// (sometimes we need zero buckets as the lower bound of a range).
+func (h *histogram) removeZeroBuckets() {
+	if h.buckets == nil {
+		return
+	}
+
+	var j int
+	for i := 0; i < len(h.buckets); i++ {
+		if h.buckets[i].NumEq <= 0 && h.buckets[i].NumRange <= 0 &&
+			(i == len(h.buckets)-1 || h.buckets[i+1].NumRange <= 0) {
+			continue
+		}
+		if j != i {
+			h.buckets[j] = h.buckets[i]
+		}
+		j++
+	}
+	h.buckets = h.buckets[:j]
 }
 
 // addOuterBuckets adds buckets above and below the existing buckets in the
