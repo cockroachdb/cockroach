@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -113,6 +114,20 @@ var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	1e6,
 	settings.NonNegativeInt,
+)
+
+// AdmissionPriority determines the admission priority level to use for MVCC GC
+// work.
+var AdmissionPriority = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"kv.gc.admission_priority",
+	"the admission priority to use for mvcc gc work",
+	"bulk_normal_pri",
+	map[int64]string{
+		int64(admissionpb.BulkNormalPri): "bulk_normal_pri",
+		int64(admissionpb.NormalPri):     "normal_pri",
+		int64(admissionpb.UserHighPri):   "user_high_pri",
+	},
 )
 
 // CalculateThreshold calculates the GC threshold given the policy and the

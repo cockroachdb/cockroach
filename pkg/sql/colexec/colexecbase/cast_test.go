@@ -26,12 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,12 +46,6 @@ func TestRandomizedCast(t *testing.T) {
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
-			if from.Oid() == oid.T_void && to.Oid() == oid.T_bpchar {
-				// Skip the cast from void to char because such setup would get
-				// stuck forever in the datum generation (due to the TODO
-				// below).
-				continue
-			}
 			if _, ok := cast.LookupCastVolatility(from, to); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
@@ -73,27 +65,10 @@ func TestRandomizedCast(t *testing.T) {
 		toConverter := colconv.GetDatumToPhysicalFn(to)
 		errorExpected := false
 		for i := 0; i < numRows; i++ {
-			var (
-				fromDatum, toDatum tree.Datum
-				err                error
-			)
-			// Datum generation. The loop exists only because of the TODO below.
-			for {
-				// We don't allow any NULL datums to be generated, so disable
-				// this ability in the RandDatum function.
-				fromDatum = randgen.RandDatum(rng, from, false)
-				toDatum, err = eval.PerformCast(&evalCtx, fromDatum, to)
-				if to.Oid() == oid.T_bpchar && string(*toDatum.(*tree.DString)) == "" {
-					// There is currently a problem when converting an empty
-					// string datum to a physical representation, so we skip
-					// such a datum and retry generation.
-					// TODO(yuzefovich): figure it out. When removing this
-					// check, remove the special casing for 'void -> char' cast
-					// above.
-					continue
-				}
-				break
-			}
+			// We don't allow any NULL datums to be generated, so disable this
+			// ability in the RandDatum function.
+			fromDatum := randgen.RandDatum(rng, from, false)
+			toDatum, err := eval.PerformCast(&evalCtx, fromDatum, to)
 			var toPhys interface{}
 			if err != nil {
 				errorExpected = true

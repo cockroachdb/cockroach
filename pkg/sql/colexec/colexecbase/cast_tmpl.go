@@ -126,7 +126,15 @@ func GetCastOperator(
 		return &castOpNullAny{castOpBase: base}, nil
 	}
 	if isIdentityCast(fromType, toType) {
-		return &castIdentityOp{castOpBase: base}, nil
+		// bpchars require special handling.
+		if toType.Oid() == oid.T_bpchar {
+			return &castBPCharIdentityOp{castOpBase: base}, nil
+		}
+		// If we don't have an array of bpchars, then we use the identity,
+		// otherwise we'll fallback to datum-datum cast below.
+		if toType.Oid() != oid.T__bpchar {
+			return &castIdentityOp{castOpBase: base}, nil
+		}
 	}
 	isFromDatum := typeconv.TypeFamilyToCanonicalTypeFamily(fromType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	isToDatum := typeconv.TypeFamilyToCanonicalTypeFamily(toType.Family()) == typeconv.DatumVecCanonicalTypeFamily
@@ -318,6 +326,50 @@ func (c *castIdentityOp) Next() coldata.Batch {
 			Src:       batch.ColVec(c.colIdx),
 			SrcEndIdx: maxIdx,
 		})
+	})
+	return batch
+}
+
+// castBPCharIdentityOp is a specialization of castIdentityOp which handles
+// casts to the bpchar type (which trims trailing whitespaces).
+type castBPCharIdentityOp struct {
+	castOpBase
+}
+
+var _ colexecop.ClosableOperator = &castBPCharIdentityOp{}
+
+func (c *castBPCharIdentityOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	inputVec := batch.ColVec(c.colIdx)
+	inputCol := inputVec.Bytes()
+	inputNulls := inputVec.Nulls()
+	outputVec := batch.ColVec(c.outputIdx)
+	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
+	// Note that the loops below are not as optimized as in other cast operators
+	// since this operator should only be planned in tests.
+	c.allocator.PerformOperation([]coldata.Vec{outputVec}, func() {
+		if sel := batch.Selection(); sel != nil {
+			for _, i := range sel[:n] {
+				if inputNulls.NullAt(i) {
+					outputNulls.SetNull(i)
+				} else {
+					outputCol.Set(i, bytes.TrimRight(inputCol.Get(i), " "))
+				}
+			}
+		} else {
+			for i := 0; i < n; i++ {
+				if inputNulls.NullAt(i) {
+					outputNulls.SetNull(i)
+				} else {
+					outputCol.Set(i, bytes.TrimRight(inputCol.Get(i), " "))
+				}
+			}
+		}
 	})
 	return batch
 }

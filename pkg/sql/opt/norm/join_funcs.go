@@ -459,19 +459,20 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	return multiplicity.JoinFiltersMatchAllLeftRows()
 }
 
-// CanExtractJoinEquality returns true if:
+// CanExtractJoinComparison returns true if:
 //   - one of a, b is bound by the left columns;
 //   - the other is bound by the right columns;
 //   - a and b are not "bare" variables;
 //   - a and b contain no correlated subqueries;
 //   - neither a or b are constants.
+//   - the comparison is either an equality or an inequality.
 //
-// Such an equality can be converted to a column equality by pushing down
+// Such a comparison can be converted to a column comparison by pushing down
 // expressions as projections.
-func (c *CustomFuncs) CanExtractJoinEquality(
+func (c *CustomFuncs) CanExtractJoinComparison(
 	a, b opt.ScalarExpr, leftCols, rightCols opt.ColSet,
 ) bool {
-	// Disallow simple equality between variables.
+	// Disallow simple comparison between variables.
 	if a.Op() == opt.VariableOp && b.Op() == opt.VariableOp {
 		return false
 	}
@@ -495,18 +496,18 @@ func (c *CustomFuncs) CanExtractJoinEquality(
 
 	if (leftProps.OuterCols.SubsetOf(leftCols) && rightProps.OuterCols.SubsetOf(rightCols)) ||
 		(leftProps.OuterCols.SubsetOf(rightCols) && rightProps.OuterCols.SubsetOf(leftCols)) {
-		// The equality is of the form:
-		//   expression(leftCols) = expression(rightCols)
+		// The comparison is of the form:
+		//   expression(leftCols) op expression(rightCols)
 		return true
 	}
 	return false
 }
 
-// ExtractJoinEquality takes an equality FiltersItem that was identified via a
-// call to CanExtractJoinEquality, and converts it to an equality on "bare"
-// variables, by pushing down more complicated expressions as projections. See
-// the ExtractJoinEqualities rule.
-func (c *CustomFuncs) ExtractJoinEquality(
+// ExtractJoinComparison takes an equality or inequality FiltersItem that was
+// identified via a call to CanExtractJoinComparison, and converts it to an
+// equality or inequality on "bare" variables, by pushing down more complicated
+// expressions as projections. See the ExtractJoinComparisons rule.
+func (c *CustomFuncs) ExtractJoinComparison(
 	joinOp opt.Operator,
 	left, right memo.RelExpr,
 	filters memo.FiltersExpr,
@@ -516,13 +517,16 @@ func (c *CustomFuncs) ExtractJoinEquality(
 	leftCols := c.OutputCols(left)
 	rightCols := c.OutputCols(right)
 
-	eq := item.Condition.(*memo.EqExpr)
-	a, b := eq.Left, eq.Right
+	cmp := item.Condition
+	condLeft := cmp.Child(0).(opt.ScalarExpr)
+	a, b := cmp.Child(0).(opt.ScalarExpr), cmp.Child(1).(opt.ScalarExpr)
+	op := cmp.Op()
 
-	var eqLeftProps props.Shared
-	memo.BuildSharedProps(eq.Left, &eqLeftProps, c.f.evalCtx)
-	if eqLeftProps.OuterCols.SubsetOf(rightCols) {
+	var cmpLeftProps props.Shared
+	memo.BuildSharedProps(condLeft, &cmpLeftProps, c.f.evalCtx)
+	if cmpLeftProps.OuterCols.SubsetOf(rightCols) {
 		a, b = b, a
+		op = opt.CommuteEqualityOrInequalityOp(op)
 	}
 
 	var leftProj, rightProj projectBuilder
@@ -537,7 +541,7 @@ func (c *CustomFuncs) ExtractJoinEquality(
 		}
 
 		newFilters[i] = c.f.ConstructFiltersItem(
-			c.f.ConstructEq(leftProj.add(a), rightProj.add(b)),
+			c.f.DynamicConstruct(op, leftProj.add(a), rightProj.add(b)).(opt.ScalarExpr),
 		)
 	}
 

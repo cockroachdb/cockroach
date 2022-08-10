@@ -250,6 +250,12 @@ type FetcherInitArgs struct {
 	// TraceKV indicates whether or not session tracing is enabled.
 	TraceKV                    bool
 	ForceProductionKVBatchSize bool
+	// SpansCanOverlap indicates whether the spans in a given batch can overlap
+	// with one another. If it is true, spans that correspond to the same row must
+	// share the same span ID, since the span IDs are used to determine when a new
+	// row is being processed. In practice, this means that span IDs must be
+	// passed in when SpansCanOverlap is true.
+	SpansCanOverlap bool
 }
 
 // Init sets up a Fetcher for a given table and index.
@@ -660,7 +666,14 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, spanID int, _ erro
 	// unchangedPrefix will be set to true if the current KV belongs to the same
 	// row as the previous KV (i.e. the last and current keys have identical
 	// prefix). In this case, we can skip decoding the index key completely.
-	unchangedPrefix := rf.table.spec.MaxKeysPerRow > 1 && rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
+	// If the spans can overlap, it is not sufficient to check the prefix of the
+	// key in order to determine whether a new row is being processed. Instead, we
+	// have to rely on checking if the associated span ID has changed. Note that
+	// we cannot use the span ID check unconditionally. This is because it is
+	// possible for multiple span IDs to be associated with a given row when the
+	// spans cannot overlap.
+	unchangedPrefix := (!rf.args.SpansCanOverlap || rf.spanID == spanID) &&
+		rf.table.spec.MaxKeysPerRow > 1 && rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
 	if unchangedPrefix {
 		// Skip decoding!
 		rf.keyRemainingBytes = rf.kv.Key[len(rf.indexKey):]
