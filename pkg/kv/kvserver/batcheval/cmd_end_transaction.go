@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -1028,6 +1029,7 @@ func splitTriggerHelper(
 	// Initialize the RHS range's AbortSpan by copying the LHS's.
 	if err := rec.AbortSpan().CopyTo(
 		ctx, batch, batch, h.AbsPostSplitRight(), ts, split.RightDesc.RangeID,
+		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
 	); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
@@ -1175,6 +1177,7 @@ func mergeTrigger(
 
 	if err := abortspan.New(merge.RightDesc.RangeID).CopyTo(
 		ctx, batch, batch, ms, ts, merge.LeftDesc.RangeID,
+		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
 	); err != nil {
 		return result.Result{}, err
 	}

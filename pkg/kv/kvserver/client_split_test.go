@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -172,7 +173,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 		return r
 	}
 
-	thresh := kvserverbase.TxnCleanupThreshold.Nanoseconds()
+	thresh := gc.TxnCleanupThreshold.Default().Nanoseconds()
 	// Make sure this test doesn't run out of padding time if we significantly
 	// reduce TxnCleanupThreshold in the future for whatever reason.
 	require.Greater(t, thresh, int64(time.Minute))

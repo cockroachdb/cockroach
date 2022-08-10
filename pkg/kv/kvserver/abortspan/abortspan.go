@@ -12,9 +12,9 @@ package abortspan
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -154,13 +154,14 @@ func (sc *AbortSpan) CopyTo(
 	ms *enginepb.MVCCStats,
 	ts hlc.Timestamp,
 	newRangeID roachpb.RangeID,
+	txnCleanupThreshold time.Duration,
 ) error {
 	var abortSpanCopyCount, abortSpanSkipCount int
 	// Abort span entries before this span are eligible for GC, so we don't
 	// copy them into the new range. We could try to delete them from the LHS
 	// as well, but that could create a large Raft command in itself. Plus,
 	// we'd have to adjust the stats computations.
-	threshold := ts.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
+	threshold := ts.Add(-txnCleanupThreshold.Nanoseconds(), 0)
 	var scratch [64]byte
 	if err := sc.Iterate(ctx, r, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
 		if entry.Timestamp.Less(threshold) {
