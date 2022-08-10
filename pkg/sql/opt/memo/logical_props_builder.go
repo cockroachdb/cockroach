@@ -169,6 +169,12 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		}
 		b.updateCardinalityFromTypes(rel.OutputCols, rel)
 	}
+	if scan.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter. The minimum cardinality of a scan
+		// should never exceed zero based on the logic above, but this provides
+		// extra safety.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
 
 	// Statistics
 	// ----------
@@ -509,6 +515,12 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 
 func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *props.Relational) {
 	b.buildJoinProps(join, rel)
+	if join.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter. The minimum cardinality of a scan
+		// should never exceed zero based on the logic in buildJoinProps, but
+		// this provides extra safety.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
 }
 
 func (b *logicalPropsBuilder) buildInvertedJoinProps(
