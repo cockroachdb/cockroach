@@ -91,6 +91,7 @@ func TestForwarder_tryBeginTransfer(t *testing.T) {
 		f := &forwarder{}
 		f.mu.request = &processor{}
 		f.mu.response = &processor{}
+		f.mu.isInitialized = true
 
 		started, cleanupFn := f.tryBeginTransfer()
 		require.False(t, started)
@@ -107,6 +108,7 @@ func TestForwarder_tryBeginTransfer(t *testing.T) {
 		f := &forwarder{}
 		f.mu.request = &processor{}
 		f.mu.response = &processor{}
+		f.mu.isInitialized = true
 
 		started, cleanupFn := f.tryBeginTransfer()
 		require.True(t, started)
