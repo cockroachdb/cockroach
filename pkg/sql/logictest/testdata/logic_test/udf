@@ -295,9 +295,6 @@ WHERE id = $max_desc_id;
     }
 }
 
-statement error pq: unimplemented: alter function not supported.*
-ALTER FUNCTION f() IMMUTABLE
-
 statement error pq: unimplemented: alter function rename to not supported.*
 ALTER FUNCTION f() RENAME TO g
 
@@ -1170,3 +1167,40 @@ grantor  grantee  specific_catalog  specific_schema  specific_name        routin
 NULL     root     test              public           test_priv_f1_100166  test             public          test_priv_f1  EXECUTE         YES
 NULL     root     test              public           test_priv_f2_100169  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100170  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+subtest alter_function_options
+
+statement ok
+CREATE FUNCTION f_test_alter_opt(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+----
+CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement error pq: conflicting or redundant options
+ALTER FUNCTION f_test_alter_opt IMMUTABLE IMMUTABLE
+
+statement ok
+ALTER FUNCTION f_test_alter_opt IMMUTABLE LEAKPROOF STRICT;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+----
+CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+    RETURNS INT8
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
