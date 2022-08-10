@@ -66,7 +66,8 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 
 	// Delete system.role_id_seq.
 	tdb.Exec(t, `INSERT INTO system.users VALUES ('node', '', false, 0)`)
-	tdb.Exec(t, `GRANT node TO root`)
+	tdb.Exec(t, `INSERT INTO system.role_members VALUES ($1, $2, false, $3, $4)`,
+		username.NodeUser, username.RootUser, username.NodeUserID, username.RootUserID)
 	tdb.Exec(t, `DROP SEQUENCE system.role_id_seq`)
 	tdb.Exec(t, `REVOKE node FROM root`)
 

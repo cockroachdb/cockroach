@@ -1164,6 +1164,17 @@ func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser4", "NULL", "false", "104"},
 		})
 
+		sqlDB.CheckQueryResults(t, `SELECT role, member "isAdmin", role_id, member_id FROM system.role_members`, [][]string{
+			{"admin", "root", "2", "1"},
+			{"admin", "testuser4", "2", "104"},
+			{"testrole", "testuser", "100", "101"},
+			{"testrole", "testuser2", "100", "102"},
+			{"testuser", "root", "101", "1"},
+			{"testuser", "testuser2", "101", "102"},
+			{"testuser", "testuser3", "101", "103"},
+			{"testuser4", "testuser2", "104", "102"},
+		})
+
 		sqlDB.CheckQueryResults(t, `SELECT * FROM system.role_options`, [][]string{
 			{"testrole", "NOLOGIN", "NULL", "100"},
 			{"testuser", "CREATEROLE", "NULL", "101"},
@@ -1193,6 +1204,19 @@ func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser3", "NULL", "false", "103"},
 			{"testuser4", "NULL", "false", "104"},
 			{"testuser5", "NULL", "false", "105"},
+		})
+
+		sqlDB.Exec(t, "GRANT testuser5 TO testuser")
+		sqlDB.CheckQueryResults(t, `SELECT role, member "isAdmin", role_id, member_id FROM system.role_members`, [][]string{
+			{"admin", "root", "2", "1"},
+			{"admin", "testuser4", "2", "104"},
+			{"testrole", "testuser", "100", "101"},
+			{"testrole", "testuser2", "100", "102"},
+			{"testuser", "root", "101", "1"},
+			{"testuser", "testuser2", "101", "102"},
+			{"testuser", "testuser3", "101", "103"},
+			{"testuser4", "testuser2", "104", "102"},
+			{"testuser5", "testuser", "105", "101"},
 		})
 	}
 }
@@ -1224,6 +1248,20 @@ func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser2", "NULL", "false", "102"},
 			{"testuser3", "NULL", "false", "103"},
 			{"testuser4", "NULL", "false", "104"},
+		})
+
+		// Note: in the backup, we grant `testuser` to `root`.
+		// However, we don't restore that row since we only restore
+		// memberships for users that did not previously exist in
+		// the cluster.
+		sqlDB.CheckQueryResults(t, `SELECT role, member "isAdmin", role_id, member_id FROM system.role_members`, [][]string{
+			{"admin", "root", "2", "1"},
+			{"admin", "testuser4", "2", "104"},
+			{"testrole", "testuser", "100", "101"},
+			{"testrole", "testuser2", "100", "102"},
+			{"testuser", "testuser2", "101", "102"},
+			{"testuser", "testuser3", "101", "103"},
+			{"testuser4", "testuser2", "104", "102"},
 		})
 
 		// Verify that the next user we create uses the next biggest ID.

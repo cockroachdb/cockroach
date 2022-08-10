@@ -320,6 +320,16 @@ const (
 	// WaitedForDelRangeInGCJob corresponds to the migration which waits for
 	// the GC jobs to adopt the use of DelRange with tombstones.
 	WaitedForDelRangeInGCJob
+	// RoleMembersTableHasIDColumns is the version where the role
+	// members table has ids.
+	RoleMembersTableHasIDColumns
+	// RoleMembersIDColumnsAreBackfilled is the version where ids in the
+	// role options table are backfilled.
+	RoleMembersIDColumnsAreBackfilled
+	// SetRoleMembersUserIDColumnsNotNull is the version where the role
+	// members table id columns cannot be null. This is the final step
+	// of the system.role_members table migration.
+	SetRoleMembersUserIDColumnsNotNull
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -541,6 +551,18 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
+	},
+	{
+		Key:     RoleMembersTableHasIDColumns,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
+	},
+	{
+		Key:     RoleMembersIDColumnsAreBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
+	},
+	{
+		Key:     SetRoleMembersUserIDColumnsNotNull,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

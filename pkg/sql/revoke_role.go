@@ -111,6 +111,9 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 	opName := "revoke-role"
 
 	var memberStmt string
+
+	// Note that we don't use role ids to delete here. This is okay
+	// in 22.2 because role members and role ids map 1:1.
 	if n.adminOption {
 		// ADMIN OPTION FOR is specified, we don't remove memberships just remove the admin option.
 		memberStmt = `UPDATE system.role_members SET "isAdmin" = false WHERE "role" = $1 AND "member" = $2`

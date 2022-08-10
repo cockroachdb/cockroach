@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -55,7 +56,8 @@ func TestSystemPrivilegesMigration(t *testing.T) {
 
 	// Delete system.role_id_seq.
 	tdb.Exec(t, `INSERT INTO system.users VALUES ('node', '', false, 3)`)
-	tdb.Exec(t, `GRANT node TO root`)
+	tdb.Exec(t, `INSERT INTO system.role_members VALUES ($1, $2, false, $3, $4)`,
+		username.NodeUser, username.RootUser, username.NodeUserID, username.RootUserID)
 	tdb.Exec(t, `DROP TABLE system.privileges`)
 	tdb.Exec(t, `REVOKE node FROM root`)
 
