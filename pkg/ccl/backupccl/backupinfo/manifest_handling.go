@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -64,6 +66,10 @@ const (
 	// BackupStatisticsFileName is the file name used to store the serialized
 	// table statistics for the tables being backed up.
 	BackupStatisticsFileName = "BACKUP-STATISTICS"
+
+	// BackupLockFile is the prefix of the file name used by the backup job to
+	// lock the bucket from running concurrent backups to the same destination.
+	BackupLockFilePrefix = "BACKUP-LOCK-"
 
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
@@ -486,6 +492,34 @@ func GetStatisticsFromBackup(
 	return tableStatistics, nil
 }
 
+// WriteBackupLock is responsible for writing a job ID suffixed
+// `BACKUP-LOCK` file that will prevent concurrent backups from writing to the
+// same location.
+func WriteBackupLock(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user username.SQLUsername,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupLock")
+	defer sp.Finish()
+
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
+	// The lock file name consists of two parts `BACKUP-LOCK-<jobID>.
+	//
+	// The jobID is used in `checkForPreviousBackups` to ensure that we do not
+	// read our own lock file on job resumption.
+	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
+
+	return cloud.WriteFile(ctx, defaultStore, lockFileName, bytes.NewReader([]byte("lock")))
+}
+
 // WriteBackupManifest compresses and writes the passed in BackupManifest `desc`
 // to `exportStore`.
 func WriteBackupManifest(
@@ -892,18 +926,72 @@ func SanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
+// CheckForBackupLock returns true if a lock file for this job already exists.
+func CheckForBackupLock(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user username.SQLUsername,
+) (bool, error) {
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return false, err
+	}
+	defer defaultStore.Close()
+
+	// Check for the existence of a BACKUP-LOCK file written by our job
+	// corresponding to `jobID`. If present, we have already laid claim on the
+	// location and do not need to check further.
+	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
+	r, err := defaultStore.ReadFile(ctx, lockFileName)
+	if err == nil {
+		r.Close(ctx)
+		return true, nil
+	} else if errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return false, nil
+	}
+
+	return false, err
+}
+
 // CheckForPreviousBackup ensures that the target location does not already
-// contain a BACKUP or checkpoint, locking out accidental concurrent operations
-// on that location. Note that the checkpoint file should be written as soon as
-// the job actually starts.
+// contain a previous or concurrently running backup. It does this by checking
+// for the existence of one of:
+//
+// 1) BACKUP_MANIFEST: Written on completion of a backup.
+//
+// 2) BACKUP-LOCK: Written by the coordinator node to lay claim on a backup
+// location. This file is suffixed with the ID of the backup job to prevent a
+// node from reading its own lock file on job resumption.
+//
+// 3) BACKUP-CHECKPOINT: Prior to 22.1.1, nodes would use the BACKUP-CHECKPOINT
+// to lay claim on a backup location. To account for a mixed-version cluster
+// where an older coordinator node may be running a concurrent backup to the
+// same location, we must continue to check for a BACKUP-CHECKPOINT file.
+//
+// NB: The node will continue to write a BACKUP-CHECKPOINT file later in its
+// execution, but we do not have to worry about reading our own
+// BACKUP-CHECKPOINT file (and locking ourselves out) since
+// `checkForPreviousBackup` is invoked as the first step on job resumption, and
+// is not called again.
 func CheckForPreviousBackup(
-	ctx context.Context, exportStore cloud.ExternalStorage, defaultURI string,
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user username.SQLUsername,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.CheckForPreviousBackup")
 	defer sp.Finish()
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
 
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
-	r, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName)
+	r, err := defaultStore.ReadFile(ctx, backupbase.BackupManifestName)
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
@@ -917,7 +1005,38 @@ func CheckForPreviousBackup(
 			redactedURI, backupbase.BackupManifestName)
 	}
 
-	r, err = readLatestCheckpointFile(ctx, exportStore, BackupManifestCheckpointName)
+	// Check for the presence of a BACKUP-LOCK file with a job ID different from
+	// that of our job.
+	if err := defaultStore.List(ctx, "", "", func(s string) error {
+		s = strings.TrimPrefix(s, "/")
+		if strings.HasPrefix(s, BackupLockFilePrefix) {
+			jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)
+			if len(jobIDSuffix) == 0 {
+				return errors.AssertionFailedf("malformed BACKUP-LOCK file %s, expected a job ID suffix", s)
+			}
+			if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
+				return pgerror.Newf(pgcode.FileAlreadyExists,
+					"%s already contains a `BACKUP-LOCK` file written by job %s",
+					redactedURI, jobIDSuffix)
+			}
+		}
+		return nil
+	}); err != nil {
+		// HTTP external storage does not support listing, and so we skip checking
+		// for a BACKUP-LOCK file.
+		if !errors.Is(err, cloud.ErrListingUnsupported) {
+			return errors.Wrap(err, "checking for BACKUP-LOCK file")
+		}
+		log.Warningf(ctx, "external storage %s does not support listing: skip checking for BACKUP_LOCK", redactedURI)
+	}
+
+	// Check for a BACKUP-CHECKPOINT that might have been written by a node
+	// running a pre-22.1.1 binary.
+	//
+	// TODO(adityamaru): Delete in 23.1 since we will no longer need to check for
+	// BACKUP-CHECKPOINT files as all backups will rely on BACKUP-LOCK to lock a
+	// location.
+	r, err = readLatestCheckpointFile(ctx, defaultStore, BackupManifestCheckpointName)
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
