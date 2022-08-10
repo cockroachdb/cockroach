@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,12 +26,20 @@ var parseAndValidateFns = map[string]connectionParserFactory{}
 // RegisterConnectionDetailsFromURIFactory is used by every concrete
 // implementation to register its factory method.
 func RegisterConnectionDetailsFromURIFactory(
-	providerScheme string, parseAndValidateFn connectionParserFactory,
+	providerScheme string,
+	provider connectionpb.ConnectionProvider,
+	parseAndValidateFn connectionParserFactory,
+	redactFn func(details connectionpb.ConnectionDetails) (connectionpb.ConnectionDetails, error),
 ) {
 	if _, ok := parseAndValidateFns[providerScheme]; ok {
 		panic(fmt.Sprintf("parse function already registered for %s", providerScheme))
 	}
 	parseAndValidateFns[providerScheme] = parseAndValidateFn
+
+	if _, ok := connectionpb.RedactedDetails[provider]; ok {
+		panic(fmt.Sprintf("redact function already registered for %s", provider.String()))
+	}
+	connectionpb.RedactedDetails[provider] = redactFn
 }
 
 // ExternalConnectionFromURI returns a ExternalConnection for the given URI.

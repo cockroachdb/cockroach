@@ -14,9 +14,22 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 )
+
+func redactedGCSKMSConnectionDetails(
+	details connectionpb.ConnectionDetails,
+) (connectionpb.ConnectionDetails, error) {
+	redactedDetails := details.GetSimpleURI()
+	sanitizedURI, err := cloud.SanitizeExternalStorageURI(redactedDetails.URI, nil /* extraParams */)
+	if err != nil {
+		return connectionpb.ConnectionDetails{}, err
+	}
+	redactedDetails.URI = sanitizedURI
+	return details, nil
+}
 
 func parseAndValidateGCSKMSConnectionURI(
 	_ context.Context, uri *url.URL,
@@ -40,6 +53,8 @@ func parseAndValidateGCSKMSConnectionURI(
 func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
 		gcsScheme,
+		connectionpb.ConnectionProvider_TypeGSKMS,
 		parseAndValidateGCSKMSConnectionURI,
+		redactedGCSKMSConnectionDetails,
 	)
 }

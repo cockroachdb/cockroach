@@ -779,9 +779,9 @@ func validateSink(
 	return nil
 }
 
-func changefeedJobDescription(
-	changefeed *tree.CreateChangefeed, sinkURI string, opts changefeedbase.StatementOptions,
-) (string, error) {
+func sanitizeSinkURI(
+	sinkURI string, opts changefeedbase.StatementOptions,
+) (string, tree.KVOptions, error) {
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
 		changefeedbase.SinkParamCACert,
@@ -789,24 +789,37 @@ func changefeedJobDescription(
 	})
 
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	cleanedSinkURI = redactUser(cleanedSinkURI)
 
-	c := &tree.CreateChangefeed{
-		Targets: changefeed.Targets,
-		SinkURI: tree.NewDString(cleanedSinkURI),
-		Select:  changefeed.Select,
-	}
+	var options tree.KVOptions
 	opts.ForEachWithRedaction(func(k string, v string) {
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
 		}
-		c.Options = append(c.Options, opt)
+		options = append(options, opt)
 	})
-	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
+	sort.Slice(options, func(i, j int) bool { return options[i].Key < options[j].Key })
+
+	return cleanedSinkURI, options, nil
+}
+
+func changefeedJobDescription(
+	changefeed *tree.CreateChangefeed, sinkURI string, opts changefeedbase.StatementOptions,
+) (string, error) {
+	cleanedSinkURI, cleanedOptions, err := sanitizeSinkURI(sinkURI, opts)
+	if err != nil {
+		return "", err
+	}
+	c := &tree.CreateChangefeed{
+		Targets: changefeed.Targets,
+		SinkURI: tree.NewDString(cleanedSinkURI),
+		Select:  changefeed.Select,
+		Options: cleanedOptions,
+	}
 	return tree.AsString(c), nil
 }
 

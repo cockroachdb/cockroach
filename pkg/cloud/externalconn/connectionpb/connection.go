@@ -10,7 +10,17 @@
 
 package connectionpb
 
-import "github.com/cockroachdb/errors"
+import (
+	"encoding/json"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/jsonpb"
+)
+
+// RedactedDetails maps a ConnectionProvider to a method that returns the
+// ConnectionDetails of that scheme with sensitive information redacted.
+var RedactedDetails = map[ConnectionProvider]func(ConnectionDetails) (ConnectionDetails, error){}
 
 // Type returns the ConnectionType of the receiver.
 func (d *ConnectionDetails) Type() ConnectionType {
@@ -24,4 +34,22 @@ func (d *ConnectionDetails) Type() ConnectionType {
 	default:
 		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %T", d.Provider.String()))
 	}
+}
+
+var _ jsonpb.JSONPBMarshaler = &ConnectionDetails{}
+
+// MarshalJSONPB implements the jsonpb.Marshaler interface.
+func (d *ConnectionDetails) MarshalJSONPB(marshaler *jsonpb.Marshaler) ([]byte, error) {
+	if !protoreflect.ShouldRedact(marshaler) {
+		return json.Marshal(d)
+	}
+	redact, ok := RedactedDetails[d.Provider]
+	if !ok {
+		return nil, errors.Newf("no redaction method registered for provider %s", d.Provider.String())
+	}
+	details, err := redact(*d)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to redact provider %s", d.Provider.String())
+	}
+	return json.Marshal(details)
 }

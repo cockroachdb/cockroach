@@ -173,6 +173,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalActiveRangeFeedsTable:              crdbInternalActiveRangeFeedsTable,
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
+		catconstants.CrdbInternalExternalConnections:                crdbInternalExternalConnections,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -351,6 +352,72 @@ CREATE TABLE crdb_internal.databases (
 					tree.NewDString(createNode.String()), // create_statement
 				)
 			})
+	},
+}
+
+var crdbInternalExternalConnections = virtualSchemaTable{
+	comment: `list external connections that can be used by the current user`,
+	schema: `
+CREATE TABLE crdb_internal.external_connections (
+	name STRING NOT NULL,
+	created TIMESTAMP NOT NULL,
+	updated TIMESTAMP NOT NULL,
+	connection_type STRING NOT NULL,
+	connection_details JSONB NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Get all external connections in the cluster.
+		query := `
+SELECT
+	connection_name,
+	created,
+	updated,
+	connection_type,
+	crdb_internal.pb_to_json('cockroach.cloud.externalconn.connectionpb.ConnectionDetails', connection_details, false, true)
+FROM system.external_connections
+`
+		it, err := p.ExecCfg().InternalExecutor.QueryIteratorEx(ctx, "external-connections", nil,
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, query)
+		if err != nil {
+			return err
+		}
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			r := it.Cur()
+			name, created, updated, connType, connDetails := tree.MustBeDString(r[0]),
+				tree.MustBeDTimestamp(r[1]), tree.MustBeDTimestamp(r[2]), tree.MustBeDString(r[3]),
+				tree.MustBeDJSON(r[4])
+
+			// Check that the user has the `USAGE` privilege on the external
+			// connection, otherwise skip the row.
+			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
+				ConnectionName: name.String(),
+			}
+			if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
+				continue // user does not have sufficient privileges to view this row.
+			}
+			createdTS, err := tree.MakeDTimestamp(created.Time, time.Microsecond)
+			if err != nil {
+				return err
+			}
+			updatedTS, err := tree.MakeDTimestamp(updated.Time, time.Microsecond)
+			if err != nil {
+				return err
+			}
+			if err := addRow(
+				tree.NewDString(name.String()),     // name
+				createdTS,                          // created
+				updatedTS,                          // updated
+				tree.NewDString(connType.String()), // connection_type
+				tree.NewDJSON(connDetails.JSON),    // connection_details
+			); err != nil {
+				return err
+			}
+		}
+		if err != nil {
+			return err
+		}
+		return nil
 	},
 }
 

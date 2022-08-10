@@ -161,6 +161,7 @@ const (
 	CrdbInternalTenantUsageDetailsViewID
 	CrdbInternalPgCatalogTableIsImplementedTableID
 	CrdbInternalSuperRegions
+	CrdbInternalExternalConnections
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

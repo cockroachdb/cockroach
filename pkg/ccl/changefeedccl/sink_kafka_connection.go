@@ -18,6 +18,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func redactedKafkaConnectionDetails(
+	details connectionpb.ConnectionDetails,
+) (connectionpb.ConnectionDetails, error) {
+	redactedDetails := details.GetSimpleURI()
+	sanitizedURI, _, err := sanitizeSinkURI(redactedDetails.URI, changefeedbase.StatementOptions{})
+	if err != nil {
+		return connectionpb.ConnectionDetails{}, err
+	}
+	redactedDetails.URI = sanitizedURI
+	return details, nil
+}
+
 func parseAndValidateKafkaSinkURI(
 	ctx context.Context, uri *url.URL,
 ) (externalconn.ExternalConnection, error) {
@@ -43,6 +55,10 @@ func parseAndValidateKafkaSinkURI(
 }
 
 func init() {
-	externalconn.RegisterConnectionDetailsFromURIFactory(changefeedbase.SinkSchemeKafka,
-		parseAndValidateKafkaSinkURI)
+	externalconn.RegisterConnectionDetailsFromURIFactory(
+		changefeedbase.SinkSchemeKafka,
+		connectionpb.ConnectionProvider_TypeKafka,
+		parseAndValidateKafkaSinkURI,
+		redactedKafkaConnectionDetails,
+	)
 }
