@@ -13,6 +13,7 @@ import (
 	fmt "fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -478,15 +479,16 @@ func rekeySystemTable(
 		sort.Sort(toRekey)
 
 		executor := execCtx.InternalExecutor
+		q := strings.Builder{}
+		fmt.Fprintf(&q, "UPDATE %s SET %s = CASE\n", tempTableName, colName)
+
 		for _, old := range toRekey {
-			// TODO(dt): batch 10+ updates at once if >10 in the map.
-			q := fmt.Sprintf("UPDATE %s SET %s = $1 WHERE %s = $2", tempTableName, colName, colName)
-			_, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q, rekeys[old].ID, old)
-			if err != nil {
-				return errors.Wrapf(err, "remapping %s", tempTableName)
-			}
+			fmt.Fprintf(&q, "WHEN %s = %d THEN %d\n", colName, old, rekeys[old].ID)
 		}
-		return nil
+		fmt.Fprintf(&q, "ELSE %s END", colName)
+
+		_, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q.String())
+		return errors.Wrapf(err, "remapping %s", tempTableName)
 	}
 }
 
