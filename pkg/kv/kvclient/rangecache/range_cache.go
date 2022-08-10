@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/biogo/store/llrb"
@@ -41,16 +42,34 @@ import (
 // RangeCache.
 type rangeCacheKey roachpb.RKey
 
-var minCacheKey interface{} = rangeCacheKey(roachpb.RKeyMin)
+var minCacheKey = newRangeCacheKey(roachpb.RKeyMin)
 
-func (a rangeCacheKey) String() string {
-	return roachpb.Key(a).String()
+var rangeCacheKeyPool = sync.Pool{
+	New: func() interface{} { return &rangeCacheKey{} },
 }
 
-// Compare implements the llrb.Comparable interface for rangeCacheKey, so that
+// newRangeCacheKey allocates a new rangeCacheKey using the supplied key. The
+// objects escape to the heap because they are passed through an interface{}
+// when handed to an OrderedCache, so the sync.Pool avoids a heap allocation.
+func newRangeCacheKey(key roachpb.RKey) *rangeCacheKey {
+	k := rangeCacheKeyPool.Get().(*rangeCacheKey)
+	*k = rangeCacheKey(key)
+	return k
+}
+
+func (k *rangeCacheKey) release() {
+	*k = rangeCacheKey{}
+	rangeCacheKeyPool.Put(k)
+}
+
+func (k *rangeCacheKey) String() string {
+	return roachpb.Key(*k).String()
+}
+
+// Compare implements the llrb.Comparable interface for *rangeCacheKey, so that
 // it can be used as a key for util.OrderedCache.
-func (a rangeCacheKey) Compare(b llrb.Comparable) int {
-	return bytes.Compare(a, b.(rangeCacheKey))
+func (k *rangeCacheKey) Compare(o llrb.Comparable) int {
+	return bytes.Compare(*k, *o.(*rangeCacheKey))
 }
 
 // RangeDescriptorDB is a type which can query range descriptors from an
@@ -201,7 +220,7 @@ func (rc *RangeCache) String() string {
 func (rc *RangeCache) stringLocked() string {
 	var buf strings.Builder
 	rc.rangeCache.cache.Do(func(k, v interface{}) bool {
-		fmt.Fprintf(&buf, "key=%s desc=%+v\n", roachpb.Key(k.(rangeCacheKey)), v)
+		fmt.Fprintf(&buf, "key=%s desc=%+v\n", roachpb.Key(*k.(*rangeCacheKey)), v)
 		return false
 	})
 	return buf.String()
@@ -566,6 +585,8 @@ func (rc *RangeCache) GetCachedOverlapping(ctx context.Context, span roachpb.RSp
 func (rc *RangeCache) getCachedOverlappingRLocked(
 	ctx context.Context, span roachpb.RSpan,
 ) []*cache.Entry {
+	from := newRangeCacheKey(span.EndKey)
+	defer from.release()
 	var res []*cache.Entry
 	rc.rangeCache.cache.DoRangeReverseEntry(func(e *cache.Entry) (exit bool) {
 		desc := rc.getValue(e).Desc()
@@ -579,7 +600,7 @@ func (rc *RangeCache) getCachedOverlappingRLocked(
 		}
 		res = append(res, e)
 		return false // continue iterating
-	}, rangeCacheKey(span.EndKey), minCacheKey)
+	}, from, minCacheKey)
 	// Invert the results so the get sorted ascendingly.
 	for i, j := 0, len(res)-1; i < j; i, j = i+1, j-1 {
 		res[i], res[j] = res[j], res[i]
@@ -847,7 +868,7 @@ func (rc *RangeCache) EvictByKey(ctx context.Context, descKey roachpb.RKey) bool
 		return false
 	}
 	log.VEventf(ctx, 2, "evict cached descriptor: %s", cachedDesc)
-	rc.rangeCache.cache.DelEntry(entry)
+	rc.delEntryLocked(entry)
 	return true
 }
 
@@ -868,7 +889,7 @@ func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDe
 	// equal because the desc that the caller supplied also came from the cache
 	// and the cache is not expected to go backwards). Evict it.
 	log.VEventf(ctx, 2, "evict cached descriptor: desc=%s", cachedEntry)
-	rc.rangeCache.cache.DelEntry(rawEntry)
+	rc.delEntryLocked(rawEntry)
 	return true
 }
 
@@ -897,14 +918,18 @@ func (rc *RangeCache) getCachedRLocked(
 	// key, in the direction indicated by inverted.
 	var rawEntry *cache.Entry
 	if !inverted {
+		k := newRangeCacheKey(key)
+		defer k.release()
 		var ok bool
-		rawEntry, ok = rc.rangeCache.cache.FloorEntry(rangeCacheKey(key))
+		rawEntry, ok = rc.rangeCache.cache.FloorEntry(k)
 		if !ok {
 			return nil, nil
 		}
 	} else {
+		from := newRangeCacheKey(key)
+		defer from.release()
 		rc.rangeCache.cache.DoRangeReverseEntry(func(e *cache.Entry) bool {
-			startKey := roachpb.RKey(e.Key.(rangeCacheKey))
+			startKey := roachpb.RKey(*e.Key.(*rangeCacheKey))
 			if key.Equal(startKey) {
 				// DoRangeReverseEntry is inclusive on the higher key. We're iterating
 				// backwards and we got a range that starts at key. We're not interested
@@ -914,7 +939,7 @@ func (rc *RangeCache) getCachedRLocked(
 			}
 			rawEntry = e
 			return true
-		}, rangeCacheKey(key), minCacheKey)
+		}, from, minCacheKey)
 		// DoRangeReverseEntry is exclusive on the "to" part, so we need to check
 		// manually if there's an entry for RKeyMin.
 		if rawEntry == nil {
@@ -998,11 +1023,10 @@ func (rc *RangeCache) insertLockedInner(ctx context.Context, rs []*CacheEntry) [
 			entries[i] = newerEntry
 			continue
 		}
-		rangeKey := ent.Desc().StartKey
 		if log.V(2) {
 			log.Infof(ctx, "adding cache entry: value=%s", ent)
 		}
-		rc.rangeCache.cache.Add(rangeCacheKey(rangeKey), ent)
+		rc.addEntryLocked(ent)
 		entries[i] = ent
 	}
 	return entries
@@ -1043,7 +1067,7 @@ func (rc *RangeCache) clearOlderOverlappingLocked(
 			if log.V(2) {
 				log.Infof(ctx, "clearing overlapping descriptor: key=%s entry=%s", e.Key, rc.getValue(e))
 			}
-			rc.rangeCache.cache.DelEntry(e)
+			rc.delEntryLocked(e)
 		} else {
 			newest = false
 			if descsCompatible(entry.Desc(), newEntry.Desc()) {
@@ -1074,11 +1098,21 @@ func (rc *RangeCache) swapEntryLocked(
 		}
 	}
 
-	rc.rangeCache.cache.DelEntry(oldEntry)
+	rc.delEntryLocked(oldEntry)
 	if newEntry != nil {
 		log.VEventf(ctx, 2, "caching new entry: %s", newEntry)
-		rc.rangeCache.cache.Add(oldEntry.Key, newEntry)
+		rc.addEntryLocked(newEntry)
 	}
+}
+
+func (rc *RangeCache) addEntryLocked(entry *CacheEntry) {
+	key := newRangeCacheKey(entry.Desc().StartKey)
+	rc.rangeCache.cache.Add(key, entry)
+}
+
+func (rc *RangeCache) delEntryLocked(entry *cache.Entry) {
+	rc.rangeCache.cache.DelEntry(entry)
+	entry.Key.(*rangeCacheKey).release()
 }
 
 // DB returns the descriptor database, for tests.

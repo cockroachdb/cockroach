@@ -2592,10 +2592,23 @@ func (r *Replica) sendSnapshot(
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
-	sender, err := r.GetReplicaDescriptor()
+	r.mu.RLock()
+	sender, err := r.getReplicaDescriptorRLocked()
+	_, destPaused := r.mu.pausedFollowers[recipient.ReplicaID]
+	r.mu.RUnlock()
+
 	if err != nil {
 		return err
 	}
+
+	if ioThresh := r.store.ioOverloadedStores.Load()[recipient.StoreID]; ioThresh != nil && destPaused {
+		// If the destination is paused, be more hesitant to send snapshots. The destination being
+		// paused implies that we have recently checked that it's not required for quorum, and that
+		// we wish to conserve I/O on that store, which sending a snapshot counteracts. So hold back on
+		// the snapshot as well.
+		return errors.Errorf("skipping snapshot; %s is overloaded: %s", recipient, ioThresh)
+	}
+
 	// Check follower snapshots cluster setting.
 	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
 		sender, err = r.getSenderReplica(ctx)
@@ -2607,10 +2620,6 @@ func (r *Replica) sendSnapshot(
 	log.VEventf(
 		ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
 	)
-	desc, err := r.GetReplicaDescriptor()
-	if err != nil {
-		return err
-	}
 	status := r.RaftStatus()
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
@@ -2621,7 +2630,7 @@ func (r *Replica) sendSnapshot(
 	// Create new delegate snapshot request with only required metadata.
 	delegateRequest := &kvserverpb.DelegateSnapshotRequest{
 		RangeID:            r.RangeID,
-		CoordinatorReplica: desc,
+		CoordinatorReplica: sender,
 		RecipientReplica:   recipient,
 		Priority:           priority,
 		Type:               snapType,
