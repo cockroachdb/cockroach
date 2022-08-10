@@ -2623,7 +2623,6 @@ CREATE TABLE crdb_internal.create_function_statements (
 							for i := range stmtStrs {
 								stmtStrs[i] = "\t" + stmtStrs[i]
 							}
-
 							p := &treeNode.Options[i]
 							// Add two new lines just for better formatting.
 							*p = "\n" + tree.FunctionBodyStr(strings.Join(stmtStrs, "\n")) + "\n"
