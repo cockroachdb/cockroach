@@ -198,6 +198,7 @@ go_test(
         "type_check_test.go",
         "type_name_test.go",
         "typing_test.go",
+        "udf_test.go",
         "var_expr_test.go",
     ],
     data = glob(["testdata/**"]) + ["//pkg/sql/parser:sql.y"],
