@@ -111,7 +111,7 @@ type csvRowProducer struct {
 	csv                *csv.Reader
 	rowNum             int64
 	err                error
-	record             []string
+	record             []csv.Record
 	progress           func() float32
 	numExpectedColumns int
 }
@@ -141,12 +141,20 @@ func (p *csvRowProducer) Skip() error {
 	return nil
 }
 
-func strRecord(record []string, sep rune) string {
+func strRecord(record []csv.Record, sep rune) string {
 	csvSep := ","
 	if sep != 0 {
 		csvSep = string(sep)
 	}
-	return strings.Join(record, csvSep)
+	strs := make([]string, len(record))
+	for i := range record {
+		if record[i].Quoted {
+			strs[i] = "\"" + record[i].Val + "\""
+		} else {
+			strs[i] = record[i].Val
+		}
+	}
+	return strings.Join(strs, csvSep)
 }
 
 // Row() implements importRowProducer interface.
@@ -156,7 +164,9 @@ func (p *csvRowProducer) Row() (interface{}, error) {
 
 	if len(p.record) == expectedColsLen {
 		// Expected number of columns.
-	} else if len(p.record) == expectedColsLen+1 && p.record[expectedColsLen] == "" {
+	} else if len(p.record) == expectedColsLen+1 &&
+		p.record[expectedColsLen].Val == "" &&
+		!p.record[expectedColsLen].Quoted {
 		// Line has the optional trailing comma, ignore the empty field.
 		p.record = p.record[:expectedColsLen]
 	} else {
@@ -184,7 +194,7 @@ var _ importRowConsumer = &csvRowConsumer{}
 func (c *csvRowConsumer) FillDatums(
 	row interface{}, rowNum int64, conv *row.DatumRowConverter,
 ) error {
-	record := row.([]string)
+	record := row.([]csv.Record)
 	datumIdx := 0
 
 	for i, field := range record {
@@ -194,12 +204,22 @@ func (c *csvRowConsumer) FillDatums(
 			continue
 		}
 
-		if c.opts.NullEncoding != nil &&
-			field == *c.opts.NullEncoding {
+		// NullEncoding is stored as a *string historically, from before we wanted
+		// it to default to "". Rather than changing the proto, we just set the
+		// default here.
+		nullEncoding := ""
+		if c.opts.NullEncoding != nil {
+			nullEncoding = *c.opts.NullEncoding
+		}
+		if (!field.Quoted || c.opts.AllowQuotedNull) && field.Val == nullEncoding {
+			// To match COPY, the default behavior is to only treat the field as NULL
+			// if it was not quoted (and if it matches the configured NullEncoding).
+			// The AllowQuotedNull option can be used to get the old behavior where
+			// even a quoted value is treated as NULL.
 			conv.Datums[datumIdx] = tree.DNull
 		} else {
 			var err error
-			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], field, conv.EvalCtx)
+			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], field.Val, conv.EvalCtx)
 			if err != nil {
 				col := conv.VisibleCols[i]
 				return newImportRowError(

@@ -411,6 +411,12 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 			return
 		}
 
+		// Otherwise, try to construct an IndexJoin operator that provides the
+		// columns missing from the index.
+		if sp.Flags.NoIndexJoin {
+			return
+		}
+
 		// Calculate the PK columns once.
 		if pkCols.Empty() {
 			pkCols = c.PrimaryKeyCols(sp.Table)
