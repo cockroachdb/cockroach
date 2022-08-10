@@ -1883,6 +1883,15 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{ReplicationLayer, "Raft", "Transport"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Send Queue Messages Count",
+				Metrics: []string{"raft.transport.send-queue-size"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{ReplicationLayer, "Ranges"}},
 		Charts: []chartDescription{
 			{
