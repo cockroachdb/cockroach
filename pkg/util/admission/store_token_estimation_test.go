@@ -113,6 +113,20 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				admissionStats.admittedCount += admitted
 				admissionStats.writeAccountedBytes += writeAccounted
 				admissionStats.ingestedAccountedBytes += ingestedAccounted
+				if d.HasArg("bypassed-count") {
+					var bypassedCount, bypassedWrite, bypassedIngested int
+					d.ScanArgs(t, "bypassed-count", &bypassedCount)
+					d.ScanArgs(t, "bypassed-write", &bypassedWrite)
+					d.ScanArgs(t, "bypassed-ingested", &bypassedIngested)
+					admissionStats.aux.bypassedCount += uint64(bypassedCount)
+					admissionStats.aux.writeBypassedAccountedBytes += uint64(bypassedWrite)
+					admissionStats.aux.ingestedBypassedAccountedBytes += uint64(bypassedIngested)
+				}
+				if d.HasArg("ignore-ingested-into-L0") {
+					var ignoreIngestedIntoL0 int
+					d.ScanArgs(t, "ignore-ingested-into-L0", &ignoreIngestedIntoL0)
+					admissionStats.statsToIgnore.ApproxIngestedIntoL0Bytes += uint64(ignoreIngestedIntoL0)
+				}
 				estimator.updateEstimates(l0Metrics, admissionStats)
 				wlm, ilm := estimator.getModelsAtAdmittedDone()
 				require.Equal(t, wlm, estimator.atDoneWriteTokensLinearModel.smoothedLinearModel)
