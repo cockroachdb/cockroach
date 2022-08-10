@@ -45,10 +45,6 @@ type zipRequest struct {
 // Override for the default SELECT * FROM table when dumping one of the tables
 // in `debugZipTablesPerNode` or `debugZipTablesPerCluster`
 var customQuery = map[string]string{
-	"crdb_internal.node_inflight_trace_spans": "WITH spans AS (" +
-		"SELECT * FROM crdb_internal.node_inflight_trace_spans " +
-		"WHERE duration > INTERVAL '10' ORDER BY trace_id ASC, duration DESC" +
-		") SELECT * FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)",
 	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
 	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
 	"system.settings":   "SELECT *, to_hex(value) as hex_value FROM system.settings",

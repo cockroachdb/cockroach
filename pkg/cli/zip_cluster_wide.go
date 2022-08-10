@@ -72,46 +72,6 @@ func makeClusterWideZipRequests(
 	}
 }
 
-// Tables containing cluster-wide info that are collected using SQL
-// into a debug zip.
-var debugZipTablesPerCluster = []string{
-	"crdb_internal.cluster_contention_events",
-	"crdb_internal.cluster_distsql_flows",
-	"crdb_internal.cluster_database_privileges",
-	"crdb_internal.cluster_execution_insights",
-	"crdb_internal.cluster_locks",
-	"crdb_internal.cluster_queries",
-	"crdb_internal.cluster_sessions",
-	"crdb_internal.cluster_settings",
-	"crdb_internal.cluster_transactions",
-
-	"crdb_internal.default_privileges",
-
-	"crdb_internal.jobs",
-
-	// The synthetic SQL CREATE statements for all tables.
-	// Note the "". to collect across all databases.
-	`"".crdb_internal.create_schema_statements`,
-	`"".crdb_internal.create_statements`,
-	// Ditto, for CREATE TYPE.
-	`"".crdb_internal.create_type_statements`,
-	`"".crdb_internal.create_function_statements`,
-
-	"crdb_internal.kv_node_liveness",
-	"crdb_internal.kv_node_status",
-	"crdb_internal.kv_store_status",
-
-	"crdb_internal.regions",
-	"crdb_internal.schema_changes",
-	"crdb_internal.super_regions",
-	"crdb_internal.partitions",
-	"crdb_internal.zones",
-	"crdb_internal.invalid_objects",
-	"crdb_internal.index_usage_statistics",
-	"crdb_internal.table_indexes",
-	"crdb_internal.transaction_contention_events",
-}
-
 // forbiddenSystemTables are system tables which we do not wish to
 // retrieve during a zip operation, foremost because of
 // confidentiality concerns.
@@ -152,6 +112,23 @@ func (zc *debugZipContext) collectClusterData(
 		}
 	}
 
+	queryAndDumpTables := func(reg DebugZipTableRegistry) error {
+		for _, table := range reg.GetTables() {
+			query, err := reg.QueryForTable(table, zipCtx.redact)
+			if err != nil {
+				return err
+			}
+			if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, debugBase, table, query); err != nil {
+				return errors.Wrapf(err, "fetching %s", table)
+			}
+		}
+		return nil
+	}
+	if err := queryAndDumpTables(zipInternalTablesPerCluster); err != nil {
+		return nodesInfo{}, nil, err
+	}
+
+	// TODO(abarganier): migrate system tables over to use DebugZipTableRegistry instead.
 	allSysTables, err := zc.getListOfSystemTables(ctx)
 	if err != nil {
 		return nodesInfo{}, nil, err
@@ -162,9 +139,7 @@ func (zc *debugZipContext) collectClusterData(
 			sysTables = append(sysTables, s)
 		}
 	}
-	tablesToQuery := append(debugZipTablesPerCluster, sysTables...)
-
-	for _, table := range tablesToQuery {
+	for _, table := range sysTables {
 		query := fmt.Sprintf(`TABLE %s`, table)
 		if override, ok := customQuery[table]; ok {
 			query = override
