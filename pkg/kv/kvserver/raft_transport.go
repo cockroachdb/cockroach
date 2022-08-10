@@ -176,10 +176,10 @@ func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j]
 // which remote hung up.
 type RaftTransport struct {
 	log.AmbientContext
-	st     *cluster.Settings
-	tracer *tracing.Tracer
-
+	st      *cluster.Settings
+	tracer  *tracing.Tracer
 	stopper *stop.Stopper
+	metrics *RaftTransportMetrics
 
 	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
 	stats    [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
@@ -210,10 +210,10 @@ func NewRaftTransport(
 		AmbientContext: ambient,
 		st:             st,
 		tracer:         tracer,
-
-		stopper: stopper,
-		dialer:  dialer,
+		stopper:        stopper,
+		dialer:         dialer,
 	}
+	t.initMetrics()
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -299,6 +299,11 @@ func NewRaftTransport(
 	}
 
 	return t
+}
+
+// Metrics returns metrics tracking this transport.
+func (t *RaftTransport) Metrics() *RaftTransportMetrics {
+	return t.metrics
 }
 
 func (t *RaftTransport) queuedMessageCount() int64 {
