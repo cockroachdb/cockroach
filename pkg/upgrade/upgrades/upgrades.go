@@ -143,6 +143,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		setSystemRoleOptionsUserIDColumnNotNull,
 	),
+	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
+		toCV(clusterversion.WaitedForDelRangeInGCJob),
+		checkForPausedGCJobs,
+		waitForDelRangeInGCJob,
+	),
 }
 
 func init() {
