@@ -488,11 +488,10 @@ const (
 	statsLen
 )
 
-// parseStats converts the given datums to a TableStatistic object. It might
-// need to run a query to get user defined type metadata.
-func (sc *TableStatisticsCache) parseStats(
-	ctx context.Context, datums tree.Datums,
-) (*TableStatistic, error) {
+// NewTableStatisticProto converts a row of datums from system.table_statistics
+// into a TableStatisticsProto. Note that any user-defined types in the
+// HistogramData will be unresolved.
+func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 	if datums == nil || datums.Len() == 0 {
 		return nil, nil
 	}
@@ -529,16 +528,14 @@ func (sc *TableStatisticsCache) parseStats(
 	}
 
 	// Extract datum values.
-	res := &TableStatistic{
-		TableStatisticProto: TableStatisticProto{
-			TableID:       descpb.ID((int32)(*datums[tableIDIndex].(*tree.DInt))),
-			StatisticID:   (uint64)(*datums[statisticsIDIndex].(*tree.DInt)),
-			CreatedAt:     datums[createdAtIndex].(*tree.DTimestamp).Time,
-			RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
-			DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
-			NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
-			AvgSize:       (uint64)(*datums[avgSizeIndex].(*tree.DInt)),
-		},
+	res := &TableStatisticProto{
+		TableID:       descpb.ID((int32)(*datums[tableIDIndex].(*tree.DInt))),
+		StatisticID:   (uint64)(*datums[statisticsIDIndex].(*tree.DInt)),
+		CreatedAt:     datums[createdAtIndex].(*tree.DTimestamp).Time,
+		RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
+		DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
+		NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
+		AvgSize:       (uint64)(*datums[avgSizeIndex].(*tree.DInt)),
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
 	res.ColumnIDs = make([]descpb.ColumnID, len(columnIDs.Array))
@@ -556,7 +553,21 @@ func (sc *TableStatisticsCache) parseStats(
 		); err != nil {
 			return nil, err
 		}
+	}
+	return res, nil
+}
 
+// parseStats converts the given datums to a TableStatistic object. It might
+// need to run a query to get user defined type metadata.
+func (sc *TableStatisticsCache) parseStats(
+	ctx context.Context, datums tree.Datums,
+) (*TableStatistic, error) {
+	tsp, err := NewTableStatisticProto(datums)
+	if err != nil {
+		return nil, err
+	}
+	res := &TableStatistic{TableStatisticProto: *tsp}
+	if res.HistogramData != nil {
 		// Hydrate the type in case any user defined types are present.
 		// There are cases where typ is nil, so don't do anything if so.
 		if typ := res.HistogramData.ColumnType; typ != nil && typ.UserDefined() {
@@ -675,7 +686,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 ) ([]*TableStatistic, error) {
 	getTableStatisticsStmt := `
 SELECT
-  "tableID",
+	"tableID",
 	"statisticID",
 	name,
 	"columnIDs",
