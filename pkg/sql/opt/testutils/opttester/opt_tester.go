@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -240,6 +241,9 @@ type Flags struct {
 
 	// QueryArgs are values for placeholders, used for assign-placeholders-*.
 	QueryArgs []string
+
+	// ot is a reference to the OptTester owning Flags.
+	ot *OptTester
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -254,6 +258,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+
+	ot.Flags.ot = ot
+
 	// To allow opttester tests to use now(), we hardcode a preset transaction
 	// time. May 10, 2017 is a historic day: the release date of CockroachDB 1.0.
 	ot.evalCtx.TxnTimestamp = time.Date(2017, 05, 10, 13, 0, 0, 0, time.UTC)
@@ -477,6 +484,17 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - group-limit: used with check-size to set a max limit on the number of
 //    groups that can be added to the memo before a testing error is returned.
 //
+//  - memo-cycles: used with memo to search the memo for cycles and output a
+//    path with a cycle if one is found.
+//
+//  - skip-race: skips the test if the race detector is enabled.
+//
+//  - set: sets the session setting for the given SQL statement, for example:
+//         build set=prefer_lookup_joins_for_fks=true
+//         DELETE FROM parent WHERE p = 3
+//         ----
+//
+>>>>>>> 40a8d44c26... Address review comments
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -791,6 +809,18 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 // See OptTester.RunCommand for supported flags.
 func (f *Flags) Set(arg datadriven.CmdArg) error {
 	switch arg.Key {
+	case "set":
+		for _, val := range arg.Vals {
+			s := strings.Split(val, "=")
+			if len(s) != 2 {
+				return errors.Errorf("Expected both session variable name and value for set flag")
+			}
+			err := sql.SetSessionVariable(f.ot.ctx, f.ot.evalCtx, s[0], s[1])
+			if err != nil {
+				return err
+			}
+		}
+
 	case "format":
 		if len(arg.Vals) == 0 {
 			return fmt.Errorf("format flag requires value(s)")
