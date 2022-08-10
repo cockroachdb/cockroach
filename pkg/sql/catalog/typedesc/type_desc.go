@@ -796,6 +796,9 @@ func EnsureTypeIsHydrated(
 				return err
 			}
 		}
+	} else if t.Family() == types.ArrayFamily {
+		// Hydrate the element type.
+		return EnsureTypeIsHydrated(ctx, t.ArrayContents(), res)
 	}
 	if !t.UserDefined() || t.IsHydrated() {
 		return nil
@@ -897,11 +900,7 @@ func (desc *immutable) HydrateTypeInfoWithName(
 	case descpb.TypeDescriptor_ALIAS:
 		if typ.UserDefined() {
 			switch typ.Family() {
-			case types.ArrayFamily:
-				// Hydrate the element type.
-				elemType := typ.ArrayContents()
-				return EnsureTypeIsHydrated(ctx, elemType, res)
-			case types.TupleFamily:
+			case types.ArrayFamily, types.TupleFamily:
 				return EnsureTypeIsHydrated(ctx, typ, res)
 			default:
 				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
