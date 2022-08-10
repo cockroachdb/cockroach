@@ -448,6 +448,8 @@ func TestRunner(t *testing.T) {
 			defer func() {
 				intID(tc) // this is OK
 			}()
+
+			defer intRef(&tc) // this is OK
 		})
 	}
 
@@ -501,6 +503,107 @@ func TestRunner(t *testing.T) {
 			wg.Wait()
 		})
 	}
+}
+
+// AddressOfLoopVar tests scenarios where the address of a loop
+// variable is taken and either used in a Go routine, or passed as
+// parameter to a go routine spawn
+func AddressOfLoopVar() {
+	for _, n := range collection {
+		go intRef(&n) // want `loop variable 'n' captured by reference`
+		cp := n
+		go intRef(&cp) // this is OK
+
+		var x *int
+		go func() {
+			doWork()
+			x = &n // want `loop variable 'n' captured by reference`
+		}()
+
+		var wg sync.WaitGroup
+		go func() {
+			defer wg.Done()
+			doWork()
+			x = &n // this is OK -- synchronized
+		}()
+
+		var eg errgroup.Group
+		eg.Go(func() error {
+			x = &n // this is OK -- synchronized
+			return nil
+		})
+		eg.Wait()
+
+		wg.Wait()
+	}
+}
+
+type T struct {
+	N int
+}
+
+func (t T) Copy() {}
+func (t *T) Ref() {}
+
+// PointerReceiverLoopVar tests calls to `go` that invoke a function
+// defined on a pointer to a loop variable.
+func PointerReceiverLoopVar() {
+	ts := []T{{1}, {2}, {3}}
+
+	var cg concurrency.Group
+	for _, t := range ts {
+		go t.Copy() // this is OK
+		go t.Ref()  // want `loop variable 't' captured by reference`
+
+		go func() {
+			t.Copy()   // want `loop variable 't' captured by reference`
+			intID(t.N) // want `loop variable 't' captured by reference`
+			t.Ref()    // want `loop variable 't' captured by reference`
+		}()
+
+		cg.Go(func() {
+			doWork()
+			t.Copy() // this is OK -- synchronized
+			t.Ref()  // this is OK -- synchronized
+		})
+		cg.Wait()
+
+		cg.Go(func() {
+			doWork()
+			t.Copy() // want `loop variable 't' captured by reference`
+			doWork()
+			t.Ref() // want `loop variable 't' captured by reference`
+		})
+	}
+
+	// when iterating on pointer types, `go t.Method()` is fine
+	// (but not using it in an asynchronous closure)
+	tPointers := []*T{{1}, {2}, {3}}
+	for _, t := range tPointers {
+		go t.Copy() // this is OK
+		go t.Ref()  // this is also OK
+
+		go func() {
+			t.Copy()   // want `loop variable 't' captured by reference`
+			intID(t.N) // want `loop variable 't' captured by reference`
+			t.Ref()    // want `loop variable 't' captured by reference`
+		}()
+
+		cg.Go(func() {
+			doWork()
+			t.Copy() // this is OK -- synchronized
+			t.Ref()  // this is OK -- synchronized
+		})
+		cg.Wait()
+
+		cg.Go(func() {
+			doWork()
+			t.Copy() // want `loop variable 't' captured by reference`
+			doWork()
+			t.Ref() // want `loop variable 't' captured by reference`
+		})
+	}
+
 }
 
 // Select tests for common patterns using `select`, inspired by real

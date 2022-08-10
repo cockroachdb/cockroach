@@ -352,6 +352,32 @@ func (v *Visitor) loopStatementInspector() func(n ast.Node) bool {
 				return true
 			}
 
+			// this checks for calls to functions defined on pointer types
+			// on the loop variable, such as:
+			//
+			// type T struct {}
+			//
+			// func (t *T) run() { /* ... */ }
+			//
+			// ts = []*T{...}
+			// for _, t := range ts {
+			//     go t.run() // `t` will change while the Go routine is running
+			// }
+			ident := objFromCall(node.Call)
+			isInvalid :=
+				// this is a method call
+				ident != nil &&
+					// the identifier is a loop variable
+					v.isLoopVar(ident) &&
+					// the method is defined on *T (not T)
+					v.isPointerReceiver(node.Call) &&
+					// the loop is ranging over structs of type T, not *T
+					v.rangeOverNonPointer()
+
+			if isInvalid {
+				v.maybeAddSuspect(&suspectReference{stmtType: goCall, stmtPos: v.pos, ref: ident})
+			}
+
 			v.findLoopVarRefsInCall(goCall, node.Call, false /* go routine wrapper */)
 			// no need to keep traversing the AST, the function above is
 			// already doing that.
@@ -488,7 +514,6 @@ func (v *Visitor) findLoopVarRefsInCall(
 	// call below; other than calling the appropriate function in the
 	// visitor, it also ensures the suspect has the right
 	// synchronization objects attached to it.
-
 	addSuspect := func(suspect *suspectReference) {
 		if v.isTestParallel {
 			// if this is a test case that called `t.Parallel()`, adding
@@ -527,6 +552,17 @@ func (v *Visitor) findLoopVarRefsInCall(
 			// the suspect reference accordingly
 			if _, ok := v.closures[node.Obj]; ok {
 				addSuspect(&suspectReference{stmtType: stmtType, stmtPos: v.pos, ref: node})
+			}
+
+		case *ast.UnaryExpr:
+			// check if this is taking the address of a loop variable; that
+			// is not safe, and should be reported.
+			if ident, ok := node.X.(*ast.Ident); ok && node.Op == token.AND && v.isLoopVar(ident) {
+				addSuspect(&suspectReference{stmtType: stmtType, stmtPos: v.pos, ref: ident})
+				// return false to stop traversing this subtree; otherwise, we
+				// would hit the identifier node and report the same invalid
+				// reference twice.
+				return false
 			}
 		}
 
@@ -581,9 +617,8 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]*ast.Ident, []*ast.Ident
 				}
 			}
 
-			// if the function call is not to a closure that captures a loop
-			// variable, keep traversing the AST, as there could be invalid
-			// references down the subtree
+			// keep traversing the AST, as there could be invalid references
+			// down the subtree
 			return true
 
 		case *ast.SendStmt:
@@ -861,6 +896,62 @@ func (v *Visitor) isLoopVar(ident *ast.Ident) bool {
 	}
 
 	return false
+}
+
+// isPointerReceiver returns whether the call expression passed is of
+// the form `obj.Fun()`, where `Fun` is defined on pointers on the
+// type of `obj`.
+//
+// In other words, it will return `true` for calls of
+//     func (t *T) F() { ... }
+// and `false` for calls of
+//     func (t T) F() {...}
+//
+// Note that this function *assumes*, for simplicity, that the call
+// expression given is already of the form `obj.Foo()`. Ensuring that
+// this assumption is held is the caller's responsibility.
+func (v *Visitor) isPointerReceiver(call *ast.CallExpr) bool {
+	callee := typeutil.Callee(v.pass.TypesInfo, call)
+	// type conversion (e.g., int(n))
+	if callee == nil {
+		return false
+	}
+
+	var signature *types.Signature
+	switch t := callee.Type().(type) {
+	case *types.Signature:
+		signature = t
+	case *types.Named:
+		signature = t.Underlying().(*types.Signature)
+	default:
+		return false
+	}
+
+	recv := signature.Recv()
+	if recv == nil {
+		return false
+	}
+
+	_, isPointer := recv.Type().(*types.Pointer)
+	return isPointer
+}
+
+// rangeOverNonPointer returns true if:
+//
+// - the loop is a `range` statement
+// - the expression being iterated a slice of T (not a slice of *T)
+func (v *Visitor) rangeOverNonPointer() bool {
+	if v.loop.RangeExpr == nil {
+		return false
+	}
+
+	sliceT, isSlice := v.pass.TypesInfo.TypeOf(v.loop.RangeExpr).Underlying().(*types.Slice)
+	if !isSlice {
+		return false
+	}
+
+	_, isPointer := sliceT.Elem().Underlying().(*types.Pointer)
+	return !isPointer
 }
 
 func matchFunctions(pkg, obj, name string, functions []Function) bool {

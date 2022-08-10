@@ -18,8 +18,9 @@ import (
 // Loop abstracts away the type of loop (`for` loop with index
 // variable vs `range` loops)
 type Loop struct {
-	Vars []*ast.Ident
-	Body *ast.BlockStmt
+	Vars      []*ast.Ident
+	RangeExpr ast.Expr
+	Body      *ast.BlockStmt
 }
 
 // NewLoop creates a new Loop struct according to the node passed. If
@@ -60,7 +61,7 @@ func newForLoop(stmt *ast.ForStmt) *Loop {
 }
 
 func newRange(stmt *ast.RangeStmt) *Loop {
-	loop := Loop{Body: stmt.Body}
+	loop := Loop{Body: stmt.Body, RangeExpr: stmt.X}
 	loop.addVar(stmt.Key)
 	loop.addVar(stmt.Value)
 
