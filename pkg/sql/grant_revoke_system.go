@@ -216,6 +216,11 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 		}
 		return ret, nil
 	case privilege.ExternalConnection:
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemExternalConnectionsTable) {
+			return nil, errors.Newf("External Connections are not supported until upgrade to version %s is finalized",
+				clusterversion.SystemExternalConnectionsTable.String())
+		}
+
 		var ret []syntheticprivilege.Object
 		for _, externalConnectionName := range n.targets.ExternalConnections {
 			// Ensure that an External Connection of this name actually exists.
