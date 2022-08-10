@@ -359,6 +359,10 @@ func writeNamesToMetadata(
 	sort.Sort(names)
 
 	for i, rev := range names {
+		if rev.name == "" {
+			continue
+		}
+
 		if i > 0 {
 			prev := names[i-1]
 			prev.ts = rev.ts
