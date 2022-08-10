@@ -439,7 +439,7 @@ func TestQuantileToHistogram(t *testing.T) {
 		{
 			qfun: zeroQuantile,
 			rows: 0,
-			hist: nil,
+			hist: testHistogram{},
 		},
 		{
 			qfun: zeroQuantile,
