@@ -592,6 +592,16 @@ func (b *Builder) buildScan(
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
+		if private.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+			if tab.FamilyCount() > 1 {
+				// TODO(rytaft): We may be able to support this if enough columns are
+				// pruned that only a single family is scanned.
+				panic(pgerror.Newf(pgcode.FeatureNotSupported,
+					"SKIP LOCKED cannot be used for tables with multiple column families",
+				))
+			}
+			tabMeta.IsSkipLocked = true
+		}
 	}
 	if b.evalCtx.AsOfSystemTime != nil && b.evalCtx.AsOfSystemTime.BoundedStaleness {
 		private.Flags.NoIndexJoin = true
@@ -1317,8 +1327,7 @@ func (b *Builder) validateLockingInFrom(
 		case tree.LockWaitBlock:
 			// Default. Block on conflicting locks.
 		case tree.LockWaitSkipLocked:
-			panic(unimplementedWithIssueDetailf(40476, "",
-				"SKIP LOCKED lock wait policy is not supported"))
+			// Skip rows that can't be locked.
 		case tree.LockWaitError:
 			// Raise an error on conflicting locks.
 		default:

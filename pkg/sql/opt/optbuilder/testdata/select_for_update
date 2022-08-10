@@ -10,6 +10,10 @@ exec-ddl
 CREATE VIEW v AS SELECT a FROM t AS t2
 ----
 
+exec-ddl
+CREATE TABLE families (a INT PRIMARY KEY, b INT, c INT, FAMILY (a, b), FAMILY (c))
+----
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -1305,3 +1309,106 @@ project
  │    └── locking: for-update,nowait
  └── projections
       └── 1 [as="?column?":5]
+
+# ------------------------------------------------------------------------------
+# Tests with the SKIP LOCKED lock wait policy.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-update,skip-locked
+
+build
+SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-no-key-update,skip-locked
+
+build
+SELECT * FROM t FOR SHARE SKIP LOCKED
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-share,skip-locked
+
+build
+SELECT * FROM t FOR KEY SHARE SKIP LOCKED
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-key-share,skip-locked
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-share,skip-locked
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-no-key-update,skip-locked
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-update,skip-locked
+
+build
+SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── locking: for-update,skip-locked
+
+build
+SELECT * FROM t FOR UPDATE OF t2 SKIP LOCKED
+----
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT 1 FROM t FOR UPDATE OF t SKIP LOCKED
+----
+project
+ ├── columns: "?column?":5!null
+ ├── scan t
+ │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    └── locking: for-update,skip-locked
+ └── projections
+      └── 1 [as="?column?":5]
+
+# SKIP LOCKED cannot be used with multiple column families.
+build
+SELECT 1 FROM families FOR UPDATE OF families SKIP LOCKED
+----
+error (0A000): SKIP LOCKED cannot be used for tables with multiple column families
+
+build
+SELECT 1 FROM families FOR SHARE SKIP LOCKED
+----
+error (0A000): SKIP LOCKED cannot be used for tables with multiple column families

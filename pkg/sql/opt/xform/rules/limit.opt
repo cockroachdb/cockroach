@@ -41,7 +41,8 @@
 # TODO(radu): we can similarly push Offset too.
 [PushLimitIntoIndexJoin, Explore]
 (Limit
-    (IndexJoin $input:* $indexJoinPrivate:*)
+    (IndexJoin $input:* $indexJoinPrivate:*) &
+        (IndexJoinPreservesRows $indexJoinPrivate)
     $limitExpr:(Const $limit:* & (IsPositiveInt $limit))
     $ordering:* &
         (OrderingCanProjectCols

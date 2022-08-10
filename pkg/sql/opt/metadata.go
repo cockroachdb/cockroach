@@ -490,6 +490,7 @@ func (md *Metadata) DuplicateTable(
 		Table:                    tabMeta.Table,
 		Alias:                    tabMeta.Alias,
 		IgnoreForeignKeys:        tabMeta.IgnoreForeignKeys,
+		IsSkipLocked:             tabMeta.IsSkipLocked,
 		Constraints:              constraints,
 		ComputedCols:             computedCols,
 		partialIndexPredicates:   partialIndexPredicates,

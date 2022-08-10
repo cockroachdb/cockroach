@@ -124,9 +124,6 @@ enum ScanLockingWaitPolicy {
   BLOCK = 0;
 
   // SKIP_LOCKED represents SKIP LOCKED - skip rows that can't be locked.
-  //
-  // NOTE: SKIP_LOCKED is not currently implemented and does not make it out of
-  // the SQL optimizer without throwing an error.
   SKIP_LOCKED = 1;
 
   // ERROR represents NOWAIT - raise an error if a row cannot be locked.

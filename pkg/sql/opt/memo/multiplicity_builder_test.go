@@ -75,6 +75,8 @@ func TestGetJoinMultiplicity(t *testing.T) {
 	abcScan, abcCols := ob.abcScan()
 	notNullMultiColFKScan, notNullMultiColFKCols := ob.notNullMultiColFKScan()
 	oneNullMultiColFKScan, oneNullMultiColFKCols := ob.oneNullMultiColFKScan()
+	xyScanSkipLocked, xyColsSkipLocked := ob.xyScanSkipLocked()
+	fkScanSkipLocked, fkColsSkipLocked := ob.fkScanSkipLocked()
 
 	testCases := []struct {
 		joinOp   opt.Operator
@@ -405,6 +407,30 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
 			expected: "left-rows(zero-or-one), right-rows(exactly-one)",
 		},
+		{ // 31
+			// SELECT * FROM xy INNER JOIN fk_tab ON r1 = x FOR UPDATE SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     xyScanSkipLocked,
+			right:    fkScanSkipLocked,
+			on:       ob.makeFilters(ob.makeEquality(fkColsSkipLocked[0], xyColsSkipLocked[0])),
+			expected: "left-rows(zero-or-more), right-rows(zero-or-one)",
+		},
+		{ // 32
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x FOR UPDATE OF fk_tab SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     fkScanSkipLocked,
+			right:    xyScan,
+			on:       ob.makeFilters(ob.makeEquality(fkColsSkipLocked[0], xyCols[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 33
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x FOR UPDATE OF xy SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     fkScan,
+			right:    xyScanSkipLocked,
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyColsSkipLocked[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -511,6 +537,22 @@ func (ob *testOpBuilder) notNullMultiColFKScan() (scan RelExpr, vars []*Variable
 
 func (ob *testOpBuilder) oneNullMultiColFKScan() (scan RelExpr, vars []*VariableExpr) {
 	return ob.makeScan("one_null_multi_col_fk_tab")
+}
+
+func (ob *testOpBuilder) xyScanSkipLocked() (scan RelExpr, vars []*VariableExpr) {
+	scan, vars = ob.xyScan()
+	scan.(*ScanExpr).Locking = opt.Locking{
+		Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitSkipLocked,
+	}
+	return scan, vars
+}
+
+func (ob *testOpBuilder) fkScanSkipLocked() (scan RelExpr, vars []*VariableExpr) {
+	scan, vars = ob.fkScan()
+	scan.(*ScanExpr).Locking = opt.Locking{
+		Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitSkipLocked,
+	}
+	return scan, vars
 }
 
 func (ob *testOpBuilder) makeSelect(input RelExpr, filters FiltersExpr) RelExpr {
