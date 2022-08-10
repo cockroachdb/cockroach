@@ -412,9 +412,7 @@ func (n *Node) AnnotateCtxWithSpan(
 
 // start starts the node by registering the storage instance for the RPC
 // service "Node" and initializing stores for each specified engine.
-// Launches periodic store gossiping in a goroutine. A callback can
-// be optionally provided that will be invoked once this node's
-// NodeDescriptor is available, to help bootstrapping.
+// Launches periodic store gossiping in a goroutine.
 //
 // addr, sqlAddr, and httpAddr are used to populate the Address,
 // SQLAddress, and HTTPAddress fields respectively of the
@@ -431,7 +429,6 @@ func (n *Node) start(
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
 	localityAddress []roachpb.LocalityAddress,
-	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
 	n.initialStart = initialStart
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
@@ -447,12 +444,6 @@ func (n *Node) start(
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
-	}
-	// Invoke any passed in nodeDescriptorCallback as soon as it's available, to
-	// ensure that other components (currently the DistSQLPlanner) are initialized
-	// before store startup continues.
-	if nodeDescriptorCallback != nil {
-		nodeDescriptorCallback(n.Descriptor)
 	}
 
 	// Gossip the node descriptor to make this node addressable by node ID.

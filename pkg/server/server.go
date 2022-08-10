@@ -1299,6 +1299,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.rpcContext.StorageClusterID.Set(ctx, state.clusterID)
 	s.rpcContext.NodeID.Set(ctx, state.nodeID)
 
+	// Ensure components in the DistSQLPlanner that rely on the node ID are
+	// initialized before store startup continues.
+	s.sqlServer.execCfg.DistSQLPlanner.SetGatewaySQLInstanceID(base.SQLInstanceID(state.nodeID))
+	s.sqlServer.execCfg.DistSQLPlanner.MaybeConstructAndSetSpanResolver(state.nodeID, s.cfg.Locality)
+
 	// TODO(irfansharif): Now that we have our node ID, we should run another
 	// check here to make sure we've not been decommissioned away (if we're here
 	// following a server restart). See the discussions in #48843 for how that
@@ -1390,7 +1395,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
-		s.sqlServer.execCfg.DistSQLPlanner.SetSQLInstanceInfo,
 	); err != nil {
 		return err
 	}

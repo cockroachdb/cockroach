@@ -29,11 +29,13 @@ go_test(
         "//pkg/gossip",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/testutils",
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
