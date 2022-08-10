@@ -45,7 +45,14 @@ message TableStatisticProto {
   uint64 distinct_count = 7;
   // The number of rows that have a NULL in all of the columns in ColumnIDs.
   uint64 null_count = 8;
-  // Histogram (if available)
+  // Histogram (if available). A nil HistogramData is used for:
+  // - regular stats, GenerateHistogram=false (i.e. no histogram collected)
+  // - inverted stats, no inverted index  (i.e. no histogram collected)
+  // - inverted stats, yes inverted index, empty table
+  // - inverted stats, yes inverted index, all NULL values
+  // A non-nil HistogramData with len(Buckets) == 0 is used for:
+  // - regular stats, GenerateHistogram=true, empty table
+  // - regular stats, GenerateHistogram=true, all NULL values
   HistogramData histogram_data = 9;
   // The average row size of the columns in ColumnIDs.
   uint64 avg_size = 10;

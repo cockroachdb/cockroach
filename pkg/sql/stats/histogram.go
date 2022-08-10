@@ -173,6 +173,9 @@ func EquiDepthHistogram(
 	return histogramData, h.buckets, err
 }
 
+// histogram is a decoded HistogramData with datums for upper bounds. We use
+// nil buckets for error cases, and non-nil zero-length buckets for histograms
+// on empty tables.
 type histogram struct {
 	buckets []cat.HistogramBucket
 }

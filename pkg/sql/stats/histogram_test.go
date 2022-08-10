@@ -315,6 +315,28 @@ func TestAdjustCounts(t *testing.T) {
 		distinctCount float64
 		expected      []cat.HistogramBucket
 	}{
+		{ // Empty histogram already matching empty table.
+			expected: make([]cat.HistogramBucket, 0),
+		},
+		{ // Empty histogram not matching rowCount.
+			rowCount:      1,
+			distinctCount: 1,
+			expected:      make([]cat.HistogramBucket, 0),
+		},
+		{ // One empty bucket already matching counts.
+			h: []cat.HistogramBucket{
+				{UpperBound: d(0)},
+			},
+			expected: make([]cat.HistogramBucket, 0),
+		},
+		{ // One empty bucket not matching rowCount.
+			h: []cat.HistogramBucket{
+				{UpperBound: d(0)},
+			},
+			rowCount:      1,
+			distinctCount: 1,
+			expected:      make([]cat.HistogramBucket, 0),
+		},
 		{ // One bucket already matching counts.
 			h: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: d(1)},
@@ -453,6 +475,54 @@ func TestAdjustCounts(t *testing.T) {
 				{NumRange: 4.29, NumEq: 0.95, DistinctRange: 4.5, UpperBound: d(1)},
 				{NumRange: 8.57, NumEq: 1.9, DistinctRange: 8, UpperBound: d(10)},
 				{NumRange: 4.29, NumEq: 0, DistinctRange: 4.5, UpperBound: d(math.MaxInt64)},
+			},
+		},
+		{ // Two buckets already matching counts, 0 NumEq.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 7, NumEq: 0, DistinctRange: 5, UpperBound: d(10)},
+			},
+			rowCount:      7,
+			distinctCount: 5,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 7, NumEq: 0, DistinctRange: 5, UpperBound: d(10)},
+			},
+		},
+		{ // Two buckets matching distinctCount but not rowCount, 0 NumEq.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 7, NumEq: 0, DistinctRange: 5, UpperBound: d(10)},
+			},
+			rowCount:      14,
+			distinctCount: 5,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 14, NumEq: 0, DistinctRange: 5, UpperBound: d(10)},
+			},
+		},
+		{ // Two buckets matching rowCount but not distinctCount, 0 NumEq.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 7, NumEq: 0, DistinctRange: 5, UpperBound: d(10)},
+			},
+			rowCount:      7,
+			distinctCount: 6,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 7, NumEq: 0, DistinctRange: 6, UpperBound: d(10)},
+			},
+		},
+		{ // Two buckets matching neither count, 0 NumEq.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 4000, NumEq: 0, DistinctRange: 3, UpperBound: d(10)},
+			},
+			rowCount:      6000,
+			distinctCount: 2,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(1)},
+				{NumRange: 6000, NumEq: 0, DistinctRange: 2, UpperBound: d(10)},
 			},
 		},
 		{ // Two buckets with floats.
