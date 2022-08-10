@@ -42,7 +42,8 @@ func TestClosest(t *testing.T) {
 	nd, _ := g.GetNodeDescriptor(1)
 	o := NewOracle(ClosestChoice, Config{
 		NodeDescs: g,
-		NodeDesc:  *nd,
+		NodeID:    nd.NodeID,
+		Locality:  nd.Locality,
 	})
 	o.(*closestOracle).latencyFunc = func(s string) (time.Duration, bool) {
 		if strings.HasSuffix(s, "2") {

@@ -1390,7 +1390,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
-		s.sqlServer.execCfg.DistSQLPlanner.SetSQLInstanceInfo,
+		func(desc roachpb.NodeDescriptor) {
+			s.sqlServer.execCfg.DistSQLPlanner.SetGatewaySQLInstanceID(base.SQLInstanceID(desc.NodeID))
+			s.sqlServer.execCfg.DistSQLPlanner.MaybeConstructAndSetSpanResolver(desc.NodeID, desc.Locality)
+		},
 	); err != nil {
 		return err
 	}

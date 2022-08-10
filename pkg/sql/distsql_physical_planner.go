@@ -223,15 +223,23 @@ func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
 	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
 }
 
-// SetSQLInstanceInfo sets the planner's node descriptor.
-// The first call to SetSQLInstanceInfo leads to the construction of the SpanResolver.
-func (dsp *DistSQLPlanner) SetSQLInstanceInfo(desc roachpb.NodeDescriptor) {
-	dsp.gatewaySQLInstanceID = base.SQLInstanceID(desc.NodeID)
+// MaybeConstructAndSetSpanResolver constructs and sets the planner's
+// SpanResolver if it is unset. It's a no-op otherwise.
+// TODO(arul): Should we get rid of this maybe and just fatal if it's set
+//  instead?
+func (dsp *DistSQLPlanner) MaybeConstructAndSetSpanResolver(
+	nodeID roachpb.NodeID, locality roachpb.Locality,
+) {
 	if dsp.spanResolver == nil {
-		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, desc,
+		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, nodeID, locality,
 			dsp.clock, dsp.rpcCtx, ReplicaOraclePolicy)
 		dsp.SetSpanResolver(sr)
 	}
+}
+
+// SetGatewaySQLInstanceID sets the planner's SQL instance ID.
+func (dsp *DistSQLPlanner) SetGatewaySQLInstanceID(id base.SQLInstanceID) {
+	dsp.gatewaySQLInstanceID = id
 }
 
 // GatewayID returns the ID of the gateway.
