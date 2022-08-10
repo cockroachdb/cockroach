@@ -2119,6 +2119,7 @@ var varGen = map[string]sessionVar{
 			return formatFloatAsPostgresSetting(0)
 		},
 	},
+
 	// CockroachDB extension.
 	`disable_hoist_projection_in_join_limitation`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`disable_hoist_projection_in_join_limitation`),
@@ -2130,7 +2131,7 @@ var varGen = map[string]sessionVar{
 			m.SetDisableHoistProjectionInJoinLimitation(b)
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) (string, error) {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableHoistProjectionInJoinLimitation), nil
 		},
 		GlobalDefault: globalFalse,
@@ -2182,6 +2183,32 @@ func init() {
 		sort.Strings(res)
 		return res
 	}()
+}
+
+// SetSessionVariable sets a new value for session setting `varName` is the
+// session settings owned by `evalCtx`, returning an error if not successful.
+func SetSessionVariable(
+	ctx context.Context, evalCtx eval.Context, varName, varValue string,
+) (err error) {
+	err = CheckSessionVariableValueValid(ctx, evalCtx.Settings, varName, varValue)
+	if err != nil {
+		return err
+	}
+	sdMutatorBase := sessionDataMutatorBase{
+		defaults: make(map[string]string),
+		settings: evalCtx.Settings,
+	}
+	sdMutator := sessionDataMutator{
+		data:                        evalCtx.SessionData(),
+		sessionDataMutatorBase:      sdMutatorBase,
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+	}
+	_, sVar, err := getSessionVar(varName, false)
+	if err != nil {
+		return err
+	}
+
+	return sVar.Set(ctx, sdMutator, varValue)
 }
 
 // makePostgresBoolGetStringValFn returns a function that evaluates and returns
