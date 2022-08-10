@@ -206,9 +206,11 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       start: moment.unix(start),
       end: moment.unix(end),
     };
+    const seconds = moment.duration(moment.utc(end).diff(start)).asSeconds();
     let newTimeScale: TimeScale = {
-      ...findClosestTimeScale(defaultTimeScaleOptions, end - start, start),
+      ...findClosestTimeScale(defaultTimeScaleOptions, seconds),
       key: "Custom",
+      windowSize: moment.duration(moment.unix(end).diff(moment.unix(start))),
       fixedWindowEnd: moment.unix(end),
     };
     if (this.props.adjustTimeScaleOnChange) {
