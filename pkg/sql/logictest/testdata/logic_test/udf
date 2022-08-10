@@ -6,9 +6,6 @@ CREATE TABLE ab (
   b INT
 )
 
-statement error pq: unimplemented: replacing function
-CREATE OR REPLACE FUNCTION f(a int) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
-
 statement error pq: cannot create leakproof function with non-immutable volatility: STABLE
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
@@ -61,143 +58,40 @@ statement error pq: return type mismatch in function declared to return int\nDET
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
 
 statement ok
-CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
+CREATE FUNCTION f_star() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
 
 statement ok
-CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+CREATE FUNCTION f_by_cols() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
 
-let $max_desc_id
-SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
-
-# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
-# function resolution in place.
 query T
-SELECT jsonb_pretty(
- crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
-)::string
-FROM system.descriptor
-WHERE id = $max_desc_id;
+SELECT @2 FROM [SHOW CREATE FUNCTION f_by_cols];
 ----
-{
-    "function": {
-        "dependsOn": [
-            112,
-            112
-        ],
-        "functionBody": "SELECT a, b FROM test.public.t_implicit_type;",
-        "id": 114,
-        "lang": "SQL",
-        "modificationTime": {},
-        "name": "f",
-        "nullInputBehavior": "CALLED_ON_NULL_INPUT",
-        "parentId": 104,
-        "parentSchemaId": 105,
-        "privileges": {
-            "ownerProto": "root",
-            "users": [
-                {
-                    "privileges": 2,
-                    "userProto": "admin",
-                    "withGrantOption": 2
-                },
-                {
-                    "privileges": 2,
-                    "userProto": "root",
-                    "withGrantOption": 2
-                }
-            ],
-            "version": 2
-        },
-        "returnType": {
-            "type": {
-                "family": "TupleFamily",
-                "oid": 100112,
-                "tupleContents": [
-                    {
-                        "family": "IntFamily",
-                        "oid": 20,
-                        "width": 64
-                    },
-                    {
-                        "family": "StringFamily",
-                        "oid": 25
-                    }
-                ],
-                "tupleLabels": [
-                    "a",
-                    "b"
-                ]
-            }
-        },
-        "version": "1",
-        "volatility": "IMMUTABLE"
-    }
-}
+CREATE FUNCTION public.f_by_cols()
+    RETURNS T_IMPLICIT_TYPE
+    IMMUTABLE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT a, b FROM test.public.t_implicit_type;
+$$
 
 # Create function with no references.
 statement ok
-CREATE FUNCTION f(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
+CREATE FUNCTION f_no_ref(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
 
-let $max_desc_id
-SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
-
-# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
-# function resolution in place.
 query T
-SELECT jsonb_pretty(
- crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
-)::string
-FROM system.descriptor
-WHERE id = $max_desc_id;
+SELECT @2 FROM [SHOW CREATE FUNCTION f_no_ref];
 ----
-{
-    "function": {
-        "args": [
-            {
-                "class": "IN",
-                "name": "a",
-                "type": {
-                    "family": "IntFamily",
-                    "oid": 20,
-                    "width": 64
-                }
-            }
-        ],
-        "functionBody": "SELECT 1;",
-        "id": 115,
-        "lang": "SQL",
-        "modificationTime": {},
-        "name": "f",
-        "nullInputBehavior": "CALLED_ON_NULL_INPUT",
-        "parentId": 104,
-        "parentSchemaId": 105,
-        "privileges": {
-            "ownerProto": "root",
-            "users": [
-                {
-                    "privileges": 2,
-                    "userProto": "admin",
-                    "withGrantOption": 2
-                },
-                {
-                    "privileges": 2,
-                    "userProto": "root",
-                    "withGrantOption": 2
-                }
-            ],
-            "version": 2
-        },
-        "returnType": {
-            "type": {
-                "family": "IntFamily",
-                "oid": 20,
-                "width": 64
-            }
-        },
-        "version": "1",
-        "volatility": "IMMUTABLE"
-    }
-}
+CREATE FUNCTION public.f_no_ref(IN a INT8)
+    RETURNS INT8
+    IMMUTABLE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
 
 # Make sure that names are qualified, references are tracked and sequence
 # expression is rewritten.
@@ -224,76 +118,21 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
  SELECT nextval('sq1');
 $$
 
-let $max_desc_id
-SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
-
-# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
-# function resolution in place.
 query T
-SELECT jsonb_pretty(
-  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
-)::string
-FROM system.descriptor
-WHERE id = $max_desc_id;
+SELECT @2 FROM [SHOW CREATE FUNCTION f];
 ----
-{
-    "function": {
-        "args": [
-            {
-                "class": "IN",
-                "name": "a",
-                "type": {
-                    "family": "EnumFamily",
-                    "oid": 100118,
-                    "udtMetadata": {
-                        "arrayTypeOid": 100119
-                    }
-                }
-            }
-        ],
-        "dependsOn": [
-            116,
-            117
-        ],
-        "dependsOnTypes": [
-            118,
-            119
-        ],
-        "functionBody": "SELECT a FROM test.public.t;\nSELECT b FROM test.public.t@t_idx_b;\nSELECT c FROM test.public.t@t_idx_c;\nSELECT nextval(117:::REGCLASS);",
-        "id": 120,
-        "lang": "SQL",
-        "modificationTime": {},
-        "name": "f",
-        "nullInputBehavior": "CALLED_ON_NULL_INPUT",
-        "parentId": 104,
-        "parentSchemaId": 105,
-        "privileges": {
-            "ownerProto": "root",
-            "users": [
-                {
-                    "privileges": 2,
-                    "userProto": "admin",
-                    "withGrantOption": 2
-                },
-                {
-                    "privileges": 2,
-                    "userProto": "root",
-                    "withGrantOption": 2
-                }
-            ],
-            "version": 2
-        },
-        "returnType": {
-            "type": {
-                "family": "IntFamily",
-                "oid": 20,
-                "width": 64
-            }
-        },
-        "version": "1",
-        "volatility": "IMMUTABLE"
-    }
-}
+CREATE FUNCTION public.f(IN a test.public.notmyworkday)
+    RETURNS INT8
+    IMMUTABLE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT a FROM test.public.t;
+    SELECT b FROM test.public.t@t_idx_b;
+    SELECT c FROM test.public.t@t_idx_c;
+    SELECT nextval(117:::REGCLASS);
+$$
 
 statement error pq: unimplemented: alter function not supported.*
 ALTER FUNCTION f() IMMUTABLE
@@ -1031,3 +870,112 @@ grantor  grantee  specific_catalog  specific_schema  specific_name        routin
 NULL     root     test              public           test_priv_f1_100153  test             public          test_priv_f1  EXECUTE         YES
 NULL     root     test              public           test_priv_f2_100156  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100157  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+subtest create_or_replace_function
+
+statement error pq: parameter name "a" used more than once
+CREATE FUNCTION f_test_cor(a INT, a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: function "f_test_cor" already exists with same argument types
+CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor_not_exist(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cannot change name of input parameter "b"
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, c INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cannot change return type of existing function
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+statement error pq: cannot change return type of existing function
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cannot create leakproof function with non-immutable volatility: VOLATILE
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+----
+CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+    RETURNS INT8
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+# Make sure volatility, leakproof and null input behavior are default values
+# after replacing with a definition not specifying them.
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+----
+CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 2;
+$$
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 3 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+----
+CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+    RETURNS INT8
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 3;
+$$
+
+# Make sure function using implicit type can be replaced properly.
+statement ok
+CREATE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor_implicit];
+----
+CREATE FUNCTION public.f_test_cor_implicit()
+    RETURNS T_IMPLICIT_TYPE
+    IMMUTABLE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT a, b FROM test.public.t_implicit_type;
+$$
+
+statement error pq: function "f_test_cor_implicit" already exists with same argument types
+CREATE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type STABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor_implicit];
+----
+CREATE FUNCTION public.f_test_cor_implicit()
+    RETURNS T_IMPLICIT_TYPE
+    STABLE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT a, b FROM test.public.t_implicit_type;
+$$
