@@ -1274,6 +1274,8 @@ type connExecutor struct {
 	// if traceSessionEventLogEnabled; it is used by ex.sessionEventf()
 	eventLog trace.EventLog
 
+	opName string
+
 	// extraTxnState groups fields scoped to a SQL txn that are not handled by
 	// ex.state, above. The rule of thumb is that, if the state influences state
 	// transitions, it should live in state, otherwise it can live here.

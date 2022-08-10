@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -72,6 +74,14 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	mu struct {
+		syncutil.Mutex
+
+		exMap map[*kv.Txn]*connExecutor
+
+		txnOpnameMap map[*kv.Txn][]string
+	}
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -149,10 +159,8 @@ func (ie *InternalExecutor) initConnEx(
 	w ieResultWriter,
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
-	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
-	errCallback func(error),
-) {
+) *connExecutor {
 	clientComm := &internalClientComm{
 		w: w,
 		// init lastDelivered below the position of the first result (0).
@@ -207,13 +215,28 @@ func (ie *InternalExecutor) initConnEx(
 
 	ex.executorType = executorTypeInternal
 
+	return ex
+}
+
+func (ie *InternalExecutor) runSingleQueryWithEx(
+	ctx context.Context,
+	ex *connExecutor,
+	w ieResultWriter,
+	wg *sync.WaitGroup,
+	txn *kv.Txn,
+	errCallback func(error),
+) {
 	wg.Add(1)
 	go func() {
+		if txn != nil {
+			ex = ie.mu.exMap[txn]
+		}
 		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}
 		w.finish()
+		// TODO(janexing): move it more upstream.
 		closeMode := normalClose
 		if txn != nil {
 			closeMode = externalTxnClose
@@ -740,7 +763,40 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+
+	if ie.mu.exMap == nil {
+		ie.mu.exMap = make(map[*kv.Txn]*connExecutor)
+	}
+	if ie.mu.txnOpnameMap == nil {
+		ie.mu.txnOpnameMap = make(map[*kv.Txn][]string)
+	}
+
+	_, ok := ie.mu.txnOpnameMap[txn]
+	if !ok {
+		ie.mu.Lock()
+		ie.mu.txnOpnameMap[txn] = []string{opName}
+		ie.mu.Unlock()
+	} else {
+		ie.mu.Lock()
+		ie.mu.txnOpnameMap[txn] = append(ie.mu.txnOpnameMap[txn], opName)
+		ie.mu.Unlock()
+	}
+
+	ex := ie.initConnEx(ctx, txn, rw, sd, stmtBuf, syncCallback)
+	ex.opName = opName
+	if txn != nil {
+		ie.mu.Lock()
+		_, ok := ie.mu.exMap[txn]
+		if !ok {
+			ie.mu.exMap[txn] = ex
+		} else {
+			errMess, _ := fmt.Printf("concurrent usage of internal executor for the same txn: %s", ie.mu.txnOpnameMap[txn])
+			panic(errMess)
+		}
+		ie.mu.Unlock()
+	}
+
+	ie.runSingleQueryWithEx(ctx, ex, rw, &wg, txn, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
