@@ -332,11 +332,11 @@ const (
 	// AddSystemUserIDColumn is the version where the system.users table has
 	// a user_id column for writes only.
 	AddSystemUserIDColumn
-	// UsersHaveIDs is the version where all users in the system.users table
+	// SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
 	// have ids.
-	UsersHaveIDs
-	// SetUserIDNotNull sets the user_id column in system.users to not null.
-	SetUserIDNotNull
+	SystemUsersIDColumnIsBackfilled
+	// SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
+	SetSystemUsersUserIDColumnNotNull
 	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
 	SQLSchemaTelemetryScheduledJobs
@@ -589,11 +589,11 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 36},
 	},
 	{
-		Key:     UsersHaveIDs,
+		Key:     SystemUsersIDColumnIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 38},
 	},
 	{
-		Key:     SetUserIDNotNull,
+		Key:     SetSystemUsersUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
