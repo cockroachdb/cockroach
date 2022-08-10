@@ -246,7 +246,7 @@ func (q quantile) toHistogram(
 
 	// Empty table case.
 	if rowCount < 1 {
-		return histogram{}, nil
+		return histogram{buckets: make([]cat.HistogramBucket, 0)}, nil
 	}
 
 	hist := histogram{buckets: make([]cat.HistogramBucket, 0, len(q)-1)}
