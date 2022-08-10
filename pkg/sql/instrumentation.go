@@ -684,6 +684,8 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 	opc.reset(ctx)
 	stmtType := opc.p.stmt.AST.StatementType()
 
+	reset := false
+	var recommendations []string
 	if idxRec.ShouldGenerateIndexRecommendation(
 		ih.fingerprint,
 		ih.planGist.Hash(),
@@ -713,25 +715,17 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 			err = opc.makeQueryIndexRecommendation(ctx)
 			if err != nil {
 				log.Warningf(ctx, "unable to generate index recommendations: %s", err)
-			} else {
-				idxRec.UpdateIndexRecommendations(
-					ih.fingerprint,
-					ih.planGist.Hash(),
-					planner.SessionData().Database,
-					stmtType,
-					ih.indexRecommendations,
-					true,
-				)
 			}
 		}
-	} else {
-		ih.indexRecommendations = idxRec.UpdateIndexRecommendations(
-			ih.fingerprint,
-			ih.planGist.Hash(),
-			planner.SessionData().Database,
-			stmtType,
-			[]string{},
-			false,
-		)
+		reset = true
+		recommendations = ih.indexRecommendations
 	}
+	ih.indexRecommendations = idxRec.UpdateIndexRecommendations(
+		ih.fingerprint,
+		ih.planGist.Hash(),
+		planner.SessionData().Database,
+		stmtType,
+		recommendations,
+		reset,
+	)
 }
