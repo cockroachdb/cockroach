@@ -1126,6 +1126,18 @@ message Progress {
   int64 modified_micros = 2;
   string running_status = 4;
 
+  //                ------ COMPLIANCE NOTE ------
+  // If you're updating this `Progress` proto, consider its impact on compliance.
+  // Currently, we include this data unredacted in debug zip bundles as part of the
+  // dump of `system.jobs`. The current assumption is that none of these details
+  // protos contain PII aside from Key spans.
+  //
+  // If you need to add a new details proto that will include PII beyond just key
+  // spans, `system.jobs.progress` will need to be redacted or excluded from debug
+  // zip to maintain compliance. Exclusion can be configured in
+  // `zip_table_registry.go`.
+  //
+  // If you're unsure, reach out to the compliance team for help.
   oneof details {
     BackupProgress backup = 10;
     RestoreProgress restore = 11;
