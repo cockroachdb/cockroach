@@ -15,13 +15,16 @@ option go_package = "connectionpb";
 import "gogoproto/gogo.proto";
 
 enum ConnectionProvider {
-  Unknown = 0 [(gogoproto.enumvalue_customname) = "TypeUnspecified"];;
+  Unknown = 0 [(gogoproto.enumvalue_customname) = "TypeUnspecified"];
 
   // External Storage providers.
-  nodelocal = 1 [(gogoproto.enumvalue_customname) = "TypeNodelocal"];;
+  nodelocal = 1 [(gogoproto.enumvalue_customname) = "TypeNodelocal"];
 
   // KMS providers.
-  gs_kms = 2 [(gogoproto.enumvalue_customname) = "TypeGSKMS"];;
+  gs_kms = 2 [(gogoproto.enumvalue_customname) = "TypeGSKMS"];
+
+  // Sink providers.
+  kafka = 3 [(gogoproto.enumvalue_customname) = "TypeKafka"];
 }
 
 // ConnectionType is the type of the External Connection object.

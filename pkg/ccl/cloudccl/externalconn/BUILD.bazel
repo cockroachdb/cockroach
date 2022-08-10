@@ -10,6 +10,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
+        "//pkg/ccl/changefeedccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cloud/externalconn/providers",
         "//pkg/cloud/externalconn/utils",

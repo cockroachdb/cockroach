@@ -187,6 +187,7 @@ const (
 	SinkSchemeNull                  = `null`
 	SinkSchemeWebhookHTTP           = `webhook-http`
 	SinkSchemeWebhookHTTPS          = `webhook-https`
+	SinkSchemeExternalConnection    = `external`
 	SinkParamSASLEnabled            = `sasl_enabled`
 	SinkParamSASLHandshake          = `sasl_handshake`
 	SinkParamSASLUser               = `sasl_user`
@@ -339,6 +340,19 @@ var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTi
 
 // PubsubValidOptions is options exclusive to pubsub sink
 var PubsubValidOptions = makeStringSet()
+
+// ExternalConnectionValidOptions is options exclusive to the external
+// connection sink.
+//
+// TODO(adityamaru): Some of these options should be supported when creating the
+// external connection rather than when setting up the changefeed. Move them once
+// we support `CREATE EXTERNAL CONNECTION ... WITH <options>`.
+var ExternalConnectionValidOptions = makeStringSet(
+	// Options valid for a kafka sink.
+	OptAvroSchemaPrefix,
+	OptConfluentSchemaRegistry,
+	OptKafkaSinkConfig,
+)
 
 // CaseInsensitiveOpts options which supports case Insensitive value
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents,
