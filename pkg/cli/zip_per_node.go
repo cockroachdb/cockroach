@@ -56,32 +56,6 @@ func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []z
 	}
 }
 
-// Tables collected from each node in a debug zip using SQL.
-var debugZipTablesPerNode = []string{
-	"crdb_internal.feature_usage",
-
-	"crdb_internal.gossip_alerts",
-	"crdb_internal.gossip_liveness",
-	"crdb_internal.gossip_network",
-	"crdb_internal.gossip_nodes",
-
-	"crdb_internal.leases",
-
-	"crdb_internal.node_build_info",
-	"crdb_internal.node_contention_events",
-	"crdb_internal.node_distsql_flows",
-	"crdb_internal.node_inflight_trace_spans",
-	"crdb_internal.node_metrics",
-	"crdb_internal.node_queries",
-	"crdb_internal.node_runtime_info",
-	"crdb_internal.node_sessions",
-	"crdb_internal.node_statement_statistics",
-	"crdb_internal.node_transaction_statistics",
-	"crdb_internal.node_transactions",
-	"crdb_internal.node_txn_stats",
-	"crdb_internal.active_range_feeds",
-}
-
 // collectCPUProfiles collects CPU profiles in parallel over all nodes
 // (this is useful since these profiles contain profiler labels, which
 // can then be correlated across nodes).
@@ -228,10 +202,10 @@ func (zc *debugZipContext) collectPerNodeData(
 	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
 	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
 
-	for _, table := range debugZipTablesPerNode {
-		query := fmt.Sprintf(`SELECT * FROM %s`, table)
-		if override, ok := customQuery[table]; ok {
-			query = override
+	for _, table := range zipInternalTablesPerNode.GetTables() {
+		query, err := zipInternalTablesPerNode.QueryForTable(table, zipCtx.redact)
+		if err != nil {
+			return err
 		}
 		if err := zc.dumpTableDataForZip(nodePrinter, curSQLConn, prefix, table, query); err != nil {
 			return errors.Wrapf(err, "fetching %s", table)
