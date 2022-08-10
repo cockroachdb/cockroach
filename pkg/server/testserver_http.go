@@ -155,7 +155,7 @@ func (ts *httpTestServer) createAuthUser(userName username.SQLUsername, isAdmin 
 		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName.Normalized(),
+			fmt.Sprintf(`GRANT admin TO %s`, userName.Normalized()),
 		); err != nil {
 			return err
 		}

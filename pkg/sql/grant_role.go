@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -169,7 +170,10 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	opName := "grant-role"
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.
-	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
+	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member", "role_id", "member_id")`
+	if !params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.RoleMembersTableHasIDColumns) {
+		memberStmt = `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
+	}
 	if n.adminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
 		memberStmt += ` DO UPDATE SET "isAdmin" = true`
@@ -178,16 +182,42 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 		memberStmt += ` DO NOTHING`
 	}
 
+	withID := params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.RoleMembersTableHasIDColumns)
 	var rowsAffected int
 	for _, r := range n.roles {
+		qargs := make([]interface{}, 5)
+		qargs[0] = r.Normalized()
+		qargs[2] = n.adminOption
+		if withID {
+			idRow, err := params.p.ExecCfg().InternalExecutor.QueryRowEx(
+				params.ctx, `get-user-id`, params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+				`SELECT user_id FROM system.users WHERE username = $1`, r.Normalized(),
+			)
+			if err != nil {
+				return err
+			}
+			qargs[3] = tree.MustBeDOid(idRow[0])
+		}
+
 		for _, m := range n.members {
+			qargs[1] = m.Normalized()
+			if withID {
+				idRow, err := params.p.ExecCfg().InternalExecutor.QueryRowEx(
+					params.ctx, `get-user-id`, params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+					`SELECT user_id FROM system.users WHERE username = $1`, m.Normalized(),
+				)
+				if err != nil {
+					return err
+				}
+				qargs[4] = tree.MustBeDOid(idRow[0])
+			}
 			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				memberStmt,
-				r.Normalized(), m.Normalized(), n.adminOption,
+				qargs...,
 			)
 			if err != nil {
 				return err

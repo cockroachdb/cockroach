@@ -356,6 +356,9 @@ const (
 	// options table id column cannot be null. This is the final step
 	// of the system.role_options table migration.
 	SetRoleOptionsUserIDColumnNotNull
+	// RoleMembersTableHasIDColumns is the version where the role
+	// members table has ids.
+	RoleMembersTableHasIDColumns
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -632,6 +635,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SetRoleOptionsUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 52},
+	},
+	{
+		Key:     RoleMembersTableHasIDColumns,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
