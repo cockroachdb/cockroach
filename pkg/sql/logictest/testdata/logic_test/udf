@@ -295,9 +295,6 @@ WHERE id = $max_desc_id;
     }
 }
 
-statement error pq: unimplemented: alter function rename to not supported.*
-ALTER FUNCTION f() RENAME TO g
-
 statement error pq: unimplemented: alter function owner to not supported.*
 ALTER FUNCTION f() OWNER TO CURRENT_USER
 
@@ -1200,6 +1197,83 @@ CREATE FUNCTION public.f_test_alter_opt(IN INT8)
     IMMUTABLE
     LEAKPROOF
     STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+subtest alter_function_name
+
+statement ok
+CREATE FUNCTION f_test_alter_name(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_alter_name_same_in(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_alter_name_diff_in() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
+----
+CREATE FUNCTION public.f_test_alter_name(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement error pq: function f_test_alter_name\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
+
+statement error pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
+
+statement ok
+ALTER FUNCTION f_test_alter_name RENAME to f_test_alter_name_new
+
+statement error pq: function f_test_alter_name does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+----
+CREATE FUNCTION public.f_test_alter_name_new(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement ok
+ALTER FUNCTION f_test_alter_name_new RENAME to f_test_alter_name_diff_in
+
+statement error pq: function f_test_alter_name_new does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in];
+----
+CREATE FUNCTION public.f_test_alter_name_diff_in()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
     LANGUAGE SQL
     AS $$
     SELECT 1;

@@ -14,10 +14,12 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
@@ -87,7 +89,43 @@ func (p *planner) AlterFunctionRename(
 }
 
 func (n *alterFunctionRenameNode) startExec(params runParams) error {
-	return unimplemented.NewWithIssue(85532, "alter function rename to not supported")
+	// TODO(chengxiong): add validation that a function can not be altered if it's
+	// referenced by other objects. This is needed when want to allow function
+	// references.
+	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	if err != nil {
+		return err
+	}
+
+	scDesc, err := params.p.Descriptors().GetMutableSchemaByID(
+		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+
+	maybeExistingFuncObj := fnDesc.ToFuncObj()
+	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
+	existing, err := params.p.matchUDF(params.ctx, &maybeExistingFuncObj, false /* required */)
+	if err != nil {
+		return err
+	}
+
+	if existing != nil {
+		return pgerror.Newf(
+			pgcode.DuplicateFunction, "function %s already exists in schema %q",
+			tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
+		)
+	}
+
+	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
+	fnDesc.SetName(string(n.n.NewName))
+	scDesc.AddFunction(fnDesc.GetName(), toSchemaOverloadSignature(fnDesc))
+	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+		return err
+	}
+
+	return params.p.writeSchemaDescChange(params.ctx, scDesc, "Alter Function Name")
 }
 
 func (n *alterFunctionRenameNode) Next(params runParams) (bool, error) { return false, nil }
@@ -155,4 +193,17 @@ func (p *planner) mustGetMutableFunctionForAlter(
 		return nil, err
 	}
 	return mut, nil
+}
+
+func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionOverload {
+	ret := descpb.SchemaDescriptor_FunctionOverload{
+		ID:         fnDesc.GetID(),
+		ArgTypes:   make([]*types.T, len(fnDesc.GetArgs())),
+		ReturnType: fnDesc.ReturnType.Type,
+		ReturnSet:  fnDesc.ReturnType.ReturnSet,
+	}
+	for i := range fnDesc.Args {
+		ret.ArgTypes[i] = fnDesc.Args[i].Type
+	}
+	return ret
 }
