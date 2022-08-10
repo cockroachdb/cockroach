@@ -1860,6 +1860,34 @@ func init() {
 	}()
 }
 
+// SetSessionVariable sets a new value for session setting `varName` in the
+// session settings owned by `evalCtx`, returning an error if not successful.
+// This function should only be used for testing. For general-purpose code,
+// please use SessionAccessor.SetSessionVar instead.
+func SetSessionVariable(
+	ctx context.Context, evalCtx tree.EvalContext, varName, varValue string,
+) (err error) {
+	err = CheckSessionVariableValueValid(ctx, evalCtx.Settings, varName, varValue)
+	if err != nil {
+		return err
+	}
+	sdMutatorBase := sessionDataMutatorBase{
+		defaults: make(map[string]string),
+		settings: evalCtx.Settings,
+	}
+	sdMutator := sessionDataMutator{
+		data:                        evalCtx.SessionData(),
+		sessionDataMutatorBase:      sdMutatorBase,
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+	}
+	_, sVar, err := getSessionVar(varName, false)
+	if err != nil {
+		return err
+	}
+
+	return sVar.Set(ctx, sdMutator, varValue)
+}
+
 // makePostgresBoolGetStringValFn returns a function that evaluates and returns
 // a string representation of the first argument value.
 func makePostgresBoolGetStringValFn(varName string) getStringValFn {
