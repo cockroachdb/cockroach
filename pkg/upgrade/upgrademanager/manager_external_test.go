@@ -83,8 +83,17 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
 						) error {
 							canResume := make(chan error)
-							ch <- canResume
-							return <-canResume
+							select {
+							case ch <- canResume:
+							case <-ctx.Done():
+								return ctx.Err()
+							}
+							select {
+							case err := <-canResume:
+								return err
+							case <-ctx.Done():
+								return ctx.Err()
+							}
 						}), true
 					},
 				},

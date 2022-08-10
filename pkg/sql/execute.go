@@ -54,7 +54,7 @@ func (p *planner) fillInPlaceholders(
 			}
 		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, volatility.Volatile, false, /*allowAssignmentCast*/
+			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.WrongObjectType)
