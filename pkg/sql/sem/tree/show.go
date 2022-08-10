@@ -727,6 +727,7 @@ func (node *ShowFingerprints) Format(ctx *FmtCtx) {
 type ShowTableStats struct {
 	Table     *UnresolvedObjectName
 	UsingJSON bool
+	Options   KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -737,6 +738,10 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString("FOR TABLE ")
 	ctx.FormatNode(node.Table)
+	if len(node.Options) > 0 {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
 }
 
 // ShowHistogram represents a SHOW HISTOGRAM statement.

@@ -6473,16 +6473,25 @@ session_var_parts:
 // are encoded in JSON format.
 // %SeeAlso: SHOW HISTOGRAM
 show_stats_stmt:
-  SHOW STATISTICS FOR TABLE table_name
+  SHOW STATISTICS FOR TABLE table_name opt_with_options
   {
-    $$.val = &tree.ShowTableStats{Table: $5.unresolvedObjectName()}
+      $$.val = &tree.ShowTableStats{
+        Table:   $5.unresolvedObjectName(),
+        Options: $6.kvOptions(),
+      }
   }
-| SHOW STATISTICS USING JSON FOR TABLE table_name
+| SHOW STATISTICS USING JSON FOR TABLE table_name opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowTableStats{Table: $7.unresolvedObjectName(), UsingJSON: true}
+    $$.val = &tree.ShowTableStats{
+      Table:     $7.unresolvedObjectName(),
+      UsingJSON: true,
+      Options:   $8.kvOptions(),
+    }
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
+
+
 
 // %Help: SHOW HISTOGRAM - display histogram (experimental)
 // %Category: Experimental
