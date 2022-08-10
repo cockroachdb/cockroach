@@ -168,3 +168,12 @@ var SampleIndexRecommendation = settings.RegisterBoolSetting(
 	"generate an index recommendation for each fingerprint ID",
 	true,
 ).WithPublic()
+
+// MaxMemReportedSampleIndexRecommendations specifies the maximum of unique index
+// recommendations info we store in memory.
+var MaxMemReportedSampleIndexRecommendations = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.metrics.statement_details.max_mem_reported_idx_recommendations",
+	"the maximum number of reported index recommendation info stored in memory",
+	5000,
+).WithPublic()

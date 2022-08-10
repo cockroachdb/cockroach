@@ -171,6 +171,7 @@
 <tr><td><code>sql.metrics.statement_details.dump_to_logs</code></td><td>boolean</td><td><code>false</code></td><td>dump collected statement statistics to node logs when periodically cleared</td></tr>
 <tr><td><code>sql.metrics.statement_details.enabled</code></td><td>boolean</td><td><code>true</code></td><td>collect per-statement query statistics</td></tr>
 <tr><td><code>sql.metrics.statement_details.index_recommendation_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>generate an index recommendation for each fingerprint ID</td></tr>
+<tr><td><code>sql.metrics.statement_details.max_mem_reported_idx_recommendations</code></td><td>integer</td><td><code>5000</code></td><td>the maximum number of reported index recommendation info stored in memory</td></tr>
 <tr><td><code>sql.metrics.statement_details.plan_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>periodically save a logical plan for each fingerprint</td></tr>
 <tr><td><code>sql.metrics.statement_details.plan_collection.period</code></td><td>duration</td><td><code>5m0s</code></td><td>the time until a new logical plan is collected</td></tr>
 <tr><td><code>sql.metrics.statement_details.threshold</code></td><td>duration</td><td><code>0s</code></td><td>minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.</td></tr>

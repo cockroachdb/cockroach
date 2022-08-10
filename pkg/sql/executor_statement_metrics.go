@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -169,6 +170,7 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanHash:     planner.instrumentation.planGist.Hash(),
 	}
 
+	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecommendations)
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
 		StatementID:          planner.stmt.QueryID,
@@ -188,7 +190,7 @@ func (ex *connExecutor) recordStatementSummary(
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),
 		StatementError:       stmtErr,
-		IndexRecommendations: planner.instrumentation.indexRecommendations,
+		IndexRecommendations: idxRecommendations,
 		Query:                stmt.StmtNoConstants,
 		StartTime:            phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt),
 		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerEndExecStmt),

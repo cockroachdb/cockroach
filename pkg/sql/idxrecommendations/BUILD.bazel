@@ -1,0 +1,42 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "idxrecommendations",
+    srcs = [
+        "idx_recommendations.go",
+        "idx_recommendations_cache.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlstats",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "idxrecommendations_test",
+    srcs = [
+        "idx_recommendations_cache_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":idxrecommendations",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
