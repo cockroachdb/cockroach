@@ -192,7 +192,7 @@ func processProducerMessage(
 	draining *bool,
 	msg *execinfrapb.ProducerMessage,
 ) processMessageResult {
-	err := sd.AddMessage(ctx, msg)
+	err := sd.AddMessage(ctx, msg, &flowBase.FlowCtx)
 	if err != nil {
 		return processMessageResult{
 			err: errors.Wrapf(err, "%s",
@@ -225,7 +225,7 @@ func processProducerMessage(
 
 		if log.V(3) && row != nil {
 			if types == nil {
-				types = sd.Types()
+				types = sd.types()
 			}
 			log.Infof(ctx, "inbound stream pushing row %s", row.String(types))
 		}
