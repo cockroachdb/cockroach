@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -34,9 +35,9 @@ import (
 )
 
 const (
-	// mvccGCQueueTimerDuration is the duration between MVCC GCs of queued
-	// replicas.
-	mvccGCQueueTimerDuration = 1 * time.Second
+	// mvccGCQueueDefaultTimerDuration is the default duration between MVCC GCs
+	// of queued replicas.
+	mvccGCQueueDefaultTimerDuration = 1 * time.Second
 	// mvccGCQueueTimeout is the timeout for a single MVCC GC run.
 	mvccGCQueueTimeout = 10 * time.Minute
 	// mvccGCQueueIntentBatchTimeout is the timeout for resolving a single batch
@@ -61,6 +62,16 @@ const (
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
+)
+
+// mvccGCQueueInterval is a setting that controls how long the mvcc GC queue
+// waits between processing replicas.
+var mvccGCQueueInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc.queue_interval",
+	"how long the mvcc gc queue waits between processing replicas",
+	mvccGCQueueDefaultTimerDuration,
+	settings.NonNegativeDuration,
 )
 
 func largeAbortSpan(ms enginepb.MVCCStats) bool {
@@ -444,17 +455,32 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	// admission control here, as we are bypassing server.Node.
 	var admissionHandle interface{}
 	if r.admissionController != nil {
+		pri := admission.WorkPriority(gc.AdmissionPriority.Get(&r.repl.ClusterSettings().SV))
 		ba.AdmissionHeader = roachpb.AdmissionHeader{
-			// GC is currently assigned NormalPri.
+			// TODO(irfansharif): GC could be expected to be BulkNormalPri, so
+			// that it does not impact user-facing traffic when resources (e.g.
+			// CPU, write capacity of the store) are scarce. However long delays
+			// in GC can slow down user-facing traffic due to more versions in
+			// the store, and can increase write amplification of the store
+			// since there is more live data. Ideally, we should adjust this
+			// priority based on how far behind we are with respect to GC-ing
+			// data in this range. Keeping it static at NormalPri proved
+			// disruptive when a large volume of MVCC GC work is suddenly
+			// accrued (if an old protected timestamp record was just released
+			// for ex. following a long paused backup job being
+			// completed/canceled, or just an old, long running backup job
+			// finishing). For now, use a cluster setting that defaults to
+			// BulkNormalPri.
 			//
-			// TODO(kv): GC could be expected to be LowPri, so that it does not
-			// impact user-facing traffic when resources (e.g. CPU, write capacity
-			// of the store) are scarce. However long delays in GC can slow down
-			// user-facing traffic due to more versions in the store, and can
-			// increase write amplification of the store since there is more live
-			// data. Ideally, we should adjust this priority based on how far behind
-			// we are wrt GCing in this range.
-			Priority:                 int32(admission.NormalPri),
+			// After we implement dynamic priority adjustment, it's not clear
+			// whether we need additional pacing mechanisms to provide better
+			// latency isolation similar to ongoing work for backups (since MVCC
+			// GC work is CPU intensive): #82955. It's also worth noting that we
+			// might be able to do most MVCC GC work as part of regular
+			// compactions (#42514) -- the CPU use by the MVCC GC queue during
+			// keyspace might still be worth explicitly accounting/limiting, but
+			// it'll be lessened overall.
+			Priority:                 int32(pri),
 			CreateTime:               timeutil.Now().UnixNano(),
 			Source:                   roachpb.AdmissionHeader_ROOT_KV,
 			NoMemoryReservedAtSource: true,
@@ -639,8 +665,8 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 
 // timer returns a constant duration to space out GC processing
 // for successive queued replicas.
-func (*mvccGCQueue) timer(_ time.Duration) time.Duration {
-	return mvccGCQueueTimerDuration
+func (mgcq *mvccGCQueue) timer(_ time.Duration) time.Duration {
+	return mvccGCQueueInterval.Get(&mgcq.store.ClusterSettings().SV)
 }
 
 // purgatoryChan returns nil.
