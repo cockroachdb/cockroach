@@ -308,6 +308,9 @@ func (h *histogram) adjustCounts(
 		adjustmentFactorDistinctRange = (distinctCountTotal - distinctCountEq) / distinctCountRange
 	}
 	adjustmentFactorRowCount := rowCountTotal / (rowCountRange + rowCountEq)
+	// TODO(michae2): Consider moving this section above the sections adjusting
+	// NumEq and NumRange for distinct counts. This would help the adjustments be
+	// less surprising in some cases.
 	for i := range h.buckets {
 		h.buckets[i].DistinctRange *= adjustmentFactorDistinctRange
 		h.buckets[i].NumRange *= adjustmentFactorRowCount

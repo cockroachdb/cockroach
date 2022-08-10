@@ -8,6 +8,7 @@ go_library(
     srcs = [
         "automatic_stats.go",
         "delete_stats.go",
+        "forecast.go",
         "histogram.go",
         "json.go",
         "new_stat.go",
@@ -69,6 +70,7 @@ go_test(
         "automatic_stats_test.go",
         "create_stats_job_test.go",
         "delete_stats_test.go",
+        "forecast_test.go",
         "histogram_test.go",
         "main_test.go",
         "quantile_test.go",
