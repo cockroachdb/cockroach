@@ -73,24 +73,29 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 }
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
-// the initial state for a set of targets.
-// Returns an error when planning fails. It is up to the caller to wrap this
-// error as an assertion failure and with useful debug information details.
+// the initial state for a set of targets. Returns an error when planning fails.
 func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 	p = Plan{
 		CurrentState: initial,
 		Params:       params,
 	}
+	err = makePlan(&p)
+	if err != nil {
+		err = p.DecorateErrorWithPlanDetails(err)
+	}
+	return p, err
+}
+
+func makePlan(p *Plan) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			rAsErr, ok := r.(error)
 			if !ok {
 				rAsErr = errors.Errorf("panic during MakePlan: %v", r)
 			}
-			err = p.DecorateErrorWithPlanDetails(rAsErr)
+			err = rAsErr
 		}
 	}()
-
 	{
 		start := timeutil.Now()
 		p.Graph = buildGraph(p.CurrentState)
@@ -101,7 +106,7 @@ func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 	{
 		start := timeutil.Now()
 		p.Stages = scstage.BuildStages(
-			initial, params.ExecutionPhase, p.Graph, params.SchemaChangerJobIDSupplier,
+			p.CurrentState, p.Params.ExecutionPhase, p.Graph, p.Params.SchemaChangerJobIDSupplier,
 		)
 		if log.V(2) {
 			log.Infof(context.TODO(), "stage generation took %v", timeutil.Since(start))
@@ -109,12 +114,12 @@ func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 	}
 	if n := len(p.Stages); n > 0 && p.Stages[n-1].Phase > scop.PreCommitPhase {
 		// Only get the job ID if it's actually been assigned already.
-		p.JobID = params.SchemaChangerJobIDSupplier()
+		p.JobID = p.Params.SchemaChangerJobIDSupplier()
 	}
 	if err := scstage.ValidateStages(p.TargetState, p.Stages, p.Graph); err != nil {
 		panic(errors.Wrapf(err, "invalid execution plan"))
 	}
-	return p, nil
+	return nil
 }
 
 func buildGraph(cs scpb.CurrentState) *scgraph.Graph {
