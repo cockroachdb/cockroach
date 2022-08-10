@@ -128,6 +128,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		ensureSQLSchemaTelemetrySchedule,
 	),
+	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
+		toCV(clusterversion.WaitedForDelRangeInGCJob),
+		checkForPausedGCJobs,
+		waitForDelRangeInGCJob,
+	),
 }
 
 func init() {

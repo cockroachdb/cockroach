@@ -365,6 +365,9 @@ const (
 	// and then waits for the data to be removed automatically before removing
 	// the descriptor and zone configurations.
 	UseDelRangeInGCJob
+	// WaitedForDelRangeInGCJob corresponds to the migration which waits for
+	// the GC jobs to adopt the use of DelRange with tombstones.
+	WaitedForDelRangeInGCJob
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -637,6 +640,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     UseDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
+	},
+	{
+		Key:     WaitedForDelRangeInGCJob,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 52},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

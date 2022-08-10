@@ -70,3 +70,50 @@ func gcTenant(
 	progress.Tenant.Status = jobspb.SchemaChangeGCProgress_CLEARED
 	return nil
 }
+
+func deleteTenantData(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	tenID uint64,
+	progress *jobspb.SchemaChangeGCProgress,
+) error {
+	if log.V(2) {
+		log.Infof(ctx, "GC is being considered for tenant: %d", tenID)
+	}
+
+	if progress.Tenant.Status == jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR {
+		return errors.AssertionFailedf(
+			"Tenant id %d is expired and should not be in state %+v",
+			tenID, jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR,
+		)
+	}
+
+	info, err := sql.GetTenantRecord(ctx, execCfg, nil /* txn */, tenID)
+	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+			// The tenant row is deleted only after its data is cleared so there is
+			// nothing to do in this case but mark the job as done.
+			if progress.Tenant.Status != jobspb.SchemaChangeGCProgress_CLEARED {
+				// This will happen if the job deletes the tenant row and fails to update
+				// its progress. In this case there's nothing to do but update the job
+				// progress.
+				log.Errorf(ctx, "tenant id %d not found while attempting to GC", tenID)
+				progress.Tenant.Status = jobspb.SchemaChangeGCProgress_CLEARED
+			}
+			return nil
+		}
+		return errors.Wrapf(err, "fetching tenant %d", info.ID)
+	}
+
+	// This case should never happen.
+	if progress.Tenant.Status == jobspb.SchemaChangeGCProgress_CLEARED {
+		return errors.AssertionFailedf("GC state for tenant %+v is DELETED yet the tenant row still exists", info)
+	}
+
+	if err := sql.GCTenantSync(ctx, execCfg, info); err != nil {
+		return errors.Wrapf(err, "gc tenant %d", info.ID)
+	}
+
+	progress.Tenant.Status = jobspb.SchemaChangeGCProgress_CLEARED
+	return nil
+}

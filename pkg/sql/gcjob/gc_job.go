@@ -336,7 +336,7 @@ func waitForGC(
 	switch {
 	case details.Indexes != nil:
 		return errors.Wrap(
-			waitForIndexGC(ctx, execCfg, details.ParentID, progress),
+			deleteIndexZoneConfigsAfterGC(ctx, execCfg, details.ParentID, progress),
 			"attempting to delete index data",
 		)
 	case details.Tables != nil:
@@ -410,6 +410,16 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 	gossipUpdateC, cleanup := execCfg.GCJobNotifier.AddNotifyee(ctx)
 	defer cleanup()
+
+	// Now that we've registered to be notified, check to see if we raced
+	// with the new version becoming active.
+	//
+	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
+	if details.Tenant == nil &&
+		execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+		return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
+	}
+
 	var timerDuration time.Duration
 	ts := timeutil.DefaultTimeSource{}
 
@@ -419,6 +429,14 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 			ctx, r.job.MarkIdle, ts, timerDuration, idleWait, gossipUpdateC,
 		); err != nil {
 			return err
+		}
+		// We'll be notified if the new version becomes active, so check and
+		// see if it's now time to change to the new protocol.
+		//
+		// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
+		if details.Tenant == nil &&
+			execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+			return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
 		}
 
 		// Refresh the status of all elements in case any GC TTLs have changed.

@@ -170,7 +170,7 @@ func clearIndex(
 	return clearOrDeleteSpanData(ctx, execCfg.DB, execCfg.DistSender, rSpan)
 }
 
-func waitForIndexGC(
+func deleteIndexZoneConfigsAfterGC(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	parentID descpb.ID,
@@ -178,7 +178,7 @@ func waitForIndexGC(
 ) error {
 
 	for _, index := range progress.Indexes {
-		if index.Status != jobspb.SchemaChangeGCProgress_CLEARING {
+		if index.Status == jobspb.SchemaChangeGCProgress_CLEARED {
 			continue
 		}
 
@@ -212,10 +212,14 @@ func waitForIndexGC(
 				ctx, txn, execCfg, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
-		if err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs); err != nil {
+		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
+		switch {
+		case errors.Is(err, catalog.ErrDescriptorNotFound):
+			log.Infof(ctx, "removing index %d zone config from table %d failed: %v",
+				index.IndexID, parentID, err)
+		case err != nil:
 			return errors.Wrapf(err, "removing index %d zone configs", index.IndexID)
 		}
-
 		markIndexGCed(
 			ctx, index.IndexID, progress, jobspb.SchemaChangeGCProgress_CLEARED,
 		)
