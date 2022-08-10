@@ -877,7 +877,7 @@ show_sessions_stmt ::=
 	| 'SHOW' 'ALL' opt_cluster 'SESSIONS'
 
 show_stats_stmt ::=
-	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
+	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name opt_with_options
 
 show_tables_stmt ::=
 	'SHOW' 'TABLES' 'FROM' name '.' name with_comment
