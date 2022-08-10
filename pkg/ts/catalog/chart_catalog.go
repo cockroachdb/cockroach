@@ -1729,10 +1729,6 @@ var charts = []sectionDescription{
 				Metrics: []string{"raft.commandsapplied"},
 			},
 			{
-				Title:   "Enqueued",
-				Metrics: []string{"raft.enqueued.pending"},
-			},
-			{
 				Title:   "Keys/Sec Avg.",
 				Metrics: []string{"rebalancing.writespersecond"},
 			},
@@ -1879,6 +1875,15 @@ var charts = []sectionDescription{
 			{
 				Title:   "MsgVoteResp Count",
 				Metrics: []string{"raft.rcvd.voteresp"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{ReplicationLayer, "Raft", "Transport"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Send Queue Messages Count",
+				Metrics: []string{"raft.transport.send-queue-size"},
 			},
 		},
 	},

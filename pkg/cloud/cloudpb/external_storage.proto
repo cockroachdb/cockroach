@@ -27,29 +27,14 @@ enum ExternalStorageProvider {
   external = 9;
 }
 
-message LocalFileConfig {
-  string path = 1;
-  uint32 node_id = 2 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-}
-
-// ExternalConnectionConfig is the ExternalStorage configuration for the
-// `external` provider.
-message ExternalConnectionConfig {
-  // Name identifies the External Connection object.
-  string name = 1;
-  // User interacting with the external storage. This is used to check access
-  // privileges of the external connection object.
-  string user = 2;
-  // Path will be appended to the endpoint of the resource represented by the
-  // external connection object. It is used to access subdirectories/buckets of
-  // the external resource.
-  string path = 3;
-}
-
 message ExternalStorage {
   ExternalStorageProvider provider = 1;
 
+  message LocalFileConfig {
+    string path = 1;
+    uint32 node_id = 2 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  }
   message Http {
     string baseUri = 1;
   }
@@ -127,6 +112,20 @@ message ExternalStorage {
     // Path is the filename being read/written to via the FileTableSystem.
     string path = 3;
   }
+  // ExternalConnectionConfig is the ExternalStorage configuration for the
+  // `external` provider.
+  message ExternalConnectionConfig {
+    // Name identifies the External Connection object.
+    string name = 1;
+    // User interacting with the external storage. This is used to check access
+    // privileges of the external connection object.
+    string user = 2;
+    // Path will be appended to the endpoint of the resource represented by the
+    // external connection object. It is used to access subdirectories/buckets of
+    // the external resource.
+    string path = 3;
+  }
+
   LocalFileConfig local_file_config = 2 [(gogoproto.nullable) = false];
   Http HttpPath = 3 [(gogoproto.nullable) = false];
   GCS GoogleCloudConfig = 4;

@@ -968,15 +968,6 @@ handling consumes writes.
 		Unit:        metric.Unit_BYTES,
 	}
 
-	metaRaftEnqueuedPending = metric.Metadata{
-		Name: "raft.enqueued.pending",
-		Help: `Number of pending outgoing messages in the Raft Transport queue.
-
-The queue is bounded in size, so instead of unbounded growth one would observe a
-ceiling value in the tens of thousands.`,
-		Measurement: "Messages",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaRaftCoalescedHeartbeatsPending = metric.Metadata{
 		Name:        "raft.heartbeats.pending",
 		Help:        "Number of pending heartbeats and responses waiting to be coalesced",
@@ -1753,7 +1744,6 @@ type StoreMetrics struct {
 
 	RaftPausedFollowerCount *metric.Gauge
 
-	RaftEnqueuedPending            *metric.Gauge
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
 	// Replica queue metrics.
@@ -2263,8 +2253,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
 
 		RaftPausedFollowerCount: metric.NewGauge(metaRaftFollowerPaused),
-
-		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
 
 		// This Gauge measures the number of heartbeats queued up just before
 		// the queue is cleared, to avoid flapping wildly.

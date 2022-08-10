@@ -2,10 +2,10 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "gcp_test",
+    name = "amazon_test",
     srcs = [
-        "gcs_kms_connection_test.go",
         "main_test.go",
+        "s3_connection_test.go",
     ],
     deps = [
         "//pkg/base",
@@ -13,10 +13,9 @@ go_test(
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
-        "//pkg/cloud/cloudtestutils",
+        "//pkg/cloud/amazon",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn/providers",
-        "//pkg/cloud/gcp",
-        "//pkg/cloud/impl:cloudimpl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -28,9 +27,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
-        "@com_google_cloud_go_kms//apiv1",
-        "@org_golang_x_oauth2//google",
+        "@com_github_aws_aws_sdk_go//aws/credentials",
     ],
 )
 

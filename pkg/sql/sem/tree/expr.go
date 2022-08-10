@@ -1295,6 +1295,12 @@ func (node *FuncExpr) IsDistSQLBlocklist() bool {
 	return (node.fn != nil && node.fn.DistsqlBlocklist) || (node.fnProps != nil && node.fnProps.DistsqlBlocklist)
 }
 
+// IsVectorizeStreaming returns whether the function is of "streaming" nature
+// from the perspective of the vectorized execution engine.
+func (node *FuncExpr) IsVectorizeStreaming() bool {
+	return node.fnProps != nil && node.fnProps.VectorizeStreaming
+}
+
 type funcType int
 
 // FuncExpr.Type

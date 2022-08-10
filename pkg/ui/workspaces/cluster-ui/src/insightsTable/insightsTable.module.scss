@@ -1,0 +1,13 @@
+@import "src/core/index.module";
+
+.insight-type {
+  color: $colors--functional-orange-4;
+  font-weight: $font-weight--bold;
+}
+
+.label-bold {
+  font-family: $font-family--semi-bold;
+  font-size: $font-size--medium;
+  line-height: $line-height--x-small;
+  color: $colors--neutral-7;
+}

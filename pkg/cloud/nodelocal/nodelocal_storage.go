@@ -34,6 +34,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const scheme = "nodelocal"
+
 func validateLocalFileURI(uri *url.URL) error {
 	if uri.Host == "" {
 		return errors.Newf(
@@ -57,8 +59,8 @@ func validateLocalFileURI(uri *url.URL) error {
 	return nil
 }
 
-func makeLocalFileConfig(uri *url.URL) (cloudpb.LocalFileConfig, error) {
-	localCfg := cloudpb.LocalFileConfig{}
+func makeLocalFileConfig(uri *url.URL) (cloudpb.ExternalStorage_LocalFileConfig, error) {
+	localCfg := cloudpb.ExternalStorage_LocalFileConfig{}
 	nodeID, err := strconv.Atoi(uri.Host)
 	if err != nil {
 		return localCfg, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
@@ -85,11 +87,11 @@ func parseLocalFileURI(
 }
 
 type localFileStorage struct {
-	cfg        cloudpb.LocalFileConfig  // contains un-prefixed filepath -- DO NOT use for I/O ops.
-	ioConf     base.ExternalIODirConfig // server configurations for the ExternalStorage
-	base       string                   // relative filepath prefixed with externalIODir, for I/O ops on this node.
-	blobClient blobs.BlobClient         // inter-node file sharing service
-	settings   *cluster.Settings        // cluster settings for the ExternalStorage
+	cfg        cloudpb.ExternalStorage_LocalFileConfig // contains un-prefixed filepath -- DO NOT use for I/O ops.
+	ioConf     base.ExternalIODirConfig                // server configurations for the ExternalStorage
+	base       string                                  // relative filepath prefixed with externalIODir, for I/O ops on this node.
+	blobClient blobs.BlobClient                        // inter-node file sharing service
+	settings   *cluster.Settings                       // cluster settings for the ExternalStorage
 }
 
 var _ cloud.ExternalStorage = &localFileStorage{}
@@ -231,7 +233,6 @@ func (*localFileStorage) Close() error {
 }
 
 func init() {
-	const scheme = "nodelocal"
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
 		parseLocalFileURI, makeLocalFileStorage, cloud.RedactedParams(), scheme)
 }
