@@ -15,6 +15,15 @@ CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$
 
+statement error pq: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$ AS $$ SELECT 2 $$;
+
+statement error pq: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL LANGUAGE SQL AS $$ SELECT 1 $$;
+
 statement ok
 CREATE FUNCTION a(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i'
 

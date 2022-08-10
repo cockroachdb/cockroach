@@ -68,7 +68,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	var funcBodyStr string
 	options := make(map[string]struct{})
 	for _, option := range cf.Options {
-		if _, ok := options[reflect.TypeOf(option).Name()]; ok {
+		optTypeName := reflect.TypeOf(option).Name()
+		if _, ok := options[optTypeName]; ok {
 			panic(pgerror.New(pgcode.Syntax, "conflicting or redundant options"))
 		}
 		switch opt := option.(type) {
@@ -78,6 +79,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		case tree.FunctionLanguage:
 			languageFound = true
 		}
+		options[optTypeName] = struct{}{}
 	}
 
 	if !funcBodyFound {
