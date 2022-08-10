@@ -723,7 +723,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return errors.WithAssertionFailure(err)
 			}
 			_, err := r.ex.ExecEx(
-				ctx, "expire-sessions", nil,
+				ctx, "expire-sessions", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
@@ -770,7 +770,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return errors.WithAssertionFailure(err)
 			}
 			_, err := r.ex.ExecEx(
-				ctx, "remove-claims-for-session", nil,
+				ctx, "remove-claims-for-session", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
 			)
