@@ -283,6 +283,8 @@ func (q quantile) toHistogram(
 			// Steal from NumRange so that NumEq is at least 1, if it wouldn't make
 			// NumRange 0. This makes the histogram look more like something
 			// EquiDepthHistogram would produce.
+			// TODO(michae2): Consider removing this logic if statistics_builder
+			// doesn't need it.
 			currentBucket.NumRange -= 1 - numEq
 			numEq = 1
 		}
