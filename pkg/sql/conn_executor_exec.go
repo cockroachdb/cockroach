@@ -1197,8 +1197,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	populateQueryLevelStats(ctx, planner)
 
-	// Set index recommendations so it can be saved on statement statistics.
-	planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner)
+	// The transaction (from planner.txn) may already have been committed at this point,
+	// due to one-phase commit optimization or an error. Since we use that transaction
+	// on the optimizer, check if is still open before generating index recommendations.
+	if planner.txn.IsOpen() {
+		// Set index recommendations, so it can be saved on statement statistics.
+		planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner)
+	}
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
