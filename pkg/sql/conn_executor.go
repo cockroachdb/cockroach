@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -310,6 +311,8 @@ type Server struct {
 	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
 	TelemetryLoggingMetrics *TelemetryLoggingMetrics
 
+	idxRecommendationsCache *idxrecommendations.IndexRecCache
+
 	mu struct {
 		syncutil.Mutex
 		connectionCount int64
@@ -398,6 +401,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		txnIDCache: txnidcache.NewTxnIDCache(
 			cfg.Settings,
 			&serverMetrics.ContentionSubsystemMetrics),
+		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
 	}
 
 	telemetryLoggingMetrics := &TelemetryLoggingMetrics{}

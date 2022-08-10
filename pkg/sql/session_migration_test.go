@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -209,6 +210,30 @@ WHERE dump.variable IS NULL OR dump2.variable IS NULL OR dump.variable != dump2.
 					return err.Error()
 				}
 				return ret
+
+			case "error":
+				var errorRE string
+				for _, arg := range d.CmdArgs {
+					if arg.Key == "regexp" {
+						if len(arg.Vals) != 1 {
+							t.Fatalf("regexp arg expects one value")
+						}
+						errorRE = arg.Vals[0]
+					}
+				}
+				if errorRE == "" {
+					t.Fatalf("error requires regexp arg")
+				}
+				_, err := dbConn.Exec(ctx, getQuery())
+				if err != nil {
+					if ok, err := regexp.MatchString(errorRE, err.Error()); ok {
+						return ""
+					} else {
+						require.NoError(t, err)
+					}
+					t.Fatalf("error regexp didn't match: %s", err.Error())
+				}
+				t.Fatalf("expected error")
 			}
 			t.Fatalf("unknown command: %s", d.Cmd)
 			return "unexpected"
