@@ -43,6 +43,7 @@ var pauseReplicationIOThreshold = settings.RegisterFloatSetting(
 )
 
 type computeExpendableOverloadedFollowersInput struct {
+	self      roachpb.ReplicaID
 	replDescs roachpb.ReplicaSet
 	// TODO(tbg): all entries are overloaded, so consdier removing the IOThreshold here
 	// because it's confusing.
@@ -104,11 +105,10 @@ func computeExpendableOverloadedFollowers(
 	var nonLive map[roachpb.ReplicaID]nonLiveReason
 	var liveOverloadedVoterCandidates map[roachpb.ReplicaID]struct{}
 	var liveOverloadedNonVoterCandidates map[roachpb.ReplicaID]struct{}
-
 	var prs map[uint64]tracker.Progress
 
 	for _, replDesc := range d.replDescs.AsProto() {
-		if _, overloaded := d.ioOverloadMap[replDesc.StoreID]; !overloaded {
+		if _, overloaded := d.ioOverloadMap[replDesc.StoreID]; !overloaded || replDesc.ReplicaID == d.self {
 			continue
 		}
 		// There's at least one overloaded follower, so initialize
@@ -205,4 +205,75 @@ func (osm *overloadedStoresMap) Swap(
 ) map[roachpb.StoreID]*admissionpb.IOThreshold {
 	v, _ := (*atomic.Value)(osm).Swap(m).(map[roachpb.StoreID]*admissionpb.IOThreshold)
 	return v
+}
+
+func (r *Replica) updatePausedFollowersLocked(
+	ctx context.Context, ioOverloadMap map[roachpb.StoreID]*admissionpb.IOThreshold,
+) {
+	r.mu.pausedFollowers = nil
+
+	if len(ioOverloadMap) == 0 {
+		return
+	}
+
+	if r.replicaID != r.mu.leaderID {
+		// Only the raft leader pauses followers. Followers never send meaningful
+		// amounts of data in raft messages, so pausing doesn't make sense on them.
+		return
+	}
+
+	if !quotaPoolEnabledForRange(*r.descRLocked()) {
+		// If the quota pool isn't enabled (like for the liveness range), play it
+		// safe. The range is unlikely to be a major contributor to any follower's
+		// I/O and wish to reduce the likelihood of a problem in replication pausing
+		// contributing to an outage of that critical range.
+		return
+	}
+
+	status := r.leaseStatusAtRLocked(ctx, r.Clock().NowAsClockTimestamp())
+	if !status.IsValid() || !status.OwnedBy(r.StoreID()) {
+		// If we're not the leaseholder (which includes the case in which we just
+		// transferred the lease away), leave all followers unpaused. Otherwise, the
+		// leaseholder won't learn that the entries it submitted were committed
+		// which effectively causes range unavailability.
+		return
+	}
+
+	// When multiple followers are overloaded, we may not be able to exclude all
+	// of them from replication traffic due to quorum constraints. We would like
+	// a given Range to deterministically exclude the same store (chosen
+	// randomly), so that across multiple Ranges we have a chance of removing
+	// load from all overloaded Stores in the cluster. (It would be a bad idea
+	// to roll a per-Range dice here on every tick, since that would rapidly
+	// include and exclude individual followers from replication traffic, which
+	// would be akin to a high rate of packet loss. Once we've decided to ignore
+	// a follower, this decision should be somewhat stable for at least a few
+	// seconds).
+	seed := int64(r.RangeID)
+	now := r.store.Clock().Now().GoTime()
+	d := computeExpendableOverloadedFollowersInput{
+		self:          r.replicaID,
+		replDescs:     r.descRLocked().Replicas(),
+		ioOverloadMap: ioOverloadMap,
+		getProgressMap: func(_ context.Context) map[uint64]tracker.Progress {
+			prs := r.mu.internalRaftGroup.Status().Progress
+			updateRaftProgressFromActivity(ctx, prs, r.descRLocked().Replicas().AsProto(), func(id roachpb.ReplicaID) bool {
+				return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, id, now, r.store.cfg.RangeLeaseActiveDuration())
+			})
+			return prs
+		},
+		minLiveMatchIndex: r.mu.proposalQuotaBaseIndex,
+		seed:              seed,
+	}
+	r.mu.pausedFollowers, _ = computeExpendableOverloadedFollowers(ctx, d)
+	for replicaID := range r.mu.pausedFollowers {
+		// We're dropping messages to those followers (see handleRaftReady) but
+		// it's a good idea to tell raft not to even bother sending in the first
+		// place. Raft will react to this by moving the follower to probing state
+		// where it will be contacted only sporadically until it responds to an
+		// MsgApp (which it can only do once we stop dropping messages). Something
+		// similar would result naturally if we didn't report as unreachable, but
+		// with more wasted work.
+		r.mu.internalRaftGroup.ReportUnreachable(uint64(replicaID))
+	}
 }

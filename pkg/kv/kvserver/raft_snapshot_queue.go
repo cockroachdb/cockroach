@@ -139,18 +139,6 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 			return false, nil
 		}
 	}
-	repl.mu.RLock()
-	_, destPaused := repl.mu.pausedFollowers[id]
-	repl.mu.RUnlock()
-	if ioThresh := repl.store.ioOverloadedStores.Load()[repDesc.StoreID]; ioThresh != nil && destPaused {
-		// If the destination is paused, be more hesitant to send snapshots. The destination being
-		// paused implies that we have recently checked that it's not required for quorum, and that
-		// we wish to conserve I/O on that store, which sending a snapshot counteracts. So hold back on
-		// the snapshot as well.
-		err := errors.Errorf("skipping snapshot; %s is overloaded: %s", repDesc, ioThresh)
-		repl.reportSnapshotStatus(ctx, repDesc.ReplicaID, err)
-		return false, err
-	}
 
 	err := repl.sendSnapshot(ctx, repDesc, snapType, kvserverpb.SnapshotRequest_RECOVERY)
 
