@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -265,6 +266,9 @@ type Flags struct {
 	// SkipRace indicates that a test should be skipped if the race detector is
 	// enabled.
 	SkipRace bool
+
+	// ot is a reference to the OptTester owning Flags.
+	ot *OptTester
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -279,6 +283,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+	ot.Flags.ot = ot
 	ot.semaCtx.SearchPath = tree.EmptySearchPath
 	ot.semaCtx.FunctionResolver = ot.catalog
 	// To allow opttester tests to use now(), we hardcode a preset transaction
@@ -897,6 +902,18 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 // See OptTester.RunCommand for supported flags.
 func (f *Flags) Set(arg datadriven.CmdArg) error {
 	switch arg.Key {
+	case "set":
+		for _, val := range arg.Vals {
+			s := strings.Split(val, "=")
+			if len(s) != 2 {
+				return errors.Errorf("Expected both session variable name and value for set command")
+			}
+			err := sql.SetSessionVariable(f.ot.ctx, f.ot.evalCtx, s[0], s[1])
+			if err != nil {
+				return err
+			}
+		}
+
 	case "format":
 		if len(arg.Vals) == 0 {
 			return fmt.Errorf("format flag requires value(s)")
