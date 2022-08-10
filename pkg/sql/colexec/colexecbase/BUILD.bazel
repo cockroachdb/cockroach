@@ -78,7 +78,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
-        "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",
     ],
 )
