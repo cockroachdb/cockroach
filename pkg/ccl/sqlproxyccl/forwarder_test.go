@@ -44,6 +44,12 @@ func TestForward(t *testing.T) {
 		err := f.run(p1, p2)
 		require.NoError(t, err)
 
+		func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.True(t, f.mu.isInitialized)
+		}()
+
 		// Close the connection right away to simulate processor error.
 		p1.Close()
 
@@ -77,6 +83,11 @@ func TestForward(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, f.ctx.Err())
 		require.False(t, f.IsIdle())
+		func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.True(t, f.mu.isInitialized)
+		}()
 
 		f.mu.Lock()
 		requestProc := f.mu.request
@@ -217,6 +228,11 @@ func TestForward(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, f.ctx.Err())
 		require.False(t, f.IsIdle())
+		func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.True(t, f.mu.isInitialized)
+		}()
 
 		f.mu.Lock()
 		responseProc := f.mu.response

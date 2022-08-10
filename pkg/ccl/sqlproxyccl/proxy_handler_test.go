@@ -781,11 +781,6 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 	const podCount = 2
 	tenantID := serverutils.TestTenantID()
 	tenants := startTestTenantPods(ctx, t, s, tenantID, podCount)
-	defer func() {
-		for _, tenant := range tenants {
-			tenant.Stopper().Stop(ctx)
-		}
-	}()
 
 	// Register one SQL pod in the directory server.
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
@@ -869,11 +864,6 @@ func TestPodWatcher(t *testing.T) {
 	const podCount = 4
 	tenantID := serverutils.TestTenantID()
 	tenants := startTestTenantPods(ctx, t, s, tenantID, podCount)
-	defer func() {
-		for _, tenant := range tenants {
-			tenant.Stopper().Stop(ctx)
-		}
-	}()
 
 	// Register only 3 SQL pods in the directory server. We will add the 4th
 	// once the watcher has been established.
@@ -1334,11 +1324,6 @@ func TestCurConnCountMetric(t *testing.T) {
 	// Start a single SQL pod.
 	tenantID := serverutils.TestTenantID()
 	tenants := startTestTenantPods(ctx, t, s, tenantID, 1)
-	defer func() {
-		for _, tenant := range tenants {
-			tenant.Stopper().Stop(ctx)
-		}
-	}()
 
 	// Register the SQL pod in the directory server.
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
@@ -1878,7 +1863,8 @@ func queryAddr(ctx context.Context, t *testing.T, db queryer) string {
 
 // startTestTenantPods starts count SQL pods for the given tenant, and returns
 // a list of tenant servers. Note that a default admin testuser with the
-// password hunter2 will be created.
+// password hunter2 will be created. The test tenants will automatically be
+// stopped once the server's stopper (from ts) is stopped.
 func startTestTenantPods(
 	ctx context.Context,
 	t *testing.T,
