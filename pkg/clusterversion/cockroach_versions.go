@@ -164,11 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// PebbleFormatBlockPropertyCollector switches to a backwards incompatible
-	// Pebble version that provides block property collectors that can be used
-	// for fine-grained time bound iteration. See
-	// https://github.com/cockroachdb/pebble/issues/1190 for details.
-	PebbleFormatBlockPropertyCollector
 	// ProbeRequest is the version at which roachpb.ProbeRequest was introduced.
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
@@ -244,9 +239,6 @@ const (
 	EnableDeclarativeSchemaChanger
 	// RowLevelTTL is the version where we allow row level TTL tables.
 	RowLevelTTL
-	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
-	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
-	PebbleFormatSplitUserKeysMarked
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -369,6 +361,10 @@ const (
 // previously referenced a < 21.2 version until that check/gate can be removed.
 const TODOPreV21_2 = V21_2
 
+// TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
+// previously referenced a < 22.1 version until that check/gate can be removed.
+const TODOPreV22_1 = V22_1
+
 // versionsSingleton lists all historical versions here in chronological order,
 // with comments describing what backwards-incompatible features were
 // introduced.
@@ -397,10 +393,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     PebbleFormatBlockPropertyCollector,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
 	},
 	{
 		Key:     ProbeRequest,
@@ -488,10 +480,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RowLevelTTL,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 88},
-	},
-	{
-		Key:     PebbleFormatSplitUserKeysMarked,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
 	},
 	{
 		Key:     EnableNewStoreRebalancer,

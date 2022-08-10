@@ -1824,13 +1824,9 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		if formatVers < pebble.FormatSplitUserKeysMarkedCompacted {
 			formatVers = pebble.FormatSplitUserKeysMarkedCompacted
 		}
-	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatSplitUserKeysMarked)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODOPreV22_1)):
 		if formatVers < pebble.FormatSplitUserKeysMarked {
 			formatVers = pebble.FormatSplitUserKeysMarked
-		}
-	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector)):
-		if formatVers < pebble.FormatBlockPropertyCollector {
-			formatVers = pebble.FormatBlockPropertyCollector
 		}
 	case !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)):
 		if formatVers < pebble.FormatSetWithDelete {
