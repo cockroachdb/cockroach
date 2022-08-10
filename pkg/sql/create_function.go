@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -68,58 +67,249 @@ func (n *createFunctionNode) startExec(params runParams) error {
 	}
 	mutScDesc := scDesc.(*schemadesc.Mutable)
 
-	udfMutableDesc, err := n.getMutableFuncDesc(mutScDesc, params)
+	udfMutableDesc, isNew, err := n.getMutableFuncDesc(mutScDesc, params)
 	if err != nil {
 		return err
 	}
 
-	for _, arg := range n.cf.Args {
-		pbArg, err := makeFunctionArg(params.ctx, arg, params.p)
-		if err != nil {
-			return err
-		}
-		udfMutableDesc.AddArgument(pbArg)
+	if isNew {
+		return n.createNewFunction(udfMutableDesc, mutScDesc, params)
 	}
+	return n.replaceFunction(udfMutableDesc, params)
+}
 
-	// Set default values before applying options. This simplifies
-	// the replacing logic.
-	resetFuncOption(udfMutableDesc)
+func (*createFunctionNode) Next(params runParams) (bool, error) { return false, nil }
+func (*createFunctionNode) Values() tree.Datums                 { return tree.Datums{} }
+func (*createFunctionNode) Close(ctx context.Context)           {}
+
+func (n *createFunctionNode) createNewFunction(
+	udfDesc *funcdesc.Mutable, scDesc *schemadesc.Mutable, params runParams,
+) error {
 	for _, option := range n.cf.Options {
-		err := setFuncOption(params, udfMutableDesc, option)
+		err := setFuncOption(params, udfDesc, option)
 		if err != nil {
 			return err
 		}
 	}
-	if udfMutableDesc.LeakProof && udfMutableDesc.Volatility != catpb.Function_IMMUTABLE {
+	if udfDesc.LeakProof && udfDesc.Volatility != catpb.Function_IMMUTABLE {
 		return pgerror.Newf(
 			pgcode.InvalidFunctionDefinition,
 			"cannot create leakproof function with non-immutable volatility: %s",
-			udfMutableDesc.Volatility.String(),
+			udfDesc.Volatility.String(),
 		)
 	}
 
+	if err := n.addUDFReferences(udfDesc, params); err != nil {
+		return err
+	}
+
+	err := params.p.createDescriptorWithID(
+		params.ctx,
+		roachpb.Key{}, // UDF does not have namespace entry.
+		udfDesc.GetID(),
+		udfDesc,
+		tree.AsStringWithFQNames(&n.cf.FuncName, params.Ann()),
+	)
+	if err != nil {
+		return err
+	}
+
+	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
+	if err != nil {
+		return err
+	}
+	argTypes := make([]*types.T, len(udfDesc.Args))
+	for i, arg := range udfDesc.Args {
+		argTypes[i] = arg.Type
+	}
+	scDesc.AddFunction(
+		udfDesc.GetName(),
+		descpb.SchemaDescriptor_FunctionOverload{
+			ID:         udfDesc.GetID(),
+			ArgTypes:   argTypes,
+			ReturnType: returnType,
+			ReturnSet:  udfDesc.ReturnType.ReturnSet,
+		},
+	)
+	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params runParams) error {
+	// TODO(chengxiong): add validation that the function is not referenced. This
+	// is needed when we start allowing function references from other objects.
+
+	// Make sure argument names are not changed.
+	for i := range n.cf.Args {
+		if string(n.cf.Args[i].Name) != udfDesc.Args[i].Name {
+			return pgerror.Newf(
+				pgcode.InvalidFunctionDefinition, "cannot change name of input parameter %q", udfDesc.Args[i].Name,
+			)
+		}
+	}
+
+	// Make sure return type is the same.
+	retType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
+	if err != nil {
+		return err
+	}
+	if n.cf.ReturnType.IsSet != udfDesc.ReturnType.ReturnSet || !retType.Equal(udfDesc.ReturnType.Type) {
+		return pgerror.Newf(pgcode.InvalidFunctionDefinition, "cannot change return type of existing function")
+	}
+
+	resetFuncOption(udfDesc)
+	for _, option := range n.cf.Options {
+		err := setFuncOption(params, udfDesc, option)
+		if err != nil {
+			return err
+		}
+	}
+	if udfDesc.LeakProof && udfDesc.Volatility != catpb.Function_IMMUTABLE {
+		return pgerror.Newf(
+			pgcode.InvalidFunctionDefinition,
+			"cannot create leakproof function with non-immutable volatility: %s",
+			udfDesc.Volatility.String(),
+		)
+	}
+
+	// Removing all existing references before adding new references.
+	for _, id := range udfDesc.DependsOn {
+		backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
+			params.ctx, params.p.txn, id, tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		backRefMutable.DependedOnBy = removeMatchingReferences(backRefMutable.DependedOnBy, udfDesc.ID)
+		jobDesc := fmt.Sprintf(
+			"removing udf reference %s(%d) in table %s(%d)",
+			udfDesc.Name, udfDesc.ID, backRefMutable.Name, backRefMutable.ID,
+		)
+		if err := params.p.writeSchemaChange(params.ctx, backRefMutable, descpb.InvalidMutationID, jobDesc); err != nil {
+			return err
+		}
+	}
+	jobDesc := fmt.Sprintf("updating type back reference %d for function %d", udfDesc.DependsOnTypes, udfDesc.ID)
+	if err := params.p.removeTypeBackReferences(params.ctx, udfDesc.DependsOnTypes, udfDesc.ID, jobDesc); err != nil {
+		return err
+	}
+	// Add all new references.
+	if err := n.addUDFReferences(udfDesc, params); err != nil {
+		return err
+	}
+
+	return params.p.writeFuncSchemaChange(params.ctx, udfDesc)
+}
+
+func (n *createFunctionNode) getMutableFuncDesc(
+	scDesc catalog.SchemaDescriptor, params runParams,
+) (fnDesc *funcdesc.Mutable, isNew bool, err error) {
+	// Resolve argument types.
+	argTypes := make([]*types.T, len(n.cf.Args))
+	pbArgs := make([]descpb.FunctionDescriptor_Argument, len(n.cf.Args))
+	argNameSeen := make(map[tree.Name]struct{})
+	for i, arg := range n.cf.Args {
+		if _, ok := argNameSeen[arg.Name]; ok {
+			// Argument names cannot be used more than once.
+			return nil, false, pgerror.Newf(
+				pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", arg.Name,
+			)
+		}
+		argNameSeen[arg.Name] = struct{}{}
+		pbArg, err := makeFunctionArg(params.ctx, arg, params.p)
+		if err != nil {
+			return nil, false, err
+		}
+		pbArgs[i] = pbArg
+		argTypes[i] = pbArg.Type
+	}
+
+	// Try to look up an existing function.
+	fuObj := tree.FuncObj{
+		FuncName: n.cf.FuncName,
+		Args:     n.cf.Args,
+	}
+	existing, err := params.p.matchUDF(params.ctx, &fuObj, false /* required */)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if existing != nil {
+		// Return an error if there is an existing match but not a replacement.
+		if !n.cf.Replace {
+			return nil, false, pgerror.Newf(
+				pgcode.DuplicateFunction,
+				"function %q already exists with same argument types",
+				n.cf.FuncName.Object(),
+			)
+		}
+		fnID, err := funcdesc.UserDefinedFunctionOIDToID(existing.Oid)
+		if err != nil {
+			return nil, false, err
+		}
+		fnDesc, err = params.p.checkPrivilegesForDropFunction(params.ctx, fnID)
+		if err != nil {
+			return nil, false, err
+		}
+		return fnDesc, false, nil
+	}
+
+	funcDescID, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
+	if err != nil {
+		return nil, false, err
+	}
+
+	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
+	if err != nil {
+		return nil, false, err
+	}
+
+	privileges := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		n.dbDesc.GetDefaultPrivilegeDescriptor(),
+		scDesc.GetDefaultPrivilegeDescriptor(),
+		n.dbDesc.GetID(),
+		params.SessionData().User(),
+		privilege.Functions,
+		n.dbDesc.GetPrivileges(),
+	)
+
+	newUdfDesc := funcdesc.NewMutableFunctionDescriptor(
+		funcDescID,
+		n.dbDesc.GetID(),
+		scDesc.GetID(),
+		string(n.cf.FuncName.ObjectName),
+		pbArgs,
+		returnType,
+		n.cf.ReturnType.IsSet,
+		privileges,
+	)
+
+	return &newUdfDesc, true, nil
+}
+
+func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params runParams) error {
 	// Get all table IDs for which we need to update back references, including
 	// tables used directly in function body or as implicit types.
-	backrefTblIDs := make([]descpb.ID, 0, len(n.planDeps)+len(n.typeDeps))
-	implicitTypeTblIDs := make(map[descpb.ID]struct{}, len(n.typeDeps))
+	backrefTblIDs := catalog.DescriptorIDSet{}
+	implicitTypeTblIDs := catalog.DescriptorIDSet{}
 	for id := range n.planDeps {
-		backrefTblIDs = append(backrefTblIDs, id)
+		backrefTblIDs.Add(id)
 	}
 	for id := range n.typeDeps {
 		if isTable, err := params.p.descIsTable(params.ctx, id); err != nil {
 			return err
 		} else if isTable {
-			backrefTblIDs = append(backrefTblIDs, id)
-			implicitTypeTblIDs[id] = struct{}{}
+			backrefTblIDs.Add(id)
+			implicitTypeTblIDs.Add(id)
 		}
 	}
 
 	// Read all referenced tables and update their dependencies.
-	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(backrefTblIDs))
-	for _, id := range backrefTblIDs {
-		if _, ok := backRefMutables[id]; ok {
-			continue
-		}
+	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable)
+	for _, id := range backrefTblIDs.Ordered() {
 		backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
 			params.ctx, params.p.txn, id, tree.ObjectLookupFlagsWithRequired(),
 		)
@@ -137,7 +327,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 	for id, updated := range n.planDeps {
 		backRefMutable := backRefMutables[id]
 		for _, dep := range updated.deps {
-			dep.ID = udfMutableDesc.ID
+			dep.ID = udfDesc.ID
 			dep.ByID = updated.desc.IsSequence()
 			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 		}
@@ -153,9 +343,9 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			return err
 		}
 	}
-	for id := range implicitTypeTblIDs {
+	for _, id := range implicitTypeTblIDs.Ordered() {
 		backRefMutable := backRefMutables[id]
-		backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, descpb.TableDescriptor_Reference{ID: udfMutableDesc.ID})
+		backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, descpb.TableDescriptor_Reference{ID: udfDesc.ID})
 		if err := params.p.writeSchemaChange(
 			params.ctx,
 			backRefMutable,
@@ -171,113 +361,24 @@ func (n *createFunctionNode) startExec(params runParams) error {
 	// Add type back references. Skip table implicit types (we update table back
 	// references above).
 	for id := range n.typeDeps {
-		if _, ok := implicitTypeTblIDs[id]; ok {
+		if implicitTypeTblIDs.Contains(id) {
 			continue
 		}
-		jobDesc := fmt.Sprintf("updating type back reference %d for function %d", id, udfMutableDesc.ID)
-		if err := params.p.addTypeBackReference(params.ctx, id, udfMutableDesc.ID, jobDesc); err != nil {
+		jobDesc := fmt.Sprintf("updating type back reference %d for function %d", id, udfDesc.ID)
+		if err := params.p.addTypeBackReference(params.ctx, id, udfDesc.ID, jobDesc); err != nil {
 			return err
 		}
 	}
 
 	// Add forward references to UDF descriptor.
-	udfMutableDesc.DependsOn = make([]descpb.ID, 0, len(backrefTblIDs))
-	udfMutableDesc.DependsOn = append(udfMutableDesc.DependsOn, backrefTblIDs...)
+	udfDesc.DependsOn = backrefTblIDs.Ordered()
 
-	sort.Sort(descpb.IDs(udfMutableDesc.DependsOn))
-
-	udfMutableDesc.DependsOnTypes = []descpb.ID{}
+	typeDepIDs := catalog.DescriptorIDSet{}
 	for id := range n.typeDeps {
-		if _, ok := implicitTypeTblIDs[id]; ok {
-			continue
-		}
-		udfMutableDesc.DependsOnTypes = append(udfMutableDesc.DependsOnTypes, id)
+		typeDepIDs.Add(id)
 	}
-	sort.Sort(descpb.IDs(udfMutableDesc.DependsOnTypes))
-
-	err = params.p.createDescriptorWithID(
-		params.ctx,
-		roachpb.Key{}, // UDF does not have namespace entry.
-		udfMutableDesc.GetID(),
-		udfMutableDesc,
-		tree.AsStringWithFQNames(&n.cf.FuncName, params.Ann()),
-	)
-	if err != nil {
-		return err
-	}
-
-	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
-	if err != nil {
-		return err
-	}
-	argTypes := make([]*types.T, len(udfMutableDesc.Args))
-	for i, arg := range udfMutableDesc.Args {
-		argTypes[i] = arg.Type
-	}
-	mutScDesc.AddFunction(
-		udfMutableDesc.GetName(),
-		descpb.SchemaDescriptor_FunctionOverload{
-			ID:         udfMutableDesc.GetID(),
-			ArgTypes:   argTypes,
-			ReturnType: returnType,
-			ReturnSet:  udfMutableDesc.ReturnType.ReturnSet,
-		},
-	)
-	if err := params.p.writeSchemaDescChange(params.ctx, mutScDesc, "Create Function"); err != nil {
-		return err
-	}
-
+	udfDesc.DependsOnTypes = typeDepIDs.Difference(implicitTypeTblIDs).Ordered()
 	return nil
-}
-
-func (*createFunctionNode) Next(params runParams) (bool, error) { return false, nil }
-func (*createFunctionNode) Values() tree.Datums                 { return tree.Datums{} }
-func (*createFunctionNode) Close(ctx context.Context)           {}
-
-func (n *createFunctionNode) getMutableFuncDesc(
-	scDesc catalog.SchemaDescriptor, params runParams,
-) (*funcdesc.Mutable, error) {
-	if n.cf.Replace {
-		return nil, unimplemented.New("CREATE OR REPLACE FUNCTION", "replacing function")
-	}
-	// TODO (Chengxiong) add function resolution and check if it's a Replace.
-	// Also:
-	// (1) add validation that return type can't be change.
-	// (2) add validation that argument names can't be change.
-	// (3) add validation that if existing function is referenced then it cannot be replace.
-	// (4) add `if` branch so that we only create new descriptor when it's not a replace.
-
-	funcDescID, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
-	if err != nil {
-		return nil, err
-	}
-
-	privileges := catprivilege.CreatePrivilegesFromDefaultPrivileges(
-		n.dbDesc.GetDefaultPrivilegeDescriptor(),
-		scDesc.GetDefaultPrivilegeDescriptor(),
-		n.dbDesc.GetID(),
-		params.SessionData().User(),
-		privilege.Functions,
-		n.dbDesc.GetPrivileges(),
-	)
-
-	newUdfDesc := funcdesc.NewMutableFunctionDescriptor(
-		funcDescID,
-		n.dbDesc.GetID(),
-		scDesc.GetID(),
-		string(n.cf.FuncName.ObjectName),
-		len(n.cf.Args),
-		returnType,
-		n.cf.ReturnType.IsSet,
-		privileges,
-	)
-
-	return &newUdfDesc, nil
 }
 
 func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.FunctionOption) error {
