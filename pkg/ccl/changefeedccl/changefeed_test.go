@@ -4342,16 +4342,19 @@ func TestChangefeedDescription(t *testing.T) {
 			descr:  `CREATE CHANGEFEED FOR TABLE d.public.foo INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated`,
 		},
 		{
-			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2 AS SELECT a FROM foo WHERE a % 2 = 0",
-			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated AS SELECT a FROM foo WHERE (a % 2) = 0`,
+			// TODO(#85143): remove schema_change_policy='stop' from this test.
+			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2, schema_change_policy='stop' AS SELECT a FROM foo WHERE a % 2 = 0",
+			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', schema_change_policy = 'stop', updated AS SELECT a FROM foo WHERE (a % 2) = 0`,
 		},
 		{
-			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2 AS SELECT a FROM public.foo AS bar WHERE a % 2 = 0",
-			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated AS SELECT a FROM public.foo AS bar WHERE (a % 2) = 0`,
+			// TODO(#85143): remove schema_change_policy='stop' from this test.
+			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2, schema_change_policy='stop' AS SELECT a FROM public.foo AS bar WHERE a % 2 = 0",
+			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', schema_change_policy = 'stop', updated AS SELECT a FROM public.foo AS bar WHERE (a % 2) = 0`,
 		},
 		{
-			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2 AS SELECT a FROM foo WHERE status IN ('open', 'closed')",
-			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated AS SELECT a FROM foo WHERE status IN ('open', 'closed')`,
+			// TODO(#85143): remove schema_change_policy='stop' from this test.
+			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2, schema_change_policy='stop' AS SELECT a FROM foo WHERE status IN ('open', 'closed')",
+			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', schema_change_policy = 'stop', updated AS SELECT a FROM foo WHERE status IN ('open', 'closed')`,
 		},
 	} {
 		t.Run(tc.create, func(t *testing.T) {
@@ -4579,7 +4582,8 @@ func TestCDCPrev(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row' AS SELECT cdc_prev()->'b' AS old FROM foo`)
+		// TODO(#85143): remove schema_change_policy='stop' from this test.
+		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row', schema_change_policy='stop' AS SELECT cdc_prev()->'b' AS old FROM foo`)
 		defer closeFeed(t, foo)
 
 		// cdc_prev() values are null during initial scan
@@ -6322,6 +6326,7 @@ CREATE TABLE foo (
   PRIMARY KEY (a, b)
 )`)
 
+			// TODO(#85143): remove schema_change_policy='stop' from this test.
 			sqlDB.Exec(t, `
 INSERT INTO foo (a, b) VALUES (0, 'zero'), (1, 'one');
 INSERT INTO foo (a, b, e) VALUES (2, 'two', 'closed');
@@ -6332,6 +6337,7 @@ INSERT INTO foo (a, b, e) VALUES (2, 'two', 'closed');
 			}
 			feed := feed(t, f, `
 CREATE CHANGEFEED 
+WITH schema_change_policy='stop'
 AS SELECT * FROM `+fromClause+` 
 WHERE e IN ('open', 'closed') AND NOT cdc_is_delete()`)
 			defer closeFeed(t, feed)
@@ -6397,8 +6403,10 @@ INSERT INTO foo (a, b, e) VALUES (11, 'eleven', 'closed');
 			specs <- aggregatorSpecs
 		}
 
+		// TODO(#85143): remove schema_change_policy='stop' from this test.
 		feed := feed(t, f, `
 CREATE CHANGEFEED 
+WITH schema_change_policy='stop'
 AS SELECT * FROM foo
 WHERE a > 10 AND e IN ('open', 'closed') AND NOT cdc_is_delete()`)
 		defer closeFeed(t, feed)
@@ -6530,6 +6538,8 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long under race")
+	// TODO(#85143): remove this skip.
+	skip.WithIssue(t, 85143)
 
 	setupSQL := []string{
 		`CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`,
