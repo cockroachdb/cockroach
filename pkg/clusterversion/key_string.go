@@ -58,17 +58,17 @@ func _() {
 	_ = x[AlterSystemStatementStatisticsAddIndexRecommendations-47]
 	_ = x[RoleIDSequence-48]
 	_ = x[AddSystemUserIDColumn-49]
-	_ = x[UsersHaveIDs-50]
-	_ = x[SetUserIDNotNull-51]
+	_ = x[SystemUsersIDColumnIsBackfilled-50]
+	_ = x[SetSystemUsersUserIDColumnNotNull-51]
 	_ = x[SQLSchemaTelemetryScheduledJobs-52]
 	_ = x[SchemaChangeSupportsCreateFunction-53]
 	_ = x[DeleteRequestReturnKey-54]
 	_ = x[PebbleFormatPrePebblev1Marked-55]
 }
 
-const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreSCRAMAuthenticationUnsafeLossOfQuorumRecoveryRangeLogAlterSystemProtectedTimestampAddColumnEnableProtectedTimestampsForTenantDeleteCommentsWithDroppedIndexesRemoveIncompatibleDatabasePrivilegesAddRaftAppliedIndexTermMigrationPostAddRaftAppliedIndexTermMigrationDontProposeWriteTimestampForLeaseTransfersEnablePebbleFormatVersionBlockPropertiesMVCCIndexBackfillerEnableLeaseHolderRemovalLooselyCoupledRaftLogTruncationChangefeedIdlenessEnableDeclarativeSchemaChangerRowLevelTTLEnableNewStoreRebalancerClusterLocksVirtualTableAutoStatsTableSettingsSuperRegionsEnableNewChangefeedOptionsSpanCountTablePreSeedSpanCountTableSeedSpanCountTableV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnUsersHaveIDsSetUserIDNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1Marked"
+const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreSCRAMAuthenticationUnsafeLossOfQuorumRecoveryRangeLogAlterSystemProtectedTimestampAddColumnEnableProtectedTimestampsForTenantDeleteCommentsWithDroppedIndexesRemoveIncompatibleDatabasePrivilegesAddRaftAppliedIndexTermMigrationPostAddRaftAppliedIndexTermMigrationDontProposeWriteTimestampForLeaseTransfersEnablePebbleFormatVersionBlockPropertiesMVCCIndexBackfillerEnableLeaseHolderRemovalLooselyCoupledRaftLogTruncationChangefeedIdlenessEnableDeclarativeSchemaChangerRowLevelTTLEnableNewStoreRebalancerClusterLocksVirtualTableAutoStatsTableSettingsSuperRegionsEnableNewChangefeedOptionsSpanCountTablePreSeedSpanCountTableSeedSpanCountTableV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1Marked"
 
-var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 152, 186, 224, 258, 290, 326, 358, 394, 436, 476, 495, 519, 550, 568, 598, 609, 633, 657, 679, 691, 717, 731, 752, 770, 775, 784, 799, 839, 873, 907, 929, 949, 968, 1001, 1020, 1040, 1061, 1096, 1130, 1160, 1213, 1227, 1248, 1260, 1276, 1307, 1341, 1363, 1392}
+var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 152, 186, 224, 258, 290, 326, 358, 394, 436, 476, 495, 519, 550, 568, 598, 609, 633, 657, 679, 691, 717, 731, 752, 770, 775, 784, 799, 839, 873, 907, 929, 949, 968, 1001, 1020, 1040, 1061, 1096, 1130, 1160, 1213, 1227, 1248, 1279, 1312, 1343, 1377, 1399, 1428}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
