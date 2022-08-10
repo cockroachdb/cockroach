@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -56,7 +55,7 @@ func runGCOld(
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-options.IntentAgeThreshold.Nanoseconds(), 0)
-	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-TxnCleanupThreshold.Default().Nanoseconds(), 0)
 
 	gc := MakeGarbageCollector(now, gcTTL)
 
