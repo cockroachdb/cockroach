@@ -82,6 +82,27 @@ func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (b
 	return true, nil
 }
 
+// ResolvedDestination encapsulates information that is populated while
+// resolving the destination of a backup.
+type ResolvedDestination struct {
+	// collectionURI is the URI pointing to the backup collection.
+	CollectionURI string
+
+	// defaultURI is the full path of the defaultURI of the backup.
+	DefaultURI string
+
+	// ChosenSubdir is the automatically chosen suffix within the collection path
+	// if we're backing up INTO a collection.
+	ChosenSubdir string
+
+	// URIsByLocalityKV is a mapping from the locality tag to the corresponding
+	// locality aware backup URI.
+	URIsByLocalityKV map[string]string
+
+	// PrevBackupURIs is the list of full paths for previous backups in the chain.
+	PrevBackupURIs []string
+}
+
 // ResolveDest resolves the true destination of a backup. The backup command
 // provided by the user may point to a backup collection, or a backup location
 // which auto-appends incremental backups to it. This method checks for these
@@ -98,25 +119,16 @@ func ResolveDest(
 	endTime hlc.Timestamp,
 	incrementalFrom []string,
 	execCfg *sql.ExecutorConfig,
-) (
-	collectionURI string,
-	plannedBackupDefaultURI string, /* the full path for the planned backup */
-	/* chosenSuffix is the automatically chosen suffix within the collection path
-	   if we're backing up INTO a collection. */
-	chosenSuffix string,
-	urisByLocalityKV map[string]string,
-	prevBackupURIs []string, /* list of full paths for previous backups in the chain */
-	err error,
-) {
+) (ResolvedDestination, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
 	defaultURI, _, err := GetURIsByLocalityKV(dest.To, "")
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
 
-	chosenSuffix = dest.Subdir
-
+	var collectionURI string
+	chosenSuffix := dest.Subdir
 	if chosenSuffix != "" {
 		// The legacy backup syntax, BACKUP TO, leaves the dest.Subdir and collection parameters empty.
 		collectionURI = defaultURI
@@ -124,15 +136,15 @@ func ResolveDest(
 		if chosenSuffix == backupbase.LatestFileName {
 			latest, err := ReadLatestFile(ctx, defaultURI, makeCloudStorage, user)
 			if err != nil {
-				return "", "", "", nil, nil, err
+				return ResolvedDestination{}, err
 			}
 			chosenSuffix = latest
 		}
 	}
 
-	plannedBackupDefaultURI, urisByLocalityKV, err = GetURIsByLocalityKV(dest.To, chosenSuffix)
+	plannedBackupDefaultURI, urisByLocalityKV, err := GetURIsByLocalityKV(dest.To, chosenSuffix)
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
 
 	// At this point, the plannedBackupDefaultURI is the full path for the backup. For BACKUP
@@ -140,28 +152,30 @@ func ResolveDest(
 	// plannedBackupDefaultURI will be the full path for this backup in planning.
 	if len(incrementalFrom) != 0 {
 		// Legacy backup with deprecated BACKUP TO-syntax.
-		prevBackupURIs = incrementalFrom
-		return collectionURI, plannedBackupDefaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
+		prevBackupURIs := incrementalFrom
+		return ResolvedDestination{
+			CollectionURI:    collectionURI,
+			DefaultURI:       plannedBackupDefaultURI,
+			ChosenSubdir:     chosenSuffix,
+			URIsByLocalityKV: urisByLocalityKV,
+			PrevBackupURIs:   prevBackupURIs,
+		}, nil
 	}
 
 	defaultStore, err := makeCloudStorage(ctx, plannedBackupDefaultURI, user)
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
 	defer defaultStore.Close()
 	exists, err := containsManifest(ctx, defaultStore)
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
-	if exists && !dest.Exists && chosenSuffix != "" && execCfg.Settings.Version.IsActive(ctx,
-		clusterversion.Start22_1) {
+	if exists && !dest.Exists && chosenSuffix != "" &&
+		execCfg.Settings.Version.IsActive(ctx, clusterversion.Start22_1) {
 		// We disallow a user from writing a full backup to a path in a collection containing an
 		// existing backup iff we're 99.9% confident this backup was planned on a 22.1 node.
-		return "",
-			"",
-			"",
-			nil,
-			nil,
+		return ResolvedDestination{},
 			errors.Newf("A full backup already exists in %s. "+
 				"Consider running an incremental backup to this full backup via `BACKUP INTO '%s' IN '%s'`",
 				plannedBackupDefaultURI, chosenSuffix, dest.To[0])
@@ -178,7 +192,7 @@ func ResolveDest(
 			// - 22.2+: the backup will fail unconditionally.
 			// TODO (msbutler): throw error in 22.2
 			if !featureFullBackupUserSubdir.Get(execCfg.SV()) {
-				return "", "", "", nil, nil,
+				return ResolvedDestination{},
 					errors.Errorf("A full backup cannot be written to %q, a user defined subdirectory. "+
 						"To take a full backup, remove the subdirectory from the backup command "+
 						"(i.e. run 'BACKUP ... INTO <collectionURI>'). "+
@@ -189,7 +203,13 @@ func ResolveDest(
 			}
 		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
-		return collectionURI, plannedBackupDefaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
+		return ResolvedDestination{
+			CollectionURI:    collectionURI,
+			DefaultURI:       plannedBackupDefaultURI,
+			ChosenSubdir:     chosenSuffix,
+			URIsByLocalityKV: urisByLocalityKV,
+			PrevBackupURIs:   nil,
+		}, nil
 	}
 
 	// The defaultStore contains a full backup; consequently, we're conducting an incremental backup.
@@ -201,28 +221,29 @@ func ResolveDest(
 		dest.To,
 		chosenSuffix)
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
 
 	priorsDefaultURI, _, err := GetURIsByLocalityKV(fullyResolvedIncrementalsLocation, "")
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
 	incrementalStore, err := makeCloudStorage(ctx, priorsDefaultURI, user)
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
 	defer incrementalStore.Close()
 
 	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest)
 	if err != nil {
-		return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
+		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
 
+	prevBackupURIs := make([]string, 0, len(priors))
 	for _, prior := range priors {
 		priorURI, err := url.Parse(priorsDefaultURI)
 		if err != nil {
-			return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s",
+			return ResolvedDestination{}, errors.Wrapf(err, "parsing default backup location %s",
 				priorsDefaultURI)
 		}
 		priorURI.Path = backuputils.JoinURLPath(priorURI.Path, prior)
@@ -234,9 +255,16 @@ func ResolveDest(
 	partName := endTime.GoTime().Format(backupbase.DateBasedIncFolderName)
 	defaultIncrementalsURI, urisByLocalityKV, err := GetURIsByLocalityKV(fullyResolvedIncrementalsLocation, partName)
 	if err != nil {
-		return "", "", "", nil, nil, err
+		return ResolvedDestination{}, err
 	}
-	return collectionURI, defaultIncrementalsURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
+
+	return ResolvedDestination{
+		CollectionURI:    collectionURI,
+		DefaultURI:       defaultIncrementalsURI,
+		ChosenSubdir:     chosenSuffix,
+		URIsByLocalityKV: urisByLocalityKV,
+		PrevBackupURIs:   prevBackupURIs,
+	}, nil
 }
 
 // ReadLatestFile reads the LATEST file from collectionURI and returns the path

@@ -271,6 +271,9 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //
 //   Supported arguments:
 //
+//   + expect-error-regex=<regex>: expects the query to return an error with a string
+//   matching the provided regex
+//
 //   + expect-error-ignore: expects the query to return an error, but we will
 //   ignore it.
 //
@@ -288,8 +291,14 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //
 //   Supported arguments:
 //
+//   + resume=<tag>: resumes the job referenced by the tag, use in conjunction
+//   with wait-for-state.
+//
 //   + cancel=<tag>: cancels the job referenced by the tag and waits for it to
 //   reach a CANCELED state.
+//
+//   + wait-for-state=<succeeded|paused|failed|cancelled> tag=<tag>: wait for
+//   the job referenced by the tag to reach the specified state.
 //
 // - "let" [args]
 //   Assigns the returned value of the SQL query to the provided args as variables.
@@ -468,6 +477,17 @@ func TestDataDriven(t *testing.T) {
 				if d.HasArg("expect-error-ignore") {
 					require.NotNilf(t, err, "expected error")
 					ret = append(ret, "ignoring expected error")
+					return strings.Join(ret, "\n")
+				}
+
+				// Check if we are expecting an error, and want to match it against a
+				// regex.
+				if d.HasArg("expect-error-regex") {
+					require.NotNilf(t, err, "expected error")
+					var expectErrorRegex string
+					d.ScanArgs(t, "expect-error-regex", &expectErrorRegex)
+					testutils.IsError(err, expectErrorRegex)
+					ret = append(ret, "regex matches error")
 					return strings.Join(ret, "\n")
 				}
 
@@ -674,6 +694,39 @@ func TestDataDriven(t *testing.T) {
 					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
 					runner.Exec(t, `CANCEL JOB $1`, jobID)
 					jobutils.WaitForJobToCancel(t, runner, jobID)
+				} else if d.HasArg("resume") {
+					var resumeJobTag string
+					d.ScanArgs(t, "resume", &resumeJobTag)
+					var jobID jobspb.JobID
+					var ok bool
+					if jobID, ok = ds.jobTags[resumeJobTag]; !ok {
+						t.Fatalf("could not find job with tag %s", resumeJobTag)
+					}
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					runner.Exec(t, `RESUME JOB $1`, jobID)
+				} else if d.HasArg("wait-for-state") {
+					var tag string
+					d.ScanArgs(t, "tag", &tag)
+					var jobID jobspb.JobID
+					var ok bool
+					if jobID, ok = ds.jobTags[tag]; !ok {
+						t.Fatalf("could not find job with tag %s", tag)
+					}
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					var state string
+					d.ScanArgs(t, "wait-for-state", &state)
+					switch state {
+					case "succeeded":
+						jobutils.WaitForJobToSucceed(t, runner, jobID)
+					case "cancelled":
+						jobutils.WaitForJobToCancel(t, runner, jobID)
+					case "paused":
+						jobutils.WaitForJobToPause(t, runner, jobID)
+					case "failed":
+						jobutils.WaitForJobToFail(t, runner, jobID)
+					default:
+						t.Fatalf("unknown state %s", state)
+					}
 				}
 				return ""
 
