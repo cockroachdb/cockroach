@@ -71,6 +71,17 @@ type forwarder struct {
 	mu struct {
 		syncutil.Mutex
 
+		// isInitialized indicates that the forwarder has been initialized.
+		//
+		// TODO(jaylim-crl): This prevents the connection from being transferred
+		// before we fully resume the processors (because the balancer now
+		// tracks assignments instead of forwarders). If we don't do this, there
+		// could be a situation where we resume the processors mid transfer. One
+		// alternative idea is to replace both isInitialized and isTransferring
+		// with a lock, which is held by the owner of the forwarder (e.g. main
+		// thread, or connection migrator thread).
+		isInitialized bool
+
 		// isTransferring indicates that a connection migration is in progress.
 		isTransferring bool
 
@@ -154,7 +165,7 @@ func newForwarder(
 //
 // run can only be called once throughout the lifetime of the forwarder.
 func (f *forwarder) run(clientConn net.Conn, serverConn net.Conn) error {
-	initialize := func() error {
+	setup := func() error {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 
@@ -165,8 +176,9 @@ func (f *forwarder) run(clientConn net.Conn, serverConn net.Conn) error {
 			return f.ctx.Err()
 		}
 
-		// Run can only be called once.
-		if f.isInitializedLocked() {
+		// Run can only be called once. If lastUpdated has already been set
+		// (i.e. non-zero), it has to be the case where run has been called.
+		if !f.mu.activity.lastUpdated.IsZero() {
 			return errors.AssertionFailedf("forwarder has already been started")
 		}
 
@@ -185,10 +197,23 @@ func (f *forwarder) run(clientConn net.Conn, serverConn net.Conn) error {
 		f.mu.activity.lastUpdated = f.timeSource.Now()
 		return nil
 	}
-	if err := initialize(); err != nil {
-		return err
+	markInitialized := func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.mu.isInitialized = true
 	}
-	return f.resumeProcessors()
+
+	if err := setup(); err != nil {
+		return errors.Wrap(err, "setting up forwarder")
+	}
+
+	if err := f.resumeProcessors(); err != nil {
+		return errors.Wrap(err, "resuming processors")
+	}
+
+	// Mark the forwarder as initialized, and connection is ready for a transfer.
+	markInitialized()
+	return nil
 }
 
 // Context returns the context associated with the forwarder.
@@ -237,7 +262,7 @@ func (f *forwarder) IsIdle() (idle bool) {
 	defer f.mu.Unlock()
 
 	// If the forwarder hasn't been initialized, it is considered active.
-	if !f.isInitializedLocked() {
+	if !f.mu.isInitialized {
 		return false
 	}
 
@@ -268,12 +293,6 @@ func (f *forwarder) IsIdle() (idle bool) {
 	// No activity from the forwarder. If the idle timeout hasn't elapsed, the
 	// forwarder is still considered active.
 	return now.Sub(f.mu.activity.lastUpdated) >= idleTimeout
-}
-
-// isInitializedLocked returns true if the forwarder has been initialized
-// through Run, or false otherwise.
-func (f *forwarder) isInitializedLocked() bool {
-	return f.mu.request != nil && f.mu.response != nil
 }
 
 // resumeProcessors starts both the request and response processors
