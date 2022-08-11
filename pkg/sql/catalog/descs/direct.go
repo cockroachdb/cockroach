@@ -199,13 +199,6 @@ func (d *direct) GetSchemaDescriptorsFromIDs(
 func (d *direct) ResolveSchemaID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string,
 ) (descpb.ID, error) {
-	if !d.version.IsActive(clusterversion.PublicSchemasWithDescriptors) {
-		// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
-		// checking for public schema.
-		if scName == tree.PublicSchema {
-			return keys.PublicSchemaID, nil
-		}
-	}
 	return catkv.LookupID(ctx, txn, d.codec, dbID, keys.RootNamespaceID, scName)
 }
 
