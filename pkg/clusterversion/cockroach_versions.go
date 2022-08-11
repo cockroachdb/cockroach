@@ -202,9 +202,6 @@ const (
 	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
 	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
 	ClusterLocksVirtualTable
-	// AutoStatsTableSettings is the version where we allow auto stats related
-	// table settings.
-	AutoStatsTableSettings
 	// EnableNewChangefeedOptions enables the usage of new changefeed options
 	// such as end_time, initial_scan_only, and setting the value of initial_scan
 	// to 'yes|no|only'
@@ -401,10 +398,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ClusterLocksVirtualTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 98},
-	},
-	{
-		Key:     AutoStatsTableSettings,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
 	},
 	{
 		Key:     EnableNewChangefeedOptions,

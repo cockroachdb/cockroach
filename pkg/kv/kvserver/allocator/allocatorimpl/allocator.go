@@ -1605,12 +1605,8 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 // stores as targets) when enforcementLevel is set to storeHealthNoAction or
 // storeHealthLogOnly. By default storeHealthBlockRebalanceTo is the action taken. When
 // there is a mixed version cluster, storeHealthNoAction is set instead.
-func (a *Allocator) StoreHealthOptions(ctx context.Context) StoreHealthOptions {
-	enforcementLevel := StoreHealthNoAction
-	if a.StorePool.St.Version.IsActive(ctx, clusterversion.AutoStatsTableSettings) {
-		enforcementLevel = StoreHealthEnforcement(l0SublevelsThresholdEnforce.Get(&a.StorePool.St.SV))
-	}
-
+func (a *Allocator) StoreHealthOptions(_ context.Context) StoreHealthOptions {
+	enforcementLevel := StoreHealthEnforcement(l0SublevelsThresholdEnforce.Get(&a.StorePool.St.SV))
 	return StoreHealthOptions{
 		EnforcementLevel:    enforcementLevel,
 		L0SublevelThreshold: l0SublevelsThreshold.Get(&a.StorePool.St.SV),
