@@ -229,6 +229,32 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 	return b.nextIndexID(view.ViewID)
 }
 
+// NextTableConstraintID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextTableConstraintID(table *scpb.Table) (ret catid.ConstraintID) {
+	{
+		b.ensureDescriptor(table.TableID)
+		desc := b.descCache[table.TableID].desc
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
+				desc.GetID(), desc.DescriptorType()))
+		}
+		ret = tbl.GetNextConstraintID()
+		if ret == 0 {
+			ret = 1
+		}
+	}
+
+	b.QueryByID(table.TableID).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		v, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		if id, ok := v.(catid.ConstraintID); ok && id >= ret {
+			ret = id + 1
+		}
+	})
+
+	return ret
+}
+
 func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 	// Scan the table for any rows, if they exist the lack of a default value
 	// should lead to an error.

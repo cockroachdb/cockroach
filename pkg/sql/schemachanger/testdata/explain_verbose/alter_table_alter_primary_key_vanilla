@@ -15,16 +15,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
-│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │     ABSENT → BACKFILL_ONLY
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
@@ -41,13 +41,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │       │   │         rule: "temp index exists before columns, partitioning, and partial"
 │       │   │         rule: "index-column added to index after temp index exists"
 │       │   │
-│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │     ABSENT → BACKFILL_ONLY
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
@@ -60,7 +60,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
@@ -82,7 +82,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │
 │           ├── • MakeAddedIndexBackfilling
 │           │     Index:
-│           │       ConstraintID: 1
+│           │       ConstraintID: 2
 │           │       IndexID: 2
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -91,7 +91,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
-│           │       ConstraintID: 1
+│           │       ConstraintID: 3
 │           │       IndexID: 3
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -110,6 +110,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │
 │           ├── • MakeAddedIndexBackfilling
 │           │     Index:
+│           │       ConstraintID: 3
 │           │       IndexID: 4
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -119,6 +120,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
+│           │       ConstraintID: 4
 │           │       IndexID: 5
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -226,7 +228,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │   │ BACKFILL_ONLY → BACKFILLED
 │   │   │   │   │
 │   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
@@ -238,7 +240,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │   │   │   │   └── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}
 │   │   │   │         rule: "temp index is WRITE_ONLY before backfill"
 │   │   │   │
-│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
 │   │   │       │
 │   │   │       ├── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}
@@ -266,10 +268,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │     BACKFILLED → DELETE_ONLY
 │   │   │   │
-│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         BACKFILLED → DELETE_ONLY
 │   │   │
 │   │   └── • 4 Mutation operations
@@ -293,10 +295,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │     DELETE_ONLY → MERGE_ONLY
 │   │   │   │
-│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         DELETE_ONLY → MERGE_ONLY
 │   │   │
 │   │   └── • 4 Mutation operations
@@ -320,10 +322,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │     MERGE_ONLY → MERGED
 │   │   │   │
-│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         MERGE_ONLY → MERGED
 │   │   │
 │   │   └── • 2 Backfill operations
@@ -342,10 +344,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │     MERGED → WRITE_ONLY
 │   │   │   │
-│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         MERGED → WRITE_ONLY
 │   │   │
 │   │   └── • 4 Mutation operations
@@ -369,10 +371,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │       │
 │       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │     WRITE_ONLY → VALIDATED
 │       │   │
-│       │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   └── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │         WRITE_ONLY → VALIDATED
 │       │
 │       └── • 2 Validation operations
@@ -414,7 +416,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │
     │   ├── • 4 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
@@ -426,10 +428,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   ├── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
     │   │   │   │ ABSENT → PUBLIC
     │   │   │   │
-    │   │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │         rule: "index existence precedes index name and comment"
     │   │   │
-    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
@@ -438,7 +440,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   └── • IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
     │   │       │ ABSENT → PUBLIC
     │   │       │
-    │   │       └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │       └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
     │   │             rule: "index existence precedes index name and comment"
     │   │
     │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT

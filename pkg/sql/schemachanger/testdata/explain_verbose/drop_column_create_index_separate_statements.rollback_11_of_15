@@ -17,13 +17,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │         rule: "index no longer public before dependents removed"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │         rule: "index no longer public before dependents removed"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
@@ -32,13 +32,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │     PUBLIC → WRITE_ONLY
     │   │   │
     │   │   ├── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │         rule: "index no longer public before dependents removed"
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
@@ -96,7 +96,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
     │   │   │   │     rule: "index named right before index becomes public"
     │   │   │   │
-    │   │   │   └── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   └── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │         rule: "primary index swap"
     │   │   │
     │   │   ├── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
@@ -289,7 +289,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
     │   │
     │   ├── • 3 elements transitioning toward ABSENT
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │     WRITE_ONLY → DELETE_ONLY
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
@@ -344,7 +344,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
         │
         ├── • 1 element transitioning toward ABSENT
         │   │
-        │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+        │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
         │       │ DELETE_ONLY → ABSENT
         │       │
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}

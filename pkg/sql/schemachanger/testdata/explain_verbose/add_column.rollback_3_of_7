@@ -30,7 +30,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ BACKFILL_ONLY → ABSENT
     │   │   │   │
     │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
@@ -129,7 +129,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
         │   │   │     rule: "dependents removed before column"
         │   │   │     rule: "column type removed right before column when not dropping relation"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │         rule: "indexes containing columns reach absent before column"
         │   │
         │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
