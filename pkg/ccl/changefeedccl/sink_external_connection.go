@@ -10,12 +10,16 @@ package changefeedccl
 
 import (
 	"context"
+	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
@@ -58,8 +62,77 @@ func makeExternalConnectionSink(
 		// Replace the external connection URI in the `feedCfg` with the URI of the
 		// underlying resource.
 		feedCfg.SinkURI = d.SimpleURI.URI
-		return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+		return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
 	default:
 		return nil, errors.Newf("cannot connect to %T; unsupported resource for a Sink connection", d)
+	}
+}
+
+func parseAndValidateExternalConnectionSinkURI(
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL,
+) (externalconn.ExternalConnection, error) {
+
+	connectionProvider, ok := supportedExternalConnectionTypes[uri.Scheme]
+	if !ok {
+		return nil, errors.Newf("%s is not a supported external connection type for changefeeds.")
+	}
+
+	serializedURI := uri.String()
+	serverCfg := execinfra.ServerConfig{ExternalStorageFromURI: func(ctx context.Context, uri string,
+		user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+		return nil, nil
+	}}
+
+	// Pass through the server config, except for the WrapSink testing knob since that often assumes it's
+	// inside a job.
+	if actualExecCfg, ok := execCfg.(*sql.ExecutorConfig); ok {
+		serverCfg = actualExecCfg.DistSQLSrv.ServerConfig
+		if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
+			wrapSink := knobs.WrapSink
+			knobs.WrapSink = nil
+			defer func() { knobs.WrapSink = wrapSink }()
+		}
+	}
+
+	// Validate the URI by creating a canary sink.
+	//
+	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
+	// to accept JSONConfig we should validate that here too.
+	_, err := getSink(ctx, &serverCfg, jobspb.ChangefeedDetails{SinkURI: serializedURI}, nil, user,
+		jobspb.JobID(0), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid changefeed sink URI")
+	}
+
+	connDetails := connectionpb.ConnectionDetails{
+		Provider: connectionProvider,
+		Details: &connectionpb.ConnectionDetails_SimpleURI{
+			SimpleURI: &connectionpb.SimpleURI{
+				URI: uri.String(),
+			},
+		},
+	}
+	return externalconn.NewExternalConnection(connDetails), nil
+}
+
+var supportedExternalConnectionTypes = map[string]connectionpb.ConnectionProvider{
+	changefeedbase.SinkSchemeCloudStorageAzure:     connectionpb.ConnectionProvider_azure,
+	changefeedbase.SinkSchemeCloudStorageGCS:       connectionpb.ConnectionProvider_gs,
+	GcpScheme:                                      connectionpb.ConnectionProvider_gcpubsub,
+	changefeedbase.SinkSchemeCloudStorageHTTP:      connectionpb.ConnectionProvider_http,
+	changefeedbase.SinkSchemeCloudStorageHTTPS:     connectionpb.ConnectionProvider_https,
+	changefeedbase.SinkSchemeCloudStorageNodelocal: connectionpb.ConnectionProvider_nodelocal,
+	changefeedbase.SinkSchemeCloudStorageS3:        connectionpb.ConnectionProvider_s3,
+	changefeedbase.SinkSchemeKafka:                 connectionpb.ConnectionProvider_kafka,
+	changefeedbase.SinkSchemeWebhookHTTP:           connectionpb.ConnectionProvider_webhookhttp,
+	changefeedbase.SinkSchemeWebhookHTTPS:          connectionpb.ConnectionProvider_webhookhttps,
+	// TODO (zinger): Not including SinkSchemeExperimentalSQL for now because A: it's undocumented
+	// and B, in tests it leaks a *gosql.DB and I can't figure out why.
+}
+
+func init() {
+	for scheme := range supportedExternalConnectionTypes {
+		externalconn.RegisterConnectionDetailsFromURIFactory(scheme,
+			parseAndValidateExternalConnectionSinkURI)
 	}
 }

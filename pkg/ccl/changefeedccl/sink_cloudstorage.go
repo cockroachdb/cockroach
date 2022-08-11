@@ -425,7 +425,7 @@ func makeCloudStorageSink(
 	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil)); err != nil {
 		return nil, err
 	}
-	if mb != nil {
+	if mb != nil && s.es != nil {
 		s.metrics = mb(s.es.RequiresExternalIOAccounting())
 	} else {
 		s.metrics = (*sliMetrics)(nil)

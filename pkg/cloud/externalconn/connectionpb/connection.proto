@@ -26,6 +26,14 @@ enum ConnectionProvider {
 
   // Sink providers.
   kafka = 3;
+  azure = 5;
+  gs = 6;
+  http = 7;
+  https = 8;
+  sql = 9;
+  webhookhttp = 10;
+  webhookhttps = 11;
+  gcpubsub = 12;
 }
 
 // ConnectionType is the type of the External Connection object.

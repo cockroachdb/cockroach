@@ -10,8 +10,6 @@
 
 package connectionpb
 
-import "github.com/cockroachdb/errors"
-
 // Type returns the ConnectionType of the receiver.
 func (d *ConnectionDetails) Type() ConnectionType {
 	switch d.Provider {
@@ -22,6 +20,6 @@ func (d *ConnectionDetails) Type() ConnectionType {
 	case ConnectionProvider_kafka:
 		return TypeStorage
 	default:
-		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %T", d.Provider.String()))
+		return TypeStorage
 	}
 }

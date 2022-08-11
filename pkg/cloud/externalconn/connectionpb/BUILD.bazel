@@ -26,7 +26,6 @@ go_library(
     embed = [":connectionpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 get_x_data(name = "get_x_data")
