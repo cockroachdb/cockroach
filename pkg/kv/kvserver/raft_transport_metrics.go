@@ -15,6 +15,8 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 // RaftTransportMetrics is the set of metrics for a given RaftTransport.
 type RaftTransportMetrics struct {
 	SendQueueSize *metric.Gauge
+	MessagesSent  *metric.Counter
+	MessagesRcvd  *metric.Counter
 }
 
 func (t *RaftTransport) initMetrics() {
@@ -29,5 +31,19 @@ messages to at least one peer.`,
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
 		}, t.queuedMessageCount),
+
+		MessagesSent: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.sent",
+			Help:        "Number of Raft messages sent by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		MessagesRcvd: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.rcvd",
+			Help:        "Number of Raft messages received by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
 	}
 }
