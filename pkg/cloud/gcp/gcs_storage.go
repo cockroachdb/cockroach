@@ -67,20 +67,28 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 )
 
 func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+	gsURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_gs
-	assumeRole, delegateRoles := cloud.ParseRoleString(uri.Query().Get(AssumeRoleParam))
+	assumeRole, delegateRoles := cloud.ParseRoleString(gsURL.ConsumeParam(AssumeRoleParam))
 	conf.GoogleCloudConfig = &cloudpb.ExternalStorage_GCS{
 		Bucket:              uri.Host,
 		Prefix:              uri.Path,
-		Auth:                uri.Query().Get(cloud.AuthParam),
-		BillingProject:      uri.Query().Get(GoogleBillingProjectParam),
-		Credentials:         uri.Query().Get(CredentialsParam),
+		Auth:                gsURL.ConsumeParam(cloud.AuthParam),
+		BillingProject:      gsURL.ConsumeParam(GoogleBillingProjectParam),
+		Credentials:         gsURL.ConsumeParam(CredentialsParam),
 		AssumeRole:          assumeRole,
 		AssumeRoleDelegates: delegateRoles,
-		BearerToken:         uri.Query().Get(BearerTokenParam),
+		BearerToken:         gsURL.ConsumeParam(BearerTokenParam),
 	}
 	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
+
+	// Validate that all the passed in parameters are supported.
+	if unknownParams := gsURL.RemainingQueryParams(); len(unknownParams) > 0 {
+		return cloudpb.ExternalStorage{}, errors.Errorf(
+			`unknown GS query parameters: %s`, strings.Join(unknownParams, ", "))
+	}
+
 	return conf, nil
 }
 
