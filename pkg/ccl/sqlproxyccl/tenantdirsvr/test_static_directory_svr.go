@@ -344,7 +344,7 @@ func (d *TestStaticDirectoryServer) RemovePod(tenantID roachpb.TenantID, podAddr
 }
 
 // Start starts the test directory server using an in-memory listener. This
-// returns an error if the server cannot be started. If the sevrer has already
+// returns an error if the server cannot be started. If the server has already
 // been started, this is a no-op.
 func (d *TestStaticDirectoryServer) Start(ctx context.Context) error {
 	d.process.Lock()

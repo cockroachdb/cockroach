@@ -14,18 +14,22 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -208,6 +212,16 @@ func retrieveSessionInitInfoWithCache(
 	databaseName string,
 ) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
 	if err = func() (retErr error) {
+		makePlanner := func(opName string) (interface{}, func()) {
+			return NewInternalPlanner(
+				opName,
+				execCfg.DB.NewTxn(ctx, opName),
+				username.RootUserName(),
+				&MemoryMetrics{},
+				execCfg,
+				sessiondatapb.SessionData{},
+			)
+		}
 		aInfo, retErr = execCfg.SessionInitCache.GetAuthInfo(
 			ctx,
 			execCfg.Settings,
@@ -216,6 +230,7 @@ func retrieveSessionInitInfoWithCache(
 			execCfg.CollectionFactory,
 			userName,
 			retrieveAuthInfo,
+			makePlanner,
 		)
 		if retErr != nil {
 			return retErr
@@ -244,7 +259,11 @@ func retrieveSessionInitInfoWithCache(
 }
 
 func retrieveAuthInfo(
-	ctx context.Context, ie sqlutil.InternalExecutor, user username.SQLUsername,
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	user username.SQLUsername,
+	makePlanner func(opName string) (interface{}, func()),
+	settings *cluster.Settings,
 ) (aInfo sessioninit.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
 	// We use a nil txn as login is not tied to any transaction state, and
@@ -298,6 +317,23 @@ func retrieveAuthInfo(
 	aInfo.CanLoginSQL = true
 	aInfo.CanLoginDBConsole = true
 	var ok bool
+
+	// Check system privilege to see if user can sql login.
+	planner, cleanup := makePlanner("check-privilege")
+	defer cleanup()
+	aa := planner.(AuthorizationAccessor)
+	hasAdmin, err := aa.HasAdminRole(ctx)
+	if err != nil {
+		return aInfo, err
+	}
+	if !hasAdmin {
+		if settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			if noSQLLogin := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user) == nil; noSQLLogin {
+				aInfo.CanLoginSQL = false
+			}
+		}
+	}
+
 	for ok, err = roleOptsIt.Next(ctx); ok; ok, err = roleOptsIt.Next(ctx) {
 		row := roleOptsIt.Cur()
 		option := string(tree.MustBeDString(row[0]))
@@ -306,7 +342,9 @@ func retrieveAuthInfo(
 			aInfo.CanLoginSQL = false
 			aInfo.CanLoginDBConsole = false
 		}
-		if option == "NOSQLLOGIN" {
+		// If the user did not have the NOSQLLOGIN system privilege but has the
+		// equivalent role option set the flag to false.
+		if option == "NOSQLLOGIN" && aInfo.CanLoginSQL {
 			aInfo.CanLoginSQL = false
 		}
 
