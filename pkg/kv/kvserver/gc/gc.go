@@ -236,6 +236,12 @@ type Info struct {
 	// AffectedVersionsRangeValBytes is the number of (fully encoded) bytes deleted from values that
 	// belong to removed range keys.
 	AffectedVersionsRangeValBytes int64
+	// ClearRangeKeyOperations reports 1 if GC succeeded performing collection with
+	// ClearRange operation.
+	ClearRangeKeyOperations int
+	// ClearRangeKeyFailures reports 1 if GC identified a possibility to collect
+	// with ClearRange operation, but request failed.
+	ClearRangeKeyFailures int
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
@@ -304,7 +310,7 @@ func Run(
 		Threshold: newThreshold,
 	}
 
-	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold, gcer,
+	fastPath, err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold, gcer,
 		intentBatcherOptions{
 			maxIntentsPerIntentCleanupBatch:        options.MaxIntentsPerIntentCleanupBatch,
 			maxIntentKeyBytesPerIntentCleanupBatch: options.MaxIntentKeyBytesPerIntentCleanupBatch,
@@ -314,7 +320,7 @@ func Run(
 	if err != nil {
 		return Info{}, err
 	}
-	err = processReplicatedRangeTombstones(ctx, desc, snap, now, newThreshold, gcer, &info)
+	err = processReplicatedRangeTombstones(ctx, desc, snap, fastPath, now, newThreshold, gcer, &info)
 	if err != nil {
 		return Info{}, err
 	}
@@ -348,6 +354,7 @@ func Run(
 //
 // The logic iterates all versions of all keys in the range from oldest to
 // newest. Expired intents are written into the txnMap and intentKeyMap.
+// Returns true if clear range was used to remove all user data.
 func processReplicatedKeyRange(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -359,7 +366,29 @@ func processReplicatedKeyRange(
 	options intentBatcherOptions,
 	cleanupIntentsFn CleanupIntentsFunc,
 	info *Info,
-) error {
+) (bool, error) {
+	// Perform fast path check prior to performing GC. Fast path only collects
+	// user key span portion, so we don't need to clean it up once again if
+	// we succeeded.
+	excludeUserKeySpan := false
+	{
+		start := desc.StartKey.AsRawKey()
+		end := desc.EndKey.AsRawKey()
+		if err := storage.CanGCEntireRange(ctx, snap, start, end, threshold); err == nil {
+			if err = gcer.GC(ctx, nil, nil, roachpb.GCRequest_GCClearRangeKey{
+				StartKey: start,
+				EndKey:   end,
+			}); err == nil {
+				excludeUserKeySpan = true
+				info.ClearRangeKeyOperations++
+			} else {
+				log.Warningf(ctx, "failed to perform GC clear range operation on range %s: %s", desc.String(),
+					err)
+				info.ClearRangeKeyFailures++
+			}
+		}
+	}
+
 	var alloc bufalloc.ByteAllocator
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
@@ -406,13 +435,13 @@ func processReplicatedKeyRange(
 		gcTimestampForThisKey hlc.Timestamp
 		sentBatchForThisKey   bool
 	)
-	it := makeGCIterator(desc, snap, threshold)
+	it := makeGCIterator(desc, snap, threshold, excludeUserKeySpan)
 	defer it.close()
 	for ; ; it.step() {
 		s, ok := it.state()
 		if !ok {
 			if it.err != nil {
-				return it.err
+				return false, it.err
 			}
 			break
 		}
@@ -421,7 +450,7 @@ func processReplicatedKeyRange(
 		}
 		if s.curIsIntent() {
 			if err := handleIntent(s.next); err != nil {
-				return err
+				return false, err
 			}
 			continue
 		}
@@ -465,7 +494,7 @@ func processReplicatedKeyRange(
 		if shouldSendBatch {
 			if err := gcer.GC(ctx, batchGCKeys, nil, roachpb.GCRequest_GCClearRangeKey{}); err != nil {
 				if errors.Is(err, ctx.Err()) {
-					return err
+					return false, err
 				}
 				// Even though we are batching the GC process, it's
 				// safe to continue because we bumped the GC
@@ -481,16 +510,16 @@ func processReplicatedKeyRange(
 	// We need to send out last intent cleanup batch.
 	if err := intentBatcher.maybeFlushPendingIntents(ctx); err != nil {
 		if errors.Is(err, ctx.Err()) {
-			return err
+			return false, err
 		}
 		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
 	if len(batchGCKeys) > 0 {
 		if err := gcer.GC(ctx, batchGCKeys, nil, roachpb.GCRequest_GCClearRangeKey{}); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return excludeUserKeySpan, nil
 }
 
 type intentBatcher struct {
@@ -867,15 +896,17 @@ func processReplicatedRangeTombstones(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	snap storage.Reader,
+	excludeUserKeySpan bool,
 	now hlc.Timestamp,
 	gcThreshold hlc.Timestamp,
 	gcer GCer,
 	info *Info,
 ) error {
 	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
-		Reverse:  false,
-		IterKind: storage.MVCCKeyIterKind,
-		KeyTypes: storage.IterKeyTypeRangesOnly,
+		Reverse:            false,
+		IterKind:           storage.MVCCKeyIterKind,
+		KeyTypes:           storage.IterKeyTypeRangesOnly,
+		ExcludeUserKeySpan: excludeUserKeySpan,
 	})
 	defer iter.Close()
 
