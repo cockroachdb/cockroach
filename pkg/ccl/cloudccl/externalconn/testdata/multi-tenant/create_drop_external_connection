@@ -145,16 +145,16 @@ subtest end
 
 subtest basic-gs-kms
 
-disable-check-external-storage
+disable-check-kms
 ----
 
 exec-sql
-CREATE EXTERNAL CONNECTION "foo-kms" AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
+CREATE EXTERNAL CONNECTION "foo-kms" AS 'gcp-kms:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
 ----
 
 inspect-system-table
 ----
-foo-kms KMS {"provider": "gs_kms", "simpleUri": {"uri": "gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}}
+foo-kms KMS {"provider": "gcp_kms", "simpleUri": {"uri": "gcp-kms:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}}
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-kms";
@@ -163,9 +163,15 @@ DROP EXTERNAL CONNECTION "foo-kms";
 inspect-system-table
 ----
 
+enable-check-kms
+----
+
 subtest end
 
 subtest basic-s3
+
+disable-check-external-storage
+----
 
 exec-sql
 CREATE EXTERNAL CONNECTION "foo-s3" AS 's3://foo/bar?AUTH=implicit&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&ASSUME_ROLE=ronaldo,rashford,bruno';
@@ -191,6 +197,9 @@ DROP EXTERNAL CONNECTION "foo-s3";
 ----
 
 inspect-system-table
+----
+
+enable-check-external-storage
 ----
 
 subtest end
