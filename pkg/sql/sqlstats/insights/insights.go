@@ -27,10 +27,10 @@ import (
 // detection.
 var LatencyThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"sql.stats.insights.latency_threshold",
+	"sql.insights.latency_threshold",
 	"amount of time after which an executing statement is considered slow. Use 0 to disable.",
-	0,
-)
+	100*time.Millisecond,
+).WithPublic()
 
 // AnomalyDetectionEnabled turns on a per-fingerprint heuristic-based
 // algorithm for marking statements as slow, attempting to capture elevated
@@ -38,7 +38,7 @@ var LatencyThreshold = settings.RegisterDurationSetting(
 // 100ms.
 var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
-	"sql.stats.insights.anomaly_detection.enabled",
+	"sql.insights.anomaly_detection.enabled",
 	"enable per-fingerprint latency recording and anomaly detection",
 	false,
 )
@@ -51,7 +51,7 @@ var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
 // reported (this is a UX optimization, removing noise).
 var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"sql.stats.insights.anomaly_detection.latency_threshold",
+	"sql.insights.anomaly_detection.latency_threshold",
 	"statements must surpass this threshold to trigger anomaly detection and identification",
 	100*time.Millisecond,
 	settings.NonNegativeDuration,
@@ -63,7 +63,7 @@ var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
 // churn.
 var AnomalyDetectionMemoryLimit = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
-	"sql.stats.insights.anomaly_detection.memory_limit",
+	"sql.insights.anomaly_detection.memory_limit",
 	"the maximum amount of memory allowed for tracking statement latencies",
 	1024*1024,
 )
@@ -91,21 +91,21 @@ var _ metric.Struct = Metrics{}
 func NewMetrics() Metrics {
 	return Metrics{
 		Fingerprints: metric.NewGauge(metric.Metadata{
-			Name:        "sql.stats.insights.anomaly_detection.fingerprints",
+			Name:        "sql.insights.anomaly_detection.fingerprints",
 			Help:        "Current number of statement fingerprints being monitored for anomaly detection",
 			Measurement: "Fingerprints",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  prometheus.MetricType_GAUGE,
 		}),
 		Memory: metric.NewGauge(metric.Metadata{
-			Name:        "sql.stats.insights.anomaly_detection.memory",
+			Name:        "sql.insights.anomaly_detection.memory",
 			Help:        "Current memory used to support anomaly detection",
 			Measurement: "Memory",
 			Unit:        metric.Unit_BYTES,
 			MetricType:  prometheus.MetricType_GAUGE,
 		}),
 		Evictions: metric.NewCounter(metric.Metadata{
-			Name:        "sql.stats.insights.anomaly_detection.evictions",
+			Name:        "sql.insights.anomaly_detection.evictions",
 			Help:        "Evictions of fingerprint latency summaries due to memory pressure",
 			Measurement: "Evictions",
 			Unit:        metric.Unit_COUNT,

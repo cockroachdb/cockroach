@@ -2282,15 +2282,15 @@ var charts = []sectionDescription{
 		Charts: []chartDescription{
 			{
 				Title:   "Current number of statement fingerprints being monitored for anomaly detection",
-				Metrics: []string{"sql.stats.insights.anomaly_detection.fingerprints"},
+				Metrics: []string{"sql.insights.anomaly_detection.fingerprints"},
 			},
 			{
 				Title:   "Current memory used to support anomaly detection",
-				Metrics: []string{"sql.stats.insights.anomaly_detection.memory"},
+				Metrics: []string{"sql.insights.anomaly_detection.memory"},
 			},
 			{
 				Title:   "Evictions of fingerprint latency summaries due to memory pressure",
-				Metrics: []string{"sql.stats.insights.anomaly_detection.evictions"},
+				Metrics: []string{"sql.insights.anomaly_detection.evictions"},
 			},
 		},
 	},
