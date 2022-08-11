@@ -1007,7 +1007,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	mt.makeMutationsActive(ctx)
 	// Add column mutation "b"
 	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`); !testutils.IsError(err, `index "bar" contains unknown column "b"`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`); !testutils.IsError(err, `secondary index "bar" contains dropped key column "b"`) {
 		t.Fatal(err)
 	}
 	// Make "b" live.
