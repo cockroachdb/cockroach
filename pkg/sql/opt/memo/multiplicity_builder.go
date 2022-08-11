@@ -233,11 +233,16 @@ func filtersMatchLeftRowsAtMostOnce(left, right RelExpr, filters FiltersExpr) bo
 //      the left and the column it references from the right. All left columns
 //      must come from the same foreign key.
 //
-// In both the self-join and the foreign key cases, the left columns must be
-// not-null, and the right columns must be either unfiltered, or the left and
-// right must be Select expressions where the left side filters imply the right
-// side filters and right columns are unfiltered in the right Select's input
-// (see condition #3b in the comment for verifyFiltersAreValidEqualities).
+// In both the self-join and the foreign key cases that are not cross-joins
+// (cases 2a and 2b):
+//
+//   - The left columns must be not-null, and
+//   - One of the following must be true:
+//     - The right columns are unfiltered, or
+//     - The left and right side of the join must be Select expressions where
+//       the left side filters imply the right side filters, and the right
+//       columns - are unfiltered in the right Select's input (see condition
+//       #3b in the comment for verifyFilterAreValidEqualities).
 //
 // Why do the left columns have to be non-null, and the right columns unfiltered
 // or filtered identically as their corresponding left column? In both the
@@ -447,8 +452,7 @@ func rightHasSingleFilterThatMatchesLeft(left, right RelExpr, leftCol, rightCol 
 }
 
 // checkSelfJoinCase returns true if all equalities in the given FiltersExpr
-// are between columns from the same position in the same base table. Panics
-// if verifyFilters is not checked first.
+// are between columns from the same position in the same base table.
 func checkSelfJoinCase(md *opt.Metadata, filters FiltersExpr) bool {
 	for i := range filters {
 		eq, _ := filters[i].Condition.(*EqExpr)
@@ -470,8 +474,7 @@ func checkSelfJoinCase(md *opt.Metadata, filters FiltersExpr) bool {
 
 // checkForeignKeyCase returns true if all equalities in the given FiltersExpr
 // are between not-null foreign key columns on the left and unfiltered
-// referenced columns on the right. Panics if verifyFiltersAreValidEqualities is
-// not checked first.
+// referenced columns on the right.
 func checkForeignKeyCase(
 	md *opt.Metadata, leftNotNullCols, rightUnfilteredCols opt.ColSet, filters FiltersExpr,
 ) bool {
@@ -479,7 +482,8 @@ func checkForeignKeyCase(
 		// There are no unfiltered columns from the right; a valid foreign key
 		// relation is not possible. This check, which is a duplicate of a check
 		// in verifyFiltersAreValidEqualities, is necessary in the case of a
-		// cross-join because verifyFiltersAreValidEqualities is not called.
+		// cross-join because verifyFiltersAreValidEqualities is not called (see
+		// case 1a in filtersMatchAllLeftRows).
 		return false
 	}
 
@@ -553,7 +557,8 @@ func checkForeignKeyCase(
 					// can't be used in a filter. This check, which is a
 					// duplicate of a check in verifyFiltersAreValidEqualities,
 					// is necessary in the case of a cross-join because
-					// verifyFiltersAreValidEqualities is not called.
+					// verifyFiltersAreValidEqualities is not called (see case
+					// 1a in filtersMatchAllLeftRows).
 					continue
 				}
 				if filtersHaveEquality(filters, leftColID, rightColID) {
