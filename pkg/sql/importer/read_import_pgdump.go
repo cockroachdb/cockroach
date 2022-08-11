@@ -354,10 +354,6 @@ func getSchemaByNameFromMap(
 	version clusterversion.Handle,
 ) (catalog.SchemaDescriptor, error) {
 	var schema catalog.SchemaDescriptor
-	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) &&
-		(schemaAndTableName.schema == "" || schemaAndTableName.schema == tree.PublicSchema) {
-		return schemadesc.GetPublicSchema(), nil
-	}
 	var ok bool
 	if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
 		return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
@@ -530,16 +526,14 @@ func readPostgresCreateTable(
 		schemaNameToDesc[schemaDesc.GetName()] = schemaDesc
 	}
 
-	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		// The database should already have a public schema so we don't have to create
-		// it. However, we do have to add it to the naming map for name resolution.
-		publicSchema, err := getPublicSchemaDescForDatabase(ctx, p.ExecCfg(), parentDB)
-		if err != nil {
-			return nil, nil, err
-		}
-		schemaNameToDesc[tree.PublicSchema] =
-			schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
+	// The database should already have a public schema so we don't have to create
+	// it. However, we do have to add it to the naming map for name resolution.
+	publicSchema, err := getPublicSchemaDescForDatabase(ctx, p.ExecCfg(), parentDB)
+	if err != nil {
+		return nil, nil, err
 	}
+	schemaNameToDesc[tree.PublicSchema] =
+		schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
 
 	// Construct sequence descriptors.
 	seqs, err := createPostgresSequences(

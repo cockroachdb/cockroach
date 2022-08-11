@@ -1015,7 +1015,7 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
+							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOPreV22_1 - 1),
 						},
 					},
 				}})
@@ -1070,7 +1070,7 @@ func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testin
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
+							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOPreV22_1 - 1),
 						},
 					},
 				}})
@@ -1101,7 +1101,7 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
+							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOPreV22_1 - 1),
 						},
 					},
 				}})
