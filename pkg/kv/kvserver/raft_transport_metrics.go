@@ -17,6 +17,8 @@ type RaftTransportMetrics struct {
 	SendQueueSize *metric.Gauge
 	MessagesSent  *metric.Counter
 	MessagesRcvd  *metric.Counter
+	ResponsesSent *metric.Counter
+	ResponsesRcvd *metric.Counter
 }
 
 func (t *RaftTransport) initMetrics() {
@@ -42,6 +44,20 @@ messages to at least one peer.`,
 		MessagesRcvd: metric.NewCounter(metric.Metadata{
 			Name:        "raft.transport.rcvd",
 			Help:        "Number of Raft messages received by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		ResponsesSent: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.resp-sent",
+			Help:        "Number of Raft responses sent by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		ResponsesRcvd: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.resp-rcvd",
+			Help:        "Number of Raft responses received by the Raft Transport",
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
 		}),

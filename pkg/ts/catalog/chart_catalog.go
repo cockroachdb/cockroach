@@ -1893,6 +1893,14 @@ var charts = []sectionDescription{
 				Title:   "Raft Messages Received",
 				Metrics: []string{"raft.transport.rcvd"},
 			},
+			{
+				Title:   "Raft Responses Sent",
+				Metrics: []string{"raft.transport.resp-sent"},
+			},
+			{
+				Title:   "Raft Responses Received",
+				Metrics: []string{"raft.transport.resp-rcvd"},
+			},
 		},
 	},
 	{
