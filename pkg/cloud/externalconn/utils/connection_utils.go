@@ -13,6 +13,7 @@ package utils
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"strings"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,6 +47,7 @@ func CheckExternalStorageConnection(
 	if cfg.ExternalConnectionTestingKnobs != nil &&
 		cfg.ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection != nil {
 		if cfg.ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection() {
+			fmt.Println("SKIPPPPING")
 			return nil
 		}
 	}
@@ -134,7 +137,10 @@ func CheckKMSConnection(
 	if err != nil {
 		return err
 	}
-	defer kms.Close()
+	defer func() {
+		err := kms.Close()
+		log.Warningf(ctx, "failed to close KMS: %+v", err)
+	}()
 
 	if cfg.ExternalConnectionTestingKnobs != nil &&
 		cfg.ExternalConnectionTestingKnobs.SkipCheckingKMSConnection != nil {
