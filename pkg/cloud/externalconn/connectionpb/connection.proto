@@ -21,6 +21,7 @@ enum ConnectionProvider {
   nodelocal = 1;
   s3 = 4;
   userfile = 5;
+  gs = 6;
 
   // KMS providers.
   gcp_kms = 2;
