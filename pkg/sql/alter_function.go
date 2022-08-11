@@ -15,11 +15,14 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -182,7 +185,83 @@ func (p *planner) AlterFunctionSetSchema(
 }
 
 func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
-	return unimplemented.NewWithIssue(85532, "alter function set schema not supported")
+	// TODO(chengxiong): add validation that a function can not be altered if it's
+	// referenced by other objects. This is needed when want to allow function
+	// references.
+	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	if err != nil {
+		return err
+	}
+	// Functions cannot be resolved across db, so just use current db name to get
+	// the descriptor.
+	db, err := params.p.Descriptors().GetMutableDatabaseByName(
+		params.ctx, params.p.txn, params.p.CurrentDatabase(), tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+
+	sc, err := params.p.Descriptors().GetMutableSchemaByName(
+		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), tree.SchemaLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+
+	switch sc.SchemaKind() {
+	case catalog.SchemaTemporary:
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot move objects into or out of temporary schemas")
+	case catalog.SchemaVirtual:
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot move objects into or out of virtual schemas")
+	case catalog.SchemaPublic:
+		// We do not need to check for privileges on the public schema.
+	default:
+		err = params.p.CheckPrivilege(params.ctx, sc, privilege.CREATE)
+		if err != nil {
+			return err
+		}
+	}
+
+	targetSc := sc.(*schemadesc.Mutable)
+	if targetSc.GetID() == fnDesc.GetParentSchemaID() {
+		// No-op if moving to the same schema.
+		return nil
+	}
+
+	// Check if there is a conflicting function exists.
+	maybeExistingFuncObj := fnDesc.ToFuncObj()
+	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
+	maybeExistingFuncObj.FuncName.ExplicitSchema = true
+	existing, err := params.p.matchUDF(params.ctx, &maybeExistingFuncObj, false /* required */)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		return pgerror.Newf(
+			pgcode.DuplicateFunction, "function %s already exists in schema %q",
+			tree.AsString(maybeExistingFuncObj), targetSc.GetName(),
+		)
+	}
+
+	sourceSc, err := params.p.Descriptors().GetMutableSchemaByID(
+		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+
+	sourceSc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
+	if err := params.p.writeSchemaDesc(params.ctx, sourceSc); err != nil {
+		return err
+	}
+	targetSc.AddFunction(fnDesc.GetName(), toSchemaOverloadSignature(fnDesc))
+	if err := params.p.writeSchemaDesc(params.ctx, targetSc); err != nil {
+		return err
+	}
+	fnDesc.SetParentSchemaID(targetSc.GetID())
+	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
 }
 
 func (n *alterFunctionSetSchemaNode) Next(params runParams) (bool, error) { return false, nil }
