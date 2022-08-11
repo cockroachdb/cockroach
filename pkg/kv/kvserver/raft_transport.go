@@ -147,9 +147,7 @@ type RaftMessageHandler interface {
 // See: https://github.com/cockroachdb/cockroach/issues/83917
 type raftTransportStats struct {
 	nodeID        roachpb.NodeID
-	clientRecv    int64
 	clientDropped int64
-	serverSent    int64
 }
 
 type raftTransportStatsSlice []*raftTransportStats
@@ -227,7 +225,6 @@ func NewRaftTransport(
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
-			lastTime := timeutil.Now()
 			var stats raftTransportStatsSlice
 			for {
 				select {
@@ -247,30 +244,22 @@ func NewRaftTransport(
 					}
 					clearStatsMap() // no need to hold on to references to stats
 
-					now := timeutil.Now()
-					elapsed := now.Sub(lastTime).Seconds()
 					sort.Sort(stats)
 
 					var buf bytes.Buffer
 					// NB: The header is 80 characters which should display in a single
 					// line on most terminals.
 					fmt.Fprintf(&buf,
-						"         qdropped client-recv server-sent\n")
+						"         qdropped\n")
 					for _, s := range stats {
-						last := lastStats[s.nodeID]
 						cur := raftTransportStats{
 							nodeID:        s.nodeID,
 							clientDropped: atomic.LoadInt64(&s.clientDropped),
-							clientRecv:    atomic.LoadInt64(&s.clientRecv),
-							serverSent:    atomic.LoadInt64(&s.serverSent),
 						}
-						fmt.Fprintf(&buf, "  %3d: %6d %11.1f %11.1f\n",
-							cur.nodeID, cur.clientDropped,
-							float64(cur.clientRecv-last.clientRecv)/elapsed,
-							float64(cur.serverSent-last.serverSent)/elapsed)
+						fmt.Fprintf(&buf, "  %3d: %6d\n",
+							cur.nodeID, cur.clientDropped)
 						lastStats[s.nodeID] = cur
 					}
-					lastTime = now
 					log.Infof(ctx, "stats:\n%s", buf.String())
 				case <-t.stopper.ShouldQuiesce():
 					return
@@ -396,10 +385,10 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 						req := &batch.Requests[i]
 						t.metrics.MessagesRcvd.Inc(1)
 						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
-							atomic.AddInt64(&stats.serverSent, 1)
 							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
 								return err
 							}
+							t.metrics.ReverseSent.Inc(1)
 						}
 					}
 				}
@@ -512,7 +501,7 @@ func (t *RaftTransport) processQueue(
 					if err != nil {
 						return err
 					}
-					atomic.AddInt64(&stats.clientRecv, 1)
+					t.metrics.ReverseRcvd.Inc(1)
 					handler, ok := t.getHandler(resp.ToReplica.StoreID)
 					if !ok {
 						log.Warningf(ctx, "no handler found for store %s in response %s",

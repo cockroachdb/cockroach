@@ -17,6 +17,8 @@ type RaftTransportMetrics struct {
 	SendQueueSize *metric.Gauge
 	MessagesSent  *metric.Counter
 	MessagesRcvd  *metric.Counter
+	ReverseSent   *metric.Counter
+	ReverseRcvd   *metric.Counter
 }
 
 func (t *RaftTransport) initMetrics() {
@@ -42,6 +44,26 @@ messages to at least one peer.`,
 		MessagesRcvd: metric.NewCounter(metric.Metadata{
 			Name:        "raft.transport.rcvd",
 			Help:        "Number of Raft messages received by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		ReverseSent: metric.NewCounter(metric.Metadata{
+			Name: "raft.transport.reverse-sent",
+			Help: `Messages sent in the reverse direction of a stream.
+
+These messages should be rare. They are mostly informational, and are not actual
+responses to Raft messages. Responses are sent over another stream.`,
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		ReverseRcvd: metric.NewCounter(metric.Metadata{
+			Name: "raft.transport.reverse-rcvd",
+			Help: `Messages received from the reverse direction of a stream.
+
+These messages should be rare. They are mostly informational, and are not actual
+responses to Raft messages. Responses are received over another stream.`,
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
 		}),
