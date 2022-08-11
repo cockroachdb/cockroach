@@ -37,6 +37,19 @@ func MakeFunctionNameFromPrefix(prefix ObjectNamePrefix, object Name) FunctionNa
 	}}
 }
 
+// MakeQualifiedFunctionName constructs a FunctionName with the given db and
+// schema name as prefix.
+func MakeQualifiedFunctionName(db string, sc string, fn string) FunctionName {
+	return MakeFunctionNameFromPrefix(
+		ObjectNamePrefix{
+			CatalogName:     Name(db),
+			ExplicitCatalog: true,
+			SchemaName:      Name(sc),
+			ExplicitSchema:  true,
+		}, Name(fn),
+	)
+}
+
 // Format implements the NodeFormatter interface.
 func (f *FunctionName) Format(ctx *FmtCtx) {
 	f.ObjectNamePrefix.Format(ctx)

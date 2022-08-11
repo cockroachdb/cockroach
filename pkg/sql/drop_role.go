@@ -80,6 +80,7 @@ const (
 	table            objectType = "table"
 	schema           objectType = "schema"
 	typeObject       objectType = "type"
+	function         objectType = "function"
 	defaultPrivilege objectType = "default_privilege"
 )
 
@@ -239,6 +240,38 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				})
 		}
 	}
+	for _, fnDesc := range lCtx.fnDescs {
+		if _, ok := userNames[fnDesc.GetPrivileges().Owner()]; ok {
+			if !descriptorIsVisible(fnDesc, true /* allowAdding */) {
+				continue
+			}
+			name, err := getFunctionNameFromFunctionDescriptor(lCtx, fnDesc)
+			if err != nil {
+				return err
+			}
+			userNames[fnDesc.GetPrivileges().Owner()] = append(
+				userNames[fnDesc.GetPrivileges().Owner()],
+				objectAndType{
+					ObjectType: function,
+					ObjectName: name.String(),
+				},
+			)
+		}
+
+		for _, u := range fnDesc.GetPrivileges().Users {
+			if _, ok := userNames[u.User()]; ok {
+				name, err := getFunctionNameFromFunctionDescriptor(lCtx, fnDesc)
+				if err != nil {
+					return err
+				}
+				if privilegeObjectFormatter.Len() > 0 {
+					privilegeObjectFormatter.WriteString(", ")
+				}
+				privilegeObjectFormatter.FormatNode(&name)
+				break
+			}
+		}
+	}
 
 	// Was there any object depending on that user?
 	if privilegeObjectFormatter.Len() > 0 {
@@ -279,7 +312,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			objectsMsg := tree.NewFmtCtx(tree.FmtSimple)
 			for _, obj := range dependentObjects {
 				switch obj.ObjectType {
-				case database, table, schema, typeObject:
+				case database, table, schema, typeObject, function:
 					objectsMsg.WriteString(fmt.Sprintf("\nowner of %s %s", obj.ObjectType, obj.ObjectName))
 				case defaultPrivilege:
 					hasDependentDefaultPrivilege = true
