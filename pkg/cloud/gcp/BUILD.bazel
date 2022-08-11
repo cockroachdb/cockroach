@@ -4,8 +4,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "gcp",
     srcs = [
+        "gcp_kms_connection.go",
         "gcs_kms.go",
-        "gcs_kms_connection.go",
         "gcs_retry.go",
         "gcs_storage.go",
     ],
@@ -17,6 +17,7 @@ go_library(
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
+        "//pkg/cloud/externalconn/utils",
         "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",

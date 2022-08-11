@@ -60,6 +60,10 @@ type TestingKnobs struct {
 	// CONNECTION` should skip the step that writes, lists and reads a sentinel
 	// file from the underlying ExternalStorage.
 	SkipCheckingExternalStorageConnection func() bool
+	// SkipCheckingKMSConnection returns whether `CREATE EXTERNAL CONNECTION`
+	// should skip the step that encrypts and decrypts a sentinel file from the
+	// underlying KMS.
+	SkipCheckingKMSConnection func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

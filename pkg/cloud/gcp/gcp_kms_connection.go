@@ -16,18 +16,20 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/utils"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/errors"
 )
 
-func parseAndValidateGCSKMSConnectionURI(
-	_ context.Context, _ interface{}, _ username.SQLUsername, uri *url.URL,
+func parseAndValidateGCPKMSConnectionURI(
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL,
 ) (externalconn.ExternalConnection, error) {
-	if err := ValidateKMSURI(*uri); err != nil {
-		return nil, err
+	if err := utils.CheckKMSConnection(ctx, execCfg, user, uri.String()); err != nil {
+		return nil, errors.Wrap(err, "failed to create GCP KMS external connection")
 	}
 
 	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_gs_kms,
+		Provider: connectionpb.ConnectionProvider_gcp_kms,
 		Details: &connectionpb.ConnectionDetails_SimpleURI{
 			SimpleURI: &connectionpb.SimpleURI{
 				URI: uri.String(),
@@ -40,7 +42,7 @@ func parseAndValidateGCSKMSConnectionURI(
 
 func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
-		gcsScheme,
-		parseAndValidateGCSKMSConnectionURI,
+		gcpScheme,
+		parseAndValidateGCPKMSConnectionURI,
 	)
 }
