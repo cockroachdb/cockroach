@@ -377,14 +377,7 @@ func computeStats(
 	if len(to) == 0 {
 		to = keys.MaxKey
 	}
-
-	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: from,
-		UpperBound: to,
-	})
-	defer iter.Close()
-	ms, err := storage.ComputeStatsForRange(iter, from, to, nowNanos)
+	ms, err := storage.ComputeStats(reader, from, to, nowNanos)
 	require.NoError(t, err)
 	return ms
 }

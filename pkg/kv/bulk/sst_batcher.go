@@ -661,7 +661,8 @@ func (b *SSTBatcher) addSSTable(
 	defer iter.Close()
 
 	if (stats == enginepb.MVCCStats{}) {
-		stats, err = storage.ComputeStatsForRange(iter, start, end, sendStart.UnixNano())
+		iter.SeekGE(storage.MVCCKey{Key: start})
+		stats, err = storage.ComputeStatsForIter(iter, sendStart.UnixNano())
 		if err != nil {
 			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
@@ -779,9 +780,18 @@ func (b *SSTBatcher) addSSTable(
 						return err
 					}
 
-					right.stats, err = storage.ComputeStatsForRange(
-						iter, right.start, right.end, sendStart.Unix(),
-					)
+					// Needs a new iterator with new bounds.
+					statsIter, err := storage.NewPebbleMemSSTIterator(sstBytes, true, storage.IterOptions{
+						KeyTypes:   storage.IterKeyTypePointsOnly,
+						LowerBound: right.start,
+						UpperBound: right.end,
+					})
+					if err != nil {
+						return err
+					}
+					statsIter.SeekGE(storage.MVCCKey{Key: right.start})
+					right.stats, err = storage.ComputeStatsForIter(statsIter, sendStart.Unix())
+					statsIter.Close()
 					if err != nil {
 						return err
 					}

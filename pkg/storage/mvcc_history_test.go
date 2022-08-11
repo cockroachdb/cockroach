@@ -516,7 +516,8 @@ func TestMVCCHistories(t *testing.T) {
 					// that we can compare the deltas.
 					var msEngineBefore enginepb.MVCCStats
 					if stats {
-						msEngineBefore = computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
+						msEngineBefore, err = ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+						require.NoError(t, err)
 					}
 					msEvalBefore := *e.ms
 
@@ -533,7 +534,8 @@ func TestMVCCHistories(t *testing.T) {
 					if stats && cmd.typ == typDataUpdate {
 						// If stats are enabled, emit evaluated stats returned by the
 						// command, and compare them with the real computed stats diff.
-						msEngineDiff := computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
+						msEngineDiff, err := ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+						require.NoError(t, err)
 						msEngineDiff.Subtract(msEngineBefore)
 
 						msEvalDiff := *e.ms
@@ -576,7 +578,8 @@ func TestMVCCHistories(t *testing.T) {
 
 				// Calculate and output final stats if requested and the data changed.
 				if stats && dataChange {
-					ms := computeStats(t, e.engine, span.Key, span.EndKey, statsTS)
+					ms, err := ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+					require.NoError(t, err)
 					buf.Printf("stats: %s\n", formatStats(ms, false))
 				}
 
@@ -1058,13 +1061,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 		// Some tests will submit invalid MVCC range keys, where e.g. the end key is
 		// before the start key -- ignore them to avoid iterator panics.
 		if key.Compare(endKey) < 0 {
-			iter := e.engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-				KeyTypes:   IterKeyTypePointsAndRanges,
-				LowerBound: key,
-				UpperBound: endKey,
-			})
-			ms, err := ComputeStatsForRange(iter, key, endKey, ts.WallTime)
-			iter.Close()
+			ms, err := ComputeStats(e.engine, key, endKey, ts.WallTime)
 			if err != nil {
 				return err
 			}

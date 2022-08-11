@@ -780,10 +780,20 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 				newIdx.ConstraintID = oldIdx.ConstraintID
 			}
 		} else if constraint := mutation.GetConstraint(); constraint != nil {
-			nextID := nextConstraintID()
-			constraint.UniqueWithoutIndexConstraint.ConstraintID = nextID
-			constraint.ForeignKey.ConstraintID = nextID
-			constraint.Check.ConstraintID = nextID
+			switch constraint.ConstraintType {
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				if constraint.UniqueWithoutIndexConstraint.ConstraintID == 0 {
+					constraint.UniqueWithoutIndexConstraint.ConstraintID = nextConstraintID()
+				}
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+				if constraint.Check.ConstraintID == 0 {
+					constraint.Check.ConstraintID = nextConstraintID()
+				}
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
+				if constraint.ForeignKey.ConstraintID == 0 {
+					constraint.ForeignKey.ConstraintID = nextConstraintID()
+				}
+			}
 		}
 
 	}
