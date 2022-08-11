@@ -15,7 +15,7 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
-      │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+      │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
       │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 1}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
