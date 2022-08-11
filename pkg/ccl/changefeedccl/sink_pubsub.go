@@ -111,7 +111,7 @@ type pubsubSink struct {
 	format changefeedbase.FormatType
 }
 
-func (s *pubsubSink) getConcreteType() sinkType {
+func (p *pubsubSink) getConcreteType() sinkType {
 	return sinkTypePubsub
 }
 

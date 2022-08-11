@@ -32,7 +32,7 @@ type externalConnectionKafkaSink struct {
 	sink Sink
 }
 
-func (s *externalConnectionKafkaSink) getConcreteType() sinkType {
+func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
 	return sinkTypeKafka
 }
 

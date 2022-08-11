@@ -74,7 +74,7 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedAddTargetFamily(t *testing.T) {
@@ -113,7 +113,7 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 	}
 
 	// TODO: Figure out why this freezes on other sinks (ex: webhook)
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedSwitchFamily(t *testing.T) {
@@ -151,7 +151,7 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 	}
 
 	// TODO: Figure out why this freezes on other sinks (ex: cloudstorage)
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedDropTarget(t *testing.T) {
@@ -186,7 +186,7 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 		assertPayloads(t, testFeed, nil)
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedDropTargetFamily(t *testing.T) {
@@ -220,7 +220,7 @@ func TestAlterChangefeedDropTargetFamily(t *testing.T) {
 
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedSetDiffOption(t *testing.T) {
@@ -251,7 +251,7 @@ func TestAlterChangefeedSetDiffOption(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedUnsetDiffOption(t *testing.T) {
@@ -283,7 +283,7 @@ func TestAlterChangefeedUnsetDiffOption(t *testing.T) {
 	}
 
 	// TODO: Figure out why this fails on other sinks
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedErrors(t *testing.T) {
@@ -374,7 +374,7 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		)
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
@@ -401,7 +401,7 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 		)
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedTelemetry(t *testing.T) {
@@ -437,7 +437,7 @@ func TestAlterChangefeedTelemetry(t *testing.T) {
 		require.Equal(t, int32(1), counts[`changefeed.alter.unset_options.1`])
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 // The purpose of this test is to ensure that the ALTER CHANGEFEED statement
@@ -519,7 +519,7 @@ func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 		)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedChangeSinkURI(t *testing.T) {
@@ -557,7 +557,9 @@ func TestAlterChangefeedChangeSinkURI(t *testing.T) {
 		require.Equal(t, newSinkURI, details.SinkURI)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	// TODO (zinger): Decide how this functionality should interact with external connections
+	// and add a test for it.
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedAddTargetErrors(t *testing.T) {
@@ -646,7 +648,7 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		)
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
@@ -696,7 +698,7 @@ func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedDatabaseScope(t *testing.T) {
@@ -741,7 +743,7 @@ func TestAlterChangefeedDatabaseScope(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
@@ -790,7 +792,7 @@ func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
@@ -835,7 +837,7 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedAlterTableName(t *testing.T) {
@@ -892,7 +894,7 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
@@ -1037,7 +1039,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		sqlDB.ExpectErr(t, errMsg, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, jobFeed.JobID()))
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
@@ -1190,7 +1192,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		}
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedUpdateFilter(t *testing.T) {
@@ -1268,7 +1270,7 @@ func TestAlterChangefeedUpdateFilter(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedInitialScan(t *testing.T) {
@@ -1322,7 +1324,7 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 		"initial_scan = 'no'",
 		"initial_scan",
 		"no_initial_scan"} {
-		cdcTest(t, testFn(initialScanOpt), feedTestForceSink("kafka"))
+		cdcTest(t, testFn(initialScanOpt), feedTestForceSink("kafka"), feedTestNoExternalConnection)
 	}
 }
 
@@ -1394,5 +1396,5 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
