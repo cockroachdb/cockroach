@@ -106,8 +106,8 @@ func DeleteRange(
 				statsCovered = &s
 			}
 			err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
-				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents,
-				statsCovered)
+				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
+				args.IdempotentTombstone, maxIntents, statsCovered)
 			return result.Result{}, err
 		}
 
@@ -122,6 +122,10 @@ func DeleteRange(
 			// other types of requests, preventing further resume span muddling.
 			return result.Result{}, errors.AssertionFailedf(
 				"MaxSpanRequestKeys must be greater than zero when using predicated based DeleteRange")
+		}
+		if args.IdempotentTombstone {
+			return result.Result{}, errors.AssertionFailedf(
+				"IdempotentTombstone not compatible with Predicates")
 		}
 		// TODO (msbutler): Tune the threshold once DeleteRange and DeleteRangeUsingTombstone have
 		// been further optimized.

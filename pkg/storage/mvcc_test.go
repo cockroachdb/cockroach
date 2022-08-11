@@ -4793,15 +4793,15 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				}
 			}
 			if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("r"),
-				roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, 0, nil); err != nil {
+				roachpb.Key("r-del").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
 				t.Fatal(err)
 			}
 			if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-				roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, 0, nil); err != nil {
+				roachpb.Key("u").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
 				t.Fatal(err)
 			}
 			if err := MVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("t"),
-				roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, 0, nil); err != nil {
+				roachpb.Key("u").Next(), ts3, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
 				t.Fatal(err)
 			}
 			if log.V(1) {
@@ -5230,7 +5230,7 @@ func (d rangeTestData) populateEngine(
 			ts = v.point.Key.Timestamp
 		} else {
 			require.NoError(t, MVCCDeleteRangeUsingTombstone(ctx, engine, ms, v.rangeTombstone.StartKey,
-				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, 0, nil),
+				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil),
 				"failed to insert range tombstone into engine (%s)", v.rangeTombstone.String())
 			ts = v.rangeTombstone.Timestamp
 		}
