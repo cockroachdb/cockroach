@@ -636,7 +636,7 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID,
 ) ([]*TableStatistic, error) {
-	getTableStatisticsStmt := `
+	const getTableStatisticsStmt = `
 SELECT
   "tableID",
 	"statisticID",
@@ -650,8 +650,10 @@ SELECT
 	histogram
 FROM system.table_statistics
 WHERE "tableID" = $1
-ORDER BY "createdAt" DESC
+ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 `
+	// TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
+	// columnIDs, statisticID).
 
 	it, err := sc.SQLExecutor.QueryIterator(
 		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,

@@ -300,8 +300,8 @@ column_names  row_count  distinct_count  null_count
 {a,b,c}       256        64              0
 {a,b}         256        16              0
 {a}           256        4               0
+{b,c}         256        16              0
 {b}           256        4               0
-{c,b}         256        16              0
 {c,d}         256        16              0
 {c}           256        4               0
 {d}           256        4               0
@@ -418,7 +418,7 @@ FROM [SHOW STATISTICS FOR TABLE data]
 ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s4               {c,b}         256        16              0
+s4               {b,c}         256        16              0
 s4               {c,d}         256        16              0
 s5               {a,b,c,d}     256        256             0
 s5               {a,b,c}       256        64              0
@@ -510,7 +510,7 @@ __auto__         {e}
 __auto__         {e}
 __auto__         {e}
 __auto__         {e}
-s4               {c,b}
+s4               {b,c}
 s4               {c,d}
 
 statement ok
@@ -560,7 +560,7 @@ __auto__         {e}
 __auto__         {e}
 __auto__         {e}
 __auto__         {e}
-s4               {c,b}
+s4               {b,c}
 s4               {c,d}
 s7               {a}
 
@@ -612,7 +612,7 @@ __auto__         {e}
 __auto__         {e}
 __auto__         {e}
 __auto__         {e}
-s4               {c,b}
+s4               {b,c}
 s4               {c,d}
 s8               {a}
 
@@ -669,7 +669,7 @@ __auto__         {d}
 __auto__         {d}
 __auto__         {d}
 s10              {a}
-s4               {c,b}
+s4               {b,c}
 s4               {c,d}
 
 # Stats for column e still exist. (We cannot use SHOW STATISTICS to see them
@@ -1585,11 +1585,11 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
     {
         "avg_size": 0,
         "columns": [
+            "a",
             "sa"
         ],
         "distinct_count": 0,
-        "histo_col_type": "INT8",
-        "histo_version": 2,
+        "histo_col_type": "",
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1597,11 +1597,11 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
     {
         "avg_size": 0,
         "columns": [
-            "a",
             "sa"
         ],
         "distinct_count": 0,
-        "histo_col_type": "",
+        "histo_col_type": "INT8",
+        "histo_version": 2,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1694,17 +1694,6 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
     },
     {
         "columns": [
-            "sa"
-        ],
-        "distinct_count": 1,
-        "histo_col_type": "INT8",
-        "histo_version": 2,
-        "name": "locke",
-        "null_count": 1,
-        "row_count": 1
-    },
-    {
-        "columns": [
             "a",
             "sa"
         ],
@@ -1712,6 +1701,17 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "histo_col_type": "",
         "name": "locke",
         "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "sa"
+        ],
+        "distinct_count": 1,
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "name": "locke",
+        "null_count": 1,
         "row_count": 1
     }
 ]
@@ -1767,17 +1767,6 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
     {
         "avg_size": 0,
         "columns": [
-            "rowid"
-        ],
-        "distinct_count": 0,
-        "histo_col_type": "INT8",
-        "histo_version": 2,
-        "null_count": 0,
-        "row_count": 0
-    },
-    {
-        "avg_size": 0,
-        "columns": [
             "a"
         ],
         "distinct_count": 0,
@@ -1800,6 +1789,17 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
     {
         "avg_size": 0,
         "columns": [
+            "rowid"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
             "a",
             "b"
         ],
@@ -1810,3 +1810,35 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "row_count": 0
     }
 ]
+
+# Check that column_names of multi-column stats are always sorted the same way.
+statement ok
+CREATE TABLE u (d INT, c INT, b INT, a INT, PRIMARY KEY (a, b), INDEX (c, d, a, b));
+
+statement ok
+CREATE STATISTICS u_defaults FROM u;
+
+statement ok
+CREATE STATISTICS u_a_b ON a, b FROM u;
+
+statement ok
+CREATE STATISTICS u_b_a ON b, a FROM u;
+
+statement ok
+CREATE STATISTICS u_c_d_b ON c, d, b FROM u;
+
+query TT colnames,rowsort
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE u]
+ORDER BY column_names, statistics_name
+----
+statistics_name  column_names
+u_defaults       {a}
+u_defaults       {b}
+u_b_a            {b,a}
+u_defaults       {c}
+u_defaults       {d}
+u_defaults       {d,c}
+u_defaults       {d,c,a}
+u_c_d_b          {d,c,b}
+u_defaults       {d,c,b,a}

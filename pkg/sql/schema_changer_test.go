@@ -5490,11 +5490,11 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	// column w is ordered before column v, since index columns are added first).
 	sqlRun.CheckQueryResultsRetry(t,
 		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-	  FROM [SHOW STATISTICS FOR TABLE t.test]`,
+	  FROM [SHOW STATISTICS FOR TABLE t.test] ORDER BY column_names::STRING`,
 		[][]string{
 			{"__auto__", "{k}", "0", "0", "0"},
-			{"__auto__", "{w}", "0", "0", "0"},
 			{"__auto__", "{v}", "0", "0", "0"},
+			{"__auto__", "{w}", "0", "0", "0"},
 		})
 
 	// Add a column.
