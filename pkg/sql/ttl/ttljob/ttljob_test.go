@@ -373,7 +373,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 
 	sqlDB := th.sqlDB
 
-	// create table
+	// Create table
 	tableName := "tbl"
 	expirationExpr := "expire_at"
 	sqlDB.Exec(t, fmt.Sprintf(
@@ -384,7 +384,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 		tableName, expirationExpr,
 	))
 
-	// split table
+	// Split table
 	const splitAt = 10_000
 	ranges := sqlDB.QueryStr(t, fmt.Sprintf(
 		`SHOW RANGES FROM TABLE %s`,
@@ -413,7 +413,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	))
 	require.Equal(t, 2, len(newRanges))
 
-	// populate table - even pk is non-expired, odd pk is expired
+	// Populate table - even pk is non-expired, odd pk is expired
 	expectedNumNonExpiredRows := 0
 	expectedNumExpiredRows := 0
 	ts := timeutil.Now()
@@ -435,8 +435,8 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	// Force the schedule to execute.
 	th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
 
+	// Verify results
 	th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
-
 	th.verifyExpiredRows(t, expectedNumExpiredRows)
 }
 
