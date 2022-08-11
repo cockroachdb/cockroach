@@ -120,9 +120,14 @@ type copyMachine struct {
 	// other things that statements more generally need.
 	parsingEvalCtx *eval.Context
 
-	processRows func(ctx context.Context) error
+	processRows func(ctx context.Context, finalBatch bool) error
 
 	scratchRow []tree.Datum
+
+	// For testing we want to be able to override this on the instance level.
+	copyBatchRowSize int
+
+	implicitTxn bool
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -146,11 +151,11 @@ func newCopyMachine(
 		csvExpectHeader: n.Options.Header,
 		p:               p,
 		execInsertPlan:  execInsertPlan,
+		implicitTxn:     txnOpt.txn == nil,
 	}
-
 	// We need a planner to do the initial planning, in addition
 	// to those used for the main execution of the COPY afterwards.
-	cleanup := c.p.preparePlannerForCopy(ctx, txnOpt)
+	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, false /* finalBatch */, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
@@ -278,6 +283,7 @@ func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMo
 	c.copyMon.StartNoReserved(ctx, parentMon)
 	c.bufMemAcc = c.copyMon.MakeBoundAccount()
 	c.rowsMemAcc = c.copyMon.MakeBoundAccount()
+	c.copyBatchRowSize = copyBatchRowSize
 }
 
 // copyTxnOpt contains information about the transaction in which the copying
@@ -451,10 +457,10 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
-	if ln := c.rows.Len(); !final && (ln == 0 || ln < copyBatchRowSize) {
+	if ln := c.rows.Len(); !final && (ln == 0 || ln < c.copyBatchRowSize) {
 		return nil
 	}
-	return c.processRows(ctx)
+	return c.processRows(ctx, final)
 }
 
 func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, err error) {
@@ -577,8 +583,7 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) err
 
 		datums[i] = d
 	}
-	_, err := c.rows.AddRow(ctx, datums)
-	if err != nil {
+	if _, err := c.rows.AddRow(ctx, datums); err != nil {
 		return err
 	}
 	return nil
@@ -710,12 +715,12 @@ func (c *copyMachine) readBinarySignature() ([]byte, error) {
 // an error. If an error is passed in to the cleanup function, the
 // same error is returned.
 func (p *planner) preparePlannerForCopy(
-	ctx context.Context, txnOpt copyTxnOpt,
+	ctx context.Context, txnOpt *copyTxnOpt, finalBatch bool, implicitTxn bool,
 ) func(context.Context, error) error {
 	txn := txnOpt.txn
 	txnTs := txnOpt.txnTimestamp
 	stmtTs := txnOpt.stmtTimestamp
-	autoCommit := false
+	autoCommit := finalBatch && implicitTxn
 	if txn == nil {
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
 		// The session data stack in the planner is not set up at this point, so use
@@ -723,9 +728,21 @@ func (p *planner) preparePlannerForCopy(
 		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, sessiondatapb.Normal)
 		txnTs = p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
-		autoCommit = true
+
 	}
 	txnOpt.resetPlanner(ctx, p, txn, txnTs, stmtTs)
+	if implicitTxn {
+		// For atomic implicit COPY remember txn for next time so we don't start a new one.
+		if p.SessionData().CopyFromAtomicEnabled {
+			txnOpt.txn = txn
+			txnOpt.txnTimestamp = txnTs
+			txnOpt.stmtTimestamp = txnTs
+			autoCommit = finalBatch
+		} else {
+			// We're doing original behavior of committing each batch.
+			autoCommit = true
+		}
+	}
 	p.autoCommit = autoCommit
 
 	return func(ctx context.Context, prevErr error) (err error) {
@@ -749,14 +766,14 @@ func (p *planner) preparePlannerForCopy(
 }
 
 // insertRows transforms the buffered rows into an insertNode and executes it.
-func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
-	if c.rows.Len() == 0 {
-		return nil
-	}
-	cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt)
+func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) (retErr error) {
+	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, finalBatch, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
+	if c.rows.Len() == 0 {
+		return nil
+	}
 	numRows := c.rows.Len()
 
 	copyFastPath := c.p.SessionData().CopyFastPathEnabled

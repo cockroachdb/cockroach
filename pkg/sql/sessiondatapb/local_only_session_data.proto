@@ -276,6 +276,9 @@ message LocalOnlySessionData {
   bool optimizer_use_not_visible_indexes = 74;
   // CopyFastPathEnabled controls whether the optimized copy mode is enabled.
   bool copy_fast_path_enabled = 75;
+  // CopyFromAtomicEnabled controls whether implicit txn copy from operations
+  // are atomic or segmented.
+  bool copy_from_atomic_enabled = 76;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
