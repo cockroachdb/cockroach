@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/serverccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -59,8 +60,8 @@ func TestTenantStatusAPI(t *testing.T) {
 		StoreDisableCoalesceAdjacent: true,
 	}
 
-	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
-	defer testHelper.cleanup(ctx, t)
+	testHelper := serverccl.NewTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	defer testHelper.Cleanup(ctx, t)
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
@@ -295,7 +296,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 }
 
 func testResetSQLStatsRPCForTenant(
-	ctx context.Context, t *testing.T, testHelper *tenantTestHelper,
+	ctx context.Context, t *testing.T, testHelper serverccl.TenantTestHelper,
 ) {
 	stmts := []string{
 		"SELECT 1",
@@ -303,20 +304,20 @@ func testResetSQLStatsRPCForTenant(
 		"SELECT 1, 1, 1",
 	}
 
-	testCluster := testHelper.testCluster()
-	controlCluster := testHelper.controlCluster()
+	testCluster := testHelper.TestCluster()
+	controlCluster := testHelper.ControlCluster()
 
 	// Disable automatic flush to ensure tests are deterministic.
-	testCluster.tenantConn(0 /* idx */).
+	testCluster.TenantConn(0 /* idx */).
 		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
-	controlCluster.tenantConn(0 /* idx */).
+	controlCluster.TenantConn(0 /* idx */).
 		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
 
 	defer func() {
 		// Cleanup
-		testCluster.tenantConn(0 /* idx */).
+		testCluster.TenantConn(0 /* idx */).
 			Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = true")
-		controlCluster.tenantConn(0 /* idx */).
+		controlCluster.TenantConn(0 /* idx */).
 			Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = true")
 
 	}()
@@ -325,21 +326,21 @@ func testResetSQLStatsRPCForTenant(
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			// Clears the SQL Stats at the end of each test via builtin.
 			defer func() {
-				testCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
-				controlCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				testCluster.TenantConn(serverccl.RandomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
 			}()
 
 			for _, stmt := range stmts {
-				testCluster.tenantConn(randomServer).Exec(t, stmt)
-				controlCluster.tenantConn(randomServer).Exec(t, stmt)
+				testCluster.TenantConn(serverccl.RandomServer).Exec(t, stmt)
+				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, stmt)
 			}
 
 			if flushed {
-				testCluster.tenantSQLStats(randomServer).Flush(ctx)
-				controlCluster.tenantSQLStats(randomServer).Flush(ctx)
+				testCluster.TenantSQLStats(serverccl.RandomServer).Flush(ctx)
+				controlCluster.TenantSQLStats(serverccl.RandomServer).Flush(ctx)
 			}
 
-			status := testCluster.tenantStatusSrv(randomServer)
+			status := testCluster.TenantStatusSrv(serverccl.RandomServer)
 
 			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
 				Combined: true,
@@ -380,7 +381,7 @@ func testResetSQLStatsRPCForTenant(
 
 			// Ensures that sql stats reset is isolated by tenant boundary.
 			statsFromControlCluster, err :=
-				controlCluster.tenantStatusSrv(randomServer).Statements(ctx, &serverpb.StatementsRequest{
+				controlCluster.TenantStatusSrv(serverccl.RandomServer).Statements(ctx, &serverpb.StatementsRequest{
 					Combined: true,
 				})
 			require.NoError(t, err)
@@ -391,25 +392,25 @@ func testResetSQLStatsRPCForTenant(
 }
 
 func testResetIndexUsageStatsRPCForTenant(
-	ctx context.Context, t *testing.T, testHelper *tenantTestHelper,
+	ctx context.Context, t *testing.T, testHelper serverccl.TenantTestHelper,
 ) {
 	testCases := []struct {
 		name    string
-		resetFn func(helper *tenantTestHelper)
+		resetFn func(helper serverccl.TenantTestHelper)
 	}{
 		{
 			name: "sql-cli",
-			resetFn: func(helper *tenantTestHelper) {
+			resetFn: func(helper serverccl.TenantTestHelper) {
 				// Reset index usage stats using SQL shell built-in.
-				testingCluster := helper.testCluster()
-				testingCluster.tenantConn(0).Exec(t, "SELECT crdb_internal.reset_index_usage_stats()")
+				testingCluster := helper.TestCluster()
+				testingCluster.TenantConn(0).Exec(t, "SELECT crdb_internal.reset_index_usage_stats()")
 			},
 		},
 		{
 			name: "http",
-			resetFn: func(helper *tenantTestHelper) {
+			resetFn: func(helper serverccl.TenantTestHelper) {
 				// Reset index usage stats over HTTP on tenant SQL pod 1.
-				httpPod1 := helper.testCluster().tenantAdminHTTPClient(t, 1)
+				httpPod1 := helper.TestCluster().TenantAdminHTTPClient(t, 1)
 				defer httpPod1.Close()
 				httpPod1.PostJSON("/_status/resetindexusagestats", &serverpb.ResetIndexUsageStatsRequest{}, &serverpb.ResetIndexUsageStatsResponse{})
 			},
@@ -417,14 +418,14 @@ func testResetIndexUsageStatsRPCForTenant(
 	}
 
 	for _, testCase := range testCases {
-		testingCluster := testHelper.testCluster()
-		controlCluster := testHelper.controlCluster()
+		testingCluster := testHelper.TestCluster()
+		controlCluster := testHelper.ControlCluster()
 
 		t.Run(testCase.name, func(t *testing.T) {
 			var testingTableID, controlTableID string
-			for i, cluster := range []tenantCluster{testingCluster, controlCluster} {
+			for i, cluster := range []serverccl.TenantClusterHelper{testingCluster, controlCluster} {
 				// Create tables and insert data.
-				cluster.tenantConn(0).Exec(t, `
+				cluster.TenantConn(0).Exec(t, `
 CREATE TABLE test (
   k INT PRIMARY KEY,
   a INT,
@@ -433,20 +434,20 @@ CREATE TABLE test (
 )
 `)
 
-				cluster.tenantConn(0).Exec(t, `
+				cluster.TenantConn(0).Exec(t, `
 INSERT INTO test
 VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 `)
 
 				// Record scan on primary index.
-				cluster.tenantConn(randomServer).
+				cluster.TenantConn(serverccl.RandomServer).
 					Exec(t, "SELECT * FROM test")
 
 				// Record scan on secondary index.
 				// Note that this is an index join and will also read from the primary index.
-				cluster.tenantConn(randomServer).
+				cluster.TenantConn(serverccl.RandomServer).
 					Exec(t, "SELECT * FROM test@test_a_idx")
-				testTableIDStr := cluster.tenantConn(randomServer).
+				testTableIDStr := cluster.TenantConn(serverccl.RandomServer).
 					QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
 
 				// Set table ID outside of loop.
@@ -471,12 +472,12 @@ WHERE
 					{testTableIDStr, "1", "2", "true"}, // Primary index
 					{testTableIDStr, "2", "1", "true"},
 				}
-				cluster.tenantConn(randomServer).CheckQueryResults(t, query, expected)
+				cluster.TenantConn(serverccl.RandomServer).CheckQueryResults(t, query, expected)
 			}
 
 			// Reset index usage stats.
 			timePreReset := timeutil.Now()
-			status := testingCluster.tenantStatusSrv(randomServer)
+			status := testingCluster.TenantStatusSrv(serverccl.RandomServer)
 
 			// Reset index usage stats.
 			testCase.resetFn(testHelper)
@@ -488,7 +489,7 @@ WHERE
 
 			// Ensure tenant data isolation.
 			// Check that last reset time was not updated for control cluster.
-			status = controlCluster.tenantStatusSrv(randomServer)
+			status = controlCluster.TenantStatusSrv(serverccl.RandomServer)
 			resp, err = status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
 			require.NoError(t, err)
 			require.Equal(t, resp.LastReset, time.Time{})
@@ -507,7 +508,7 @@ WHERE
 `
 
 			// Check that index usage stats were reset.
-			rows := testingCluster.tenantConn(2).QueryStr(t, query, testingTableID)
+			rows := testingCluster.TenantConn(2).QueryStr(t, query, testingTableID)
 			require.NotNil(t, rows)
 			for _, row := range rows {
 				require.Equal(t, row[1], "0", "expected total reads for table %s to be reset, but got %s",
@@ -517,7 +518,7 @@ WHERE
 			}
 
 			// Ensure tenant data isolation.
-			rows = controlCluster.tenantConn(0).QueryStr(t, query, controlTableID)
+			rows = controlCluster.TenantConn(0).QueryStr(t, query, controlTableID)
 			require.NotNil(t, rows)
 			for _, row := range rows {
 				require.NotEqual(t, row[1], "0", "expected total reads for table %s to not be reset, but got %s", row[0], row[1])
@@ -525,29 +526,29 @@ WHERE
 			}
 
 			// Cleanup.
-			testingCluster.tenantConn(0).Exec(t, "DROP TABLE IF EXISTS test")
-			controlCluster.tenantConn(0).Exec(t, "DROP TABLE IF EXISTS test")
+			testingCluster.TenantConn(0).Exec(t, "DROP TABLE IF EXISTS test")
+			controlCluster.TenantConn(0).Exec(t, "DROP TABLE IF EXISTS test")
 		})
 	}
 }
 
-func testTableIndexStats(ctx context.Context, t *testing.T, testHelper *tenantTestHelper) {
-	getTableIndexStats := func(t *testing.T, helper *tenantTestHelper, db string) *serverpb.TableIndexStatsResponse {
+func testTableIndexStats(ctx context.Context, t *testing.T, testHelper serverccl.TenantTestHelper) {
+	getTableIndexStats := func(t *testing.T, helper serverccl.TenantTestHelper, db string) *serverpb.TableIndexStatsResponse {
 		// Get index usage stats using function call.
-		cluster := helper.testCluster()
-		status := cluster.tenantStatusSrv(randomServer)
+		cluster := helper.TestCluster()
+		status := cluster.TenantStatusSrv(serverccl.RandomServer)
 		req := &serverpb.TableIndexStatsRequest{Table: "test", Database: db}
 		resp, err := status.TableIndexStats(ctx, req)
 		require.NoError(t, err)
 		return resp
 	}
 
-	cluster := testHelper.testCluster()
+	cluster := testHelper.TestCluster()
 
 	timePreCreate := timeutil.Now()
 
 	// Create table on a database.
-	cluster.tenantConn(0).Exec(t, `
+	cluster.TenantConn(0).Exec(t, `
 CREATE DATABASE test_db1;
 SET DATABASE=test_db1;
 CREATE TABLE test (
@@ -558,7 +559,7 @@ CREATE TABLE test (
 );`)
 
 	// Create second table on different database.
-	cluster.tenantConn(0).Exec(t, `
+	cluster.TenantConn(0).Exec(t, `
 CREATE DATABASE test_db2;
 SET DATABASE=test_db2;
 CREATE TABLE test (
@@ -570,7 +571,7 @@ CREATE TABLE test (
 
 	// Record scan on primary index.
 	timePreRead := timeutil.Now()
-	cluster.tenantConn(0).Exec(t, `
+	cluster.TenantConn(0).Exec(t, `
 SET DATABASE=test_db1;
 SELECT * FROM test;
 `)
@@ -598,7 +599,7 @@ WHERE tablename = 'test' AND indexname = $1`
 		require.Equal(t, uint64(1), resp.Statistics[0].Statistics.Stats.TotalReadCount)
 		requireAfter(t, &resp.Statistics[0].Statistics.Stats.LastRead, &timePreRead)
 		indexName := resp.Statistics[0].IndexName
-		createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+		createStmt := cluster.TenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
 		print(createStmt)
 		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
 		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
@@ -609,8 +610,8 @@ WHERE tablename = 'test' AND indexname = $1`
 		require.Equal(t, uint64(0), resp.Statistics[0].Statistics.Stats.TotalReadCount)
 		require.Equal(t, resp.Statistics[0].Statistics.Stats.LastRead, time.Time{})
 		indexName := resp.Statistics[0].IndexName
-		cluster.tenantConn(0).Exec(t, `SET DATABASE=test_db2`)
-		createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+		cluster.TenantConn(0).Exec(t, `SET DATABASE=test_db2`)
+		createStmt := cluster.TenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
 		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
 		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
 	})
@@ -618,7 +619,7 @@ WHERE tablename = 'test' AND indexname = $1`
 	// Test that a subsequent index creation has an appropriate timestamp.
 	t.Run("validate CreatedAt for new index", func(t *testing.T) {
 		timeBeforeCreateNewIndex := timeutil.Now()
-		cluster.tenantConn(0).Exec(t, `
+		cluster.TenantConn(0).Exec(t, `
 SET DATABASE=test_db2;
 CREATE INDEX idx2 ON test (b, a)`)
 		timeAfterCreateNewIndex := timeutil.Now()
@@ -660,14 +661,14 @@ func ensureExpectedStmtFingerprintExistsInRPCResponse(
 }
 
 func testContentionEventsForTenant(
-	ctx context.Context, t *testing.T, testHelper *tenantTestHelper,
+	ctx context.Context, t *testing.T, testHelper serverccl.TenantTestHelper,
 ) {
-	testingCluster := testHelper.testCluster()
-	controlledCluster := testHelper.controlCluster()
+	testingCluster := testHelper.TestCluster()
+	controlledCluster := testHelper.ControlCluster()
 
 	sqlutils.CreateTable(
 		t,
-		testingCluster[0].tenantConn,
+		testingCluster.TenantDB(0),
 		"test",
 		"x INT PRIMARY KEY",
 		1, /* numRows */
@@ -675,31 +676,31 @@ func testContentionEventsForTenant(
 	)
 
 	testTableID, err :=
-		strconv.Atoi(testingCluster.tenantConn(0).QueryStr(t, "SELECT 'test.test'::regclass::oid")[0][0])
+		strconv.Atoi(testingCluster.TenantConn(0).QueryStr(t, "SELECT 'test.test'::regclass::oid")[0][0])
 	require.NoError(t, err)
 
-	testingCluster.tenantConn(0).Exec(t, "USE test")
-	testingCluster.tenantConn(1).Exec(t, "USE test")
+	testingCluster.TenantConn(0).Exec(t, "USE test")
+	testingCluster.TenantConn(1).Exec(t, "USE test")
 
-	testingCluster.tenantConn(0).Exec(t, `
+	testingCluster.TenantConn(0).Exec(t, `
 BEGIN;
 UPDATE test SET x = 100 WHERE x = 1;
 `)
-	testingCluster.tenantConn(1).Exec(t, `
+	testingCluster.TenantConn(1).Exec(t, `
 SET TRACING=on;
 BEGIN PRIORITY HIGH;
 UPDATE test SET x = 1000 WHERE x = 1;
 COMMIT;
 SET TRACING=off;
 `)
-	testingCluster.tenantConn(0).ExpectErr(
+	testingCluster.TenantConn(0).ExpectErr(
 		t,
 		"^pq: restart transaction.+",
 		"COMMIT;",
 	)
 
 	resp, err :=
-		testingCluster.tenantStatusSrv(2).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
+		testingCluster.TenantStatusSrv(2).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
 	require.NoError(t, err)
 
 	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
@@ -716,7 +717,7 @@ SET TRACING=off;
 	require.True(t, found,
 		"expect to find contention event for table %d, but found %+v", testTableID, resp)
 
-	resp, err = controlledCluster.tenantStatusSrv(0).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
+	resp, err = controlledCluster.TenantStatusSrv(0).ListContentionEvents(ctx, &serverpb.ListContentionEventsRequest{})
 	require.NoError(t, err)
 	for _, event := range resp.Events.IndexContentionEvents {
 		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
@@ -725,15 +726,15 @@ SET TRACING=off;
 	}
 
 	testutils.SucceedsWithin(t, func() error {
-		err = testHelper.testCluster().tenantContentionRegistry(1).FlushEventsForTest(ctx)
+		err = testHelper.TestCluster().TenantContentionRegistry(1).FlushEventsForTest(ctx)
 		if err != nil {
 			return err
 		}
 
 		resp := &serverpb.TransactionContentionEventsResponse{}
 		testHelper.
-			testCluster().
-			tenantAdminHTTPClient(t, 1).
+			TestCluster().
+			TenantAdminHTTPClient(t, 1).
 			GetJSON("/_status/transactioncontentionevents", resp)
 
 		if len(resp.Events) == 0 {
@@ -745,16 +746,16 @@ SET TRACING=off;
 	}, 5*time.Second)
 }
 
-func testIndexUsageForTenants(t *testing.T, testHelper *tenantTestHelper) {
-	testingCluster := testHelper.testCluster()
-	controlledCluster := testHelper.controlCluster()
+func testIndexUsageForTenants(t *testing.T, testHelper serverccl.TenantTestHelper) {
+	testingCluster := testHelper.TestCluster()
+	controlledCluster := testHelper.ControlCluster()
 
-	testingCluster.tenantConn(0).Exec(t, "USE defaultdb")
-	testingCluster.tenantConn(1).Exec(t, "USE defaultdb")
-	testingCluster.tenantConn(2).Exec(t, "USE defaultdb")
-	testingCluster.tenantConn(0).Exec(t, `CREATE SCHEMA idx_test`)
+	testingCluster.TenantConn(0).Exec(t, "USE defaultdb")
+	testingCluster.TenantConn(1).Exec(t, "USE defaultdb")
+	testingCluster.TenantConn(2).Exec(t, "USE defaultdb")
+	testingCluster.TenantConn(0).Exec(t, `CREATE SCHEMA idx_test`)
 
-	testingCluster.tenantConn(0).Exec(t, `
+	testingCluster.TenantConn(0).Exec(t, `
 CREATE TABLE idx_test.test (
   k INT PRIMARY KEY,
   a INT,
@@ -764,21 +765,21 @@ CREATE TABLE idx_test.test (
 `)
 
 	defer func() {
-		testingCluster.tenantConn(0).Exec(t, "DROP TABLE idx_test.test")
+		testingCluster.TenantConn(0).Exec(t, "DROP TABLE idx_test.test")
 	}()
 
-	testingCluster.tenantConn(0).Exec(t, `
+	testingCluster.TenantConn(0).Exec(t, `
 INSERT INTO idx_test.test
 VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 `)
 
 	// Record scan on primary index.
-	testingCluster.tenantConn(0).Exec(t, "SELECT * FROM idx_test.test")
+	testingCluster.TenantConn(0).Exec(t, "SELECT * FROM idx_test.test")
 
 	// Record scan on secondary index.
 	// Note that this is an index join and will also read from the primary index.
-	testingCluster.tenantConn(1).Exec(t, "SELECT * FROM idx_test.test@test_a_idx")
-	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'idx_test.test'::regclass::oid")[0][0]
+	testingCluster.TenantConn(1).Exec(t, "SELECT * FROM idx_test.test@test_a_idx")
+	testTableIDStr := testingCluster.TenantConn(2).QueryStr(t, "SELECT 'idx_test.test'::regclass::oid")[0][0]
 	testTableID, err := strconv.Atoi(testTableIDStr)
 	require.NoError(t, err)
 
@@ -793,7 +794,7 @@ FROM
 WHERE
   table_id = $1
 `
-	actual := testingCluster.tenantConn(2).QueryStr(t, query, testTableID)
+	actual := testingCluster.TenantConn(2).QueryStr(t, query, testTableID)
 	expected := [][]string{
 		{testTableIDStr, "1", "2", "true"},
 		{testTableIDStr, "2", "1", "true"},
@@ -802,7 +803,7 @@ WHERE
 	require.Equal(t, expected, actual)
 
 	// Ensure tenant data isolation.
-	actual = controlledCluster.tenantConn(0).QueryStr(t, query, testTableID)
+	actual = controlledCluster.TenantConn(0).QueryStr(t, query, testTableID)
 	expected = [][]string{}
 
 	require.Equal(t, expected, actual)
@@ -817,13 +818,13 @@ func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
 	return sessionIDs
 }
 
-func testTenantStatusCancelSession(t *testing.T, helper *tenantTestHelper) {
+func testTenantStatusCancelSession(t *testing.T, helper serverccl.TenantTestHelper) {
 	// Open a SQL session on tenant SQL pod 0.
-	sqlPod0 := helper.testCluster().tenantConn(0)
+	sqlPod0 := helper.TestCluster().TenantConn(0)
 	sqlPod0.Exec(t, "SELECT 1")
 
 	// See the session over HTTP on tenant SQL pod 1.
-	httpPod1 := helper.testCluster().tenantAdminHTTPClient(t, 1)
+	httpPod1 := helper.TestCluster().TenantAdminHTTPClient(t, 1)
 	defer httpPod1.Close()
 	listSessionsResp := serverpb.ListSessionsResponse{}
 	httpPod1.GetJSON("/_status/sessions", &listSessionsResp)
@@ -860,7 +861,7 @@ func testTenantStatusCancelSession(t *testing.T, helper *tenantTestHelper) {
 	require.Equal(t, fmt.Sprintf("session ID %s not found", sessionID), cancelSessionResp.Error)
 }
 
-func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper *tenantTestHelper) {
+func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper serverccl.TenantTestHelper) {
 	testCases := []struct {
 		sessionID     string
 		expectedError string
@@ -892,7 +893,7 @@ func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper *tenantTest
 	}
 
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
-		client := helper.testCluster().tenantHTTPClient(t, 1, isAdmin)
+		client := helper.TestCluster().TenantHTTPClient(t, 1, isAdmin)
 		defer client.Close()
 
 		for _, testCase := range testCases {
@@ -923,9 +924,11 @@ func selectClusterQueryIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
 	return queryIDs
 }
 
-func testTenantStatusCancelQuery(ctx context.Context, t *testing.T, helper *tenantTestHelper) {
+func testTenantStatusCancelQuery(
+	ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper,
+) {
 	// Open a SQL session on tenant SQL pod 0 and start a long-running query.
-	sqlPod0 := helper.testCluster().tenantConn(0)
+	sqlPod0 := helper.TestCluster().TenantConn(0)
 	resultCh := make(chan struct{})
 	errorCh := make(chan error)
 	defer close(resultCh)
@@ -939,7 +942,7 @@ func testTenantStatusCancelQuery(ctx context.Context, t *testing.T, helper *tena
 	}()
 
 	// See the query over HTTP on tenant SQL pod 1.
-	httpPod1 := helper.testCluster().tenantAdminHTTPClient(t, 1)
+	httpPod1 := helper.TestCluster().TenantAdminHTTPClient(t, 1)
 	defer httpPod1.Close()
 	var listSessionsResp serverpb.ListSessionsResponse
 	var query serverpb.ActiveQuery
@@ -987,7 +990,7 @@ func testTenantStatusCancelQuery(ctx context.Context, t *testing.T, helper *tena
 	require.Equal(t, fmt.Sprintf("query ID %s not found", query.ID), cancelQueryResp.Error)
 }
 
-func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper *tenantTestHelper) {
+func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper serverccl.TenantTestHelper) {
 	testCases := []struct {
 		queryID       string
 		expectedError string
@@ -1025,7 +1028,7 @@ func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper *tenantTestHe
 	}
 
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
-		client := helper.testCluster().tenantHTTPClient(t, 1, isAdmin)
+		client := helper.TestCluster().TenantHTTPClient(t, 1, isAdmin)
 		defer client.Close()
 
 		for _, testCase := range testCases {
@@ -1048,7 +1051,7 @@ func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper *tenantTestHe
 // testTxnIDResolutionRPC tests the reachability of TxnIDResolution RPC. The
 // underlying implementation correctness is tested within
 // pkg/sql/contention/txnidcache.
-func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTestHelper) {
+func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
 	run := func(sqlConn *sqlutils.SQLRunner, status serverpb.SQLStatusServer, coordinatorNodeID int32) {
 		sqlConn.Exec(t, "SET application_name='test1'")
 
@@ -1087,8 +1090,8 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTes
 
 	t.Run("regular_cluster", func(t *testing.T) {
 		status :=
-			helper.hostCluster.Server(0 /* idx */).StatusServer().(serverpb.SQLStatusServer)
-		sqlConn := helper.hostCluster.ServerConn(0 /* idx */)
+			helper.HostCluster().Server(0 /* idx */).StatusServer().(serverpb.SQLStatusServer)
+		sqlConn := helper.HostCluster().ServerConn(0 /* idx */)
 		run(sqlutils.MakeSQLRunner(sqlConn), status, 1 /* coordinatorNodeID */)
 	})
 
@@ -1096,42 +1099,58 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTes
 		// Select a different tenant status server here so a pod-to-pod RPC will
 		// happen.
 		status :=
-			helper.testCluster().tenantStatusSrv(2 /* idx */)
-		sqlConn := helper.testCluster().tenantConn(0 /* idx */)
+			helper.TestCluster().TenantStatusSrv(2 /* idx */)
+		sqlConn := helper.TestCluster().TenantConn(0 /* idx */)
 		run(sqlConn, status, 1 /* coordinatorNodeID */)
 	})
 }
 
-func testTenantRangesRPC(_ context.Context, t *testing.T, helper *tenantTestHelper) {
-	tenantA := helper.testCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
-	keyPrefixForA := keys.MakeTenantPrefix(helper.testCluster().tenant(0).tenant.RPCContext().TenantID)
-	keyPrefixEndForA := keyPrefixForA.PrefixEnd()
+func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
 
-	tenantB := helper.controlCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
-	keyPrefixForB := keys.MakeTenantPrefix(helper.controlCluster().tenant(0).tenant.RPCContext().TenantID)
-	keyPrefixEndForB := keyPrefixForB.PrefixEnd()
-
-	resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
-	require.NoError(t, err)
-	require.NotEmpty(t, resp.RangesByLocality)
-	for localityKey, rangeList := range resp.RangesByLocality {
-		require.NotEmpty(t, localityKey)
-		for _, r := range rangeList.Ranges {
-			assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForA)
-			assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForA, keyPrefixEndForA)
+	// Wait for range splits to occur so we get more than just a single range during our tests.
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+		if err != nil {
+			return err
 		}
-	}
-
-	resp, err = tenantB.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
-	require.NoError(t, err)
-	require.NotEmpty(t, resp.RangesByLocality)
-	for localityKey, rangeList := range resp.RangesByLocality {
-		require.NotEmpty(t, localityKey)
-		for _, r := range rangeList.Ranges {
-			assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForB)
-			assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForB, keyPrefixEndForB)
+		for _, ranges := range resp.RangesByLocality {
+			if len(ranges.Ranges) > 1 {
+				return nil
+			}
 		}
-	}
+		return errors.New("waiting for tenant range split")
+	})
+
+	t.Run("test tenant ranges respects tenant isolation", func(t *testing.T) {
+		keyPrefixForA := keys.MakeTenantPrefix(helper.TestCluster().Tenant(0).GetRPCContext().TenantID)
+		keyPrefixEndForA := keyPrefixForA.PrefixEnd()
+		keyPrefixForB := keys.MakeTenantPrefix(helper.ControlCluster().Tenant(0).GetRPCContext().TenantID)
+		keyPrefixEndForB := keyPrefixForB.PrefixEnd()
+
+		resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.RangesByLocality)
+		for localityKey, rangeList := range resp.RangesByLocality {
+			require.NotEmpty(t, localityKey)
+			for _, r := range rangeList.Ranges {
+				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForA)
+				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForA, keyPrefixEndForA)
+			}
+		}
+
+		resp, err = tenantB.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.RangesByLocality)
+		for localityKey, rangeList := range resp.RangesByLocality {
+			require.NotEmpty(t, localityKey)
+			for _, r := range rangeList.Ranges {
+				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForB)
+				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForB, keyPrefixEndForB)
+			}
+		}
+	})
 }
 
 // assertStartKeyInRange compares the pretty printed startKey with the provided
