@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -289,6 +288,9 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		if err != nil {
 			return nil, err
 		}
+		// Sort columnIDs to make equivalent column sets equal when using SHOW
+		// STATISTICS or other SQL on table_statistics.
+		_ = stats.MakeSortedColStatKey(columnIDs)
 		isInvIndex := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
 		colStats = []jobspb.CreateStatsDetails_ColStat{{
 			ColumnIDs: columnIDs,
@@ -377,16 +379,17 @@ func createStatsDefaultColumns(
 
 	requestedStats := make(map[string]struct{})
 
-	// trackStatsIfNotExists adds the given column IDs as a set to the
-	// requestedStats set. If the columnIDs were not already in the set, it
-	// returns true.
-	trackStatsIfNotExists := func(colIDs []descpb.ColumnID) bool {
-		key := makeColStatKey(colIDs)
+	// sortAndTrackStatsExists adds the given column IDs as a set to the
+	// requestedStats set. If the columnIDs were already in the set, it returns
+	// true. As a side-effect sortAndTrackStatsExists also sorts colIDs. NOTE:
+	// This assumes that ordering is not significant for multi-column stats.
+	sortAndTrackStatsExists := func(colIDs []descpb.ColumnID) bool {
+		key := stats.MakeSortedColStatKey(colIDs)
 		if _, ok := requestedStats[key]; ok {
-			return false
+			return true
 		}
 		requestedStats[key] = struct{}{}
-		return true
+		return false
 	}
 
 	// addIndexColumnStatsIfNotExists appends column stats for the given column
@@ -406,15 +409,15 @@ func createStatsDefaultColumns(
 			return nil
 		}
 
-		colList := []descpb.ColumnID{colID}
+		colIDs := []descpb.ColumnID{colID}
 
 		// Check for existing stats and remember the requested stats.
-		if !trackStatsIfNotExists(colList) {
+		if ok := sortAndTrackStatsExists(colIDs); ok {
 			return nil
 		}
 
 		colStat := jobspb.CreateStatsDetails_ColStat{
-			ColumnIDs:           colList,
+			ColumnIDs:           colIDs,
 			HasHistogram:        !isInverted,
 			HistogramMaxBuckets: stats.DefaultHistogramBuckets,
 		}
@@ -453,7 +456,7 @@ func createStatsDefaultColumns(
 		}
 
 		// Remember the requested stats so we don't request duplicates.
-		trackStatsIfNotExists(colIDs)
+		_ = sortAndTrackStatsExists(colIDs)
 
 		// Only generate non-histogram multi-column stats.
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
@@ -497,7 +500,7 @@ func createStatsDefaultColumns(
 			}
 
 			// Check for existing stats and remember the requested stats.
-			if !trackStatsIfNotExists(colIDs) {
+			if ok := sortAndTrackStatsExists(colIDs); ok {
 				continue
 			}
 
@@ -545,9 +548,10 @@ func createStatsDefaultColumns(
 			continue
 		}
 
-		colList := []descpb.ColumnID{col.GetID()}
+		colIDs := []descpb.ColumnID{col.GetID()}
 
-		if !trackStatsIfNotExists(colList) {
+		// Check for existing stats.
+		if ok := sortAndTrackStatsExists(colIDs); ok {
 			continue
 		}
 
@@ -560,7 +564,7 @@ func createStatsDefaultColumns(
 			maxHistBuckets = stats.DefaultHistogramBuckets
 		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-			ColumnIDs:           colList,
+			ColumnIDs:           colIDs,
 			HasHistogram:        !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType()),
 			HistogramMaxBuckets: maxHistBuckets,
 		})
@@ -568,16 +572,6 @@ func createStatsDefaultColumns(
 	}
 
 	return colStats, nil
-}
-
-// makeColStatKey constructs a unique key representing cols that can be used
-// as the key in a map.
-func makeColStatKey(cols []descpb.ColumnID) string {
-	var colSet util.FastIntSet
-	for _, c := range cols {
-		colSet.Add(int(c))
-	}
-	return colSet.String()
 }
 
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
