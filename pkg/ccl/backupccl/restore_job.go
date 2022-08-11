@@ -1265,11 +1265,6 @@ func remapPublicSchemas(
 	writtenSchemas *[]catalog.SchemaDescriptor,
 	details *jobspb.RestoreDetails,
 ) error {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		// If we're not on PublicSchemasWithDescriptors, there is no work to do as
-		// we did not create any public schemas with descriptors.
-		return nil
-	}
 	databaseToPublicSchemaID := make(map[descpb.ID]descpb.ID)
 	for _, db := range mutableDatabases {
 		if db.HasPublicSchemaWithDescriptor() {

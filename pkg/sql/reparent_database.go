@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -42,66 +41,9 @@ type reparentDatabaseNode struct {
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
-	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
-			clusterversion.PublicSchemasWithDescriptors)
-	}
-	if err := checkSchemaChangeEnabled(
-		ctx,
-		p.ExecCfg(),
-		"REPARENT DATABASE",
-	); err != nil {
-		return nil, err
-	}
-
-	// We'll only allow the admin to perform this reparenting action.
-	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... CONVERT TO SCHEMA"); err != nil {
-		return nil, err
-	}
-
-	if string(n.Name) == p.CurrentDatabase() {
-		return nil, pgerror.DangerousStatementf("CONVERT TO SCHEMA on current database")
-	}
-
-	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaReparentDatabase)
-
-	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return nil, err
-	}
-
-	parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
-		tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure that this database wouldn't collide with a name under the new database.
-	exists, _, err := schemaExists(ctx, p.txn, p.Descriptors(), parent.ID, db.Name)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		return nil, sqlerrors.NewSchemaAlreadyExistsError(db.Name)
-	}
-
-	// Ensure the database has a valid schema name.
-	if err := schemadesc.IsSchemaNameValid(db.Name); err != nil {
-		return nil, err
-	}
-
-	// We can't reparent a database that has any child schemas other than public.
-	if len(db.Schemas) > 0 {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot convert database with schemas into schema")
-	}
-
-	return &reparentDatabaseNode{
-		n:         n,
-		db:        db,
-		newParent: parent,
-	}, nil
+	return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+		"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
+		clusterversion.TODOPreV22_1)
 }
 
 func (n *reparentDatabaseNode) startExec(params runParams) error {
