@@ -15,17 +15,15 @@ import {
   ColumnDescriptor,
 } from "../../sortedtable";
 import { SortSetting } from "../../sortedtable";
-import { ActiveStatement } from "../types";
+import { ActiveStatement, ExecutionType } from "../types";
 import { isSelectedColumn } from "../../columnsSelector/utils";
-import { Link } from "react-router-dom";
-import { StatusIcon } from "../statusIcon";
 import {
   getLabel,
-  executionsTableTitles,
-  ExecutionType,
   ExecutionsColumn,
+  activeStatementColumnsFromCommon,
+  executionsTableTitles,
 } from "../execTableCommon";
-import { DATE_FORMAT } from "../../util";
+import { Link } from "react-router-dom";
 
 interface ActiveStatementsTable {
   data: ActiveStatement[];
@@ -37,60 +35,24 @@ interface ActiveStatementsTable {
 }
 
 export function makeActiveStatementsColumns(): ColumnDescriptor<ActiveStatement>[] {
-  const execType: ExecutionType = "statement";
-  const columns: ColumnDescriptor<ActiveStatement>[] = [
-    {
-      name: "executionID",
-      title: executionsTableTitles.executionID(execType),
-      cell: (item: ActiveStatement) => (
-        <Link to={`/execution/statement/${item.executionID}`}>
-          {item.executionID}
-        </Link>
-      ),
-      sort: (item: ActiveStatement) => item.executionID,
-      alwaysShow: true,
-    },
+  return [
+    activeStatementColumnsFromCommon.executionID,
     {
       name: "execution",
-      title: executionsTableTitles.execution(execType),
+      title: executionsTableTitles.execution("statement"),
       cell: (item: ActiveStatement) => (
-        <Link to={`/execution/statement/${item.executionID}`}>
+        <Link to={`/execution/statement/${item.statementID}`}>
           {item.query}
         </Link>
       ),
       sort: (item: ActiveStatement) => item.query,
     },
-    {
-      name: "status",
-      title: executionsTableTitles.status(execType),
-      cell: (item: ActiveStatement) => (
-        <span>
-          <StatusIcon status={item.status} />
-          {item.status}
-        </span>
-      ),
-      sort: (item: ActiveStatement) => item.status,
-    },
-    {
-      name: "startTime",
-      title: executionsTableTitles.startTime(execType),
-      cell: (item: ActiveStatement) => item.start.format(DATE_FORMAT),
-      sort: (item: ActiveStatement) => item.start.unix(),
-    },
-    {
-      name: "elapsedTime",
-      title: executionsTableTitles.elapsedTime(execType),
-      cell: (item: ActiveStatement) => `${item.elapsedTimeSeconds} s`,
-      sort: (item: ActiveStatement) => item.elapsedTimeSeconds,
-    },
-    {
-      name: "applicationName",
-      title: executionsTableTitles.applicationName(execType),
-      cell: (item: ActiveStatement) => item.application,
-      sort: (item: ActiveStatement) => item.application,
-    },
+    activeStatementColumnsFromCommon.status,
+    activeStatementColumnsFromCommon.startTime,
+    activeStatementColumnsFromCommon.elapsedTime,
+    activeStatementColumnsFromCommon.timeSpentWaiting,
+    activeStatementColumnsFromCommon.applicationName,
   ];
-  return columns;
 }
 
 export function getColumnOptions(

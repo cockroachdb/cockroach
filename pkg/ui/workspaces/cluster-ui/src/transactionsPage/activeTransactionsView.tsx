@@ -29,7 +29,7 @@ import {
   Filter,
   getFullFiltersAsStringRecord,
 } from "../queryFilter/filter";
-import { getAppsFromActiveTransactions } from "../activeExecutions/activeStatementUtils";
+import { getAppsFromActiveExecutions } from "../activeExecutions/activeStatementUtils";
 import { inactiveFiltersState } from "../queryFilter/filter";
 import { ActiveTransactionsSection } from "src/activeExecutions/activeTransactionsSection";
 
@@ -44,7 +44,7 @@ export type ActiveTransactionsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
   onFiltersChange: (filters: ActiveTransactionFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshSessions: () => void;
+  refreshLiveWorkload: () => void;
 };
 
 export type ActiveTransactionsViewStateProps = {
@@ -63,7 +63,7 @@ const ACTIVE_TXN_SEARCH_PARAM = "q";
 
 export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   onColumnsSelect,
-  refreshSessions,
+  refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
   selectedColumns,
@@ -83,13 +83,14 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
-    refreshSessions();
-    const interval = setInterval(refreshSessions, 10 * 1000);
+    // Refresh  every 10 seconds.
+    refreshLiveWorkload();
+
+    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshSessions]);
+  }, [refreshLiveWorkload]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -154,10 +155,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
 
-  const apps = getAppsFromActiveTransactions(
-    transactions,
-    internalAppNamePrefix,
-  );
+  const apps = getAppsFromActiveExecutions(transactions, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
 
   const filteredTransactions = filterActiveTransactions(

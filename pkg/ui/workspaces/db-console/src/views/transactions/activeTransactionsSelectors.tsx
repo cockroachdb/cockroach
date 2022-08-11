@@ -10,28 +10,14 @@
 
 import {
   ActiveTransactionFilters,
-  ActiveTransaction,
-  getActiveTransactionsFromSessions,
-  SortSetting,
+  ActiveTransactionsViewDispatchProps,
   defaultFilters,
+  SortSetting,
 } from "@cockroachlabs/cluster-ui";
-import { createSelector } from "reselect";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { selectAppName, selectActiveTransactions } from "src/selectors";
+import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { SessionsResponseMessage } from "src/util/api";
-import { refreshSessions } from "src/redux/apiReducers";
-import { selectAppName } from "src/views/statements/activeStatementsSelectors";
-
-const selectActiveTransactions = createSelector(
-  (state: AdminUIState) => state.cachedData.sessions,
-  (
-    state?: CachedDataReducerState<SessionsResponseMessage>,
-  ): ActiveTransaction[] => {
-    if (state?.data == null) return [];
-    return getActiveTransactionsFromSessions(state.data, state.setAt);
-  },
-);
 
 const transactionsColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -66,11 +52,14 @@ export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
   internalAppNamePrefix: selectAppName(state),
 });
 
-export const activeTransactionsPageActions = {
-  onColumnsSelect: (columns: string[]) =>
-    transactionsColumnsLocalSetting.set(columns.join(",")),
-  refreshSessions,
-  onFiltersChange: (filters: ActiveTransactionFilters) =>
-    filtersLocalSetting.set(filters),
-  onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-};
+// This object is just for convenience so we don't need to supply dispatch to
+// each action.
+export const activeTransactionsPageActionCreators: ActiveTransactionsViewDispatchProps =
+  {
+    onColumnsSelect: (columns: string[]) =>
+      transactionsColumnsLocalSetting.set(columns.join(",")),
+    onFiltersChange: (filters: ActiveTransactionFilters) =>
+      filtersLocalSetting.set(filters),
+    onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
+    refreshLiveWorkload,
+  };
