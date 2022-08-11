@@ -139,12 +139,12 @@ CREATE EXTERNAL CONNECTION "foo-kafka" AS 'kafka://broker.address.com:9092?topic
 exec-sql
 CREATE EXTERNAL CONNECTION "invalid-param-kafka" AS 'kafka://broker.address.com:9092?INVALIDPARAM=baz'
 ----
-pq: failed to construct External Connection details: invalid Kafka URI: unknown kafka sink query parameters: INVALIDPARAM
+pq: failed to construct External Connection details: invalid changefeed sink URI: unknown kafka sink query parameters: INVALIDPARAM
 
 exec-sql
 CREATE EXTERNAL CONNECTION "invalid-cert" AS 'kafka://broker.address.com?topic_prefix=bar_&tls_enabled=true&ca_cert=Zm9vCg=11'
 ----
-pq: failed to construct External Connection details: invalid Kafka URI: param ca_cert must be base 64 encoded: illegal base64 data at input byte 6
+pq: failed to construct External Connection details: invalid changefeed sink URI: param ca_cert must be base 64 encoded: illegal base64 data at input byte 6
 
 inspect-system-table
 ----
