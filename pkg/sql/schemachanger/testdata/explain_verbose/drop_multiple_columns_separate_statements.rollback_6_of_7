@@ -15,10 +15,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   ├── • 4 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-    │   │   │     PUBLIC → ABSENT
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-    │   │   │     PUBLIC → ABSENT
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │     MERGE_ONLY → DELETE_ONLY
@@ -31,14 +37,47 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • Column:{DescID: 104, ColumnID: 3}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   └── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
-    │   │   │         rule: "ensure columns are in increasing order"
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: k, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 104, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnOnUpdateExpression:{DescID: 104, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+    │   │   │   │     rule: "ensure columns are in increasing order"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+    │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
     │   │   ├── • ColumnName:{DescID: 104, Name: k, ColumnID: 3}
     │   │   │     ABSENT → PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
-    │   │   │     WRITE_ONLY → PUBLIC
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+    │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 4}
     │   │   │   │ WRITE_ONLY → PUBLIC
@@ -46,13 +85,32 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 3}
     │   │   │   │     rule: "ensure columns are in increasing order"
     │   │   │   │
-    │   │   │   └── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
-    │   │   │         rule: "ensure columns are in increasing order"
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+    │   │   │   │     rule: "ensure columns are in increasing order"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+    │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
     │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+    │   │   │         rule: "index dependents exist before index becomes public"
     │   │   │         rule: "index named right before index becomes public"
     │   │   │
     │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
@@ -64,36 +122,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
     │   │         ABSENT → PUBLIC
     │   │
-    │   └── • 17 Mutation operations
+    │   └── • 15 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 3
     │       │     Name: k
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeColumnPublic
-    │       │     ColumnID: 2
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TableID: 104
-    │       │
-    │       ├── • RefreshStats
-    │       │     TableID: 104
-    │       │
-    │       ├── • RemoveColumnFromIndex
-    │       │     ColumnID: 1
-    │       │     IndexID: 3
-    │       │     TableID: 104
-    │       │
-    │       ├── • RemoveColumnFromIndex
-    │       │     ColumnID: 1
-    │       │     IndexID: 4
     │       │     TableID: 104
     │       │
     │       ├── • SetColumnName
@@ -113,6 +146,29 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │       │
     │       ├── • MakeDroppedIndexDeleteOnly
     │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeColumnPublic
+    │       │     ColumnID: 2
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeAddedSecondaryIndexPublic
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 3
     │       │     TableID: 104
     │       │
     │       ├── • MakeColumnPublic
@@ -144,14 +200,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeAddedSecondaryIndexPublic
-    │       │     IndexID: 2
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
-    │       │     IndexID: 3
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor

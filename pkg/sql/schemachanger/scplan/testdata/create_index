@@ -187,58 +187,58 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index before temp index receives writes
+  rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index before temp index receives writes
+  rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index before temp index receives writes
+  rule: index dependents exist before index becomes public
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
-  rule: index named right before index becomes public
+  rules: [index dependents exist before index becomes public; index named right before index becomes public]
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after index exists
+  rule: index existence precedes index dependents
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after index exists
+  rule: index existence precedes index dependents
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after index exists
+  rule: index existence precedes index dependents
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index existence precedes index name and comment
+  rule: index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
+  rule: temp index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
+  rule: temp index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
+  rule: temp index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -434,58 +434,58 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index before temp index receives writes
+  rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index before temp index receives writes
+  rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index before temp index receives writes
+  rule: index dependents exist before index becomes public
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
-  rule: index named right before index becomes public
+  rules: [index dependents exist before index becomes public; index named right before index becomes public]
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after index exists
+  rule: index existence precedes index dependents
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after index exists
+  rule: index existence precedes index dependents
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index-column added to index after index exists
+  rule: index existence precedes index dependents
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index existence precedes index name and comment
+  rule: index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
+  rule: temp index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
+  rule: temp index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   kind: Precedence
-  rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
+  rule: temp index existence precedes index dependents
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence

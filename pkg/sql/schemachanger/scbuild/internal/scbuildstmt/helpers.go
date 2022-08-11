@@ -326,6 +326,10 @@ func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element)
 	return target == scpb.ToAbsent
 }
 
+func notAbsentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+	return target != scpb.ToAbsent
+}
+
 func statusAbsentOrBackfillOnlyFilter(
 	status scpb.Status, _ scpb.TargetStatus, _ scpb.Element,
 ) bool {
@@ -462,15 +466,15 @@ type tempIndexSpec struct {
 	columns      []*scpb.IndexColumn
 }
 
-// setTargets makes it possible to conveniently set adding or transient build
-// targets for all the elements in the tempIndexSpec.
-func (s tempIndexSpec) setTargets(b BuildCtx) {
-	b.AddTransient(s.idx)
+// apply makes it possible to conveniently define build targets for all
+// the elements in the tempIndexSpec.
+func (s tempIndexSpec) apply(fn func(e scpb.Element)) {
+	fn(s.idx)
 	if s.partitioning != nil {
-		b.Add(s.partitioning)
+		fn(s.partitioning)
 	}
 	for _, ic := range s.columns {
-		b.Add(ic)
+		fn(ic)
 	}
 }
 
@@ -497,7 +501,7 @@ func makeSwapPrimaryIndexSpec(
 	var inID, tempID catid.IndexID
 	var inConstraintID, tempConstraintID catid.ConstraintID
 	{
-		_, _, tbl := scpb.FindTable(b.QueryByID(out.idx.TableID).Filter(publicTargetFilter))
+		_, _, tbl := scpb.FindTable(b.QueryByID(out.idx.TableID).Filter(notAbsentTargetFilter))
 		inID = b.NextTableIndexID(tbl)
 		inConstraintID = b.NextTableConstraintID(tbl.TableID)
 		tempID = inID + 1
