@@ -860,12 +860,31 @@ func cdcTestNamedWithSystem(
 	t.Run(testLabel, func(t *testing.T) {
 		testServer, cleanupServer := makeServerWithOptions(t, options)
 		feedFactory, cleanupSink := makeFeedFactoryWithOptions(t, sinkType, testServer.Server, testServer.DB, options)
+		feedFactory = maybeUseExternalConnection(feedFactory, testServer.DB, sinkType, options, t)
 		defer cleanupServer()
 		defer cleanupSink()
 		defer cleanupCloudStorage()
-
+		t.Log()
 		testFn(t, testServer, feedFactory)
 	})
+}
+
+func maybeUseExternalConnection(
+	factory cdctest.TestFeedFactory,
+	db *gosql.DB,
+	sinkType string,
+	options feedTestOptions,
+	logger *testing.T,
+) cdctest.TestFeedFactory {
+	const percentExternal = 1
+	if sinkType != `sinkless` && sinkType != `enterprise` && rand.Float32() < percentExternal {
+		return &externalConnectionFeedFactory{
+			TestFeedFactory: factory,
+			db:              db,
+			logger:          logger,
+		}
+	}
+	return factory
 }
 
 func forceTableGC(
