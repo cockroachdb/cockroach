@@ -52,6 +52,7 @@ func CreateDeclarativeSchemaChangeJobs(
 		for _, d := range descs {
 			ds := d.GetDeclarativeSchemaChangerState()
 			ds.JobID = newID
+			d.SetDeclarativeSchemaChangerState(ds)
 			descriptorStates = append(descriptorStates, ds)
 		}
 		currentState, err := scpb.MakeCurrentStateFromDescriptors(

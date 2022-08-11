@@ -116,6 +116,12 @@ func (desc *wrapper) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// GetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
 // ByteSize implements the Descriptor interface.
 func (desc *wrapper) ByteSize() int64 {
 	return int64(desc.Size())
