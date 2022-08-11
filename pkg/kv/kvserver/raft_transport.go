@@ -147,11 +147,9 @@ type RaftMessageHandler interface {
 // See: https://github.com/cockroachdb/cockroach/issues/83917
 type raftTransportStats struct {
 	nodeID        roachpb.NodeID
-	clientSent    int64
 	clientRecv    int64
 	clientDropped int64
 	serverSent    int64
-	serverRecv    int64
 }
 
 type raftTransportStatsSlice []*raftTransportStats
@@ -257,23 +255,19 @@ func NewRaftTransport(
 					// NB: The header is 80 characters which should display in a single
 					// line on most terminals.
 					fmt.Fprintf(&buf,
-						"         qdropped client-sent client-recv server-sent server-recv\n")
+						"         qdropped client-recv server-sent\n")
 					for _, s := range stats {
 						last := lastStats[s.nodeID]
 						cur := raftTransportStats{
 							nodeID:        s.nodeID,
 							clientDropped: atomic.LoadInt64(&s.clientDropped),
-							clientSent:    atomic.LoadInt64(&s.clientSent),
 							clientRecv:    atomic.LoadInt64(&s.clientRecv),
 							serverSent:    atomic.LoadInt64(&s.serverSent),
-							serverRecv:    atomic.LoadInt64(&s.serverRecv),
 						}
-						fmt.Fprintf(&buf, "  %3d: %6d %11.1f %11.1f %11.1f %11.1f\n",
+						fmt.Fprintf(&buf, "  %3d: %6d %11.1f %11.1f\n",
 							cur.nodeID, cur.clientDropped,
-							float64(cur.clientSent-last.clientSent)/elapsed,
 							float64(cur.clientRecv-last.clientRecv)/elapsed,
-							float64(cur.serverSent-last.serverSent)/elapsed,
-							float64(cur.serverRecv-last.serverRecv)/elapsed)
+							float64(cur.serverSent-last.serverSent)/elapsed)
 						lastStats[s.nodeID] = cur
 					}
 					lastTime = now
@@ -400,7 +394,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 
 					for i := range batch.Requests {
 						req := &batch.Requests[i]
-						atomic.AddInt64(&stats.serverRecv, 1)
+						t.metrics.MessagesRcvd.Inc(1)
 						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
 							atomic.AddInt64(&stats.serverSent, 1)
 							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
@@ -567,6 +561,7 @@ func (t *RaftTransport) processQueue(
 			if err != nil {
 				return err
 			}
+			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
 
 			// Reuse the Requests slice, but zero out the contents to avoid delaying
 			// GC of memory referenced from within.
@@ -574,8 +569,6 @@ func (t *RaftTransport) processQueue(
 				batch.Requests[i] = kvserverpb.RaftMessageRequest{}
 			}
 			batch.Requests = batch.Requests[:0]
-
-			atomic.AddInt64(&stats.clientSent, 1)
 		}
 	}
 }
