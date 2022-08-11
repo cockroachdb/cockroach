@@ -379,6 +379,10 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 	_, fromIsFulfilled := sb.bs.fulfilled[de.From()]
 	_, fromIsCandidate := sb.fulfilling[de.From()]
 	switch de.Kind() {
+	case scgraph.PreviousStagePrecedence:
+		// True iff the source node has not been fulfilled in an earlier stage.
+		return !fromIsFulfilled
+
 	case scgraph.Precedence:
 		// True iff the source node has not been fulfilled in an earlier stage
 		// and also iff it's not (yet?) scheduled to be fulfilled in this stage.
