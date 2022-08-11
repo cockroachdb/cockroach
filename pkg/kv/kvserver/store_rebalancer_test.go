@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -454,7 +453,9 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 			Expiration: &hlc.MaxTimestamp,
 			Replica:    repl.mu.state.Desc.InternalReplicas[0],
 		}
-		repl.mu.state.TruncatedState = &roachpb.RaftTruncatedState{}
+		// NB: We set the index to 2 corresponding to the match in
+		// TestingRaftStatusFn. Matches that are 0 are considered behind.
+		repl.mu.state.TruncatedState = &roachpb.RaftTruncatedState{Index: 2}
 		for _, storeID := range r.nonVoters {
 			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -470,9 +471,9 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 		repl.loadStats = NewReplicaLoad(s.Clock(), nil)
 		repl.loadStats.batchRequests.SetMeanRateForTesting(r.qps)
 
-		acc.addReplica(replicaWithStats{
-			repl: repl,
-			qps:  r.qps,
+		acc.addReplica(candidateReplica{
+			Replica: repl,
+			qps:     r.qps,
 		})
 	}
 	rr.update(acc)
@@ -496,8 +497,6 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
-	storeMap := storeList.ToMap()
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	cfg.Gossip = g
@@ -511,7 +510,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	// Rather than trying to populate every Replica with a real raft group in
 	// order to pass replicaIsBehind checks, fake out the function for getting
 	// raft status with one that always returns all replicas as up to date.
-	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+	sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
 		return TestingRaftStatusFn(r)
 	}
 
@@ -662,14 +661,12 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
-			hottestRanges := rr.topQPS()
+
+			rctx := sr.makeRebalanceContext(ctx)
+
 			_, target, _ := sr.chooseLeaseToTransfer(
 				ctx,
-				&hottestRanges,
-				&localDesc,
-				storeList,
-				storeMap,
-				nil, /* qpsScorerOptions */
+				rctx,
 			)
 			if target.StoreID != tc.expectTarget {
 				t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
@@ -758,7 +755,6 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 
 			// Test setup boilerplate.
 			gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
-			storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
 			localDesc := *stores[0]
 			cfg := TestStoreConfig(nil)
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -769,7 +765,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			// Rather than trying to populate every Replica with a real raft group in
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
-			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
 				return TestingRaftStatusFn(r)
 			}
 			a.StorePool.IsStoreReadyForRoutineReplicaTransfer = func(_ context.Context, this roachpb.StoreID) bool {
@@ -797,18 +793,13 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 					{voters: voterStores, nonVoters: nonVoterStores, qps: perReplicaQPS},
 				},
 			)
-			hottestRanges := rr.topQPS()
-			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(
-				ctx,
-				&hottestRanges,
-				&localDesc,
-				storeList,
-				&allocatorimpl.QPSScorerOptions{
-					StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-					Deterministic:         false,
-					QPSRebalanceThreshold: qpsRebalanceThreshold,
-				},
-			)
+			rctx := sr.makeRebalanceContext(ctx)
+			rctx.options = &allocatorimpl.QPSScorerOptions{
+				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
+				Deterministic:         false,
+				QPSRebalanceThreshold: qpsRebalanceThreshold,
+			}
+			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(ctx, rctx)
 			var rebalancedVoterStores, rebalancedNonVoterStores []roachpb.StoreID
 			for _, target := range voterTargets {
 				rebalancedVoterStores = append(rebalancedVoterStores, target.StoreID)
@@ -1102,7 +1093,6 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			stopper, g, _, a, _ := allocatorimpl.CreateTestAllocatorWithKnobs(ctx, 10, false /* deterministic */, &testingKnobs)
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(multiRegionStores, t)
-			storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
 
 			var localDesc roachpb.StoreDescriptor
 			for _, store := range multiRegionStores {
@@ -1121,7 +1111,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// Rather than trying to populate every Replica with a real raft group in
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
-			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
 				return TestingRaftStatusFn(r)
 			}
 			s.cfg.DefaultSpanConfig.NumVoters = int32(len(tc.voters))
@@ -1135,17 +1125,15 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 					{voters: tc.voters, nonVoters: tc.nonVoters, qps: testingQPS},
 				},
 			)
-			hottestRanges := rr.topQPS()
+			rctx := sr.makeRebalanceContext(ctx)
+			rctx.options = &allocatorimpl.QPSScorerOptions{
+				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthBlockRebalanceTo},
+				Deterministic:         true,
+				QPSRebalanceThreshold: 0.05,
+			}
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(
 				ctx,
-				&hottestRanges,
-				&localDesc,
-				storeList,
-				&allocatorimpl.QPSScorerOptions{
-					StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthBlockRebalanceTo},
-					Deterministic:         true,
-					QPSRebalanceThreshold: 0.05,
-				},
+				rctx,
 			)
 
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
@@ -1195,7 +1183,6 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		&allocator.TestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
 	)
 	defer stopper.Stop(context.Background())
-	storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
 
 	localDesc := *noLocalityStores[len(noLocalityStores)-1]
 	cfg := TestStoreConfig(nil)
@@ -1215,13 +1202,14 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	// that the store rebalancer doesn't attempt to rebalance ranges that it
 	// cannot find better rebalance opportunities for.
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{localDesc.StoreID}, qps: 100}})
-	hottestRanges := rr.topQPS()
-	sr.chooseRangeToRebalance(
-		ctx, &hottestRanges, &localDesc, storeList, &allocatorimpl.QPSScorerOptions{
-			StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-			QPSRebalanceThreshold: 0.05,
-		},
-	)
+
+	rctx := sr.makeRebalanceContext(ctx)
+	rctx.options = &allocatorimpl.QPSScorerOptions{
+		StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
+		Deterministic:         true,
+		QPSRebalanceThreshold: 0.05,
+	}
+	sr.chooseRangeToRebalance(ctx, rctx)
 	trace := finishAndGetRecording()
 	require.Regexpf(
 		t, "could not find.*opportunities for r1",
@@ -1337,7 +1325,6 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			stopper, g, _, a, _ := allocatorimpl.CreateTestAllocator(ctx, 10, false /* deterministic */)
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(imbalancedStores, t)
-			storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
 
 			var localDesc roachpb.StoreDescriptor
 			for _, store := range imbalancedStores {
@@ -1358,24 +1345,19 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			// Rather than trying to populate every Replica with a real raft group in
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
-			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
 				return TestingRaftStatusFn(r)
 			}
 
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
 			loadRanges(rr, s, []testRange{{voters: tc.voters, qps: tc.QPS}})
-			hottestRanges := rr.topQPS()
-			_, voterTargets, _ := sr.chooseRangeToRebalance(
-				ctx,
-				&hottestRanges,
-				&localDesc,
-				storeList,
-				&allocatorimpl.QPSScorerOptions{
-					StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-					Deterministic:         true,
-					QPSRebalanceThreshold: tc.rebalanceThreshold,
-				},
-			)
+			rctx := sr.makeRebalanceContext(ctx)
+			rctx.options = &allocatorimpl.QPSScorerOptions{
+				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
+				Deterministic:         true,
+				QPSRebalanceThreshold: tc.rebalanceThreshold,
+			}
+			_, voterTargets, _ := sr.chooseRangeToRebalance(ctx, rctx)
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
 
 			voterStoreIDs := make([]roachpb.StoreID, len(voterTargets))
@@ -1394,7 +1376,35 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Lots of setup boilerplate.
+	// Set up a fake RaftStatus that indicates s5 is behind (but all other stores
+	// are caught up). We thus shouldn't transfer a lease to s5.
+	behindTestingRaftStatusFn := func(
+		r interface {
+			Desc() *roachpb.RangeDescriptor
+			StoreID() roachpb.StoreID
+		},
+	) *raft.Status {
+		status := &raft.Status{
+			Progress: make(map[uint64]tracker.Progress),
+		}
+		replDesc, ok := r.Desc().GetReplicaDescriptor(r.StoreID())
+		require.True(t, ok, "Could not find replica descriptor for replica on store with id %d", r.StoreID())
+
+		status.Lead = uint64(replDesc.ReplicaID)
+		status.RaftState = raft.StateLeader
+		status.Commit = 2
+		for _, replica := range r.Desc().InternalReplicas {
+			match := uint64(2)
+			if replica.StoreID == roachpb.StoreID(5) {
+				match = 0
+			}
+			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
+				Match: match,
+				State: tracker.StateReplicate,
+			}
+		}
+		return status
+	}
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -1403,11 +1413,12 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	stopper, g, _, a, _ := allocatorimpl.CreateTestAllocatorWithKnobs(ctx,
 		10,
 		false, /* deterministic */
-		&allocator.TestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
+		&allocator.TestingKnobs{
+			AllowLeaseTransfersToReplicasNeedingSnapshots: false,
+			RaftStatusFn: behindTestingRaftStatusFn,
+		},
 	)
 	defer stopper.Stop(context.Background())
-	storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
-	storeMap := storeList.ToMap()
 
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
@@ -1420,43 +1431,17 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	rr := newReplicaRankings()
 
 	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+	sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
+		return behindTestingRaftStatusFn(r)
+	}
 
 	// Load in a range with replicas on an overfull node, a slightly underfull
 	// node, and a very underfull node.
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 4, 5}, qps: 100}})
-	hottestRanges := rr.topQPS()
-	repl := hottestRanges[0].repl
+	rctx := sr.makeRebalanceContext(ctx)
+	repl := rctx.hottestRanges[0]
 
-	// Set up a fake RaftStatus that indicates s5 is behind (but all other stores
-	// are caught up). We thus shouldn't transfer a lease to s5.
-	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
-		status := &raft.Status{
-			Progress: make(map[uint64]tracker.Progress),
-		}
-		status.Lead = uint64(r.ReplicaID())
-		status.RaftState = raft.StateLeader
-		status.Commit = 1
-		for _, replica := range r.Desc().InternalReplicas {
-			match := uint64(1)
-			if replica.StoreID == roachpb.StoreID(5) {
-				match = 0
-			}
-			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
-				Match: match,
-				State: tracker.StateReplicate,
-			}
-		}
-		return status
-	}
-
-	_, target, _ := sr.chooseLeaseToTransfer(
-		ctx,
-		&hottestRanges,
-		&localDesc,
-		storeList,
-		storeMap,
-		nil, /* qpsScorerOptions */
-	)
+	_, target, _ := sr.chooseLeaseToTransfer(ctx, rctx)
 	expectTarget := roachpb.StoreID(4)
 	if target.StoreID != expectTarget {
 		t.Errorf("got target store s%d for range with RaftStatus %v; want s%d",
@@ -1467,20 +1452,15 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	// that's behind, and see how a new replica is preferred as the leaseholder
 	// over it.
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100}})
-	hottestRanges = rr.topQPS()
-	repl = hottestRanges[0].repl
+	rctx = sr.makeRebalanceContext(ctx)
+	rctx.options = &allocatorimpl.QPSScorerOptions{
+		StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
+		Deterministic:         true,
+		QPSRebalanceThreshold: 0.05,
+	}
+	repl = rctx.hottestRanges[0]
 
-	_, targets, _ := sr.chooseRangeToRebalance(
-		ctx,
-		&hottestRanges,
-		&localDesc,
-		storeList,
-		&allocatorimpl.QPSScorerOptions{
-			StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-			Deterministic:         true,
-			QPSRebalanceThreshold: 0.05,
-		},
-	)
+	_, targets, _ := sr.chooseRangeToRebalance(ctx, rctx)
 	expectTargets := []roachpb.ReplicationTarget{
 		{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 	}
@@ -1619,7 +1599,6 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
 			stopper, g, _, a, _ := allocatorimpl.CreateTestAllocator(ctx, 10, false /* deterministic */)
 			defer stopper.Stop(ctx)
-			storeList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
 
 			localDesc := *noLocalityStores[0]
 			cfg := TestStoreConfig(nil)
@@ -1636,19 +1615,15 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			// Load in a range with replicas on an overfull node, a slightly underfull
 			// node, and a very underfull node.
 			loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100}})
-			hottestRanges := rr.topQPS()
 
-			_, targetVoters, _ := sr.chooseRangeToRebalance(
-				ctx,
-				&hottestRanges,
-				&localDesc,
-				storeList,
-				&allocatorimpl.QPSScorerOptions{
-					StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: test.enforcement, L0SublevelThreshold: allocatorimpl.MaxL0SublevelThreshold},
-					Deterministic:         true,
-					QPSRebalanceThreshold: 0.05,
-				},
-			)
+			rctx := sr.makeRebalanceContext(ctx)
+			rctx.options = &allocatorimpl.QPSScorerOptions{
+				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: test.enforcement, L0SublevelThreshold: allocatorimpl.MaxL0SublevelThreshold},
+				Deterministic:         true,
+				QPSRebalanceThreshold: 0.05,
+			}
+
+			_, targetVoters, _ := sr.chooseRangeToRebalance(ctx, rctx)
 			require.Equal(t, test.expectedTargets, targetVoters)
 		})
 	}
@@ -1673,10 +1648,10 @@ func TestingRaftStatusFn(
 
 	status.Lead = uint64(replDesc.ReplicaID)
 	status.RaftState = raft.StateLeader
-	status.Commit = 1
+	status.Commit = 2
 	for _, replica := range r.Desc().InternalReplicas {
 		status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
-			Match: 1,
+			Match: 2,
 			State: tracker.StateReplicate,
 		}
 	}

@@ -3010,9 +3010,9 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
-		rankingsAccumulator.addReplica(replicaWithStats{
-			repl: r,
-			qps:  qps,
+		rankingsAccumulator.addReplica(candidateReplica{
+			Replica: r,
+			qps:     qps,
 		})
 		return true
 	})
@@ -3373,13 +3373,13 @@ func (s *Store) HottestReplicas() []HotReplicaInfo {
 	topQPS := s.replRankings.topQPS()
 	hotRepls := make([]HotReplicaInfo, len(topQPS))
 	for i := range topQPS {
-		hotRepls[i].Desc = topQPS[i].repl.Desc()
+		hotRepls[i].Desc = topQPS[i].Replica.Desc()
 		hotRepls[i].QPS = topQPS[i].qps
-		hotRepls[i].RequestsPerSecond = topQPS[i].repl.RequestsPerSecond()
-		hotRepls[i].WriteKeysPerSecond = topQPS[i].repl.WritesPerSecond()
-		hotRepls[i].ReadKeysPerSecond = topQPS[i].repl.ReadsPerSecond()
-		hotRepls[i].WriteBytesPerSecond = topQPS[i].repl.WriteBytesPerSecond()
-		hotRepls[i].ReadBytesPerSecond = topQPS[i].repl.ReadBytesPerSecond()
+		hotRepls[i].RequestsPerSecond = topQPS[i].Replica.RequestsPerSecond()
+		hotRepls[i].WriteKeysPerSecond = topQPS[i].Replica.WritesPerSecond()
+		hotRepls[i].ReadKeysPerSecond = topQPS[i].Replica.ReadsPerSecond()
+		hotRepls[i].WriteBytesPerSecond = topQPS[i].Replica.WriteBytesPerSecond()
+		hotRepls[i].ReadBytesPerSecond = topQPS[i].Replica.ReadBytesPerSecond()
 	}
 	return hotRepls
 }

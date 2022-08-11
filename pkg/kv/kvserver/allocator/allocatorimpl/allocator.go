@@ -1576,7 +1576,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 		}
 	}
 	if !leaseholderInExisting {
-		log.Errorf(ctx, "programming error: expected leaseholder store to be in the slice of existing replicas")
+		log.Errorf(ctx, "programming error: expected leaseholder store to be in the slice of existing replicas, existing: %+v, storeID %d", allExistingReplicas, leaseRepl.StoreID())
 	}
 
 	// Exclude suspect/draining/dead stores.

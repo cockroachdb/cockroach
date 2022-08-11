@@ -12,8 +12,14 @@ package kvserver
 
 import (
 	"container/heap"
+	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (
@@ -21,10 +27,73 @@ const (
 	numTopReplicasToTrack = 128
 )
 
-type replicaWithStats struct {
-	repl *Replica
-	qps  float64
+// CandidateReplica is a replica that is being tracked as a potential candidate
+// for rebalancing activities. It maintains a set of methods that enable
+// querying it's state and processing a rebalancing action if taken.
+type CandidateReplica interface {
+	// OwnsValidLease returns whether this replica is the current valid
+	// leaseholder.
+	OwnsValidLease(context.Context, hlc.ClockTimestamp) bool
+	// StoreID returns the Replica's StoreID.
+	StoreID() roachpb.StoreID
+	// GetRangeID returns the Range ID.
+	GetRangeID() roachpb.RangeID
+	// RaftStatus returns the current raft status of the replica. It returns
+	// nil if the Raft group has not been initialized yet.
+	RaftStatus() *raft.Status
+	// GetFirstIndex returns the index of the first entry in the replica's Raft
+	// log.
+	GetFirstIndex() uint64
+	// DescAndSpanConfig returns the authoritative range descriptor as well
+	// as the span config for the replica.
+	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
+	// Desc returns the authoritative range descriptor, acquiring a replica lock in
+	// the process.
+	Desc() *roachpb.RangeDescriptor
+	// QPS returns the current queries-per-second recorded on this replica.
+	QPS() float64
+	// RangeUsageInfo returns usage information (sizes and traffic) needed by
+	// the allocator to make rebalancing decisions for a given range.
+	RangeUsageInfo() allocator.RangeUsageInfo
+	// Stats returns the QPS replica load stats.
+	Stats() *replicastats.ReplicaStats
+	// AdminTransferLease transfers the LeaderLease to another replica.
+	AdminTransferLease(ctx context.Context, target roachpb.StoreID) error
+	// Replica returns the underlying replica for this CandidateReplica. It is
+	// only used for determining timeouts in production code and not the
+	// simulator.
+	Repl() *Replica
+	// String implements the string interface.
+	String() string
+}
+
+type candidateReplica struct {
+	*Replica
+	qps float64
 	// TODO(aayush): Include writes-per-second and logicalBytes of storage?
+}
+
+// QPS returns the current queries-per-second recorded on this replica.
+func (cr candidateReplica) QPS() float64 {
+	return cr.qps
+}
+
+// RangeUsageInfo returns usage information (sizes and traffic) needed by
+// the allocator to make rebalancing decisions for a given range.
+func (cr candidateReplica) RangeUsageInfo() allocator.RangeUsageInfo {
+	return rangeUsageInfoForRepl(cr.Replica)
+}
+
+// Replica returns the underlying replica for this CandidateReplica. It is
+// only used for determining timeouts in production code and not the
+// simulator.
+func (cr candidateReplica) Repl() *Replica {
+	return cr.Replica
+}
+
+// Stats returns the QPS replica load stats.
+func (cr candidateReplica) Stats() *replicastats.ReplicaStats {
+	return cr.Replica.loadStats.batchRequests
 }
 
 // replicaRankings maintains top-k orderings of the replicas in a store by QPS.
@@ -32,7 +101,7 @@ type replicaRankings struct {
 	mu struct {
 		syncutil.Mutex
 		qpsAccumulator *rrAccumulator
-		byQPS          []replicaWithStats
+		byQPS          []candidateReplica
 	}
 }
 
@@ -42,7 +111,7 @@ func newReplicaRankings() *replicaRankings {
 
 func (rr *replicaRankings) newAccumulator() *rrAccumulator {
 	res := &rrAccumulator{}
-	res.qps.val = func(r replicaWithStats) float64 { return r.qps }
+	res.qps.val = func(r candidateReplica) float64 { return r.qps }
 	return res
 }
 
@@ -52,7 +121,16 @@ func (rr *replicaRankings) update(acc *rrAccumulator) {
 	rr.mu.Unlock()
 }
 
-func (rr *replicaRankings) topQPS() []replicaWithStats {
+// TopQPS returns the highest QPS CandidateReplicas that are tracked.
+func (rr *replicaRankings) TopQPS() []CandidateReplica {
+	hottestRanges := []CandidateReplica{}
+	for _, cr := range rr.topQPS() {
+		hottestRanges = append(hottestRanges, cr)
+	}
+	return hottestRanges
+}
+
+func (rr *replicaRankings) topQPS() []candidateReplica {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
 	// If we have a new set of data, consume it. Otherwise, just return the most
@@ -75,7 +153,7 @@ type rrAccumulator struct {
 	qps rrPriorityQueue
 }
 
-func (a *rrAccumulator) addReplica(repl replicaWithStats) {
+func (a *rrAccumulator) addReplica(repl candidateReplica) {
 	// If the heap isn't full, just push the new replica and return.
 	if a.qps.Len() < numTopReplicasToTrack {
 		heap.Push(&a.qps, repl)
@@ -90,18 +168,18 @@ func (a *rrAccumulator) addReplica(repl replicaWithStats) {
 	}
 }
 
-func consumeAccumulator(pq *rrPriorityQueue) []replicaWithStats {
+func consumeAccumulator(pq *rrPriorityQueue) []candidateReplica {
 	length := pq.Len()
-	sorted := make([]replicaWithStats, length)
+	sorted := make([]candidateReplica, length)
 	for i := 1; i <= length; i++ {
-		sorted[length-i] = heap.Pop(pq).(replicaWithStats)
+		sorted[length-i] = heap.Pop(pq).(candidateReplica)
 	}
 	return sorted
 }
 
 type rrPriorityQueue struct {
-	entries []replicaWithStats
-	val     func(replicaWithStats) float64
+	entries []candidateReplica
+	val     func(candidateReplica) float64
 }
 
 func (pq rrPriorityQueue) Len() int { return len(pq.entries) }
@@ -115,7 +193,7 @@ func (pq rrPriorityQueue) Swap(i, j int) {
 }
 
 func (pq *rrPriorityQueue) Push(x interface{}) {
-	item := x.(replicaWithStats)
+	item := x.(candidateReplica)
 	pq.entries = append(pq.entries, item)
 }
 
