@@ -713,7 +713,6 @@ GO_TARGETS = [
     "//pkg/ccl/schemachangerccl:schemachangerccl",
     "//pkg/ccl/schemachangerccl:schemachangerccl_test",
     "//pkg/ccl/serverccl/diagnosticsccl:diagnosticsccl_test",
-    "//pkg/ccl/serverccl/statusccl:statusccl",
     "//pkg/ccl/serverccl/statusccl:statusccl_test",
     "//pkg/ccl/serverccl:serverccl",
     "//pkg/ccl/serverccl:serverccl_test",

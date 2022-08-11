@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package statusccl
+package serverccl
 
 import (
 	"context"
@@ -36,11 +36,11 @@ import (
 // a server from the test cluster.
 type serverIdx int
 
-const randomServer serverIdx = -1
+const RandomServer serverIdx = -1
 
 type testTenant struct {
-	tenant                   serverutils.TestTenantInterface
-	tenantConn               *gosql.DB
+	Tenant                   serverutils.TestTenantInterface
+	TenantConn               *gosql.DB
 	tenantDB                 *sqlutils.SQLRunner
 	tenantStatus             serverpb.SQLStatusServer
 	tenantSQLStats           *persistedsqlstats.PersistedSQLStats
@@ -66,8 +66,8 @@ func newTestTenant(
 	contentionRegistry := tenant.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry
 
 	return &testTenant{
-		tenant:                   tenant,
-		tenantConn:               tenantConn,
+		Tenant:                   tenant,
+		TenantConn:               tenantConn,
 		tenantDB:                 sqlDB,
 		tenantStatus:             status,
 		tenantSQLStats:           sqlStats,
@@ -76,21 +76,21 @@ func newTestTenant(
 }
 
 func (h *testTenant) cleanup(t *testing.T) {
-	require.NoError(t, h.tenantConn.Close())
+	require.NoError(t, h.TenantConn.Close())
 }
 
-type tenantTestHelper struct {
-	hostCluster serverutils.TestClusterInterface
+type TenantTestHelper struct {
+	HostCluster serverutils.TestClusterInterface
 
 	// Creating two separate tenant clusters. This allows unit tests to test
 	// the isolation between different tenants are properly enforced.
-	tenantTestCluster    tenantCluster
-	tenantControlCluster tenantCluster
+	tenantTestCluster    TenantCluster
+	tenantControlCluster TenantCluster
 }
 
-func newTestTenantHelper(
+func NewTestTenantHelper(
 	t *testing.T, tenantClusterSize int, knobs base.TestingKnobs,
-) *tenantTestHelper {
+) *TenantTestHelper {
 	t.Helper()
 
 	params, _ := tests.CreateTestServerParams()
@@ -102,9 +102,9 @@ func newTestTenantHelper(
 	})
 	server := testCluster.Server(0)
 
-	return &tenantTestHelper{
-		hostCluster: testCluster,
-		tenantTestCluster: newTenantCluster(
+	return &TenantTestHelper{
+		HostCluster: testCluster,
+		tenantTestCluster: NewTenantCluster(
 			t,
 			server,
 			tenantClusterSize,
@@ -113,7 +113,7 @@ func newTestTenantHelper(
 		),
 		// Spin up a small tenant cluster under a different tenant ID to test
 		// tenant isolation.
-		tenantControlCluster: newTenantCluster(
+		tenantControlCluster: NewTenantCluster(
 			t,
 			server,
 			1, /* tenantClusterSize */
@@ -123,30 +123,30 @@ func newTestTenantHelper(
 	}
 }
 
-func (h *tenantTestHelper) testCluster() tenantCluster {
+func (h *TenantTestHelper) TestCluster() TenantCluster {
 	return h.tenantTestCluster
 }
 
-func (h *tenantTestHelper) controlCluster() tenantCluster {
+func (h *TenantTestHelper) ControlCluster() TenantCluster {
 	return h.tenantControlCluster
 }
 
-func (h *tenantTestHelper) cleanup(ctx context.Context, t *testing.T) {
+func (h *TenantTestHelper) Cleanup(ctx context.Context, t *testing.T) {
 	t.Helper()
-	h.hostCluster.Stopper().Stop(ctx)
-	h.tenantTestCluster.cleanup(t)
-	h.tenantControlCluster.cleanup(t)
+	h.HostCluster.Stopper().Stop(ctx)
+	h.tenantTestCluster.Cleanup(t)
+	h.tenantControlCluster.Cleanup(t)
 }
 
-type tenantCluster []*testTenant
+type TenantCluster []*testTenant
 
-func newTenantCluster(
+func NewTenantCluster(
 	t *testing.T,
 	server serverutils.TestServerInterface,
 	tenantClusterSize int,
 	tenantID uint64,
 	knobs base.TestingKnobs,
-) tenantCluster {
+) TenantCluster {
 	t.Helper()
 
 	cluster := make([]*testTenant, tenantClusterSize)
@@ -158,39 +158,39 @@ func newTenantCluster(
 	return cluster
 }
 
-func (c tenantCluster) tenantConn(idx serverIdx) *sqlutils.SQLRunner {
-	return c.tenant(idx).tenantDB
+func (c TenantCluster) TenantConn(idx serverIdx) *sqlutils.SQLRunner {
+	return c.Tenant(idx).tenantDB
 }
 
-func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx, isAdmin bool) *httpClient {
+func (c TenantCluster) TenantHTTPClient(t *testing.T, idx serverIdx, isAdmin bool) *httpClient {
 	var client http.Client
 	var err error
 	if isAdmin {
-		client, err = c.tenant(idx).tenant.GetAdminHTTPClient()
+		client, err = c.Tenant(idx).Tenant.GetAdminHTTPClient()
 	} else {
-		client, err = c.tenant(idx).tenant.GetAuthenticatedHTTPClient(false)
+		client, err = c.Tenant(idx).Tenant.GetAuthenticatedHTTPClient(false)
 	}
 	require.NoError(t, err)
-	return &httpClient{t: t, client: client, baseURL: c[idx].tenant.AdminURL()}
+	return &httpClient{t: t, client: client, baseURL: c[idx].Tenant.AdminURL()}
 }
 
-func (c tenantCluster) tenantAdminHTTPClient(t *testing.T, idx serverIdx) *httpClient {
-	return c.tenantHTTPClient(t, idx, true /* isAdmin */)
+func (c TenantCluster) TenantAdminHTTPClient(t *testing.T, idx serverIdx) *httpClient {
+	return c.TenantHTTPClient(t, idx, true /* isAdmin */)
 }
 
-func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats {
-	return c.tenant(idx).tenantSQLStats
+func (c TenantCluster) TenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats {
+	return c.Tenant(idx).tenantSQLStats
 }
 
-func (c tenantCluster) tenantStatusSrv(idx serverIdx) serverpb.SQLStatusServer {
-	return c.tenant(idx).tenantStatus
+func (c TenantCluster) TenantStatusSrv(idx serverIdx) serverpb.SQLStatusServer {
+	return c.Tenant(idx).tenantStatus
 }
 
-func (c tenantCluster) tenantContentionRegistry(idx serverIdx) *contention.Registry {
-	return c.tenant(idx).tenantContentionRegistry
+func (c TenantCluster) TenantContentionRegistry(idx serverIdx) *contention.Registry {
+	return c.Tenant(idx).tenantContentionRegistry
 }
 
-func (c tenantCluster) cleanup(t *testing.T) {
+func (c TenantCluster) Cleanup(t *testing.T) {
 	for _, tenant := range c {
 		tenant.cleanup(t)
 	}
@@ -198,8 +198,8 @@ func (c tenantCluster) cleanup(t *testing.T) {
 
 // tenant selects a tenant node from the tenant cluster. If randomServer
 // is passed in, then a random node is selected.
-func (c tenantCluster) tenant(idx serverIdx) *testTenant {
-	if idx == randomServer {
+func (c TenantCluster) Tenant(idx serverIdx) *testTenant {
+	if idx == RandomServer {
 		return c[rand.Intn(len(c))]
 	}
 
