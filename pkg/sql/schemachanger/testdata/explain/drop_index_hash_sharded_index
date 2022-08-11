@@ -14,11 +14,11 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
  │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 104, Name: idx, IndexID: 2}
  │         └── 5 Mutation operations
+ │              ├── MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {"IndexID":2,"TableID":104}
+ │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
  │              ├── MakeDroppedColumnDeleteAndWriteOnly {"ColumnID":3,"TableID":104}
  │              ├── LogEvent {"TargetStatus":1}
- │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
- │              ├── MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {"IndexID":2,"TableID":104}
- │              └── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+ │              └── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 2 Mutation operations
@@ -34,14 +34,11 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    │    ├── PUBLIC     → ABSENT      CheckConstraint:{DescID: 104, ConstraintID: 2}
       │    │    └── PUBLIC     → ABSENT      ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
-      │    └── 9 Mutation operations
+      │    └── 6 Mutation operations
       │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
       │         ├── NotImplemented {"ElementType":"scpb.ConstraintN..."}
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Ordinal":1,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase

@@ -56,19 +56,6 @@ upsert descriptor #104
   +  indexes: []
   +  modificationTime: {}
   +  mutations:
-  +  - column:
-  +      computeExpr: lower(j)
-  +      id: 3
-  +      inaccessible: true
-  +      name: crdb_internal_column_3_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: StringFamily
-  +        oid: 25
-  +      virtual: true
-  +    direction: DROP
-  +    mutationId: 2
-  +    state: DELETE_AND_WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -92,6 +79,19 @@ upsert descriptor #104
   +      version: 3
   +    mutationId: 2
   +    state: DELETE_AND_WRITE_ONLY
+  +  - column:
+  +      computeExpr: lower(j)
+  +      id: 3
+  +      inaccessible: true
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 2
+  +    state: DELETE_AND_WRITE_ONLY
      name: t
      nextColumnId: 4
   ...
@@ -99,7 +99,6 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.AlterTable to event log for descriptor #104: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -128,7 +127,7 @@ upsert descriptor #104
   +  modificationTime:
   +    wallTime: "1640995200000000001"
      mutations:
-     - column:
+     - direction: DROP
   ...
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
@@ -139,7 +138,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -148,16 +147,16 @@ upsert descriptor #104
   -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      mutations:
-     - column:
+     - direction: DROP
   ...
-       direction: DROP
+         version: 3
        mutationId: 2
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
-     - direction: DROP
-       index:
+     - column:
+         computeExpr: lower(j)
   ...
-         version: 3
+       direction: DROP
        mutationId: 2
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
@@ -196,19 +195,6 @@ upsert descriptor #104
   -  modificationTime:
   -    wallTime: "1640995200000000003"
   -  mutations:
-  -  - column:
-  -      computeExpr: lower(j)
-  -      id: 3
-  -      inaccessible: true
-  -      name: crdb_internal_column_3_name_placeholder
-  -      nullable: true
-  -      type:
-  -        family: StringFamily
-  -        oid: 25
-  -      virtual: true
-  -    direction: DROP
-  -    mutationId: 2
-  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      createdAtNanos: "1640995200000000000"
@@ -230,6 +216,19 @@ upsert descriptor #104
   -      predicate: i > 0:::INT8
   -      sharded: {}
   -      version: 3
+  -    mutationId: 2
+  -    state: DELETE_ONLY
+  -  - column:
+  -      computeExpr: lower(j)
+  -      id: 3
+  -      inaccessible: true
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: StringFamily
+  -        oid: 25
+  -      virtual: true
+  -    direction: DROP
   -    mutationId: 2
   -    state: DELETE_ONLY
   +  modificationTime: {}

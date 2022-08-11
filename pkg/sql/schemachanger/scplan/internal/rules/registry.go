@@ -164,8 +164,18 @@ func (v nodeVars) joinTarget() rel.Clause {
 	return screl.JoinTarget(v.el, v.target)
 }
 
-func (v nodeVars) targetStatus(status scpb.TargetStatus) rel.Clause {
-	return v.target.AttrEq(screl.TargetStatus, status.Status())
+func (v nodeVars) targetStatus(status ...scpb.TargetStatus) rel.Clause {
+	if len(status) == 0 {
+		panic(errors.AssertionFailedf("empty current status values"))
+	}
+	if len(status) == 1 {
+		return v.target.AttrEq(screl.TargetStatus, status[0].Status())
+	}
+	in := make([]interface{}, len(status))
+	for i, s := range status {
+		in[i] = s.Status()
+	}
+	return v.target.AttrIn(screl.TargetStatus, in...)
 }
 
 // Type delegates to the element var Type method.

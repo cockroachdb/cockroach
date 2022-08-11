@@ -21,10 +21,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
-    │   │   │         rule: "column dependents removed after column no longer public"
+    │   │   │         rule: "column no longer public before dependents"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
-    │   │         PUBLIC → ABSENT
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │             rule: "column no longer public before dependents"
     │   │
     │   └── • 5 Mutation operations
     │       │
@@ -61,15 +64,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: j, ColumnID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   └── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+        │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │     rule: "column type removed right before column when not dropping relation"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
         │   │         rule: "dependents removed before column"
-        │   │         rule: "column type removed right before column when not dropping relation"
         │   │
         │   └── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
         │       │ PUBLIC → ABSENT
         │       │
         │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
-        │             rule: "column dependents removed after column no longer public"
+        │             rule: "column no longer public before dependents"
         │
         └── • 3 Mutation operations
             │
