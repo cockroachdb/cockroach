@@ -171,6 +171,8 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecommendations)
+	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
+
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
 		StatementID:          planner.stmt.QueryID,
@@ -196,6 +198,7 @@ func (ex *connExecutor) recordStatementSummary(
 		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerEndExecStmt),
 		FullScan:             fullScan,
 		SessionData:          planner.SessionData(),
+		ExecStats:            queryLevelStats,
 	}
 
 	stmtFingerprintID, err :=
@@ -210,8 +213,8 @@ func (ex *connExecutor) recordStatementSummary(
 
 	// Record statement execution statistics if span is recorded and no error was
 	// encountered while collecting query-level statistics.
-	if _, ok := planner.instrumentation.Tracing(); ok && planner.instrumentation.queryLevelStatsWithErr.Err == nil {
-		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, planner.instrumentation.queryLevelStatsWithErr.Stats)
+	if queryLevelStatsOk {
+		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, *queryLevelStats)
 		if err != nil {
 			if log.V(2 /* level */) {
 				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
