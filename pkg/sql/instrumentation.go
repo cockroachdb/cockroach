@@ -691,6 +691,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		ih.planGist.Hash(),
 		planner.SessionData().Database,
 		stmtType,
+		planner.isInternalPlanner,
 	) {
 		f := opc.optimizer.Factory()
 		// EvalContext() has the context with the already closed span, so we
@@ -725,6 +726,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		ih.planGist.Hash(),
 		planner.SessionData().Database,
 		stmtType,
+		planner.isInternalPlanner,
 		recommendations,
 		reset,
 	)
