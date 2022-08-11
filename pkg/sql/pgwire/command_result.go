@@ -161,11 +161,13 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 		r.conn.bufferReadyForQuery(byte(t))
 		// The error is saved on conn.err.
 		_ /* err */ = r.conn.Flush(r.pos)
+		r.conn.maybeReallocate()
 	case emptyQueryResponse:
 		r.conn.bufferEmptyQueryResponse()
 	case flush:
 		// The error is saved on conn.err.
 		_ /* err */ = r.conn.Flush(r.pos)
+		r.conn.maybeReallocate()
 	case noCompletionMsg:
 		// nothing to do
 	default:
@@ -435,7 +437,7 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 
 		return r.moreResultsNeeded(ctx)
 	}
-	return r.conn.maybeFlush(r.pos, r.bufferingDisabled)
+	return nil
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
