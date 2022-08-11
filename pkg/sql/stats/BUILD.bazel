@@ -15,6 +15,7 @@ go_library(
         "row_sampling.go",
         "simple_linear_regression.go",
         "stats_cache.go",
+        "util.go",
     ],
     embed = [":stats_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/stats",
