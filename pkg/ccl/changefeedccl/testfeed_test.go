@@ -243,6 +243,77 @@ func (c *sinklessFeed) Close() error {
 	return c.conn.Close(context.Background())
 }
 
+type logger interface {
+	Log(args ...interface{})
+}
+
+type externalConnectionFeedFactory struct {
+	cdctest.TestFeedFactory
+	db     *gosql.DB
+	logger logger
+}
+
+type externalConnectionCreator func(uri string) error
+
+func (e *externalConnectionFeedFactory) Feed(
+	create string, args ...interface{},
+) (_ cdctest.TestFeed, err error) {
+
+	randomExternalConnectionName := fmt.Sprintf("testconn%d", rand.Int63())
+
+	var c externalConnectionCreator = func(uri string) error {
+		e.logger.Log("creating external connection")
+		createConnStmt := fmt.Sprintf(`CREATE EXTERNAL CONNECTION %s AS '%s'`, randomExternalConnectionName, uri)
+		_, err := e.db.Exec(createConnStmt)
+		e.logger.Log("ran create external connection")
+		if err != nil {
+			e.logger.Log("error creating external connection:" + err.Error())
+		}
+		return err
+	}
+
+	args = append([]interface{}{c}, args...)
+
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+	if createStmt.SinkURI != nil {
+		return nil, errors.Errorf(
+			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
+	}
+	createStmt.SinkURI = tree.NewStrVal(`external://` + randomExternalConnectionName)
+
+	return e.TestFeedFactory.Feed(createStmt.String(), args...)
+
+}
+
+func setURI(
+	createStmt *tree.CreateChangefeed, uri string, allowOverride bool, args *[]interface{},
+) error {
+	if createStmt.SinkURI != nil {
+		u, err := url.Parse(tree.AsStringWithFlags(createStmt.SinkURI, tree.FmtBareStrings))
+		if err != nil {
+			return err
+		}
+		if u.Scheme == changefeedbase.SinkSchemeExternalConnection {
+			fn, ok := (*args)[0].(externalConnectionCreator)
+			if ok {
+				*args = (*args)[1:]
+				return fn(uri)
+			}
+		}
+		if allowOverride {
+			return nil
+		}
+		return errors.Errorf(
+			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
+	}
+	createStmt.SinkURI = tree.NewStrVal(uri)
+	return nil
+}
+
 // reportErrorResumer is a job resumer which reports OnFailOrCancel events.
 type reportErrorResumer struct {
 	wrapped   jobs.Resumer
@@ -786,11 +857,9 @@ func (f *tableFeedFactory) Feed(
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI != nil {
-		return nil, errors.Errorf(
-			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
+	if err := setURI(createStmt, sinkURI.String(), false, &args); err != nil {
+		return nil, err
 	}
-	createStmt.SinkURI = tree.NewStrVal(sinkURI.String())
 
 	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
 		return nil, err
@@ -953,9 +1022,6 @@ func (f *cloudFeedFactory) Feed(
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI != nil {
-		return nil, errors.Errorf(`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
-	}
 
 	if createStmt.Select != nil {
 		createStmt.Options = append(createStmt.Options,
@@ -999,11 +1065,13 @@ func (f *cloudFeedFactory) Feed(
 	}
 
 	feedDir := feedSubDir()
-	sinkURI := `experimental-nodelocal://0/` + feedDir
+	sinkURI := `nodelocal://0/` + feedDir
 	// TODO(dan): This is a pretty unsatisfying way to test that the uri passes
 	// through params it doesn't understand to ExternalStorage.
 	sinkURI += `?should_be=ignored`
-	createStmt.SinkURI = tree.NewStrVal(sinkURI)
+	if err := setURI(createStmt, sinkURI, false, &args); err != nil {
+		return nil, err
+	}
 
 	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
 	// cloudFeedFactory.
@@ -1068,7 +1136,7 @@ func reformatJSON(j interface{}) ([]byte, error) {
 	// whitespace back to where it started.
 	parsed, err := json.ParseJSON(string(printed))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "while reparsing json '%s' marshaled from %v", printed, j)
 	}
 	var buf bytes.Buffer
 	parsed.Format(&buf)
@@ -1081,14 +1149,14 @@ func extractFieldFromJSONValue(
 	parsed := make(map[string]gojson.RawMessage)
 
 	if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrapf(err, "unmarshalling json '%s'", wrapped)
 	}
 
 	if isBare {
 		meta := make(map[string]gojson.RawMessage)
 		if metaVal, haveMeta := parsed[jsonMetaSentinel]; haveMeta {
 			if err := gojson.Unmarshal(metaVal, &meta); err != nil {
-				return nil, nil, err
+				return nil, nil, errors.Wrapf(err, "unmarshalling json %v", metaVal)
 			}
 			field = meta[fieldName]
 			delete(meta, fieldName)
@@ -1118,7 +1186,7 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 	var keyParsed gojson.RawMessage
 	keyParsed, value, err = extractFieldFromJSONValue("key", isBare, wrapped)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrapf(err, "extracting key from json payload %s", wrapped)
 	}
 
 	if key, err = reformatJSON(keyParsed); err != nil {
@@ -1366,6 +1434,11 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	if strings.HasSuffix(path, `.tmp`) {
 		// File in the process of being written by ExternalStorage. Ignore.
+		return nil
+	}
+
+	if strings.Contains(path, "crdb_external_storage_location") {
+		// Marker file created when testing "external" connection.
 		return nil
 	}
 
@@ -1641,6 +1714,17 @@ type kafkaFeedFactory struct {
 
 var _ cdctest.TestFeedFactory = (*kafkaFeedFactory)(nil)
 
+func mustBeKafkaFeedFactory(f cdctest.TestFeedFactory) *kafkaFeedFactory {
+	switch v := f.(type) {
+	case *kafkaFeedFactory:
+		return v
+	case *externalConnectionFeedFactory:
+		return mustBeKafkaFeedFactory(v.TestFeedFactory)
+	default:
+		panic(fmt.Errorf("expected kafkaFeedFactory but got %+v", v))
+	}
+}
+
 // makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
 func makeKafkaFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
@@ -1678,9 +1762,9 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 
 	// Set SinkURI if it wasn't provided.  It's okay if it is -- since we may
 	// want to set some kafka specific URI parameters.
-	if createStmt.SinkURI == nil {
-		createStmt.SinkURI = tree.NewStrVal(
-			fmt.Sprintf("%s://does.not.matter/", changefeedbase.SinkSchemeKafka))
+	defaultURI := fmt.Sprintf("%s://does.not.matter/", changefeedbase.SinkSchemeKafka)
+	if err := setURI(createStmt, defaultURI, true, &args); err != nil {
+		return nil, err
 	}
 
 	var registry *cdctest.SchemaRegistry
@@ -1888,11 +1972,13 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 			return nil, err
 		}
 
-		if createStmt.SinkURI == nil {
-			createStmt.SinkURI = tree.NewStrVal(
-				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true&client_cert=%s&client_key=%s",
-					sinkDest.URL(), base64.StdEncoding.EncodeToString(clientCertPEM),
-					base64.StdEncoding.EncodeToString(clientKeyPEM)))
+		uri := fmt.Sprintf(
+			"webhook-%s?insecure_tls_skip_verify=true&client_cert=%s&client_key=%s",
+			sinkDest.URL(), base64.StdEncoding.EncodeToString(clientCertPEM),
+			base64.StdEncoding.EncodeToString(clientKeyPEM))
+
+		if err := setURI(createStmt, uri, true, &args); err != nil {
+			return nil, err
 		}
 	} else {
 		sinkDest, err = cdctest.StartMockWebhookSink(cert)
@@ -1900,9 +1986,9 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 			return nil, err
 		}
 
-		if createStmt.SinkURI == nil {
-			createStmt.SinkURI = tree.NewStrVal(
-				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL()))
+		uri := fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL())
+		if err := setURI(createStmt, uri, true, &args); err != nil {
+			return nil, err
 		}
 	}
 
@@ -2181,10 +2267,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
-	if createStmt.SinkURI == nil {
-		createStmt.SinkURI = tree.NewStrVal(GcpScheme + "://testfeed?region=testfeedRegion")
-	}
-
+	err = setURI(createStmt, GcpScheme+"://testfeed?region=testfeedRegion", true, &args)
 	if err != nil {
 		return nil, err
 	}

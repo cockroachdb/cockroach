@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -114,7 +115,7 @@ func getEventSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 ) (EventSink, error) {
-	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
 }
 
 func getResolvedTimestampSink(
@@ -126,7 +127,23 @@ func getResolvedTimestampSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 ) (ResolvedTimestampSink, error) {
-	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+}
+
+func getAndDialSink(
+	ctx context.Context,
+	serverCfg *execinfra.ServerConfig,
+	feedCfg jobspb.ChangefeedDetails,
+	timestampOracle timestampLowerBoundOracle,
+	user username.SQLUsername,
+	jobID jobspb.JobID,
+	m metricsRecorder,
+) (Sink, error) {
+	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	if err != nil {
+		return nil, err
+	}
+	return sink, sink.Dial()
 }
 
 func getSink(
@@ -199,8 +216,13 @@ func getSink(
 			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg))
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
+				// Placeholder id for canary sink
+				var nodeID base.SQLInstanceID = 0
+				if serverCfg.NodeID != nil {
+					nodeID = serverCfg.NodeID.SQLInstanceID()
+				}
 				return makeCloudStorageSink(
-					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings, encodingOpts,
+					ctx, sinkURL{URL: u}, nodeID, serverCfg.Settings, encodingOpts,
 					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
 				)
 			})
@@ -226,11 +248,10 @@ func getSink(
 	}
 
 	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
-		sink = knobs.WrapSink(sink, jobID)
-	}
-
-	if err := sink.Dial(); err != nil {
-		return nil, err
+		// External connections call getSink recursively and wrap the sink then.
+		if u.Scheme != changefeedbase.SinkSchemeExternalConnection {
+			sink = knobs.WrapSink(sink, jobID)
+		}
 	}
 
 	return sink, nil
@@ -498,7 +519,7 @@ type nullSink struct {
 	metrics metricsRecorder
 }
 
-func (s *nullSink) getConcreteType() sinkType {
+func (n *nullSink) getConcreteType() sinkType {
 	return sinkTypeNull
 }
 
@@ -592,6 +613,10 @@ type safeSink struct {
 }
 
 var _ EventSink = (*safeSink)(nil)
+
+func (s *safeSink) getConcreteType() sinkType {
+	return s.wrapped.getConcreteType()
+}
 
 func (s *safeSink) Dial() error {
 	s.Lock()

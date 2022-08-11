@@ -211,6 +211,16 @@ func makeStringSet(opts ...string) map[string]struct{} {
 	return res
 }
 
+func unionStringSets(sets ...map[string]struct{}) map[string]struct{} {
+	res := make(map[string]struct{})
+	for _, s := range sets {
+		for k := range s {
+			res[k] = struct{}{}
+		}
+	}
+	return res
+}
+
 // OptionType is an enum of the ways changefeed options can be provided in WITH.
 type OptionType int
 
@@ -348,12 +358,7 @@ var PubsubValidOptions = makeStringSet()
 // TODO(adityamaru): Some of these options should be supported when creating the
 // external connection rather than when setting up the changefeed. Move them once
 // we support `CREATE EXTERNAL CONNECTION ... WITH <options>`.
-var ExternalConnectionValidOptions = makeStringSet(
-	// Options valid for a kafka sink.
-	OptAvroSchemaPrefix,
-	OptConfluentSchemaRegistry,
-	OptKafkaSinkConfig,
-)
+var ExternalConnectionValidOptions = unionStringSets(SQLValidOptions, KafkaValidOptions, CloudStorageValidOptions, WebhookValidOptions, PubsubValidOptions)
 
 // CaseInsensitiveOpts options which supports case Insensitive value
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents,
