@@ -23,7 +23,7 @@ import { Filter } from "src/queryFilter";
 import SQLActivityError from "src/sqlActivity/errorComponent";
 import {
   ACTIVE_STATEMENT_SEARCH_PARAM,
-  getAppsFromActiveStatements,
+  getAppsFromActiveExecutions,
   filterActiveStatements,
 } from "../activeExecutions/activeStatementUtils";
 import {
@@ -44,7 +44,7 @@ export type ActiveStatementsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
   onFiltersChange: (filters: ActiveStatementFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshSessions: () => void;
+  refreshLiveWorkload: () => void;
 };
 
 export type ActiveStatementsViewStateProps = {
@@ -61,7 +61,7 @@ export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
 
 export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   onColumnsSelect,
-  refreshSessions,
+  refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
   selectedColumns,
@@ -82,12 +82,12 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
 
   useEffect(() => {
     // Refresh every 10 seconds.
-    refreshSessions();
-    const interval = setInterval(refreshSessions, 10 * 1000);
+    refreshLiveWorkload();
+    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshSessions]);
+  }, [refreshLiveWorkload]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -154,7 +154,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
 
-  const apps = getAppsFromActiveStatements(statements, internalAppNamePrefix);
+  const apps = getAppsFromActiveExecutions(statements, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
 
   const filteredStatements = filterActiveStatements(
