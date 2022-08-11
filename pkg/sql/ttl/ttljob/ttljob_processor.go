@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -33,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -61,10 +59,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 	db := serverCfg.DB
 	codec := serverCfg.Codec
 	details := ttlSpec.RowLevelTTLDetails
-	ttlExpr := ttlSpec.TTLExpr
 	rangeConcurrency := ttlSpec.RangeConcurrency
-	selectBatchSize := ttlSpec.SelectBatchSize
-	deleteBatchSize := ttlSpec.DeleteBatchSize
 
 	deleteRateLimit := ttlSpec.DeleteRateLimit
 	deleteRateLimiter := quotapool.NewRateLimiter(
@@ -73,7 +68,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		deleteRateLimit,
 	)
 
-	rowCount := int64(0)
+	processorRowCount := int64(0)
 
 	var relationName string
 	var pkColumns []string
@@ -131,27 +126,16 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 			group.GoCtx(func(ctx context.Context) error {
 				for rangeToProcess := range rangeChan {
 					start := timeutil.Now()
-					rangeRowCount, err := runTTLOnRange(
+					rangeRowCount, err := ttl.runTTLOnRange(
 						ctx,
-						details,
-						db,
-						serverCfg.Executor,
-						serverCfg.Settings,
-						descsCol,
 						metrics,
 						rangeToProcess,
 						pkColumns,
 						relationName,
-						selectBatchSize,
-						deleteBatchSize,
 						deleteRateLimiter,
-						ttlSpec.AOST,
-						ttlExpr,
-						ttlSpec.PreDeleteChangeTableVersion,
-						ttlSpec.PreSelectStatement,
 					)
 					// add before returning err in case of partial success
-					atomic.AddInt64(&rowCount, rangeRowCount)
+					atomic.AddInt64(&processorRowCount, rangeRowCount)
 					metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
 					if err != nil {
 						// Continue until channel is fully read.
@@ -224,38 +208,35 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		return err
 	}
 
-	job, err := serverCfg.JobRegistry.LoadJob(ctx, ttlSpec.JobID)
-	if err != nil {
-		return err
-	}
-	return db.Txn(ctx, func(_ context.Context, txn *kv.Txn) error {
-		return job.Update(ctx, txn, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	jobID := ttlSpec.JobID
+	return serverCfg.JobRegistry.UpdateJobWithTxn(
+		ctx,
+		jobID,
+		nil,  /* txn */
+		true, /* useReadLock */
+		func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
-			progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += rowCount
+			existingRowCount := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount
+			progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += processorRowCount
 			ju.UpdateProgress(progress)
+			log.Infof(
+				ctx,
+				"TTL processorRowCount updated jobID=%d processorID=%d tableID=%d existingRowCount=%d processorRowCount=%d progress=%s",
+				jobID, ttl.ProcessorID, details.TableID, existingRowCount, processorRowCount, progress,
+			)
 			return nil
-		})
-	})
+		},
+	)
 }
 
 // rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
-func runTTLOnRange(
+func (ttl *ttlProcessor) runTTLOnRange(
 	ctx context.Context,
-	details jobspb.RowLevelTTLDetails,
-	db *kv.DB,
-	ie sqlutil.InternalExecutor,
-	settings *cluster.Settings,
-	descsCol *descs.Collection,
 	metrics rowLevelTTLMetrics,
 	rangeToProcess rangeToProcess,
 	pkColumns []string,
 	relationName string,
-	selectBatchSize, deleteBatchSize int64,
 	deleteRateLimiter *quotapool.RateLimiter,
-	aost time.Time,
-	ttlExpr catpb.Expression,
-	preDeleteChangeTableVersion bool,
-	preSelectStatement string,
 ) (rangeRowCount int64, err error) {
 	metrics.NumActiveRanges.Inc(1)
 	defer metrics.NumActiveRanges.Dec(1)
@@ -263,18 +244,27 @@ func runTTLOnRange(
 	// TODO(#76914): look at using a dist sql flow job, utilize any existing index
 	// on crdb_internal_expiration.
 
+	ttlSpec := ttl.ttlSpec
+	details := ttlSpec.RowLevelTTLDetails
 	tableID := details.TableID
 	cutoff := details.Cutoff
+	ttlExpr := ttlSpec.TTLExpr
+	flowCtx := ttl.FlowCtx
+	serverCfg := flowCtx.Cfg
+	ie := serverCfg.Executor
+
+	selectBatchSize := ttlSpec.SelectBatchSize
 	selectBuilder := makeSelectQueryBuilder(
 		tableID,
 		cutoff,
 		pkColumns,
 		relationName,
 		rangeToProcess,
-		aost,
+		ttlSpec.AOST,
 		selectBatchSize,
 		ttlExpr,
 	)
+	deleteBatchSize := ttlSpec.DeleteBatchSize
 	deleteBuilder := makeDeleteQueryBuilder(
 		tableID,
 		cutoff,
@@ -284,6 +274,7 @@ func runTTLOnRange(
 		ttlExpr,
 	)
 
+	preSelectStatement := ttlSpec.PreSelectStatement
 	if preSelectStatement != "" {
 		if _, err := ie.ExecEx(
 			ctx,
@@ -300,7 +291,7 @@ func runTTLOnRange(
 
 	for {
 		// Check the job is enabled on every iteration.
-		if err := checkEnabled(&settings.SV); err != nil {
+		if err := checkEnabled(&serverCfg.Settings.SV); err != nil {
 			return rangeRowCount, err
 		}
 
@@ -308,6 +299,11 @@ func runTTLOnRange(
 		// SELECT query.
 		start := timeutil.Now()
 		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
+		log.Dev.Infof(
+			ctx,
+			"TTL selected rows jobID=%d processorID=%d tableID=%d expiredRowsPKs=%s",
+			ttlSpec.JobID, ttl.ProcessorID, details.TableID, expiredRowsPKs,
+		)
 		metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
 			return rangeRowCount, errors.Wrapf(err, "error selecting rows to delete")
@@ -323,10 +319,10 @@ func runTTLOnRange(
 				until = numExpiredRows
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
-			if err := db.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
-				// If we detected a schema change here, the delete will not succeed
+			if err := serverCfg.DB.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
+				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
-				desc, err := descsCol.GetImmutableTableByID(
+				desc, err := flowCtx.Descriptors.GetImmutableTableByID(
 					ctx,
 					txn,
 					details.TableID,
@@ -335,7 +331,7 @@ func runTTLOnRange(
 				if err != nil {
 					return err
 				}
-				if preDeleteChangeTableVersion || desc.GetVersion() != details.TableVersion {
+				if ttlSpec.PreDeleteChangeTableVersion || desc.GetVersion() != details.TableVersion {
 					return errors.Newf(
 						"table has had a schema change since the job has started at %s, aborting",
 						desc.GetModificationTime().GoTime().Format(time.RFC3339),
