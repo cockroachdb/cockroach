@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -173,10 +172,6 @@ func (p *planner) createDatabase(
 func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
 ) (descpb.ID, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		return descpb.InvalidID, nil
-	}
-
 	publicSchemaID, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return descpb.InvalidID, err

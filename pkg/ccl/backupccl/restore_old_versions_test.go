@@ -268,28 +268,6 @@ ORDER BY object_type, object_name`, [][]string{
 		}
 	})
 
-	t.Run("public_schema_mixed_version", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(publicSchemaDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restorePublicSchemaMixedVersion(exportDir))
-		}
-	})
-
-	t.Run("missing_public_schema_namespace_entry", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(publicSchemaDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreSyntheticPublicSchemaNamespaceEntry(exportDir))
-		}
-	})
-
 	t.Run("missing_public_schema_namespace_entry_cleanup_on_fail", func(t *testing.T) {
 		dirs, err := ioutil.ReadDir(publicSchemaDirs)
 		require.NoError(t, err)
@@ -1000,94 +978,6 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 	}
 }
 
-// restorePublicSchemaMixedVersion tests that if we are not on version
-// PublicSchemaWithDescriptor, we do not create public schemas during restore.
-func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
-
-		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
-			InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{
-						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-						Server: &server.TestingKnobs{
-							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
-						},
-					},
-				}})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
-		require.NoError(t, err)
-
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo))
-
-		var restoredDBID int
-		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='d' AND "parentID"=0`)
-		row.Scan(&restoredDBID)
-
-		publicSchemaID := keys.PublicSchemaIDForBackup
-
-		row = sqlDB.QueryRow(t,
-			fmt.Sprintf(`SELECT count(1) FROM system.namespace WHERE name='t' AND "parentID"=%d AND "parentSchemaID"=%d`, restoredDBID, publicSchemaID))
-		require.NotNil(t, row)
-
-		sqlDB.CheckQueryResults(t, `SELECT x FROM d.s.t`, [][]string{{"1"}, {"2"}})
-		sqlDB.CheckQueryResults(t, `SELECT x FROM d.public.t`, [][]string{{"3"}, {"4"}})
-
-		// Test restoring a single table and ensuring that d.public.t which
-		// previously had a synthetic public schema gets correctly restored into the
-		// descriptor backed public schema of database test.
-		sqlDB.Exec(t, `CREATE DATABASE test`)
-		sqlDB.Exec(t, `RESTORE d.public.t FROM $1 WITH into_db = 'test'`, localFoo)
-
-		row = sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='test' AND "parentID"=0`)
-		var parentDBID int
-		row.Scan(&parentDBID)
-
-		row = sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, parentDBID))
-		row.Scan(&publicSchemaID)
-
-		require.Equal(t, publicSchemaID, keys.PublicSchemaID)
-
-		sqlDB.CheckQueryResults(t, `SELECT x FROM test.public.t`, [][]string{{"3"}, {"4"}})
-	}
-}
-
-func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
-
-		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
-			InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{
-						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-						Server: &server.TestingKnobs{
-							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
-						},
-					},
-				}})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
-		require.NoError(t, err)
-
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo))
-
-		var dbID int
-		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'd'`)
-		row.Scan(&dbID)
-
-		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = 'public' AND "parentID"=%d`, dbID), [][]string{{"29"}})
-	}
-}
-
 func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
@@ -1101,7 +991,7 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
+							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOPreV22_1 - 1),
 						},
 					},
 				}})
