@@ -13,7 +13,6 @@ package tabledesc
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -627,9 +626,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
-	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
-	columnIDs := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(desc.Columns))
-	if err := desc.validateColumns(columnNames, columnIDs); err != nil {
+	if err := desc.validateColumns(); err != nil {
 		vea.Report(err)
 		return
 	}
@@ -653,21 +650,25 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
-	mutationsHaveErrs := false
-	for _, m := range desc.Mutations {
-		if err := validateMutation(&m); err != nil {
-			vea.Report(err)
-			mutationsHaveErrs = true
+	// Validate mutations and exit early if any of these are deeply corrupted.
+	{
+		mutationsHaveErrs := false
+		for _, m := range desc.Mutations {
+			if err := validateMutation(&m); err != nil {
+				vea.Report(err)
+				mutationsHaveErrs = true
+			}
 		}
-		switch desc := m.Descriptor_.(type) {
-		case *descpb.DescriptorMutation_Column:
-			col := desc.Column
-			columnIDs[col.ID] = col
+		if mutationsHaveErrs {
+			return
 		}
 	}
 
-	if mutationsHaveErrs {
-		return
+	// Build a mapping of column descriptors by ID. The columns have already been
+	// validated at this point, so we know that the mapping is 1-to-1.
+	columnsByID := make(map[descpb.ColumnID]catalog.Column, len(desc.Columns))
+	for _, col := range desc.DeletableColumns() {
+		columnsByID[col.GetID()] = col
 	}
 
 	// TODO(dt): Validate each column only appears at-most-once in any FKs.
@@ -676,10 +677,10 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
 		newErrs := []error{
-			desc.validateColumnFamilies(columnIDs),
-			desc.validateCheckConstraints(columnIDs),
-			desc.validateUniqueWithoutIndexConstraints(columnIDs),
-			desc.validateTableIndexes(columnNames, vea),
+			desc.validateColumnFamilies(columnsByID),
+			desc.validateCheckConstraints(columnsByID),
+			desc.validateUniqueWithoutIndexConstraints(columnsByID),
+			desc.validateTableIndexes(columnsByID, vea),
 			desc.validatePartitioning(),
 		}
 		hasErrs := false
@@ -841,7 +842,7 @@ func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulato
 	for _, name := range orderedNames {
 		constraint := constraints[name]
 		if constraint.ConstraintID == 0 {
-			vea.Report(errors.AssertionFailedf("constraint id was missing for constraint: %s with name %q",
+			vea.Report(errors.AssertionFailedf("constraint ID was missing for constraint: %s with name %q",
 				constraint.Kind,
 				name))
 
@@ -849,10 +850,10 @@ func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulato
 	}
 }
 
-func (desc *wrapper) validateColumns(
-	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
-) error {
-	for _, column := range desc.NonDropColumns() {
+func (desc *wrapper) validateColumns() error {
+	columnIDs := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(desc.Columns))
+	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
+	for _, column := range desc.DeletableColumns() {
 
 		if err := catalog.ValidateName(column.GetName(), "column"); err != nil {
 			return err
@@ -861,32 +862,16 @@ func (desc *wrapper) validateColumns(
 			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.GetID()))
 		}
 
-		if _, columnNameExists := columnNames[column.GetName()]; columnNameExists {
-			for i := range desc.Columns {
-				if desc.Columns[i].Name == column.GetName() {
-					return pgerror.Newf(pgcode.DuplicateColumn,
-						"duplicate column name: %q", column.GetName())
-				}
-			}
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public", column.GetName())
+		if column.GetID() >= desc.NextColumnID {
+			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
+				column.GetName(), errors.Safe(column.GetID()), errors.Safe(desc.NextColumnID))
 		}
-		if colinfo.IsSystemColumnName(column.GetName()) {
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"column name %q conflicts with a system column name", column.GetName())
-		}
-		columnNames[column.GetName()] = column.GetID()
 
 		if other, ok := columnIDs[column.GetID()]; ok {
 			return errors.Newf("column %q duplicate ID of column %q: %d",
 				column.GetName(), other.Name, column.GetID())
 		}
 		columnIDs[column.GetID()] = column.ColumnDesc()
-
-		if column.GetID() >= desc.NextColumnID {
-			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
-				column.GetName(), errors.Safe(column.GetID()), errors.Safe(desc.NextColumnID))
-		}
 
 		if column.IsComputed() {
 			// Verify that the computed column expression is valid.
@@ -936,13 +921,32 @@ func (desc *wrapper) validateColumns(
 		if column.HasOnUpdate() && column.IsGeneratedAsIdentity() {
 			return errors.Newf("both generated identity and on update expression specified for column %q", column.GetName())
 		}
+
+		// The following checks on names only apply to non-dropped columns.
+		if column.Dropped() {
+			continue
+		}
+
+		if _, columnNameExists := columnNames[column.GetName()]; columnNameExists {
+			for i := range desc.Columns {
+				if desc.Columns[i].Name == column.GetName() {
+					return pgerror.Newf(pgcode.DuplicateColumn,
+						"duplicate column name: %q", column.GetName())
+				}
+			}
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q in the middle of being added, not yet public", column.GetName())
+		}
+		if colinfo.IsSystemColumnName(column.GetName()) {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"column name %q conflicts with a system column name", column.GetName())
+		}
+		columnNames[column.GetName()] = column.GetID()
 	}
 	return nil
 }
 
-func (desc *wrapper) validateColumnFamilies(
-	columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
-) error {
+func (desc *wrapper) validateColumnFamilies(columnsByID map[descpb.ColumnID]catalog.Column) error {
 	if len(desc.Families) < 1 {
 		return errors.Newf("at least 1 column family must be specified")
 	}
@@ -990,16 +994,16 @@ func (desc *wrapper) validateColumnFamilies(
 		}
 
 		for i, colID := range family.ColumnIDs {
-			col, ok := columnIDs[colID]
+			col, ok := columnsByID[colID]
 			if !ok {
 				return errors.Newf("family %q contains unknown column \"%d\"", family.Name, colID)
 			}
-			if col.Name != family.ColumnNames[i] {
+			if col.GetName() != family.ColumnNames[i] {
 				return errors.Newf("family %q column %d should have name %q, but found name %q",
-					family.Name, colID, col.Name, family.ColumnNames[i])
+					family.Name, colID, col.GetName(), family.ColumnNames[i])
 			}
-			if col.Virtual {
-				return errors.Newf("virtual computed column %q cannot be part of a family", col.Name)
+			if col.IsVirtual() {
+				return errors.Newf("virtual computed column %q cannot be part of a family", col.GetName())
 			}
 		}
 
@@ -1010,10 +1014,10 @@ func (desc *wrapper) validateColumnFamilies(
 			colIDToFamilyID[colID] = family.ID
 		}
 	}
-	for colID, colDesc := range columnIDs {
-		if !colDesc.Virtual {
+	for colID, col := range columnsByID {
+		if !col.IsVirtual() {
 			if _, ok := colIDToFamilyID[colID]; !ok {
-				return errors.Newf("column %q is not in any column family", colDesc.Name)
+				return errors.Newf("column %q is not in any column family", col.GetName())
 			}
 		}
 	}
@@ -1024,12 +1028,12 @@ func (desc *wrapper) validateColumnFamilies(
 // Checks include validating the column IDs and verifying that check expressions
 // do not reference non-existent columns.
 func (desc *wrapper) validateCheckConstraints(
-	columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
+	columnsByID map[descpb.ColumnID]catalog.Column,
 ) error {
 	for _, chk := range desc.AllActiveAndInactiveChecks() {
 		// Verify that the check's column IDs are valid.
 		for _, colID := range chk.ColumnIDs {
-			_, ok := columnIDs[colID]
+			_, ok := columnsByID[colID]
 			if !ok {
 				return errors.Newf("check constraint %q contains unknown column \"%d\"", chk.Name, colID)
 			}
@@ -1056,7 +1060,7 @@ func (desc *wrapper) validateCheckConstraints(
 // constraints are well formed. Checks include validating the column IDs and
 // column names.
 func (desc *wrapper) validateUniqueWithoutIndexConstraints(
-	columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
+	columnsByID map[descpb.ColumnID]catalog.Column,
 ) error {
 	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
 		if err := catalog.ValidateName(c.Name, "unique without index constraint"); err != nil {
@@ -1074,7 +1078,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		// Verify that the constraint's column IDs are valid and unique.
 		var seen util.FastIntSet
 		for _, colID := range c.ColumnIDs {
-			_, ok := columnIDs[colID]
+			_, ok := columnsByID[colID]
 			if !ok {
 				return errors.Newf(
 					"unique without index constraint %q contains unknown column \"%d\"", c.Name, colID,
@@ -1116,24 +1120,10 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
 func (desc *wrapper) validateTableIndexes(
-	columnNames map[string]descpb.ColumnID, vea catalog.ValidationErrorAccumulator,
+	columnsByID map[descpb.ColumnID]catalog.Column, vea catalog.ValidationErrorAccumulator,
 ) error {
 	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
-	}
-
-	columnsByID := make(map[descpb.ColumnID]catalog.Column)
-	for _, col := range desc.DeletableColumns() {
-		columnsByID[col.GetID()] = col
-	}
-
-	if !vea.IsActive(clusterversion.Start22_1) {
-		// Verify that the primary index columns are not virtual.
-		for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
-			if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
-				return errors.Newf("primary index column %q cannot be virtual", col.GetName())
-			}
-		}
 	}
 
 	indexNames := map[string]struct{}{}
@@ -1198,18 +1188,20 @@ func (desc *wrapper) validateTableIndexes(
 		}
 
 		var validateIndexDup catalog.TableColSet
-		for i, name := range idx.IndexDesc().KeyColumnNames {
-			inIndexColID := idx.IndexDesc().KeyColumnIDs[i]
-			colID, ok := columnNames[name]
-			if !ok {
-				return errors.Newf("index %q contains unknown column %q", idx.GetName(), name)
+		for i, colID := range idx.IndexDesc().KeyColumnIDs {
+			inIndexColName := idx.IndexDesc().KeyColumnNames[i]
+			col, exists := columnsByID[colID]
+			if !exists {
+				return errors.Newf("index %q contains key column %q with unknown ID %d", idx.GetName(), inIndexColName, colID)
 			}
-			if colID != inIndexColID {
-				return errors.Newf("index %q column %q should have ID %d, but found ID %d",
-					idx.GetName(), name, colID, inIndexColID)
+			if col.GetName() != inIndexColName {
+				return errors.Newf("index %q key column ID %d should have name %q, but found name %q",
+					idx.GetName(), colID, col.ColName(), inIndexColName)
+			}
+			if col.Dropped() && idx.GetEncodingType() != descpb.PrimaryIndexEncoding {
+				return errors.Newf("secondary index %q contains dropped key column %q", idx.GetName(), col.ColName())
 			}
 			if validateIndexDup.Contains(colID) {
-				col, _ := desc.FindColumnWithID(colID)
 				if col.IsExpressionIndexColumn() {
 					return pgerror.Newf(pgcode.FeatureNotSupported,
 						"index %q contains duplicate expression %q",
@@ -1218,10 +1210,24 @@ func (desc *wrapper) validateTableIndexes(
 				}
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"index %q contains duplicate column %q",
-					idx.GetName(), name,
+					idx.GetName(), col.ColName(),
 				)
 			}
 			validateIndexDup.Add(colID)
+		}
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			col, exists := columnsByID[colID]
+			if !exists {
+				return errors.Newf("index %q key suffix column ID %d is invalid",
+					idx.GetName(), colID)
+			}
+			if idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
+				return errors.Newf("primary-encoded index %q unexpectedly contains key suffix columns, for instance %q",
+					idx.GetName(), col.ColName())
+			}
+			if col.Dropped() {
+				return errors.Newf("secondary index %q contains dropped key suffix column %q", idx.GetName(), col.ColName())
+			}
 		}
 		for i, colID := range idx.IndexDesc().StoreColumnIDs {
 			inIndexColName := idx.IndexDesc().StoreColumnNames[i]
@@ -1233,19 +1239,15 @@ func (desc *wrapper) validateTableIndexes(
 				return errors.Newf("index %q stored column ID %d should have name %q, but found name %q",
 					idx.GetName(), colID, col.ColName(), inIndexColName)
 			}
-		}
-		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
-			if _, exists := columnsByID[colID]; !exists {
-				return errors.Newf("index %q key suffix column ID %d is invalid",
-					idx.GetName(), colID)
+			if col.Dropped() && idx.GetEncodingType() != descpb.PrimaryIndexEncoding {
+				return errors.Newf("secondary index %q contains dropped stored column %q", idx.GetName(), col.ColName())
 			}
 		}
-
 		if idx.IsSharded() {
 			if err := desc.ensureShardedIndexNotComputed(idx.IndexDesc()); err != nil {
 				return err
 			}
-			if _, exists := columnNames[idx.GetSharded().Name]; !exists {
+			if col, _ := desc.FindColumnWithName(tree.Name(idx.GetSharded().Name)); col == nil {
 				return errors.Newf("index %q refers to non-existent shard column %q",
 					idx.GetName(), idx.GetSharded().Name)
 			}
@@ -1301,15 +1303,7 @@ func (desc *wrapper) validateTableIndexes(
 			}
 		}
 		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
-			if !vea.IsActive(clusterversion.Start22_1) {
-				if col := columnsByID[colID]; col != nil && col.IsVirtual() {
-					return errors.Newf("index %q cannot store virtual column %d", idx.GetName(), colID)
-				}
-			}
-
-			if _, ok := columnsByID[colID]; !ok {
-				return errors.Newf("column %d does not exist in table %s", colID, desc.Name)
-			}
+			// At this point the ID -> column mapping is known to be valid.
 			col := columnsByID[colID]
 			if !col.IsVirtual() {
 				continue
