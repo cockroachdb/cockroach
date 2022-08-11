@@ -142,7 +142,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
@@ -189,7 +189,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         TableID: 104
     *scop.MakeAddedIndexBackfilling
       Index:
-        ConstraintID: 1
+        ConstraintID: 2
         IndexID: 2
         IsUnique: true
         SourceIndexID: 1
@@ -197,7 +197,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         TemporaryIndexID: 3
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
-        ConstraintID: 1
+        ConstraintID: 3
         IndexID: 3
         IsUnique: true
         SourceIndexID: 1
@@ -255,7 +255,7 @@ PostCommitPhase stage 1 of 7 with 4 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -263,7 +263,7 @@ PostCommitPhase stage 2 of 7 with 1 BackfillType op
       TableID: 104
 PostCommitPhase stage 3 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
   ops:
     *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 2
@@ -274,7 +274,7 @@ PostCommitPhase stage 3 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 4 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
   ops:
     *scop.MakeBackfilledIndexMerging
       IndexID: 2
@@ -285,7 +285,7 @@ PostCommitPhase stage 4 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 5 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
   ops:
     *scop.MergeIndex
       BackfilledIndexID: 2
@@ -293,7 +293,7 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       TemporaryIndexID: 3
 PostCommitPhase stage 6 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeMergedIndexWriteOnly
       IndexID: 2
@@ -304,7 +304,7 @@ PostCommitPhase stage 6 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 7 of 7 with 1 ValidationType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
@@ -315,7 +315,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
@@ -427,7 +427,7 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
@@ -521,7 +521,7 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
         TableID: 104
     *scop.MakeAddedIndexBackfilling
       Index:
-        ConstraintID: 1
+        ConstraintID: 2
         IndexID: 2
         IsUnique: true
         SourceIndexID: 1
@@ -529,7 +529,7 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
         TemporaryIndexID: 3
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
-        ConstraintID: 1
+        ConstraintID: 3
         IndexID: 3
         IsUnique: true
         SourceIndexID: 1
@@ -607,7 +607,7 @@ PostCommitPhase stage 1 of 7 with 5 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -615,7 +615,7 @@ PostCommitPhase stage 2 of 7 with 1 BackfillType op
       TableID: 104
 PostCommitPhase stage 3 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
   ops:
     *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 2
@@ -626,7 +626,7 @@ PostCommitPhase stage 3 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 4 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
   ops:
     *scop.MakeBackfilledIndexMerging
       IndexID: 2
@@ -637,7 +637,7 @@ PostCommitPhase stage 4 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 5 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
   ops:
     *scop.MergeIndex
       BackfilledIndexID: 2
@@ -645,7 +645,7 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       TemporaryIndexID: 3
 PostCommitPhase stage 6 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeMergedIndexWriteOnly
       IndexID: 2
@@ -656,7 +656,7 @@ PostCommitPhase stage 6 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 7 of 7 with 1 ValidationType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
@@ -667,7 +667,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
@@ -789,7 +789,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
@@ -833,7 +833,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
             width: 64
     *scop.MakeAddedIndexBackfilling
       Index:
-        ConstraintID: 1
+        ConstraintID: 2
         IndexID: 2
         IsUnique: true
         SourceIndexID: 1
@@ -841,7 +841,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         TemporaryIndexID: 3
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
-        ConstraintID: 1
+        ConstraintID: 3
         IndexID: 3
         IsUnique: true
         SourceIndexID: 1
@@ -899,7 +899,7 @@ PostCommitPhase stage 1 of 7 with 4 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -907,7 +907,7 @@ PostCommitPhase stage 2 of 7 with 1 BackfillType op
       TableID: 104
 PostCommitPhase stage 3 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
   ops:
     *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 2
@@ -918,7 +918,7 @@ PostCommitPhase stage 3 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 4 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
   ops:
     *scop.MakeBackfilledIndexMerging
       IndexID: 2
@@ -929,7 +929,7 @@ PostCommitPhase stage 4 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 5 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
   ops:
     *scop.MergeIndex
       BackfilledIndexID: 2
@@ -937,7 +937,7 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       TemporaryIndexID: 3
 PostCommitPhase stage 6 of 7 with 3 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeMergedIndexWriteOnly
       IndexID: 2
@@ -948,7 +948,7 @@ PostCommitPhase stage 6 of 7 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 7 of 7 with 1 ValidationType op
   transitions:
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
@@ -959,7 +959,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
@@ -1253,11 +1253,11 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 108, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 108, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT] -> PUBLIC
@@ -1266,7 +1266,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
   ops:
     *scop.MakeAddedIndexBackfilling
       Index:
-        ConstraintID: 1
+        ConstraintID: 2
         IndexID: 2
         IsUnique: true
         SourceIndexID: 1
@@ -1274,7 +1274,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         TemporaryIndexID: 3
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
-        ConstraintID: 1
+        ConstraintID: 3
         IndexID: 3
         IsUnique: true
         SourceIndexID: 1
@@ -1290,6 +1290,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       TableID: 108
     *scop.MakeAddedIndexBackfilling
       Index:
+        ConstraintID: 3
         IndexID: 4
         IsUnique: true
         SourceIndexID: 1
@@ -1298,6 +1299,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IsSecondaryIndex: true
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
+        ConstraintID: 4
         IndexID: 5
         IsUnique: true
         SourceIndexID: 1
@@ -1365,8 +1367,8 @@ PostCommitPhase stage 1 of 7 with 4 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 7 with 2 BackfillType ops
   transitions:
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -1378,8 +1380,8 @@ PostCommitPhase stage 2 of 7 with 2 BackfillType ops
       TableID: 108
 PostCommitPhase stage 3 of 7 with 4 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
   ops:
     *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 2
@@ -1393,8 +1395,8 @@ PostCommitPhase stage 3 of 7 with 4 MutationType ops
       JobID: 1
 PostCommitPhase stage 4 of 7 with 4 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
   ops:
     *scop.MakeBackfilledIndexMerging
       IndexID: 2
@@ -1408,8 +1410,8 @@ PostCommitPhase stage 4 of 7 with 4 MutationType ops
       JobID: 1
 PostCommitPhase stage 5 of 7 with 2 BackfillType ops
   transitions:
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
   ops:
     *scop.MergeIndex
       BackfilledIndexID: 2
@@ -1421,8 +1423,8 @@ PostCommitPhase stage 5 of 7 with 2 BackfillType ops
       TemporaryIndexID: 5
 PostCommitPhase stage 6 of 7 with 4 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeMergedIndexWriteOnly
       IndexID: 2
@@ -1436,8 +1438,8 @@ PostCommitPhase stage 6 of 7 with 4 MutationType ops
       JobID: 1
 PostCommitPhase stage 7 of 7 with 2 ValidationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
@@ -1451,10 +1453,10 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
     [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
+    [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 108, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
-    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
+    [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[TemporaryIndex:{DescID: 108, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[IndexName:{DescID: 108, Name: t_i_key, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
   ops:

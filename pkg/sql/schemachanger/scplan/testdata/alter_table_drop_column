@@ -28,7 +28,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -67,7 +67,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       Reason: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
     *scop.MakeAddedIndexBackfilling
       Index:
-        ConstraintID: 2
+        ConstraintID: 3
         IndexID: 3
         IsUnique: true
         SourceIndexID: 1
@@ -75,7 +75,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         TemporaryIndexID: 4
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
-        ConstraintID: 2
+        ConstraintID: 4
         IndexID: 4
         IsUnique: true
         SourceIndexID: 1
@@ -146,7 +146,7 @@ PostCommitPhase stage 1 of 7 with 6 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 3
@@ -154,7 +154,7 @@ PostCommitPhase stage 2 of 7 with 1 BackfillType op
       TableID: 107
 PostCommitPhase stage 3 of 7 with 6 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
   ops:
     *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 3
@@ -171,7 +171,7 @@ PostCommitPhase stage 3 of 7 with 6 MutationType ops
       JobID: 1
 PostCommitPhase stage 4 of 7 with 6 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
   ops:
     *scop.MakeBackfilledIndexMerging
       IndexID: 3
@@ -188,7 +188,7 @@ PostCommitPhase stage 4 of 7 with 6 MutationType ops
       JobID: 1
 PostCommitPhase stage 5 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
   ops:
     *scop.MergeIndex
       BackfilledIndexID: 3
@@ -196,7 +196,7 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       TemporaryIndexID: 4
 PostCommitPhase stage 6 of 7 with 6 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeMergedIndexWriteOnly
       IndexID: 3
@@ -213,7 +213,7 @@ PostCommitPhase stage 6 of 7 with 6 MutationType ops
       JobID: 1
 PostCommitPhase stage 7 of 7 with 1 ValidationType op
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 3
@@ -251,7 +251,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
@@ -650,7 +650,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC]
@@ -674,7 +674,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
@@ -686,7 +686,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
 - from: [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
@@ -714,18 +714,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: index no longer public before dependents removed
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: primary index swap
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index-column added to index after index exists
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index-column added to index after index exists
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index name and comment
@@ -778,7 +778,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: SameStagePrecedence
   rule: temp indexes reach absent at the same time as other indexes
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill
 - from: [View:{DescID: 108}, ABSENT]
@@ -879,7 +879,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -918,7 +918,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       Reason: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
     *scop.MakeAddedIndexBackfilling
       Index:
-        ConstraintID: 2
+        ConstraintID: 3
         IndexID: 3
         IsUnique: true
         SourceIndexID: 1
@@ -926,7 +926,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         TemporaryIndexID: 4
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
-        ConstraintID: 2
+        ConstraintID: 4
         IndexID: 4
         IsUnique: true
         SourceIndexID: 1
@@ -1003,7 +1003,7 @@ PostCommitPhase stage 1 of 7 with 7 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 3
@@ -1011,7 +1011,7 @@ PostCommitPhase stage 2 of 7 with 1 BackfillType op
       TableID: 107
 PostCommitPhase stage 3 of 7 with 7 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], BACKFILLED] -> DELETE_ONLY
   ops:
     *scop.MakeBackfillingIndexDeleteOnly
       IndexID: 3
@@ -1030,7 +1030,7 @@ PostCommitPhase stage 3 of 7 with 7 MutationType ops
       JobID: 1
 PostCommitPhase stage 4 of 7 with 7 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], DELETE_ONLY] -> MERGE_ONLY
   ops:
     *scop.MakeBackfilledIndexMerging
       IndexID: 3
@@ -1049,7 +1049,7 @@ PostCommitPhase stage 4 of 7 with 7 MutationType ops
       JobID: 1
 PostCommitPhase stage 5 of 7 with 1 BackfillType op
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGE_ONLY] -> MERGED
   ops:
     *scop.MergeIndex
       BackfilledIndexID: 3
@@ -1057,7 +1057,7 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       TemporaryIndexID: 4
 PostCommitPhase stage 6 of 7 with 7 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
   ops:
     *scop.MakeMergedIndexWriteOnly
       IndexID: 3
@@ -1076,7 +1076,7 @@ PostCommitPhase stage 6 of 7 with 7 MutationType ops
       JobID: 1
 PostCommitPhase stage 7 of 7 with 1 ValidationType op
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 3
@@ -1114,7 +1114,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 26 MutationType ops
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
@@ -1525,7 +1525,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC]
@@ -1541,7 +1541,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rules: [secondary index columns removed before removing the index; dependents removed before index]
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
@@ -1561,7 +1561,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
 - from: [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
@@ -1589,18 +1589,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: index no longer public before dependents removed
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: primary index swap
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index-column added to index after index exists
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index-column added to index after index exists
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index name and comment
@@ -1653,7 +1653,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: SameStagePrecedence
   rule: temp indexes reach absent at the same time as other indexes
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill
 - from: [View:{DescID: 108}, ABSENT]
