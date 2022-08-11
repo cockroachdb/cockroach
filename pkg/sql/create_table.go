@@ -1467,12 +1467,6 @@ func NewTableDesc(
 		primaryIndexColumnSet[string(regionalByRowCol)] = struct{}{}
 	}
 
-	if autoStatsSettings := desc.GetAutoStatsSettings(); autoStatsSettings != nil {
-		if err := checkAutoStatsTableSettingsEnabledForCluster(ctx, st); err != nil {
-			return nil, err
-		}
-	}
-
 	// Create the TTL automatic column (crdb_internal_expiration) if one does not already exist.
 	if ttl := desc.GetRowLevelTTL(); ttl != nil && ttl.HasDurationExpr() {
 		hasRowLevelTTLColumn := false
@@ -2417,16 +2411,6 @@ func newRowLevelTTLScheduledJob(
 		jobspb.ExecutionArguments{Args: any},
 	)
 	return sj, nil
-}
-
-func checkAutoStatsTableSettingsEnabledForCluster(ctx context.Context, st *cluster.Settings) error {
-	if !st.Version.IsActive(ctx, clusterversion.AutoStatsTableSettings) {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"auto stats table settings are only available once the cluster is fully upgraded",
-		)
-	}
-	return nil
 }
 
 // CreateRowLevelTTLScheduledJob creates a new row-level TTL schedule.
