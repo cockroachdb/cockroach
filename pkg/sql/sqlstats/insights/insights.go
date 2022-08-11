@@ -140,5 +140,5 @@ type Registry interface {
 
 // New builds a new Registry.
 func New(st *cluster.Settings, metrics Metrics) Registry {
-	return newConcurrentBufferIngester(newRegistry(st, metrics))
+	return newRegistry(st, metrics)
 }
