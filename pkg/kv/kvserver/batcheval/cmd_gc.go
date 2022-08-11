@@ -53,6 +53,10 @@ func declareKeysGC(
 	)) {
 		latchSpans.AddMVCC(spanset.SpanReadWrite, span, hlc.MaxTimestamp)
 	}
+	if rk := gcr.ClearRangeKey; rk != nil {
+		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: rk.StartKey, EndKey: rk.EndKey},
+			hlc.MaxTimestamp)
+	}
 	// The RangeGCThresholdKey is only written to if the
 	// req.(*GCRequest).Threshold is set. However, we always declare an exclusive
 	// access over this key in order to serialize with other GC requests.
@@ -134,10 +138,17 @@ func GC(
 	//    GC request's effect from the raft log. Latches held on the leaseholder
 	//    would have no impact on a follower read.
 	if !args.Threshold.IsEmpty() &&
-		(len(args.Keys) != 0 || len(args.RangeKeys) != 0) &&
+		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil) &&
 		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
+	}
+
+	// We do not allow removal of point or range keys combined with clear range
+	// operation as they could cover the same set of keys.
+	if (len(args.Keys) != 0 || len(args.RangeKeys) != 0) && args.ClearRangeKey != nil {
+		return result.Result{}, errors.AssertionFailedf(
+			"GC request can remove point and range keys or clear entire range, but it is unsafe for it to do both")
 	}
 
 	// All keys must be inside the current replica range. Keys outside
@@ -176,6 +187,18 @@ func GC(
 		desc.EndKey.AsRawKey(), args.RangeKeys)
 	if err := storage.MVCCGarbageCollectRangeKeys(ctx, readWriter, cArgs.Stats, rangeKeys); err != nil {
 		return result.Result{}, err
+	}
+
+	// Fast path operation to try to remove all user key data from the range.
+	if rk := args.ClearRangeKey; rk != nil {
+		if !rk.StartKey.Equal(desc.StartKey.AsRawKey()) || !rk.EndKey.Equal(desc.EndKey.AsRawKey()) {
+			return result.Result{}, errors.Errorf("gc with clear range operation could only be used on the full range")
+		}
+
+		if err := storage.MVCCGarbageCollectWholeRange(ctx, readWriter, cArgs.Stats,
+			rk.StartKey, rk.EndKey, cArgs.EvalCtx.GetGCThreshold(), cArgs.EvalCtx.GetMVCCStats()); err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	// Optionally bump the GC threshold timestamp.
