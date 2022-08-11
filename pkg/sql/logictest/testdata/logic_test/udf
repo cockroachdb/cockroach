@@ -439,6 +439,55 @@ CREATE FUNCTION sc.proc_f_2(IN STRING)
     SELECT 'hello';
 $$  104  test  127  sc  128  proc_f_2
 
+statement ok
+CREATE DATABASE test_cross_db;
+USE test_cross_db;
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+USE test;
+
+query TITITIT
+SELECT create_statement, database_id, database_name, schema_id, schema_name, function_id, function_name
+FROM "".crdb_internal.create_function_statements
+WHERE function_name IN ('proc_f', 'proc_f_2', 'f_cross_db')
+ORDER BY database_id, function_name;
+----
+CREATE FUNCTION public.proc_f(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$  104  test  105  public  124  proc_f
+CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
+    RETURNS SETOF STRING
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$  104  test  105  public  125  proc_f
+CREATE FUNCTION sc.proc_f_2(IN STRING)
+    RETURNS STRING
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'hello';
+$$  104  test  127  sc  128  proc_f_2
+CREATE FUNCTION public.f_cross_db()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$  129  test_cross_db  130  public  131  f_cross_db
+
 subtest show_create_function
 
 query T
