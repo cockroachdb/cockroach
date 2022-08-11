@@ -1077,3 +1077,12 @@ func TestDelimiter(t *testing.T) {
 		}
 	}
 }
+
+// Prior to the patch which introduced this test, the below calls would
+// have panicked.
+func TestEnumWithoutTypeMetaNameDoesNotPanicInSQLString(t *testing.T) {
+	typ := MakeEnum(100100, 100101)
+	require.Equal(t, "@100100", typ.SQLString())
+	arrayType := MakeArray(typ)
+	require.Equal(t, "@100100[]", arrayType.SQLString())
+}

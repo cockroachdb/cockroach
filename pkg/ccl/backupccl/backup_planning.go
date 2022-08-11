@@ -1132,25 +1132,9 @@ func getBackupDetailAndManifest(
 	txn *kv.Txn,
 	initialDetails jobspb.BackupDetails,
 	user username.SQLUsername,
+	backupDestination backupdest.ResolvedDestination,
 ) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
-	// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
-	// backupDestination struct.
-	collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-		backupdest.ResolveDest(ctx, user, initialDetails.Destination, initialDetails.EndTime, initialDetails.IncrementalFrom, execCfg)
-	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
-	}
-
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
-	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
-	}
-	defer defaultStore.Close()
-
-	if err := backupinfo.CheckForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
-	}
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
 		execCfg.DB, user, execCfg.InternalExecutor)
@@ -1159,7 +1143,7 @@ func getBackupDetailAndManifest(
 	defer mem.Close(ctx)
 
 	prevBackups, encryptionOptions, memSize, err := backupinfo.FetchPreviousBackups(ctx, &mem, user,
-		makeCloudStorage, prevs, *initialDetails.EncryptionOptions, &kmsEnv)
+		makeCloudStorage, backupDestination.PrevBackupURIs, *initialDetails.EncryptionOptions, &kmsEnv)
 
 	if err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
@@ -1187,9 +1171,9 @@ func getBackupDetailAndManifest(
 		}
 	}
 
-	localityKVs := make([]string, len(urisByLocalityKV))
+	localityKVs := make([]string, len(backupDestination.URIsByLocalityKV))
 	i := 0
-	for k := range urisByLocalityKV {
+	for k := range backupDestination.URIsByLocalityKV {
 		localityKVs[i] = k
 		i++
 	}
@@ -1234,10 +1218,10 @@ func getBackupDetailAndManifest(
 	updatedDetails, err := updateBackupDetails(
 		ctx,
 		initialDetails,
-		collectionURI,
-		defaultURI,
-		resolvedSubdir,
-		urisByLocalityKV,
+		backupDestination.CollectionURI,
+		backupDestination.DefaultURI,
+		backupDestination.ChosenSubdir,
+		backupDestination.URIsByLocalityKV,
 		prevBackups,
 		encryptionOptions,
 		&kmsEnv)

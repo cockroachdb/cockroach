@@ -123,7 +123,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					defaultDest, localitiesDest, err := backupdest.GetURIsByLocalityKV(to, "")
 					require.NoError(t, err)
 
-					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := backupdest.ResolveDest(
+					backupDest, err := backupdest.ResolveDest(
 						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
 						endTime,
@@ -133,12 +133,12 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					require.NoError(t, err)
 
 					// Not an INTO backup, so no collection of suffix info.
-					require.Equal(t, "", collectionURI)
-					require.Equal(t, "", chosenSuffix)
+					require.Equal(t, "", backupDest.CollectionURI)
+					require.Equal(t, "", backupDest.ChosenSubdir)
 
-					require.Equal(t, defaultDest, defaultURI)
-					require.Equal(t, localitiesDest, urisByLocalityKV)
-					require.Equal(t, incrementalFrom, prevBackupURIs)
+					require.Equal(t, defaultDest, backupDest.DefaultURI)
+					require.Equal(t, localitiesDest, backupDest.URIsByLocalityKV)
+					require.Equal(t, incrementalFrom, backupDest.PrevBackupURIs)
 				}
 
 				// The first initial full backup: BACKUP TO full.
@@ -190,7 +190,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				) {
 					endTime := hlc.Timestamp{WallTime: backupTime.UnixNano()}
 
-					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := backupdest.ResolveDest(
+					backupDest, err := backupdest.ResolveDest(
 						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
 						endTime,
@@ -200,11 +200,11 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					require.NoError(t, err)
 
 					// Not a backup collection.
-					require.Equal(t, "", collectionURI)
-					require.Equal(t, "", chosenSuffix)
-					require.Equal(t, expectedDefault, defaultURI)
-					require.Equal(t, expectedLocalities, urisByLocalityKV)
-					require.Equal(t, expectedPrevBackups, prevBackupURIs)
+					require.Equal(t, "", backupDest.CollectionURI)
+					require.Equal(t, "", backupDest.ChosenSubdir)
+					require.Equal(t, expectedDefault, backupDest.DefaultURI)
+					require.Equal(t, expectedLocalities, backupDest.URIsByLocalityKV)
+					require.Equal(t, expectedPrevBackups, backupDest.PrevBackupURIs)
 				}
 
 				// Initial full backup: BACKUP TO baseDir.
@@ -336,7 +336,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					if expectedIncDir != "" {
 						fullBackupExists = true
 					}
-					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := backupdest.ResolveDest(
+					backupDest, err := backupdest.ResolveDest(
 						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir,
 							IncrementalStorage: incrementalTo, Exists: fullBackupExists},
@@ -354,13 +354,11 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						localityDests[locality] = u.String()
 					}
 
-					require.Equal(t, collectionLoc, collectionURI)
-					require.Equal(t, expectedSuffix, chosenSuffix)
-
-					require.Equal(t, expectedDefault, defaultURI)
-					require.Equal(t, localityDests, urisByLocalityKV)
-
-					require.Equal(t, expectedPrevBackups, prevBackupURIs)
+					require.Equal(t, collectionLoc, backupDest.CollectionURI)
+					require.Equal(t, expectedSuffix, backupDest.ChosenSubdir)
+					require.Equal(t, expectedDefault, backupDest.DefaultURI)
+					require.Equal(t, localityDests, backupDest.URIsByLocalityKV)
+					require.Equal(t, expectedPrevBackups, backupDest.PrevBackupURIs)
 				}
 
 				// Initial: BACKUP INTO collection
