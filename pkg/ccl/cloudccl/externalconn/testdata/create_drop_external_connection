@@ -140,29 +140,29 @@ DROP EXTERNAL CONNECTION 'privileged-dup'
 
 subtest end
 
-subtest basic-gs-kms
+subtest basic-gcp-kms
 
-disable-check-external-storage
+disable-check-kms
 ----
 
 exec-sql
-CREATE EXTERNAL CONNECTION "foo-kms" AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
+CREATE EXTERNAL CONNECTION "foo-kms" AS 'gcp-kms:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
 ----
 
 # Reject invalid KMS URIs.
 exec-sql
-CREATE EXTERNAL CONNECTION "missing-cmk-kms" AS 'gs:///?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
+CREATE EXTERNAL CONNECTION "missing-cmk-kms" AS 'gcp-kms:///?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
 ----
-pq: failed to construct External Connection details: host component of the GCS KMS cannot be empty; must contain the Customer Managed Key
+pq: failed to construct External Connection details: failed to create GCP KMS external connection: host component of the KMS cannot be empty; must contain the Customer Managed Key
 
 exec-sql
-CREATE EXTERNAL CONNECTION "invalid-params-kms" AS 'gs:///cmk?AUTH=implicit&INVALIDPARAM=baz';
+CREATE EXTERNAL CONNECTION "invalid-params-kms" AS 'gcp-kms:///cmk?AUTH=implicit&INVALIDPARAM=baz';
 ----
-pq: failed to construct External Connection details: unknown query parameters: INVALIDPARAM for gs URI
+pq: failed to construct External Connection details: failed to create GCP KMS external connection: unknown KMS query parameters: INVALIDPARAM
 
 inspect-system-table
 ----
-foo-kms KMS {"provider": "gs_kms", "simpleUri": {"uri": "gs:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}}
+foo-kms KMS {"provider": "gcp_kms", "simpleUri": {"uri": "gcp-kms:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}}
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-kms";
@@ -171,7 +171,7 @@ DROP EXTERNAL CONNECTION "foo-kms";
 inspect-system-table
 ----
 
-enable-check-external-storage
+enable-check-kms
 ----
 
 subtest end

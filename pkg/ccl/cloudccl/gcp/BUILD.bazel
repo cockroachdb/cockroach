@@ -4,7 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "gcp_test",
     srcs = [
-        "gcs_kms_connection_test.go",
+        "gcp_kms_connection_test.go",
         "main_test.go",
     ],
     deps = [

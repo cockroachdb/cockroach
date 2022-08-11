@@ -22,7 +22,7 @@ enum ConnectionProvider {
   s3 = 4;
 
   // KMS providers.
-  gs_kms = 2;
+  gcp_kms = 2;
 
   // Sink providers.
   kafka = 3;
