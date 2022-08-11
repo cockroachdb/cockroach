@@ -190,9 +190,6 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-	// ChangefeedIdleness is the version where changefeed aggregators forward
-	// idleness-related information alnog with resolved spans to the frontier
-	ChangefeedIdleness
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -376,10 +373,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionBlockProperties,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
-	},
-	{
-		Key:     ChangefeedIdleness,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
 	},
 	{
 		Key:     EnableNewStoreRebalancer,
