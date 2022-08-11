@@ -295,9 +295,6 @@ WHERE id = $max_desc_id;
     }
 }
 
-statement error pq: unimplemented: alter function set schema not supported.*
-ALTER FUNCTION f() SET SCHEMA test_sc
-
 statement error pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
 
@@ -1333,3 +1330,136 @@ DROP FUNCTION f_test_alter_owner;
 
 statement ok
 DROP USER u_test_owner;
+
+subtest alter_function_set_schema
+
+statement ok
+CREATE FUNCTION f_test_sc() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f_test_sc(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+CREATE SCHEMA test_alter_sc;
+CREATE FUNCTION test_alter_sc.f_test_sc() RETURNS INT LANGUAGE SQL AS $$ SELECT 3 $$;
+
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc');
+----
+100176  f_test_sc  SELECT 1;
+100177  f_test_sc  SELECT 2;
+100179  f_test_sc  SELECT 3;
+
+query TT
+WITH fns AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+  FROM system.descriptor
+  WHERE id IN (176, 177, 179)
+)
+SELECT
+  fn->'id',
+  fn->'parentSchemaId'
+FROM fns;
+----
+176  105
+177  105
+179  178
+
+statement error pq: cannot move objects into or out of virtual schemas
+ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
+
+statement error pq: function test_alter_sc.f_test_sc\(\) already exists in schema "test_alter_sc"
+ALTER FUNCTION f_test_sc() SET SCHEMA test_alter_sc;
+
+# Make sure moving to same schema has not effects.
+statement ok
+ALTER FUNCTION f_test_sc(INT) SET SCHEMA public;
+
+query TT
+WITH fns AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+  FROM system.descriptor
+  WHERE id IN (176, 177, 179)
+)
+SELECT
+  fn->'id',
+  fn->'parentSchemaId'
+FROM fns;
+----
+176  105
+177  105
+179  178
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
+----
+CREATE FUNCTION public.f_test_sc()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+CREATE FUNCTION public.f_test_sc(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 2;
+$$
+
+# Make sure moving to another schema changes function's parentSchemaId and
+# schema's function list.
+statement ok
+ALTER FUNCTION f_test_sc(INT) SET SCHEMA test_alter_sc;
+
+query TT
+WITH fns AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+  FROM system.descriptor
+  WHERE id IN (176, 177, 179)
+)
+SELECT
+  fn->'id',
+  fn->'parentSchemaId'
+FROM fns;
+----
+176  105
+177  178
+179  178
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
+----
+CREATE FUNCTION public.f_test_sc()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc];
+----
+CREATE FUNCTION test_alter_sc.f_test_sc()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 3;
+$$
+CREATE FUNCTION test_alter_sc.f_test_sc(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 2;
+$$
