@@ -1408,9 +1408,9 @@ func TestDropLargeDatabaseWithLegacySchemaChanger(t *testing.T) {
 	dropLargeDatabaseGeneric(t,
 		sqltestutils.GenerateViewBasedGraphSchemaParams{
 			SchemaName:         "largedb",
-			NumTablesPerDepth:  5,
-			NumColumnsPerTable: 6,
-			GraphDepth:         4,
+			NumTablesPerDepth:  4,
+			NumColumnsPerTable: 4,
+			GraphDepth:         3,
 		},
 		false)
 }
@@ -1423,9 +1423,9 @@ func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
 	dropLargeDatabaseGeneric(t,
 		sqltestutils.GenerateViewBasedGraphSchemaParams{
 			SchemaName:         "largedb",
-			NumTablesPerDepth:  5,
-			NumColumnsPerTable: 2,
-			GraphDepth:         2,
+			NumTablesPerDepth:  4,
+			NumColumnsPerTable: 4,
+			GraphDepth:         3,
 		},
 		true)
 }
