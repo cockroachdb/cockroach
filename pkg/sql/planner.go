@@ -662,7 +662,7 @@ func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, 
 }
 
 // TypeAsBool enforces (not hints) that the given expression typechecks as a
-// string and returns a function that can be called to get the string value
+// bool and returns a function that can be called to get the bool value
 // during (planNode).Start.
 func (p *planner) TypeAsBool(
 	ctx context.Context, e tree.Expr, op string,
