@@ -1885,6 +1885,14 @@ var charts = []sectionDescription{
 				Title:   "Send Queue Messages Count",
 				Metrics: []string{"raft.transport.send-queue-size"},
 			},
+			{
+				Title:   "Raft Messages Sent",
+				Metrics: []string{"raft.transport.sent"},
+			},
+			{
+				Title:   "Raft Messages Received",
+				Metrics: []string{"raft.transport.rcvd"},
+			},
 		},
 	},
 	{
