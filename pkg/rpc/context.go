@@ -1821,7 +1821,6 @@ func (rpcCtx *Context) runHeartbeat(
 func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	return &HeartbeatService{
 		clock:                                 rpcCtx.Clock,
-		maxOffset:                             rpcCtx.MaxOffset,
 		remoteClockMonitor:                    rpcCtx.RemoteClocks,
 		clusterName:                           rpcCtx.ClusterName(),
 		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,
