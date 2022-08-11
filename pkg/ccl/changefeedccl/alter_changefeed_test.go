@@ -519,7 +519,7 @@ func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 		)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedChangeSinkURI(t *testing.T) {
@@ -557,7 +557,9 @@ func TestAlterChangefeedChangeSinkURI(t *testing.T) {
 		require.Equal(t, newSinkURI, details.SinkURI)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	// TODO (zinger): Decide how this functionality should interact with external connections
+	// and add a test for it.
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedAddTargetErrors(t *testing.T) {
