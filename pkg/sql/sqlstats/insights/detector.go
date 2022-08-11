@@ -23,15 +23,15 @@ type detector interface {
 	examine(*Statement) []Concern
 }
 
-var _ detector = &anyDetector{}
-var _ detector = &latencyQuantileDetector{}
+var _ detector = &compositeDetector{}
+var _ detector = &anomalyDetector{}
 var _ detector = &latencyThresholdDetector{}
 
-type anyDetector struct {
+type compositeDetector struct {
 	detectors []detector
 }
 
-func (a anyDetector) enabled() bool {
+func (a compositeDetector) enabled() bool {
 	for _, d := range a.detectors {
 		if d.enabled() {
 			return true
@@ -40,7 +40,7 @@ func (a anyDetector) enabled() bool {
 	return false
 }
 
-func (a anyDetector) examine(statement *Statement) (concerns []Concern) {
+func (a compositeDetector) examine(statement *Statement) (concerns []Concern) {
 	set := make(map[Concern]struct{})
 
 	for _, d := range a.detectors {
@@ -58,7 +58,7 @@ func (a anyDetector) examine(statement *Statement) (concerns []Concern) {
 
 var desiredQuantiles = map[float64]float64{0.5: 0.05, 0.99: 0.001}
 
-type latencyQuantileDetector struct {
+type anomalyDetector struct {
 	settings *cluster.Settings
 	metrics  Metrics
 	store    *list.List
@@ -70,11 +70,11 @@ type latencySummaryEntry struct {
 	value *quantile.Stream
 }
 
-func (d latencyQuantileDetector) enabled() bool {
-	return LatencyQuantileDetectorEnabled.Get(&d.settings.SV)
+func (d anomalyDetector) enabled() bool {
+	return AnomalyDetectionEnabled.Get(&d.settings.SV)
 }
 
-func (d *latencyQuantileDetector) examine(stmt *Statement) (concerns []Concern) {
+func (d *anomalyDetector) examine(stmt *Statement) (concerns []Concern) {
 	if !d.enabled() {
 		return concerns
 	}
@@ -85,7 +85,7 @@ func (d *latencyQuantileDetector) examine(stmt *Statement) (concerns []Concern) 
 		p99 := latencySummary.Query(0.99)
 		if stmt.LatencyInSeconds >= p99 &&
 			stmt.LatencyInSeconds >= 2*p50 &&
-			stmt.LatencyInSeconds >= LatencyQuantileDetectorInterestingThreshold.Get(&d.settings.SV).Seconds() {
+			stmt.LatencyInSeconds >= AnomalyDetectionLatencyThreshold.Get(&d.settings.SV).Seconds() {
 			concerns = append(concerns, Concern_SlowExecution)
 		}
 	})
@@ -93,7 +93,7 @@ func (d *latencyQuantileDetector) examine(stmt *Statement) (concerns []Concern) 
 	return concerns
 }
 
-func (d *latencyQuantileDetector) withFingerprintLatencySummary(
+func (d *anomalyDetector) withFingerprintLatencySummary(
 	stmt *Statement, consumer func(latencySummary *quantile.Stream),
 ) {
 	var latencySummary *quantile.Stream
@@ -102,7 +102,7 @@ func (d *latencyQuantileDetector) withFingerprintLatencySummary(
 		// We are already tracking latencies for this fingerprint.
 		latencySummary = element.Value.(latencySummaryEntry).value
 		d.store.MoveToFront(element) // Mark this latency summary as recently used.
-	} else if stmt.LatencyInSeconds >= LatencyQuantileDetectorInterestingThreshold.Get(&d.settings.SV).Seconds() {
+	} else if stmt.LatencyInSeconds >= AnomalyDetectionLatencyThreshold.Get(&d.settings.SV).Seconds() {
 		// We want to start tracking latencies for this fingerprint.
 		latencySummary = quantile.NewTargeted(desiredQuantiles)
 		entry := latencySummaryEntry{key: stmt.FingerprintID, value: latencySummary}
@@ -119,7 +119,7 @@ func (d *latencyQuantileDetector) withFingerprintLatencySummary(
 	d.metrics.Memory.Inc(latencySummary.ByteSize() - previousMemoryUsage)
 
 	// To control our memory usage, possibly evict the latency summary for the least recently seen statement fingerprint.
-	if d.metrics.Memory.Value() > LatencyQuantileDetectorMemoryCap.Get(&d.settings.SV) {
+	if d.metrics.Memory.Value() > AnomalyDetectionMemoryLimit.Get(&d.settings.SV) {
 		element := d.store.Back()
 		entry := d.store.Remove(element).(latencySummaryEntry)
 		delete(d.index, entry.key)
@@ -129,8 +129,8 @@ func (d *latencyQuantileDetector) withFingerprintLatencySummary(
 	}
 }
 
-func newLatencyQuantileDetector(settings *cluster.Settings, metrics Metrics) detector {
-	return &latencyQuantileDetector{
+func newAnomalyDetector(settings *cluster.Settings, metrics Metrics) detector {
+	return &anomalyDetector{
 		settings: settings,
 		metrics:  metrics,
 		store:    list.New(),

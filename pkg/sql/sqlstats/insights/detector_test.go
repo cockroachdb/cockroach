@@ -23,32 +23,32 @@ import (
 
 func TestAnyDetector(t *testing.T) {
 	t.Run("enabled is false without any detectors", func(t *testing.T) {
-		detector := &anyDetector{}
+		detector := &compositeDetector{}
 		require.False(t, detector.enabled())
 	})
 
 	t.Run("enabled is false with all disabled detectors", func(t *testing.T) {
-		detector := &anyDetector{[]detector{&fakeDetector{}, &fakeDetector{}}}
+		detector := &compositeDetector{[]detector{&fakeDetector{}, &fakeDetector{}}}
 		require.False(t, detector.enabled())
 	})
 
 	t.Run("enabled is true with at least one enabled detector", func(t *testing.T) {
-		detector := &anyDetector{[]detector{&fakeDetector{stubEnabled: true}, &fakeDetector{}}}
+		detector := &compositeDetector{[]detector{&fakeDetector{stubEnabled: true}, &fakeDetector{}}}
 		require.True(t, detector.enabled())
 	})
 
 	t.Run("examine is nil without any detectors", func(t *testing.T) {
-		detector := &anyDetector{}
+		detector := &compositeDetector{}
 		require.Empty(t, detector.examine(&Statement{}))
 	})
 
 	t.Run("examine is nil without any concerned detectors", func(t *testing.T) {
-		detector := &anyDetector{[]detector{&fakeDetector{}, &fakeDetector{}}}
+		detector := &compositeDetector{[]detector{&fakeDetector{}, &fakeDetector{}}}
 		require.Empty(t, detector.examine(&Statement{}))
 	})
 
 	t.Run("examine combines detector concerns (first)", func(t *testing.T) {
-		detector := &anyDetector{[]detector{
+		detector := &compositeDetector{[]detector{
 			&fakeDetector{stubExamine: []Concern{Concern_SlowExecution}},
 			&fakeDetector{},
 		}}
@@ -56,7 +56,7 @@ func TestAnyDetector(t *testing.T) {
 	})
 
 	t.Run("examine combines detector concerns (second)", func(t *testing.T) {
-		detector := &anyDetector{[]detector{
+		detector := &compositeDetector{[]detector{
 			&fakeDetector{},
 			&fakeDetector{stubExamine: []Concern{Concern_SlowExecution}},
 		}}
@@ -64,7 +64,7 @@ func TestAnyDetector(t *testing.T) {
 	})
 
 	t.Run("examine uniqs detector concerns", func(t *testing.T) {
-		detector := &anyDetector{[]detector{
+		detector := &compositeDetector{[]detector{
 			&fakeDetector{stubExamine: []Concern{Concern_SlowExecution}},
 			&fakeDetector{stubExamine: []Concern{Concern_SlowExecution}},
 		}}
@@ -74,22 +74,22 @@ func TestAnyDetector(t *testing.T) {
 
 func TestLatencyQuantileDetector(t *testing.T) {
 	t.Run("enabled false by default", func(t *testing.T) {
-		d := newLatencyQuantileDetector(cluster.MakeTestingClusterSettings(), NewMetrics())
+		d := newAnomalyDetector(cluster.MakeTestingClusterSettings(), NewMetrics())
 		require.False(t, d.enabled())
 	})
 
 	t.Run("enabled true by cluster setting", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
-		d := newLatencyQuantileDetector(st, NewMetrics())
-		LatencyQuantileDetectorEnabled.Override(context.Background(), &st.SV, true)
+		d := newAnomalyDetector(st, NewMetrics())
+		AnomalyDetectionEnabled.Override(context.Background(), &st.SV, true)
 		require.True(t, d.enabled())
 	})
 
 	t.Run("examine", func(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		LatencyQuantileDetectorEnabled.Override(ctx, &st.SV, true)
-		LatencyQuantileDetectorInterestingThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
+		AnomalyDetectionEnabled.Override(ctx, &st.SV, true)
+		AnomalyDetectionLatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
 
 		tests := []struct {
 			name             string
@@ -112,7 +112,7 @@ func TestLatencyQuantileDetector(t *testing.T) {
 		}}
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
-				d := newLatencyQuantileDetector(st, NewMetrics())
+				d := newAnomalyDetector(st, NewMetrics())
 				for i := 0; i < 1000; i++ {
 					d.examine(&Statement{LatencyInSeconds: test.seedLatency.Seconds()})
 				}
@@ -124,8 +124,8 @@ func TestLatencyQuantileDetector(t *testing.T) {
 	t.Run("metrics", func(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		LatencyQuantileDetectorEnabled.Override(ctx, &st.SV, true)
-		LatencyQuantileDetectorMemoryCap.Override(ctx, &st.SV, 1024)
+		AnomalyDetectionEnabled.Override(ctx, &st.SV, true)
+		AnomalyDetectionMemoryLimit.Override(ctx, &st.SV, 1024)
 
 		tests := []struct {
 			name         string
@@ -170,11 +170,11 @@ func TestLatencyQuantileDetector(t *testing.T) {
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				metrics := NewMetrics()
-				d := newLatencyQuantileDetector(st, metrics)
+				d := newAnomalyDetector(st, metrics)
 				// Show the detector `test.fingerprints` distinct fingerprints.
 				for i := 0; i < test.fingerprints; i++ {
 					d.examine(&Statement{
-						LatencyInSeconds: LatencyQuantileDetectorInterestingThreshold.Get(&st.SV).Seconds(),
+						LatencyInSeconds: AnomalyDetectionLatencyThreshold.Get(&st.SV).Seconds(),
 						FingerprintID:    roachpb.StmtFingerprintID(i),
 					})
 				}
@@ -189,8 +189,8 @@ func TestLatencyQuantileDetector(t *testing.T) {
 func BenchmarkLatencyQuantileDetector(b *testing.B) {
 	random := rand.New(rand.NewSource(42))
 	settings := cluster.MakeTestingClusterSettings()
-	LatencyQuantileDetectorEnabled.Override(context.Background(), &settings.SV, true)
-	d := newLatencyQuantileDetector(settings, NewMetrics())
+	AnomalyDetectionEnabled.Override(context.Background(), &settings.SV, true)
+	d := newAnomalyDetector(settings, NewMetrics())
 	for i := 0; i < b.N; i++ {
 		d.examine(&Statement{
 			LatencyInSeconds: random.Float64(),
