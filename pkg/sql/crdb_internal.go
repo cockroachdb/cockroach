@@ -6055,12 +6055,6 @@ func genClusterLocksGenerator(
 	filters clusterLocksFilters,
 ) func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 	return func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		// TODO(sarkesian): remove gate for 22.2 release
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ClusterLocksVirtualTable) {
-			return nil, nil, pgerror.New(pgcode.FeatureNotSupported,
-				"table crdb_internal.cluster_locks is not supported on this version")
-		}
-
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, nil, err
