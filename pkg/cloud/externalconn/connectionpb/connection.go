@@ -23,7 +23,7 @@ func (d *ConnectionDetails) Type() ConnectionType {
 	case ConnectionProvider_kafka:
 		return TypeStorage
 	default:
-		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %s", d.Provider.String()))
+		return TypeStorage
 	}
 }
 
