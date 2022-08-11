@@ -2481,8 +2481,7 @@ func TestChangefeedOutputTopics(t *testing.T) {
 			err = c.Close()
 			require.NoError(t, err)
 		}()
-		kafkaFeed, ok := f.(*kafkaFeedFactory)
-		require.True(t, ok)
+		kafkaFeed := mustBeKafkaFeedFactory(f)
 		kafkaFeed.di.prepareJob(c.jobFeed)
 
 		sqlDB.Exec(t, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
@@ -5916,7 +5915,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 
 	// only used for webhook sink for now since it's the only testfeed where
 	// we can control the ordering of errors
-	cdcTest(t, testFn, feedTestForceSink("webhook"))
+	cdcTest(t, testFn, feedTestForceSink("webhook"), feedTestNoExternalConnection)
 }
 
 func TestChangefeedOnErrorOption(t *testing.T) {
@@ -7102,7 +7101,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		failLogs := waitForLogs(t, beforeCreate)
 		require.Equal(t, 1, len(failLogs))
 		require.Equal(t, failLogs[0].FailureType, changefeedbase.UnknownError)
-		require.Equal(t, failLogs[0].SinkType, `gcpubsub`)
+		require.Contains(t, []string{`gcpubsub`, `external`}, failLogs[0].SinkType)
 		require.Equal(t, failLogs[0].NumTables, int32(1))
 	}, feedTestForceSink("pubsub"))
 }
@@ -7173,7 +7172,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		knobs := f.(*kafkaFeedFactory).knobs
+		knobs := mustBeKafkaFeedFactory(f).knobs
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
