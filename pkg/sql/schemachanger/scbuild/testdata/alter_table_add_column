@@ -41,9 +41,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT NOT NULL DEFAULT 123
   {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
 
 build
@@ -74,9 +74,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
   {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
   {columnId: 3, pgAttributeNum: 3, tableId: 104}
@@ -116,9 +116,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
 
 setup
@@ -171,9 +171,9 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 1, indexId: 2, kind: STORED, tableId: 106}
 - [[TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 106}
-- [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, tableId: 106}
-- [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, kind: STORED, tableId: 106}
 - [[SecondaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 3, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 106, temporaryIndexId: 5}

@@ -278,7 +278,7 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -404,11 +404,11 @@ upsert descriptor #106
   -  version: "6"
   +  version: "7"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #106
   ...
      formatVersion: 3
@@ -418,49 +418,7 @@ upsert descriptor #106
   +  modificationTime: {}
      mutations:
      - direction: DROP
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
-     name: tbl
-     nextColumnId: 3
-  ...
-       time: {}
-     unexposedParentSchemaId: 105
-  -  version: "7"
-  +  version: "8"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
-commit transaction #11
-begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
-upsert descriptor #106
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
-  -          NULL DEFAULT ‹42›
-  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
-  ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
-  -  mutations:
-  -  - direction: DROP
-  -    index:
+       index:
   -      constraintId: 3
   -      createdExplicitly: true
   -      encodingType: 1
@@ -486,6 +444,54 @@ upsert descriptor #106
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+         constraintId: 1
+         createdAtNanos: "1640995200000000000"
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "7"
+  +  version: "8"
+create job #2 (non-cancelable: true): "GC for "
+  descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 2 MutationType ops pending"
+commit transaction #11
+notified job registry to adopt jobs: [2]
+begin transaction #12
+## PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
+  -          NULL DEFAULT ‹42›
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000011"
+  -  mutations:
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -518,9 +524,9 @@ upsert descriptor #106
   -  version: "8"
   +  version: "9"
 write *eventpb.FinishSchemaChange to event log for descriptor 106
-create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
+create job #3 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #12
-notified job registry to adopt jobs: [2]
+notified job registry to adopt jobs: [3]
 # end PostCommitPhase

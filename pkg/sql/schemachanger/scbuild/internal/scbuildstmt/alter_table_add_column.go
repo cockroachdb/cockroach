@@ -359,7 +359,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 	out.apply(b.Drop)
 	in, temp := makeSwapPrimaryIndexSpec(b, out, inColumns)
 	in.apply(b.Add)
-	temp.setTargets(b)
+	temp.apply(b.AddTransient)
 	return in.idx
 }
 

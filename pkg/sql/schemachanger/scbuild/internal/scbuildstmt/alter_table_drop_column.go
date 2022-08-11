@@ -379,7 +379,7 @@ func handleDropColumnCreateNewPrimaryIndex(
 	in, temp := makeSwapPrimaryIndexSpec(b, out, inColumns)
 	out.apply(b.Drop)
 	in.apply(b.Add)
-	temp.setTargets(b)
+	temp.apply(b.AddTransient)
 	return in.idx
 }
 
@@ -401,9 +401,12 @@ func handleDropColumnFreshlyAddedPrimaryIndex(
 	if tempIndex == nil {
 		panic(errors.AssertionFailedf("failed to find temp index %d", freshlyAdded.TemporaryIndexID))
 	}
-	scpb.ForEachIndexColumn(b.QueryByID(freshlyAdded.TableID).Filter(publicTargetFilter), func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
+	scpb.ForEachIndexColumn(b.QueryByID(freshlyAdded.TableID), func(
+		_ scpb.Status, targetStatus scpb.TargetStatus, e *scpb.IndexColumn,
 	) {
+		if targetStatus == scpb.ToAbsent {
+			return
+		}
 		if e.Kind != scpb.IndexColumn_STORED {
 			return
 		}

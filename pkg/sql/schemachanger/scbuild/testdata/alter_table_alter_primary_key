@@ -24,9 +24,9 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 1, indexId: 2, kind: STORED, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, kind: STORED, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 3, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
@@ -64,9 +64,9 @@ ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
   {columnId: 2, indexId: 2, kind: STORED, tableId: 105}
 - [[TemporaryIndex:{DescID: 105, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 105}
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 105}
-- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 3, kind: STORED, tableId: 105}
 - [[SecondaryIndex:{DescID: 105, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 3, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 105, temporaryIndexId: 5}
