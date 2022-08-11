@@ -15,7 +15,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,9 +37,13 @@ type Simulator struct {
 	pacers map[state.StoreID]ReplicaPacer
 
 	// Store replicate queues.
-	rqs map[state.StoreID]RangeQueue
+	rqs map[state.StoreID]queue.RangeQueue
 	// Store split queues.
-	sqs map[state.StoreID]RangeQueue
+	sqs map[state.StoreID]queue.RangeQueue
+	// Store rebalancers.
+	srs map[state.StoreID]storerebalancer.StoreRebalancer
+	// Store operation controllers.
+	controllers map[state.StoreID]op.Controller
 
 	state    state.State
 	changer  state.Changer
@@ -57,17 +64,23 @@ func NewSimulator(
 	metrics *MetricsTracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
-	rqs := make(map[state.StoreID]RangeQueue)
-	sqs := make(map[state.StoreID]RangeQueue)
+	rqs := make(map[state.StoreID]queue.RangeQueue)
+	sqs := make(map[state.StoreID]queue.RangeQueue)
+	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
+	controllers := make(map[state.StoreID]op.Controller)
 	for storeID := range initialState.Stores() {
-		rqs[storeID] = NewReplicateQueue(
+		allocator := initialState.MakeAllocator(storeID)
+		// TODO(kvoli): Instead of passing in individual settings to contruct
+		// the per-store ticking controllers, pass a pointer to the simulation
+		// settings struct - so that settings they may adjusted at runtime.
+		rqs[storeID] = queue.NewReplicateQueue(
 			storeID,
 			changer,
 			settings.ReplicaChangeDelayFn(),
-			initialState.MakeAllocator(storeID),
+			allocator,
 			start,
 		)
-		sqs[storeID] = NewSplitQueue(
+		sqs[storeID] = queue.NewSplitQueue(
 			storeID,
 			changer,
 			settings.RangeSplitDelayFn(),
@@ -80,20 +93,35 @@ func NewSimulator(
 			settings.PacerMinIterInterval,
 			settings.PacerMaxIterIterval,
 		)
+		controllers[storeID] = op.NewController(
+			changer,
+			allocator,
+			settings,
+		)
+		srs[storeID] = storerebalancer.NewStoreRebalancer(
+			start,
+			storeID,
+			controllers[storeID],
+			allocator,
+			settings,
+			storerebalancer.GetStateRaftStatusFn(initialState),
+		)
 	}
 
 	return &Simulator{
-		curr:       start,
-		end:        end,
-		interval:   interval,
-		generators: wgs,
-		state:      initialState,
-		changer:    changer,
-		rqs:        rqs,
-		sqs:        sqs,
-		pacers:     pacers,
-		exchange:   exchange,
-		metrics:    metrics,
+		curr:        start,
+		end:         end,
+		interval:    interval,
+		generators:  wgs,
+		state:       initialState,
+		changer:     changer,
+		rqs:         rqs,
+		sqs:         sqs,
+		controllers: controllers,
+		srs:         srs,
+		pacers:      pacers,
+		exchange:    exchange,
+		metrics:     metrics,
 	}
 }
 
@@ -130,7 +158,7 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		s.tickWorkload(ctx, tick)
 
 		// Update pending state changes.
-		s.changer.Tick(tick, s.state)
+		s.tickStateChanges(ctx, tick)
 
 		// Update each allocators view of the stores in the cluster.
 		s.tickStateExchange(tick)
@@ -145,6 +173,9 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		// Simulate the replicate queue logic.
 		s.tickQueues(ctx, tick, stateForAlloc)
 
+		// Simulate the store rebalancer logic.
+		s.tickStoreRebalancers(ctx, tick, stateForAlloc)
+
 		// Print tick metrics.
 		s.tickMetrics(ctx, tick)
 	}
@@ -155,6 +186,16 @@ func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 	for _, generator := range s.generators {
 		event := generator.Tick(tick)
 		s.state.ApplyLoad(event)
+	}
+}
+
+// tickStateChanges ticks atomic pending changes, in the changer. Then, for
+// each store ticks the pending operations such as relocate range and lease
+// transfers.
+func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
+	s.changer.Tick(tick, s.state)
+	for _, controller := range s.controllers {
+		controller.Tick(ctx, tick, s.state)
 	}
 }
 
@@ -213,6 +254,14 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 			// Try adding the replica to the replicate queue.
 			s.rqs[storeID].MaybeAdd(ctx, r, state)
 		}
+	}
+}
+
+// tickStoreRebalancers iterates over the store rebalancers in the cluster and
+// ticks their control loop.
+func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, state state.State) {
+	for _, sr := range s.srs {
+		sr.Tick(ctx, tick, state)
 	}
 }
 

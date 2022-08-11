@@ -12,6 +12,7 @@ package state
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -35,6 +36,20 @@ func TestingStartTime() time.Time {
 // generator in unit tests.
 func TestingWorkloadSeed() int64 {
 	return 42
+}
+
+// TestingSetRangeQPS sets the QPS for the range with ID rangeID. This will
+// show on the current leaseholder replica load for this range and persist
+// between transfers.
+func TestingSetRangeQPS(s State, rangeID RangeID, qps float64) bool {
+	store, ok := s.LeaseholderStore(rangeID)
+	if !ok {
+		return false
+	}
+
+	rlc := s.ReplicaLoad(rangeID, store.StoreID()).(*ReplicaLoadCounter)
+	rlc.QPS.SetMeanRateForTesting(qps)
+	return true
 }
 
 // NewStorePool returns a store pool with no gossip instance and default values
@@ -226,4 +241,32 @@ func NewTestStateReplDistribution(
 	}
 
 	return NewTestState(len(percentOfReplicas), 1, startKeys, replicas, map[Key]StoreID{})
+}
+
+// TestDistributeQPSCounts distributes QPS evenly among the leaseholder
+// replicas on a store, such that the total QPS for the store matches the
+// qpsCounts argument passed in.
+func TestDistributeQPSCounts(s State, qpsCounts []float64) {
+	stores := s.Stores()
+	if len(stores) != len(qpsCounts) {
+		return
+	}
+
+	fmt.Printf("qpscounts %+v\n", qpsCounts)
+	ranges := s.Ranges()
+	for x, qpsCount := range qpsCounts {
+		storeID := StoreID(x + 1)
+		lhs := []Range{}
+		for rangeID, replicaID := range stores[storeID].Replicas() {
+			if ranges[rangeID].Leaseholder() == replicaID {
+				lhs = append(lhs, ranges[rangeID])
+			}
+		}
+		qpsPerRange := qpsCount / float64(len(lhs))
+		for _, rng := range lhs {
+			rl := s.ReplicaLoad(rng.RangeID(), storeID)
+			rlc := rl.(*ReplicaLoadCounter)
+			rlc.QPS.SetMeanRateForTesting(qpsPerRange)
+		}
+	}
 }

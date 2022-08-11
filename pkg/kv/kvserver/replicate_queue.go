@@ -627,8 +627,13 @@ func (rq *replicateQueue) shouldQueue(
 	status := repl.LeaseStatusAt(ctx, now)
 	if status.IsValid() &&
 		rq.canTransferLeaseFrom(ctx, repl) &&
-		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.loadStats.batchRequests) {
-
+		rq.allocator.ShouldTransferLease(
+			ctx,
+			conf,
+			voterReplicas,
+			repl,
+			repl.loadStats.batchRequests.SnapshotRatedSummary(),
+		) {
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
 	}
@@ -1725,7 +1730,7 @@ func (rq *replicateQueue) shedLease(
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
-		repl.loadStats.batchRequests,
+		repl.loadStats.batchRequests.SnapshotRatedSummary(),
 		false, /* forceDecisionWithoutStats */
 		opts,
 	)

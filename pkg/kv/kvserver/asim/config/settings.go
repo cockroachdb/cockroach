@@ -26,6 +26,10 @@ const (
 	defaultSplitQPSThreshold       = 2500
 	defaultSplitQPSRetention       = 10 * time.Minute
 	defaultSeed                    = 42
+	defaultLBRebalancingMode       = 2 // Leases and replicas.
+	defaultLBRebalancingInterval   = time.Minute
+	defaultLBRebalanceQPSThreshold = 0.1
+	defaultLBMinRequiredQPSDiff    = 200
 )
 
 // SimulationSettings controls
@@ -77,6 +81,19 @@ type SimulationSettings struct {
 	// SplitQPSRetention is the duration which recorded load will be retained
 	// and factored into load based splitting decisions.
 	SplitQPSRetention time.Duration
+	// LBRebalancingMode controls if and when we do store-level rebalancing
+	// based on load. It maps to kvserver.LBRebalancingMode.
+	LBRebalancingMode int64
+	// LBRebalancingInterval controls how often the store rebalancer will
+	// consider opportunities for rebalancing.
+	LBRebalancingInterval time.Duration
+	// LBRebalanceQPSThreshold is the fraction above or below the mean store QPS,
+	// that a store is considered overfull or underfull.
+	LBRebalanceQPSThreshold float64
+	// LBMinQPSDifferenceForTransfers is the minimum QPS difference that the store
+	// rebalancer would care to reconcile (via lease or replica rebalancing) between
+	// any two stores.
+	LBMinRequiredQPSDiff float64
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
@@ -95,6 +112,10 @@ func DefaultSimulationSettings() *SimulationSettings {
 		StateExchangeDelay:      defaultStateExchangeDelay,
 		SplitQPSThreshold:       defaultSplitQPSThreshold,
 		SplitQPSRetention:       defaultSplitQPSRetention,
+		LBRebalancingMode:       defaultLBRebalancingMode,
+		LBRebalancingInterval:   defaultLBRebalancingInterval,
+		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
+		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
 	}
 }
 

@@ -113,7 +113,6 @@ type ClusterInfo struct {
 func LoadConfig(c ClusterInfo) State {
 	s := newState(config.DefaultSimulationSettings())
 	// A new state has a single range - add the replica load for that range.
-	s.load[1] = &ReplicaLoadCounter{}
 	s.clusterinfo = c
 	// TODO(lidor): load locality info to be used by the allocator. Do we need a
 	// NodeDescriptor and higher level localities? or can we simulate those?

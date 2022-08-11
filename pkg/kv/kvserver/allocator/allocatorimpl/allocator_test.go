@@ -5359,7 +5359,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 					replicationFactor: 3,
 					storeID:           c.leaseholder,
 				},
-				c.stats,
+				c.stats.SnapshotRatedSummary(),
 				false,
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
