@@ -58,17 +58,6 @@ upsert descriptor #104
   +  indexes: []
   +  modificationTime: {}
   +  mutations:
-  +  - column:
-  +      id: 2
-  +      name: crdb_internal_column_2_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: IntFamily
-  +        oid: 20
-  +        width: 64
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -137,6 +126,17 @@ upsert descriptor #104
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
+  +  - column:
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: DELETE_AND_WRITE_ONLY
      name: t
      nextColumnId: 3
   -  nextConstraintId: 2
@@ -158,7 +158,6 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log for descriptor #104: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -188,7 +187,7 @@ upsert descriptor #104
   +  modificationTime:
   +    wallTime: "1640995200000000001"
      mutations:
-     - column:
+     - direction: DROP
   ...
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t DROP COLUMN j"
   descriptor IDs: [104]
@@ -208,14 +207,14 @@ upsert descriptor #104
   -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      mutations:
-     - column:
+     - direction: DROP
   ...
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: DELETE_AND_WRITE_ONLY
-     name: t
-     nextColumnId: 3
+     - column:
+         id: 2
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -237,7 +236,7 @@ upsert descriptor #104
   -    wallTime: "1640995200000000003"
   +  modificationTime: {}
      mutations:
-     - column:
+     - direction: DROP
   ...
          version: 4
        mutationId: 1
@@ -262,7 +261,7 @@ upsert descriptor #104
   -    wallTime: "1640995200000000005"
   +  modificationTime: {}
      mutations:
-     - column:
+     - direction: DROP
   ...
          version: 4
        mutationId: 1
@@ -291,7 +290,7 @@ upsert descriptor #104
   -    wallTime: "1640995200000000006"
   +  modificationTime: {}
      mutations:
-     - column:
+     - direction: DROP
   ...
          version: 4
        mutationId: 1
@@ -311,7 +310,7 @@ begin transaction #9
 validate forward indexes [3] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 13 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t DROP COLUMN j
@@ -326,14 +325,7 @@ upsert descriptor #104
   -    wallTime: "1640995200000000008"
   +  modificationTime: {}
      mutations:
-     - column:
-  ...
-       direction: DROP
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
      - direction: DROP
-       index:
   ...
          version: 3
        mutationId: 1
@@ -367,6 +359,17 @@ upsert descriptor #104
   -    state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
+  +  - column:
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: DELETE_ONLY
   +  - direction: DROP
        index:
   -      constraintId: 3
@@ -396,6 +399,20 @@ upsert descriptor #104
   -      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
+       state: DELETE_AND_WRITE_ONLY
+  -  - column:
+  -      id: 2
+  -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+     name: t
+     nextColumnId: 3
   ...
      parentId: 100
      primaryIndex:
@@ -425,11 +442,11 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -438,65 +455,6 @@ upsert descriptor #104
   -    wallTime: "1640995200000000010"
   +  modificationTime: {}
      mutations:
-     - column:
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
-     name: t
-     nextColumnId: 3
-  ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 8 MutationType ops pending"
-commit transaction #11
-begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
-upsert descriptor #104
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-  -        statement: ALTER TABLE t DROP COLUMN j
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
-       - 1
-  -    - 2
-       columnNames:
-       - i
-  -    - crdb_internal_column_2_name_placeholder
-       defaultColumnId: 2
-       name: primary
-  ...
-     id: 104
-     indexes: []
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
-  -  mutations:
-  -  - column:
-  -      id: 2
-  -      name: crdb_internal_column_2_name_placeholder
-  -      nullable: true
-  -      type:
-  -        family: IntFamily
-  -        oid: 20
-  -        width: 64
-  -    direction: DROP
-  -    mutationId: 1
-  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      createdAtNanos: "1640995200000000000"
@@ -542,6 +500,70 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
+     - column:
+         id: 2
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+write *eventpb.DropIndex to event log for descriptor #104: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j"
+  descriptor IDs: [104]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops pending"
+commit transaction #11
+notified job registry to adopt jobs: [2]
+begin transaction #12
+## PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
+  -        statement: ALTER TABLE t DROP COLUMN j
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+       - 1
+  -    - 2
+       columnNames:
+       - i
+  -    - crdb_internal_column_2_name_placeholder
+       defaultColumnId: 2
+       name: primary
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000011"
+  -  mutations:
+  -  - column:
+  -      id: 2
+  -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -577,10 +599,10 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "8"
   +  version: "9"
-write *eventpb.DropIndex to event log for descriptor #104: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j"
+write *eventpb.FinishSchemaChange to event log for descriptor 104
+create job #3 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 commit transaction #12
-notified job registry to adopt jobs: [2]
+notified job registry to adopt jobs: [3]
 # end PostCommitPhase

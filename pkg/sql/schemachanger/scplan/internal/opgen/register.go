@@ -41,6 +41,10 @@ func toTransientAbsent(initalStatus scpb.Status, specs ...transitionSpec) target
 	return asTargetSpec(scpb.Status_TRANSIENT_ABSENT, initalStatus, specs...)
 }
 
+func toTransientAbsentLikePublic() targetSpec {
+	return asTargetSpec(scpb.Status_TRANSIENT_ABSENT, scpb.Status_ABSENT)
+}
+
 func asTargetSpec(to, from scpb.Status, specs ...transitionSpec) targetSpec {
 	return targetSpec{from: from, to: to, transitionSpecs: specs}
 }
@@ -53,22 +57,63 @@ func (r *registry) register(e scpb.Element, targetSpecs ...targetSpec) {
 			panic(errors.NewAssertionErrorWithWrappedErrf(err, "element %T", e))
 		}
 	}
-
-	onErrPanic(expandTransientAbsentSpec(targetSpecs))
-	targets, err := buildTargets(e, targetSpecs)
+	fullTargetSpecs, err := populateAndValidateSpecs(targetSpecs)
+	onErrPanic(err)
+	targets, err := buildTargets(e, fullTargetSpecs)
 	onErrPanic(err)
 	onErrPanic(validateTargets(targets))
 	r.targets = append(r.targets, targets...)
 }
 
-// Expand the definition of the TRANSIENT_ABSENT targetSpec according to
-// the transitions in the ABSENT targetSpec if they exist.
-func expandTransientAbsentSpec(targetSpecs []targetSpec) error {
-	toAbsent, transient, err := findToAbsentAndTransient(targetSpecs)
-	if err != nil || transient == nil {
-		return err
+func populateAndValidateSpecs(targetSpecs []targetSpec) ([]targetSpec, error) {
+	var absentSpec, publicSpec, transientSpec *targetSpec
+	for i := range targetSpecs {
+		s := &targetSpecs[i]
+		var p **targetSpec
+		switch s.to {
+		case scpb.Status_ABSENT:
+			p = &absentSpec
+		case scpb.Status_PUBLIC:
+			p = &publicSpec
+		case scpb.Status_TRANSIENT_ABSENT:
+			p = &transientSpec
+		default:
+			return nil, errors.Errorf("unsupported target %s", s.to)
+		}
+		if *p != nil {
+			return nil, errors.Errorf("duplicate %s spec", s.to)
+		}
+		if s.to != scpb.Status_ABSENT && s.from != scpb.Status_ABSENT {
+			return nil, errors.Errorf("expected %s spec to start in ABSENT, not %s", s.to, s.from)
+		}
+		*p = s
 	}
-	return populateTransientAbsent(toAbsent, transient)
+	if absentSpec == nil {
+		return nil, errors.Errorf("ABSENT spec is missing but required")
+	}
+	if transientSpec != nil {
+		if publicSpec != nil && len(transientSpec.transitionSpecs) == 0 {
+			// Here we want the transient spec to be a copy of the public spec.
+			transientSpec.transitionSpecs = append(transientSpec.transitionSpecs, publicSpec.transitionSpecs...)
+		}
+		if err := populateTransientAbsent(absentSpec, transientSpec); err != nil {
+			return nil, err
+		}
+	}
+	specs := make([]targetSpec, 1, 3)
+	specs[0] = *absentSpec
+	if publicSpec != nil {
+		specs = append(specs, *publicSpec)
+	}
+	if transientSpec != nil {
+		specs = append(specs, *transientSpec)
+	}
+	for _, s := range specs {
+		if len(s.transitionSpecs) == 0 {
+			return nil, errors.Errorf("no transition specs found for %s spec", s.to)
+		}
+	}
+	return specs, nil
 }
 
 // populateTransientAbsent takes the targetSpecs to ABSENT and TRANSIENT_ABSENT
@@ -78,14 +123,14 @@ func expandTransientAbsentSpec(targetSpecs []targetSpec) error {
 // with the status of the latter sequence containing the TRANSIENT_ prefix.
 //
 // Note that this function directly mutates the passed targetSpecs.
-func populateTransientAbsent(toAbsent, transient *targetSpec) error {
+func populateTransientAbsent(absentSpec, transientSpec *targetSpec) error {
 
 	// Begin by finding the position in the ABSENT transition specs which match
 	// the end of the existing TRANSIENT_ABSENT spec.
-	tts := transient.transitionSpecs
-	ats := toAbsent.transitionSpecs
+	ats := absentSpec.transitionSpecs
+	tts := transientSpec.transitionSpecs
 	var startIdx int
-	if initial := tts[len(tts)-1].to; toAbsent.from != initial {
+	if initial := tts[len(tts)-1].to; absentSpec.from != initial {
 		startIdx = findTransitionTo(ats, initial) + 1
 		if startIdx == 0 {
 			return errors.AssertionFailedf(
@@ -105,68 +150,31 @@ func populateTransientAbsent(toAbsent, transient *targetSpec) error {
 	for i := startIdx; i < len(ats); i++ {
 		next := ats[i]
 		atsWithEquiv = append(atsWithEquiv, next)
-
-		// NOTE: If the toAbsent transitions have any equiv definitions
-		// we'll fail to find them because we won't find a transient equivalent.
-		// For now, this is fine, but we may later need to decide to skip them or
-		// add them in some other way.
-		nextTo, ok := scpb.GetTransientEquivalent(next.to)
-		if !ok {
-			return errors.AssertionFailedf(
-				"failed to find transient equivalent for %v", next.to,
-			)
+		if next.to == scpb.Status_UNKNOWN {
+			nextFrom, ok := scpb.GetTransientEquivalent(next.from)
+			if !ok {
+				return errors.AssertionFailedf(
+					"failed to find transient equivalent for 'from' %s", next.from,
+				)
+			}
+			next.from = nextFrom
+			atsWithEquiv = append(atsWithEquiv, equiv(next.from))
+		} else {
+			nextTo, ok := scpb.GetTransientEquivalent(next.to)
+			if !ok {
+				return errors.AssertionFailedf(
+					"failed to find transient equivalent for 'to' %s", next.to,
+				)
+			}
+			next.to = nextTo
+			atsWithEquiv = append(atsWithEquiv, equiv(next.to))
 		}
-		next.to = nextTo
 		tts = append(tts, next)
-		atsWithEquiv = append(atsWithEquiv, equiv(next.to))
 	}
 
-	transient.transitionSpecs = tts
-	toAbsent.transitionSpecs = atsWithEquiv
+	transientSpec.transitionSpecs = tts
+	absentSpec.transitionSpecs = atsWithEquiv
 	return nil
-}
-
-// findToAbsentAndTransient searches the slice of targetSpec for the two
-// targets to ABSENT and TRANSIENT_ABSENT. An error is returned if either
-// such target is defined more than once of if TRANSIENT_ABSENT is defined
-// but ABSENT is not. If TRANSIENT_ABSENT is not defined, neither targetSpec
-// will be returned; it is not an error for just ABSENT to be defined or
-// for neither to be defined.
-func findToAbsentAndTransient(specs []targetSpec) (toAbsent, transient *targetSpec, err error) {
-	findTargetSpec := func(to scpb.Status) (*targetSpec, error) {
-		i := findTargetSpecTo(specs, to)
-		if i == -1 {
-			return nil, nil
-		}
-		if also := findTargetSpecTo(specs[i+1:], to); also != -1 {
-			return nil, errors.Errorf("duplicate spec to %v", to)
-		}
-		return &specs[i], nil
-	}
-	if transient, err = findTargetSpec(
-		scpb.Status_TRANSIENT_ABSENT,
-	); err != nil || transient == nil {
-		return nil, nil, err
-	}
-	if toAbsent, err = findTargetSpec(scpb.Status_ABSENT); err != nil {
-		return nil, nil, err
-	}
-	if toAbsent == nil {
-		return nil, nil, errors.AssertionFailedf(
-			"cannot have %v target without a %v target",
-			scpb.Status_TRANSIENT_ABSENT, scpb.Status_ABSENT,
-		)
-	}
-	return toAbsent, transient, nil
-}
-
-func findTargetSpecTo(haystack []targetSpec, needle scpb.Status) int {
-	for i, spec := range haystack {
-		if spec.to == needle {
-			return i
-		}
-	}
-	return -1
 }
 
 func findTransitionTo(haystack []transitionSpec, needle scpb.Status) int {
@@ -191,25 +199,29 @@ func buildTargets(e scpb.Element, targetSpecs []targetSpec) ([]target, error) {
 
 func validateTargets(targets []target) error {
 	allStatuses := map[scpb.Status]bool{}
-	targetStatuses := make([]map[scpb.Status]bool, len(targets))
+	absentStatuses := map[scpb.Status]bool{}
+	nonAbsentStatuses := map[scpb.Status]bool{}
 	for i, tgt := range targets {
-		m := map[scpb.Status]bool{}
+		var m map[scpb.Status]bool
+		if i == 0 {
+			m = absentStatuses
+		} else {
+			m = nonAbsentStatuses
+		}
 		for _, t := range tgt.transitions {
 			m[t.from] = true
 			allStatuses[t.from] = true
 			m[t.to] = true
 			allStatuses[t.to] = true
 		}
-		targetStatuses[i] = m
 	}
 
-	for i, tgt := range targets {
-		m := targetStatuses[i]
-		for s := range allStatuses {
-			if !m[s] {
-				return errors.Errorf("target %s: status %s is missing here but is featured in other targets",
-					tgt.status.String(), s.String())
-			}
+	for s := range allStatuses {
+		if !absentStatuses[s] {
+			return errors.Errorf("status %s is featured in non-ABSENT targets but not in the ABSENT target", s)
+		}
+		if !nonAbsentStatuses[s] {
+			return errors.Errorf("status %s is featured in ABSENT target but not in any non-ABSENT targets", s)
 		}
 	}
 	return nil

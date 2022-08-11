@@ -424,12 +424,6 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	if err != nil {
 		return err
 	}
-	// As a special case, avoid removing any columns from dropped indexes.
-	// The index is going to be removed, so it doesn't matter if it references
-	// dropped columns.
-	if index.Dropped() {
-		return nil
-	}
 	column, err := tbl.FindColumnWithID(op.ColumnID)
 	if err != nil {
 		return err

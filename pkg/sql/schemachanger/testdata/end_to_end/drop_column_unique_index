@@ -287,7 +287,7 @@ begin transaction #9
 validate forward indexes [4] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 8 MutationType ops
 upsert descriptor #106
   ...
            statement: ALTER TABLE t.test DROP COLUMN pi
@@ -398,11 +398,11 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "16"
   +  version: "17"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #106
   ...
        unique: true
@@ -412,6 +412,40 @@ upsert descriptor #106
   +  modificationTime: {}
      mutations:
      - column:
+  ...
+     - direction: DROP
+       index:
+  -      constraintId: 6
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 5
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - k
+  -      name: crdb_internal_index_5_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      - 4
+  -      storeColumnNames:
+  -      - v
+  -      - x
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 3
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+         constraintId: 1
+         createdAtNanos: "1640995200000000000"
   ...
          version: 4
        mutationId: 3
@@ -424,10 +458,13 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "17"
   +  version: "18"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops pending"
+create job #2 (non-cancelable: true): "GC for "
+  descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
 commit transaction #11
+notified job registry to adopt jobs: [2]
 begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -475,35 +512,6 @@ upsert descriptor #106
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 6
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 5
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - k
-  -      name: crdb_internal_index_5_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 2
-  -      - 4
-  -      storeColumnNames:
-  -      - v
-  -      - x
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
-  -    mutationId: 3
-  -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
   -      constraintId: 1
   -      createdAtNanos: "1640995200000000000"
   -      encodingType: 1
@@ -542,9 +550,9 @@ upsert descriptor #106
   -  version: "18"
   +  version: "19"
 write *eventpb.FinishSchemaChange to event log for descriptor 106
-create job #2 (non-cancelable: true): "GC for ALTER TABLE t.public.test DROP COLUMN pi"
+create job #3 (non-cancelable: true): "GC for ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #12
-notified job registry to adopt jobs: [2]
+notified job registry to adopt jobs: [3]
 # end PostCommitPhase

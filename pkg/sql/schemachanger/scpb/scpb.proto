@@ -53,6 +53,12 @@ enum Status {
   // Intermediate states on the transient index dropping path
   TRANSIENT_DELETE_ONLY = 13;
   TRANSIENT_WRITE_ONLY = 14;
+  TRANSIENT_BACKFILL_ONLY = 16;
+  TRANSIENT_BACKFILLED = 17;
+  TRANSIENT_MERGE_ONLY = 18;
+  TRANSIENT_MERGED = 19;
+  TRANSIENT_VALIDATED = 20;
+  TRANSIENT_PUBLIC = 21;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where

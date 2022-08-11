@@ -23,17 +23,11 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
       │    ├── 2 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 106, ColumnID: 3}
       │    │    └── ABSENT        → PUBLIC      ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
-      │    └── 14 Mutation operations
+      │    └── 8 Mutation operations
+      │         ├── SetColumnName {"ColumnID":3,"Name":"pi","TableID":106}
+      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":5,"TableID":106}
       │         ├── MakeColumnPublic {"ColumnID":3,"TableID":106}
       │         ├── RefreshStats {"TableID":106}
-      │         ├── SetColumnName {"ColumnID":3,"Name":"pi","TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Kind":2,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":4,"Kind":2,"Ordinal":1,"TableID":106}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":5,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Kind":2,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":5,"Kind":2,"Ordinal":1,"TableID":106}
       │         ├── CreateGcJobForIndex {"IndexID":4,"TableID":106}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}

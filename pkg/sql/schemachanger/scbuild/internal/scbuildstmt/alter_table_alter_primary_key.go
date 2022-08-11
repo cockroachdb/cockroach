@@ -106,7 +106,7 @@ func alterTableAlterPrimaryKey(
 	in, tempIn := makeSwapPrimaryIndexSpec(b, out, inColumns)
 	in.idx.Sharding = sharding
 	in.apply(b.Add)
-	tempIn.setTargets(b)
+	tempIn.apply(b.AddTransient)
 	newPrimaryIndexElem = in.idx
 
 	// Construct and add elements for a unique secondary index created on

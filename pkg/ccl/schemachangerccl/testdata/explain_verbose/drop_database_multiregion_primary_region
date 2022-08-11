@@ -463,7 +463,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │   │     rule: "descriptor drop right before dependent element removal"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
-    │   │   │   │     rule: "column dependents removed after column no longer public"
+    │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip column dependents removal ops on relation drop"
@@ -475,7 +475,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │   │     rule: "descriptor drop right before dependent element removal"
     │   │   │   │
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
-    │   │   │         rule: "column dependents removed after column no longer public"
+    │   │   │         rule: "column no longer public before dependents"
     │   │   │
     │   │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -490,7 +490,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │   │     rule: "descriptor drop right before dependent element removal"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
-    │   │   │   │     rule: "column dependents removed after column no longer public"
+    │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip column dependents removal ops on relation drop"
@@ -502,7 +502,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │   │     rule: "descriptor drop right before dependent element removal"
     │   │   │   │
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
-    │   │   │         rule: "column dependents removed after column no longer public"
+    │   │   │         rule: "column no longer public before dependents"
     │   │   │
     │   │   ├── • Column:{DescID: 108, ColumnID: 4294967294}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -517,7 +517,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │   │     rule: "descriptor drop right before dependent element removal"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
-    │   │   │   │     rule: "column dependents removed after column no longer public"
+    │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip column dependents removal ops on relation drop"
@@ -529,7 +529,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │   │     rule: "descriptor drop right before dependent element removal"
     │   │   │   │
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
-    │   │   │         rule: "column dependents removed after column no longer public"
+    │   │   │         rule: "column no longer public before dependents"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
     │   │   │   │ PUBLIC → ABSENT
@@ -537,11 +537,15 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │   ├── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108}
     │   │   │   │     rule: "descriptor drop right before dependent element removal"
     │   │   │   │
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
+    │   │   │   │     rule: "column no longer public before dependents"
+    │   │   │   │
     │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents removed"
+    │   │   │   │     rule: "index no longer public before dependents"
     │   │   │   │
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip index dependents removal ops on relation drop"
+    │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
     │   │   │   │ VALIDATED → DELETE_ONLY
@@ -559,7 +563,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │       │     rule: "descriptor drop right before dependent element removal"
     │   │       │
     │   │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-    │   │       │     rule: "index no longer public before dependents removed"
+    │   │       │     rule: "index no longer public before dependents"
     │   │       │
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index dependents removal ops on relation drop"
@@ -678,7 +682,10 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: a, ColumnID: 1}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
         │   │         rule: "dependents removed before column"
         │   │
         │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
