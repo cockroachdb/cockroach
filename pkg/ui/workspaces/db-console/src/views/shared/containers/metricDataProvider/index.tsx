@@ -172,7 +172,7 @@ class MetricsDataProvider extends React.Component<
     (props: MetricsDataProviderProps) => props.timeInfo,
     this.queriesSelector,
     (timeInfo, queries) => {
-      if (!timeInfo) {
+      if (!timeInfo || queries.length === 0) {
         return undefined;
       }
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
