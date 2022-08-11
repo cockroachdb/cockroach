@@ -99,19 +99,18 @@ func (c *Controller) Start(ctx context.Context, stopper *stop.Stopper) {
 	// ch is used to notify a goroutine to ensure the schedule exists and
 	// update its recurrence.
 	ch := make(chan struct{}, 1)
-	stopper.AddCloser(stop.CloserFn(func() {
-		close(ch)
-		c.mon.Stop(ctx)
-	}))
+	stopper.AddCloser(stop.CloserFn(func() { c.mon.Stop(ctx) }))
 	// Start a goroutine that ensures the presence of the schema telemetry
 	// schedule and updates its recurrence.
 	_ = stopper.RunAsyncTask(ctx, "schema-telemetry-schedule-updater", func(ctx context.Context) {
+		stopCtx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 		for {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-ch:
-				updateSchedule(ctx, c.db, c.ie, c.st)
+				updateSchedule(stopCtx, c.db, c.ie, c.st)
 			}
 		}
 	})
@@ -174,8 +173,8 @@ func updateSchedule(
 			}
 			sj.SetScheduleStatus(string(jobs.StatusPending))
 			return sj.Update(ctx, ie, txn)
-		}); err != nil {
-			log.Errorf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
+		}); err != nil && ctx.Err() == nil {
+			log.Warningf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
 		} else {
 			return
 		}
