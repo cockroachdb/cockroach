@@ -5259,41 +5259,65 @@ func willOverflow(a, b int64) bool {
 	return math.MinInt64-b > a
 }
 
-// ComputeStatsForRange scans the iterator from start to end keys and computes
-// stats counters based on the values. This method is used after a range is
-// split to recompute stats for each subrange. The nowNanos arg specifies the
-// wall time in nanoseconds since the epoch and is used to compute the total age
-// of all intents.
-//
-// To account for intents and range keys, the iterator must be created with
-// MVCCKeyAndIntentsIterKind and IterKeyTypePointsAndRanges. To correctly
-// account for range key truncation bounds, the iterator must have an
-// appropriate UpperBound and LowerBound.
-//
-// TODO(erikgrinaker): Consider removing the start,end parameters, forcing the
-// caller to set appropriate bounds on the iterator instead.
-func ComputeStatsForRange(
-	iter SimpleMVCCIterator, start, end roachpb.Key, nowNanos int64,
-) (enginepb.MVCCStats, error) {
-	return ComputeStatsForRangeWithVisitors(iter, start, end, nowNanos, nil, nil)
+// ComputeStats scans the given key span and computes MVCC stats. nowNanos
+// specifies the wall time in nanoseconds since the epoch and is used to compute
+// age-related stats quantities.
+func ComputeStats(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+	return ComputeStatsWithVisitors(r, start, end, nowNanos, nil, nil)
 }
 
-// ComputeStatsForRangeWithVisitors is like ComputeStatsForRange, but also
-// takes a point and/or range key callback that is invoked for each physical
-// key-value pair (i.e. not for implicit meta records), and iteration is aborted
-// on the first error returned from either of them.
-//
-// Callbacks must copy any data they intend to hold on to.
-func ComputeStatsForRangeWithVisitors(
-	iter SimpleMVCCIterator,
+// ComputeStatsWithVisitors is like ComputeStats, but also takes a point and/or
+// range key callback that is invoked for each key.
+func ComputeStatsWithVisitors(
+	r Reader,
 	start, end roachpb.Key,
 	nowNanos int64,
 	pointKeyVisitor func(MVCCKey, []byte) error,
 	rangeKeyVisitor func(MVCCRangeKeyValue) error,
 ) (enginepb.MVCCStats, error) {
+	iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: start,
+		UpperBound: end,
+	})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: start})
+	return computeStatsForIterWithVisitors(iter, nowNanos, pointKeyVisitor, rangeKeyVisitor)
+}
+
+// ComputeStatsForIter is like ComputeStats, but scans across the given iterator
+// until exhausted. The iterator must have appropriate bounds, key types, and
+// intent options set, and it must have been seeked to the appropriate starting
+// point.
+//
+// We don't take start/end here, because that would require expensive key
+// comparisons. We also don't seek to e.g. MinKey, because that might violate
+// spanset assertions.
+//
+// Most callers should use ComputeStats() instead. This exists primarily for use
+// with SST iterators.
+func ComputeStatsForIter(iter SimpleMVCCIterator, nowNanos int64) (enginepb.MVCCStats, error) {
+	return computeStatsForIterWithVisitors(iter, nowNanos, nil, nil)
+}
+
+// computeStatsForIterWithVisitors performs the actual stats computation for the
+// other ComputeStats methods.
+//
+// The iterator must already have been seeked. This requirement is to comply
+// with spanset assertions, such that ComputeStats can seek to the given start
+// key (satisfying the spanset asserter), while ComputeStatsForIter can seek to
+// MinKey (in effect the iterator's lower bound) as it's geared towards SST
+// iterators which are not subject to spanset assertions.
+//
+// Notably, we do not want to take the start/end key here, and instead rely on
+// the iterator's bounds, to avoid expensive key comparisons.
+func computeStatsForIterWithVisitors(
+	iter SimpleMVCCIterator,
+	nowNanos int64,
+	pointKeyVisitor func(MVCCKey, []byte) error,
+	rangeKeyVisitor func(MVCCRangeKeyValue) error,
+) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	// Only some callers are providing an MVCCIterator. The others don't have
-	// any intents.
 	var meta enginepb.MVCCMetadata
 	var prevKey, prevRangeStart []byte
 	first := false
@@ -5305,12 +5329,11 @@ func ComputeStatsForRangeWithVisitors(
 	// of the point in time at which the current key begins to age.
 	var accrueGCAgeNanos int64
 	var rangeKeys MVCCRangeKeyStack
-	mvccEndKey := MakeMVCCMetadataKey(end)
 
-	for iter.SeekGE(MakeMVCCMetadataKey(start)); ; iter.Next() {
+	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return ms, err
-		} else if !ok || !iter.UnsafeKey().Less(mvccEndKey) {
+		} else if !ok {
 			break
 		}
 

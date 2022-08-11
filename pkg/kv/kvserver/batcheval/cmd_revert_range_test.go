@@ -44,17 +44,6 @@ func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []by
 	return h.Sum(nil)
 }
 
-func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
-	t.Helper()
-	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
-	defer iter.Close()
-	s, err := storage.ComputeStatsForRange(iter, keys.LocalMax, roachpb.KeyMax, 1100)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-	return s
-}
-
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine(ctx context.Context) (storage.Engine, error) {
 	return storage.Open(ctx, storage.InMemory(),
@@ -138,7 +127,8 @@ func TestCmdRevertRange(t *testing.T) {
 			cArgs := batcheval.CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC, MaxSpanRequestKeys: 2}}
 			evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), Stats: stats}
 			cArgs.EvalCtx = evalCtx.EvalContext()
-			afterStats := getStats(t, eng)
+			afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+			require.NoError(t, err)
 			for _, tc := range []struct {
 				name     string
 				ts       hlc.Timestamp
@@ -187,9 +177,9 @@ func TestCmdRevertRange(t *testing.T) {
 					}
 					evalStats := afterStats
 					evalStats.Add(*cArgs.Stats)
-					if realStats := getStats(t, batch); !evalStats.Equal(evalStats) {
-						t.Fatalf("stats mismatch:\npre-revert\t%+v\nevaled:\t%+v\neactual\t%+v", afterStats, evalStats, realStats)
-					}
+					realStats, err := storage.ComputeStats(batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
+					require.NoError(t, err)
+					require.Equal(t, realStats, evalStats)
 				})
 			}
 

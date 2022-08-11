@@ -21,13 +21,14 @@ import (
 // for specific statements, and update accordingly.
 type IdxRecommendations interface {
 	ShouldGenerateIndexRecommendation(
-		fingerprint string, planHash uint64, database string, stmtType tree.StatementType,
+		fingerprint string, planHash uint64, database string, stmtType tree.StatementType, isInternal bool,
 	) bool
 	UpdateIndexRecommendations(
 		fingerprint string,
 		planHash uint64,
 		database string,
 		stmtType tree.StatementType,
+		isInternal bool,
 		recommendations []string,
 		reset bool,
 	) []string

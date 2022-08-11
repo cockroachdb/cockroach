@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -247,6 +248,8 @@ var regularBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
+
+	"format": formatImpls,
 
 	"octet_length": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
@@ -7384,6 +7387,27 @@ func makeSubStringImpls() builtinDefinition {
 		},
 	)
 }
+
+var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+	tree.Overload{
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			if args[0] == tree.DNull {
+				return tree.DNull, nil
+			}
+			formatStr := tree.MustBeDString(args[0])
+			formatArgs := args[1:]
+			str, err := pgformat.Format(ctx, string(formatStr), formatArgs...)
+			if err != nil {
+				return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error parsing format string")
+			}
+			return tree.NewDString(str), nil
+		},
+		Info:              "Interprets the first argument as a format string similar to C sprintf and interpolates the remaining arguments.",
+		Volatility:        volatility.Stable,
+		CalledOnNullInput: true,
+	})
 
 // Returns a substring of given string starting at given position.
 func getSubstringFromIndex(str string, start int) string {

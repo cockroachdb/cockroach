@@ -1,0 +1,50 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgformat",
+    srcs = ["format.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgformat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/lexbase",
+        "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "pgformat_test",
+    srcs = [
+        "format_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":pgformat",
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

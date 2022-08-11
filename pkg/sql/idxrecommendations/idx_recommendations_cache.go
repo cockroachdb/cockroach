@@ -74,9 +74,13 @@ func NewIndexRecommendationsCache(setting *cluster.Settings) *IndexRecCache {
 // It returns true if there was no generation in the past hour
 // and there is at least 5 executions of the same fingerprint/database/planHash combination.
 func (idxRec *IndexRecCache) ShouldGenerateIndexRecommendation(
-	fingerprint string, planHash uint64, database string, stmtType tree.StatementType,
+	fingerprint string,
+	planHash uint64,
+	database string,
+	stmtType tree.StatementType,
+	isInternal bool,
 ) bool {
-	if !idxRec.statementCanHaveRecommendation(stmtType) {
+	if !idxRec.statementCanHaveRecommendation(stmtType, isInternal) {
 		return false
 	}
 
@@ -104,10 +108,11 @@ func (idxRec *IndexRecCache) UpdateIndexRecommendations(
 	planHash uint64,
 	database string,
 	stmtType tree.StatementType,
+	isInternal bool,
 	recommendations []string,
 	reset bool,
 ) []string {
-	if !idxRec.statementCanHaveRecommendation(stmtType) {
+	if !idxRec.statementCanHaveRecommendation(stmtType, isInternal) {
 		return recommendations
 	}
 
@@ -140,9 +145,12 @@ func (idxRec *IndexRecCache) UpdateIndexRecommendations(
 }
 
 // statementCanHaveRecommendation returns true if that type of statement can have recommendations
-// generated for it. We only want to recommend if the statement is DML and recommendations are enabled.
-func (idxRec *IndexRecCache) statementCanHaveRecommendation(stmtType tree.StatementType) bool {
-	if !sqlstats.SampleIndexRecommendation.Get(&idxRec.st.SV) || stmtType != tree.TypeDML {
+// generated for it. We only want to recommend if the statement is DML, recommendations are enabled and
+// is not internal.
+func (idxRec *IndexRecCache) statementCanHaveRecommendation(
+	stmtType tree.StatementType, isInternal bool,
+) bool {
+	if !sqlstats.SampleIndexRecommendation.Get(&idxRec.st.SV) || stmtType != tree.TypeDML || isInternal {
 		return false
 	}
 

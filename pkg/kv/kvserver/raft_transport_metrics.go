@@ -15,6 +15,13 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 // RaftTransportMetrics is the set of metrics for a given RaftTransport.
 type RaftTransportMetrics struct {
 	SendQueueSize *metric.Gauge
+
+	MessagesDropped *metric.Counter
+	MessagesSent    *metric.Counter
+	MessagesRcvd    *metric.Counter
+
+	ReverseSent *metric.Counter
+	ReverseRcvd *metric.Counter
 }
 
 func (t *RaftTransport) initMetrics() {
@@ -29,5 +36,46 @@ messages to at least one peer.`,
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
 		}, t.queuedMessageCount),
+
+		MessagesDropped: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.sends-dropped",
+			Help:        "Number of Raft message sends dropped by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		MessagesSent: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.sent",
+			Help:        "Number of Raft messages sent by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		MessagesRcvd: metric.NewCounter(metric.Metadata{
+			Name:        "raft.transport.rcvd",
+			Help:        "Number of Raft messages received by the Raft Transport",
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		ReverseSent: metric.NewCounter(metric.Metadata{
+			Name: "raft.transport.reverse-sent",
+			Help: `Messages sent in the reverse direction of a stream.
+
+These messages should be rare. They are mostly informational, and are not actual
+responses to Raft messages. Responses are sent over another stream.`,
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		ReverseRcvd: metric.NewCounter(metric.Metadata{
+			Name: "raft.transport.reverse-rcvd",
+			Help: `Messages received from the reverse direction of a stream.
+
+These messages should be rare. They are mostly informational, and are not actual
+responses to Raft messages. Responses are received over another stream.`,
+			Measurement: "Messages",
+			Unit:        metric.Unit_COUNT,
+		}),
 	}
 }

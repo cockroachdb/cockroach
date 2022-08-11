@@ -1202,7 +1202,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// on the optimizer, check if is still open before generating index recommendations.
 	if planner.txn.IsOpen() {
 		// Set index recommendations, so it can be saved on statement statistics.
-		planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner)
+		// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
+		// to true for the internal executors.
+		isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
+		planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
 	}
 
 	// Record the statement summary. This also closes the plan if the

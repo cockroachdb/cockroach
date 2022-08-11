@@ -1206,14 +1206,7 @@ func mergeTrigger(
 
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		// NB: Range-ID local keys have no versions and no intents.
-		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-			KeyTypes:   storage.IterKeyTypePointsAndRanges,
-			LowerBound: ridPrefix,
-			UpperBound: ridPrefix.PrefixEnd(),
-		})
-		defer iter.Close()
-		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
+		sysMS, err := storage.ComputeStats(batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
 			return result.Result{}, err
 		}

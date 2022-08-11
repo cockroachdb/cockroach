@@ -228,6 +228,7 @@ func EvalAddSSTable(
 	// compute the expected MVCC stats delta of ingesting the SST.
 	sstIter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
 	})
 	if err != nil {
@@ -252,7 +253,7 @@ func EvalAddSSTable(
 		stats = *args.MVCCStats
 	} else {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start.Key, end.Key)
-		stats, err = storage.ComputeStatsForRange(sstIter, start.Key, end.Key, h.Timestamp.WallTime)
+		stats, err = storage.ComputeStatsForIter(sstIter, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
 		}
@@ -569,10 +570,10 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			return err
 		}
 		defer iter.Close()
+		iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 
 		given := *stats
-		actual, err := storage.ComputeStatsForRange(
-			iter, keys.MinKey, keys.MaxKey, given.LastUpdateNanos)
+		actual, err := storage.ComputeStatsForIter(iter, given.LastUpdateNanos)
 		if err != nil {
 			return errors.Wrap(err, "failed to compare stats: %w")
 		}
