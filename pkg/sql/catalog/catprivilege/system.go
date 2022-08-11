@@ -66,14 +66,7 @@ var (
 		catconstants.SystemExternalConnectionsTableName,
 	}
 
-	// RestoreCopySystemTablePrefix is the prefix of the table name that we give
-	// to the copy of the system table we are moving to a higher ID during
-	// restore.
-	//
-	// TODO(adityamaru,dt): Remove once we fix the handling of dynamic system
-	// table IDs during restore.
-	RestoreCopySystemTablePrefix = "crdb_internal_copy"
-	readWriteSystemSequences     = []catconstants.SystemTableName{
+	readWriteSystemSequences = []catconstants.SystemTableName{
 		catconstants.RoleIDSequenceName,
 	}
 

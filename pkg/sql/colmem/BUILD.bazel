@@ -22,9 +22,12 @@ go_library(
 go_test(
     name = "colmem_test",
     size = "small",
-    srcs = ["allocator_test.go"],
+    srcs = [
+        "allocator_test.go",
+        "reset_maybe_reallocate_test.go",
+    ],
+    embed = [":colmem"],
     deps = [
-        ":colmem",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
@@ -39,6 +42,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

@@ -8,6 +8,7 @@ with t=A
   txn_remove
 ----
 >> del k=a resolve t=A
+del: "a": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+784
 >> at end:
 data: "a"/44.000000000,0 -> /<empty>
@@ -34,3 +35,52 @@ with t=A
 ----
 get: "a" -> /<empty> @44.000000000,0
 >> at end:
+
+## Check delete with returnKey option.
+
+# Put a value.
+
+run ok
+with ts=46  v=abc
+  put  k=a
+----
+>> at end:
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+
+# Delete the key and check that the correct key was found.
+
+run ok
+del k=a ts=47
+----
+del: "a": found key true
+>> at end:
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+
+# Try deleting the same key again and check that no key was found this time.
+
+run ok
+del k=a ts=48
+----
+del: "a": found key false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+
+# Try deleting a key that never existed and ensure that the value is still
+# written.
+
+run ok
+del k=b ts=49
+----
+del: "b": found key false
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>

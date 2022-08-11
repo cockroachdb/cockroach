@@ -79,7 +79,8 @@ func TestIsSpanEmpty(t *testing.T) {
 	requireEmpty(t, mkKey(""), mkKey("x"))
 	requireNotEmpty(t, mkKey(""), mkKey("").PrefixEnd())
 
-	require.NoError(t, kvDB.Del(ctx, mkKey("x")))
+	_, err := kvDB.Del(ctx, mkKey("x"))
+	require.NoError(t, err)
 	requireEmpty(t, mkKey(""), mkKey("x"))
 	requireNotEmpty(t, mkKey(""), mkKey("").PrefixEnd())
 

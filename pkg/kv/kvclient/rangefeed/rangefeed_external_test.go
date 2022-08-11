@@ -439,7 +439,8 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 
 	{
 		beforeDelTS := db.Clock().Now()
-		require.NoError(t, db.Del(ctx, mkKey("a")))
+		_, err = db.Del(ctx, mkKey("a"))
+		require.NoError(t, err)
 		afterDelTS := db.Clock().Now()
 
 		v := <-rows
@@ -454,7 +455,8 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 
 	{
 		beforeDelTS := db.Clock().Now()
-		require.NoError(t, db.Del(ctx, mkKey("a")))
+		_, err = db.Del(ctx, mkKey("a"))
+		require.NoError(t, err)
 		afterDelTS := db.Clock().Now()
 
 		v := <-rows

@@ -145,7 +145,7 @@ func NewCaseOp(
 ) colexecop.Operator {
 	// We internally use three selection vectors, scratch.order, origSel, and
 	// prevSel.
-	allocator.AdjustMemoryUsage(3 * colmem.SizeOfBatchSizeSelVector)
+	allocator.AdjustMemoryUsage(3 * colmem.SelVectorSize(coldata.BatchSize()))
 	return &caseOp{
 		allocator: allocator,
 		buffer:    buffer.(*bufferOp),

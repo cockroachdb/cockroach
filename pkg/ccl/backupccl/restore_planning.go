@@ -31,14 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -58,10 +56,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -139,269 +135,6 @@ func maybeFilterMissingViews(
 		}
 	}
 	return filteredTablesByID, nil
-}
-
-func synthesizePGTempSchema(
-	ctx context.Context, p sql.PlanHookState, schemaName string, dbID descpb.ID,
-) (descpb.ID, error) {
-	var synthesizedSchemaID descpb.ID
-	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		var err error
-		schemaID, err := col.Direct().LookupSchemaID(ctx, txn, dbID, schemaName)
-		if err != nil {
-			return err
-		}
-		if schemaID != descpb.InvalidID {
-			return errors.Newf("attempted to synthesize temp schema during RESTORE but found"+
-				" another schema already using the same schema key %s", schemaName)
-		}
-		synthesizedSchemaID, err = p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
-		if err != nil {
-			return err
-		}
-		return p.CreateSchemaNamespaceEntry(ctx, catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, schemaName), synthesizedSchemaID)
-	})
-
-	return synthesizedSchemaID, err
-}
-
-// bumpDescIDSequenceKey sets the clusters' `DescIDSequenceID` to the next valid
-// sequence value that is greater than the IDs of all the passed in descriptors.
-func bumpDescIDSequenceKey(
-	ctx context.Context,
-	p sql.PlanHookState,
-	databasesByID map[descpb.ID]*dbdesc.Mutable,
-	schemasByID map[descpb.ID]*schemadesc.Mutable,
-	tablesByID map[descpb.ID]*tabledesc.Mutable,
-	typesByID map[descpb.ID]*typedesc.Mutable,
-) error {
-	var maxDescIDInBackup int64
-	// Include the table descriptors when calculating the max ID.
-	for _, table := range tablesByID {
-		if int64(table.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(table.ID)
-		}
-	}
-
-	// Include the database descriptors when calculating the max ID.
-	for _, database := range databasesByID {
-		if int64(database.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(database.ID)
-		}
-	}
-
-	// Include the type descriptors when calculating the max ID.
-	for _, typ := range typesByID {
-		if int64(typ.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(typ.ID)
-		}
-	}
-
-	// Include the schema descriptors when calculating the max ID.
-	for _, sc := range schemasByID {
-		if int64(sc.ID) > maxDescIDInBackup {
-			maxDescIDInBackup = int64(sc.ID)
-		}
-	}
-
-	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		v, err := txn.Get(ctx, p.ExecCfg().Codec.DescIDSequenceKey())
-		if err != nil {
-			return err
-		}
-		newValue := maxDescIDInBackup + 1
-		if newValue <= v.ValueInt() {
-			// This case may happen when restoring backups from older versions.
-			newValue = v.ValueInt() + 1
-		}
-		b := txn.NewBatch()
-		// N.B. This key is usually mutated using the Inc command. That
-		// command warns that if the key was every Put directly, Inc will
-		// return an error. This is only to ensure that the type of the key
-		// doesn't change. Here we just need to be very careful that we only
-		// write int64 values.
-		// The generator's value should be set to the value of the next ID
-		// to generate.
-		b.Put(p.ExecCfg().Codec.DescIDSequenceKey(), newValue)
-		return txn.Run(ctx, b)
-	})
-}
-
-// findConflictingSystemTables collects all the tables in the `system` database
-// and checks if their ID collides with any of the passed in descriptor IDs. The
-// method returns a mapping from the colliding ID to the colliding system table
-// descriptor.
-func findConflictingSystemTables(
-	ctx context.Context,
-	p sql.PlanHookState,
-	databasesByID map[descpb.ID]*dbdesc.Mutable,
-	schemasByID map[descpb.ID]*schemadesc.Mutable,
-	tablesByID map[descpb.ID]*tabledesc.Mutable,
-	typesByID map[descpb.ID]*typedesc.Mutable,
-) (map[descpb.ID]catalog.TableDescriptor, error) {
-	systemTablesWithConflictingIDs := make(map[descpb.ID]catalog.TableDescriptor)
-	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		systemTableDescs, err := col.GetAllTableDescriptorsInDatabase(ctx, txn, systemschema.SystemDB.GetID())
-		if err != nil {
-			return err
-		}
-
-		// Note, we do not consider the `system` database or any objects in the
-		// `system` database when looking for a conflict with system tables in the
-		// restoring cluster. This is because we do not create new descriptors for
-		// the backed up system tables but instead `DELETE` and `INSERT` rows into
-		// the restoring clusters' system tables.
-		for _, sysTableDesc := range systemTableDescs {
-			id := sysTableDesc.GetID()
-			if desc, ok := databasesByID[id]; ok {
-				if desc.GetID() != systemschema.SystemDB.GetID() {
-					systemTablesWithConflictingIDs[id] = sysTableDesc
-				}
-			} else if desc, ok := schemasByID[id]; ok {
-				if desc.GetParentID() != systemschema.SystemDB.GetID() {
-					systemTablesWithConflictingIDs[id] = sysTableDesc
-				}
-			} else if desc, ok := typesByID[id]; ok {
-				if desc.GetParentID() != systemschema.SystemDB.GetID() {
-					systemTablesWithConflictingIDs[id] = sysTableDesc
-				}
-			} else if desc, ok := tablesByID[id]; ok {
-				if desc.GetParentID() != systemschema.SystemDB.GetID() {
-					systemTablesWithConflictingIDs[id] = sysTableDesc
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return systemTablesWithConflictingIDs, nil
-}
-
-// moveConflictingSystemTables moves any system tables whose descriptor ID
-// conflicts with an ID in one of the provided maps to a new ID.
-//
-// TODO(ssd): We currently look for the list of conflicts in one transaction and
-// then move each table in its own transaction. I suppose this could be a
-// problem if there is some concurrent migration running.
-func moveConflictingSystemTables(
-	ctx context.Context,
-	p sql.PlanHookState,
-	databasesByID map[descpb.ID]*dbdesc.Mutable,
-	schemasByID map[descpb.ID]*schemadesc.Mutable,
-	tablesByID map[descpb.ID]*tabledesc.Mutable,
-	typesByID map[descpb.ID]*typedesc.Mutable,
-) error {
-	ctx, span := tracing.ChildSpan(ctx, "backupccl.moveConflictingSystemTables")
-	defer span.Finish()
-
-	systemTablesWithConflictingIDs, err := findConflictingSystemTables(ctx, p, databasesByID, schemasByID, tablesByID, typesByID)
-	if err != nil {
-		return errors.Wrapf(err, "failed to collect system table descriptor ID conflicts")
-	}
-
-	if len(systemTablesWithConflictingIDs) == 0 {
-		log.Infof(ctx, "no system table descriptor IDs conflict with IDs found in the backup")
-		return nil
-	}
-
-	var conflictPretty strings.Builder
-	for _, table := range systemTablesWithConflictingIDs {
-		fmt.Fprintf(&conflictPretty, " %s(%d)", table.GetName(), table.GetID())
-	}
-	log.Infof(ctx, "found %d system tables with descriptor IDs that conflict with IDs from the backup: %s",
-		len(systemTablesWithConflictingIDs),
-		conflictPretty.String(),
-	)
-
-	// We bump the DescIDSeqKey to an ID higher than anything in the backup to
-	// ensure that the tables we create below won't conflict with anything in the
-	// backup.
-	if err := bumpDescIDSequenceKey(ctx, p, databasesByID, schemasByID, tablesByID, typesByID); err != nil {
-		return err
-	}
-
-	for _, table := range systemTablesWithConflictingIDs {
-		log.Infof(ctx, "moving system table %s to non-conflicting ID", table.GetName())
-		if err := moveConflictingSystemTable(ctx, p, table); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// moveConflictingSystemTable moves a system table to a higher ID.
-//
-// We do the move by creating new tables in the system database. Data from the
-// conflicting tables is moved to the temporary tables. The namespace and
-// descriptor entry for the conflicting table is removed, and then the new table
-// is renamed.
-func moveConflictingSystemTable(
-	ctx context.Context, p sql.PlanHookState, oldTable catalog.TableDescriptor,
-) error {
-	ctx, span := tracing.ChildSpan(ctx, "backupccl.moveConflictingSystemTable")
-	defer span.Finish()
-
-	codec := p.ExecCfg().Codec
-	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		// Create a new table with the same schema as the table we want to
-		// move.
-		newTable := oldTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
-
-		systemTableCopyName := fmt.Sprintf("%s_%s",
-			catprivilege.RestoreCopySystemTablePrefix, oldTable.GetName())
-		newTable.Name = systemTableCopyName
-
-		// Allow the upgrades package to dynamically assign an ID to the new system
-		// table.
-		newTable.ID = descpb.InvalidID
-		_, created, err := upgrades.CreateSystemTableInTxn(ctx, p.ExecCfg().DB, txn, codec, newTable)
-		if err != nil {
-			return err
-		}
-		if !created {
-			return errors.New("temporary table for system table already exists")
-		}
-
-		// Copy data from the old table to the new table.
-		insertStmt := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM system.%s)", newTable.GetName(), oldTable.GetName())
-		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "copy-to-temp-table", txn,
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, insertStmt); err != nil {
-			return err
-		}
-
-		// Drop the old system table.
-		dropStmt := fmt.Sprintf("DROP TABLE system.%s", oldTable.GetName())
-		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "drop-system-table", txn,
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, dropStmt); err != nil {
-			return err
-		}
-
-		// Rename the system table copy to the correct system table name.
-		renameStmt := fmt.Sprintf("ALTER TABLE system.%s RENAME TO system.%s", systemTableCopyName, oldTable.GetName())
-		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "rename-system-table", txn,
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, renameStmt); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to move conflicting system table")
-	}
-
-	// ClearRange on the table span for the old system table that we've just
-	// migrated.
-	spanToClear := oldTable.TableSpan(codec)
-	var clearBatch kv.Batch
-	clearBatch.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    spanToClear.Key,
-			EndKey: spanToClear.EndKey,
-		},
-	})
-	log.VEventf(ctx, 2, "ClearRange %s", spanToClear)
-	return errors.Wrapf(p.ExecCfg().DB.Run(ctx, &clearBatch), "ClearRange %s", spanToClear)
 }
 
 // allocateDescriptorRewrites determines the new ID and parentID (a "DescriptorRewrite")
@@ -512,13 +245,6 @@ func allocateDescriptorRewrites(
 	// in the backup and current max desc ID in the restoring cluster. This generator
 	// keeps produced the next descriptor ID.
 	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
-		if descriptorCoverage == tree.AllDescriptors {
-			// Restore the key which generates descriptor IDs.
-			if err := bumpDescIDSequenceKey(ctx, p, databasesByID, schemasByID, tablesByID, typesByID); err != nil {
-				return nil, err
-			}
-		}
-
 		tempSysDBID, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			return nil, err
@@ -526,7 +252,6 @@ func allocateDescriptorRewrites(
 
 		// Remap all of the descriptor belonging to system tables to the temp system
 		// DB.
-		descriptorRewrites[tempSysDBID] = &jobspb.DescriptorRewrite{ID: tempSysDBID}
 		for _, table := range tablesByID {
 			if table.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[table.GetID()] = &jobspb.DescriptorRewrite{
@@ -545,51 +270,6 @@ func allocateDescriptorRewrites(
 				descriptorRewrites[typ.GetID()] = &jobspb.DescriptorRewrite{
 					ParentID:       tempSysDBID,
 					ParentSchemaID: keys.PublicSchemaIDForBackup,
-				}
-			}
-		}
-
-		// When restoring a temporary object, the parent schema which the descriptor
-		// is originally pointing to is never part of the BACKUP. This is because
-		// the "pg_temp" schema in which temporary objects are created is not
-		// represented as a descriptor and thus is not picked up during a full
-		// cluster BACKUP.
-		// To overcome this orphaned schema pointer problem, when restoring a
-		// temporary object we create a "fake" pg_temp schema in temp table's db and
-		// add it to the namespace table.
-		// We then remap the temporary object descriptors to point to this schema.
-		// This allows us to piggy back on the temporary
-		// reconciliation job which looks for "pg_temp" schemas linked to temporary
-		// sessions and properly cleans up the temporary objects in it.
-		haveSynthesizedTempSchema := make(map[descpb.ID]bool)
-		var synthesizedTempSchemaCount int
-		for _, table := range tablesByID {
-			if table.IsTemporary() {
-				if _, ok := haveSynthesizedTempSchema[table.GetParentSchemaID()]; !ok {
-					var synthesizedSchemaID descpb.ID
-					var err error
-					// NB: TemporarySchemaNameForRestorePrefix is a special value that has
-					// been chosen to trick the reconciliation job into performing our
-					// cleanup for us. The reconciliation job strips the "pg_temp" prefix
-					// and parses the remainder of the string into a session ID. It then
-					// checks the session ID against its active sessions, and performs
-					// cleanup on the inactive ones.
-					// We reserve the high bit to be 0 so as to never collide with an
-					// actual session ID as normally the high bit is the hlc.Timestamp at
-					// which the cluster was started.
-					schemaName := sql.TemporarySchemaNameForRestorePrefix +
-						strconv.Itoa(synthesizedTempSchemaCount)
-					synthesizedSchemaID, err = synthesizePGTempSchema(ctx, p, schemaName, table.GetParentID())
-					if err != nil {
-						return nil, err
-					}
-					// Write a schema descriptor rewrite so that we can remap all
-					// temporary table descs which were under the original session
-					// specific pg_temp schema to point to this synthesized schema when we
-					// are performing the table rewrites.
-					descriptorRewrites[table.GetParentSchemaID()] = &jobspb.DescriptorRewrite{ID: synthesizedSchemaID}
-					haveSynthesizedTempSchema[table.GetParentSchemaID()] = true
-					synthesizedTempSchemaCount++
 				}
 			}
 		}
@@ -671,12 +351,6 @@ func allocateDescriptorRewrites(
 
 			if _, ok := restoreDBNames[targetDB]; ok {
 				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], table.ID)
-			} else if descriptorCoverage == tree.AllDescriptors {
-				// Set the remapped ID to the original parent ID, except for system tables which
-				// should be RESTOREd to the temporary system database.
-				if targetDB != restoreTempSystemDB {
-					descriptorRewrites[table.ID] = &jobspb.DescriptorRewrite{ParentID: table.ParentID}
-				}
 			} else {
 				var parentID descpb.ID
 				{
@@ -873,13 +547,9 @@ func allocateDescriptorRewrites(
 	for _, db := range restoreDBs {
 		var newID descpb.ID
 		var err error
-		if descriptorCoverage == tree.AllDescriptors {
-			newID = db.GetID()
-		} else {
-			newID, err = p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
-			if err != nil {
-				return nil, err
-			}
+		newID, err = p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
+		if err != nil {
+			return nil, err
 		}
 
 		descriptorRewrites[db.GetID()] = &jobspb.DescriptorRewrite{ID: newID}
@@ -895,50 +565,28 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	// descriptorsToRemap usually contains all tables that are being restored. In a
-	// full cluster restore this should only include the system tables that need
-	// to be remapped to the temporary table. All other tables in a full cluster
-	// backup should have the same ID as they do in the backup.
+	// descriptorsToRemap usually contains all tables that are being restored,
+	// plus additional other descriptors.
 	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
-		if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
-			if table.ParentID == systemschema.SystemDB.GetID() {
-				// This is a system table that should be marked for descriptor creation.
-				descriptorsToRemap = append(descriptorsToRemap, table)
-			} else {
-				// This table does not need to be remapped.
-				descriptorRewrites[table.ID].ID = table.ID
-			}
-		} else {
-			descriptorsToRemap = append(descriptorsToRemap, table)
-		}
+		descriptorsToRemap = append(descriptorsToRemap, table)
 	}
 
 	// Update the remapping information for type descriptors.
 	for _, typ := range typesByID {
-		if descriptorCoverage == tree.AllDescriptors {
-			// The type doesn't need to be remapped.
-			descriptorRewrites[typ.ID].ID = typ.ID
-		} else {
-			// If the type is marked to be remapped to an existing type in the
-			// cluster, then we don't want to generate an ID for it.
-			if !descriptorRewrites[typ.ID].ToExisting {
-				descriptorsToRemap = append(descriptorsToRemap, typ)
-			}
+		// If the type is marked to be remapped to an existing type in the
+		// cluster, then we don't want to generate an ID for it.
+		if !descriptorRewrites[typ.ID].ToExisting {
+			descriptorsToRemap = append(descriptorsToRemap, typ)
 		}
 	}
 
 	// Update remapping information for schema descriptors.
 	for _, sc := range schemasByID {
-		if descriptorCoverage == tree.AllDescriptors {
-			// The schema doesn't need to be remapped.
-			descriptorRewrites[sc.ID].ID = sc.ID
-		} else {
-			// If this schema isn't being remapped to an existing schema, then
-			// request to generate an ID for it.
-			if !descriptorRewrites[sc.ID].ToExisting {
-				descriptorsToRemap = append(descriptorsToRemap, sc)
-			}
+		// If this schema isn't being remapped to an existing schema, then
+		// request to generate an ID for it.
+		if !descriptorRewrites[sc.ID].ToExisting {
+			descriptorsToRemap = append(descriptorsToRemap, sc)
 		}
 	}
 
@@ -1945,16 +1593,6 @@ func doRestorePlan(
 		if err := dropDefaultUserDBs(ctx, p.ExecCfg()); err != nil {
 			return err
 		}
-
-		// We check for any system tables in the restoring cluster that might
-		// conflict with backed up decsriptors, and move the system tables to a
-		// higher, non-conflicting ID.
-		if err := moveConflictingSystemTables(ctx, p, databasesByID, schemasByID, filteredTablesByID, typesByID); err != nil {
-			return err
-		}
-		// TODO(adityamaru): Do we want to add a scan on the descriptors table that
-		// checks for *any* conflicting IDs with the backed up descriptors, and fail
-		// the restore in that case?
 	}
 
 	descriptorRewrites, err := allocateDescriptorRewrites(

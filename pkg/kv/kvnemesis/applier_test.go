@@ -85,13 +85,13 @@ func TestApplier(t *testing.T) {
 	check(t, step(reverseScan(`a`, `c`)), `db0.ReverseScan(ctx, "a", "c", 0) // (["b":"2", "a":"1"], nil)`)
 	check(t, step(reverseScanForUpdate(`a`, `b`)), `db1.ReverseScanForUpdate(ctx, "a", "b", 0) // (["a":"1"], nil)`)
 
-	check(t, step(del(`b`)), `db0.Del(ctx, "b") // nil`)
+	check(t, step(del(`b`)), `db0.Del(ctx, "b")`)
 	check(t, step(get(`b`)), `db1.Get(ctx, "b") // (nil, nil)`)
 
 	check(t, step(put(`c`, `3`)), `db0.Put(ctx, "c", 3) // nil`)
 	check(t, step(put(`d`, `4`)), `db1.Put(ctx, "d", 4) // nil`)
 
-	check(t, step(del(`c`)), `db0.Del(ctx, "c") // nil`)
+	check(t, step(del(`c`)), `db0.Del(ctx, "c")`)
 	check(t, step(scan(`a`, `e`)), `db1.Scan(ctx, "a", "e", 0) // (["a":"1", "d":"4"], nil)`)
 
 	check(t, step(put(`c`, `5`)), `db0.Put(ctx, "c", 5) // nil`)
