@@ -127,7 +127,7 @@ func (p *planner) CheckPrivilegeForUser(
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
-	if p.txn == nil || !p.txn.IsOpen() {
+	if p.txn == nil {
 		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
 	}
 
@@ -326,7 +326,7 @@ func (p *planner) CheckAnyPrivilege(
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
-	if p.txn == nil || !p.txn.IsOpen() {
+	if p.txn == nil {
 		return errors.AssertionFailedf("cannot use CheckAnyPrivilege without a txn")
 	}
 
@@ -377,7 +377,7 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user username.SQLUsernam
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
-	if p.txn == nil || !p.txn.IsOpen() {
+	if p.txn == nil {
 		return false, errors.AssertionFailedf("cannot use HasAdminRole without a txn")
 	}
 
@@ -654,7 +654,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
-	if p.txn == nil || !p.txn.IsOpen() {
+	if p.txn == nil {
 		return false, errors.AssertionFailedf("cannot use HasRoleOption without a txn")
 	}
 
