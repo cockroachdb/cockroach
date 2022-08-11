@@ -446,6 +446,11 @@ func (desc *Mutable) SetName(n string) {
 	desc.Name = n
 }
 
+// SetParentSchemaID sets function's parent schema id.
+func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
+	desc.ParentSchemaID = id
+}
+
 // ToFuncObj converts the descriptor to a tree.FuncObj.
 func (desc *immutable) ToFuncObj() tree.FuncObj {
 	ret := tree.FuncObj{
