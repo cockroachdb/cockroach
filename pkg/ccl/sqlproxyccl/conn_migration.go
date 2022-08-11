@@ -78,7 +78,7 @@ func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 	defer f.mu.Unlock()
 
 	// Forwarder hasn't been initialized.
-	if !f.isInitializedLocked() {
+	if !f.mu.isInitialized {
 		return false, nil
 	}
 
@@ -120,9 +120,9 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // where the forwarder is not in a state that is eligible for a connection
 // migration.
 //
-// NOTE: If the forwarder hasn't been closed, runTransfer has an invariant
+// NOTE: If the forwarder hasn't been closed, TransferConnection has an invariant
 // where the processors have been resumed prior to calling this method. When
-// runTransfer returns, it is guaranteed that processors will either be
+// TransferConnection returns, it is guaranteed that processors will either be
 // re-resumed, or the forwarder will be closed (in the case of a non-recoverable
 // error).
 //
@@ -145,7 +145,7 @@ func (f *forwarder) TransferConnection() (retErr error) {
 	// Create a transfer context, and timeout handler which gets triggered
 	// whenever the context expires. We have to close the forwarder because
 	// the transfer may be blocked on I/O, and the only way for now is to close
-	// the connections. This then allow runTransfer to return and cleanup.
+	// the connections. This then allow TransferConnection to return and cleanup.
 	ctx, cancel := newTransferContext(f.ctx)
 	defer cancel()
 
@@ -177,8 +177,8 @@ func (f *forwarder) TransferConnection() (retErr error) {
 		latencyDur := timeutil.Since(tBegin)
 		f.metrics.ConnMigrationAttemptedLatency.RecordValue(latencyDur.Nanoseconds())
 
-		// When runTransfer returns, it's either the forwarder has been closed,
-		// or the procesors have been resumed.
+		// When TransferConnection returns, it's either the forwarder has been
+		// closed, or the procesors have been resumed.
 		if !ctx.isRecoverable() {
 			log.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
 			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
