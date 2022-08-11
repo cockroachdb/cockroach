@@ -95,7 +95,7 @@ var restoreStatsInsertBatchSize = 10
 func rewriteBackupSpanKey(
 	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
-	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), 0)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
@@ -695,6 +695,14 @@ func createImportingDescriptors(
 				preRestoreTables = append(preRestoreTables, mut)
 			} else {
 				postRestoreTables = append(postRestoreTables, mut)
+			}
+			// TODO (msbutler) remove the schema_change condition once the online schema changer
+			// doesn't rely on OFFLINE state
+			if desc.Offline() && desc.GetDeclarativeSchemaChangerState() == nil &&
+				(desc.GetInProgressImportStartTime() == 0 || !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2)) {
+				// Only restore offline tables with an in-progress IMPORT INTO (to their pre-import state),
+				// given the restoring cluster is finalized to 22.2.
+				continue
 			}
 			tables = append(tables, mut)
 			mutableTables = append(mutableTables, mut)

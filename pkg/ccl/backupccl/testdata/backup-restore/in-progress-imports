@@ -1,0 +1,212 @@
+# This test ensures that database and cluster backups properly
+#
+# TODO: ALLOW BACKUP/RESTORE TABLE of an in progress import
+#
+# backup and restore an IMPORT INTO of an empty table (foo) and a non empty table (foofoo).
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE foofoo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo VALUES (10, 'x0');
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz WHERE i = 1;
+----
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint tag=a
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+import expect-pausepoint tag=aa
+IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+# Ensure Table, Database, and cluster full backups capture importing rows.
+exec-sql
+BACKUP INTO 'nodelocal://0/cluster/' WITH revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/database/' WITH revision_history;
+----
+
+
+# Ensure incremental backups do NOT re-capture the importing rows while the tables are offline
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://0/cluster/' WITH revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' WITH revision_history;
+----
+
+save-cluster-ts tag=t0
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+
+# Resume the job so the next set of incremental backups observes that tables are back online
+job resume=a
+----
+
+job tag=a wait-for-state=succeeded
+----
+
+job resume=aa
+----
+
+
+job tag=aa wait-for-state=succeeded
+----
+
+# Ensure incremental backups do NOT re-capture the importing rows even though
+# the tables are online
+#
+# NOTE: currently the backups below _will_ capture the imported data, but only
+# because when the import job resumes, the data is re-ingested. This verifies
+# the incremental backup does capture an incremental data from the import
+# properly, which is nice.
+#
+# TODO (msbutler): add test coverage for a case when incremental backup only captures when the
+# descriptor goes back online.
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://0/cluster/' WITH revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' WITH revision_history;
+----
+
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/cluster/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo';
+----
+d foo table 1 full
+d foofoo table 2 full
+d foo table 0 incremental
+d foofoo table 0 incremental
+d foo table 1 incremental
+d foofoo table 1 incremental
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo';
+----
+d foo table 1 full
+d foofoo table 2 full
+d foo table 0 incremental
+d foofoo table 0 incremental
+d foo table 1 incremental
+d foofoo table 1 incremental
+
+
+# Ensure all the RESTOREs contain foo (no data) and foofoo (1 row) as of system time t0
+new-server name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+restore aost=t0
+RESTORE FROM LATEST IN 'nodelocal://0/cluster/' AS OF SYSTEM TIME t0;
+----
+
+query-sql
+SELECT * FROM d.foo;
+----
+
+query-sql
+SELECT * FROM d.foofoo;
+----
+10 x0
+
+exec-sql
+DROP DATABASE d;
+----
+
+
+restore aost=t0
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/' AS OF SYSTEM TIME t0;
+----
+
+query-sql
+SELECT * FROM d.foo;
+----
+
+query-sql
+SELECT * FROM d.foofoo;
+----
+10 x0
+
+exec-sql
+DROP TABLE d.foo;
+----
+
+
+# Ensure the imported data exists as of latest time
+new-server name=s3 share-io-dir=s1 allow-implicit-access
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://0/cluster/';
+----
+
+query-sql
+SELECT * FROM d.foo;
+----
+1 x
+
+query-sql
+SELECT * FROM d.foofoo;
+----
+1 x
+10 x0
+
+exec-sql
+DROP DATABASE d;
+----
+
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/';
+----
+
+query-sql
+SELECT * FROM d.foo;
+----
+1 x
+
+query-sql
+SELECT * FROM d.foofoo;
+----
+1 x
+10 x0
+
+exec-sql
+DROP TABLE d.foo;
+----
+

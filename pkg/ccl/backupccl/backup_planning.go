@@ -921,6 +921,13 @@ func planSchedulePTSChaining(
 // has come back online since. The entire span needs to be re-backed up because
 // we may otherwise miss AddSSTable requests which write to a timestamp older
 // than the last incremental.
+//
+// If the table is offline because of an in-progress import that is guaranteed to use
+// MVCCAddSSTable, there's no need to re-backup the span.
+//
+// TODO (msbutler): bind information to the offline IMPORT PGDUMP or RESTOREing
+// descriptors that signal the jobs were created in 22.2, (analogous to
+// GetImportStartWallTime) in order to avoid reintroducing those spans as well.
 func getReintroducedSpans(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -930,13 +937,20 @@ func getReintroducedSpans(
 	endTime hlc.Timestamp,
 ) ([]roachpb.Span, error) {
 	reintroducedTables := make(map[descpb.ID]struct{})
-
 	offlineInLastBackup := make(map[descpb.ID]struct{})
 	lastBackup := prevBackups[len(prevBackups)-1]
+
+	mvccSafe := execCfg.Settings.Version.IsActive(ctx, clusterversion.Start22_2)
 	for _, desc := range lastBackup.Descriptors {
 		// TODO(pbardea): Also check that lastWriteTime is set once those are
 		// populated on the table descriptor.
 		if table, _, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Offline() {
+			if mvccSafe && table.GetImportStartWallTime() != 0 {
+				// No need to re-backup a span from an in-progress import that has all MVCC Operations
+				// (the ImportStartWallTime will only ever be nonzero in an import on a finalized 22.2
+				// cluster that only uses MVCCAddSSTable.)
+				continue
+			}
 			offlineInLastBackup[table.GetID()] = struct{}{}
 		}
 	}
@@ -962,6 +976,9 @@ func getReintroducedSpans(
 		}
 		table := tabledesc.NewBuilder(rawTable).BuildImmutableTable()
 		if _, wasOffline := offlineInLastBackup[table.GetID()]; wasOffline && table.Public() {
+			if mvccSafe && rawTable.GetImportStartWallTime() != 0 {
+				continue
+			}
 			tablesToReinclude = append(tablesToReinclude, table)
 			reintroducedTables[table.GetID()] = struct{}{}
 		}
