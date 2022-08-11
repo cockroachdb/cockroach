@@ -3,9 +3,29 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "serverccl",
-    srcs = ["doc.go"],
+    srcs = [
+        "doc.go",
+        "tenant_test_utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/serverccl",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/security",
+        "//pkg/server/serverpb",
+        "//pkg/sql",
+        "//pkg/sql/contention",
+        "//pkg/sql/pgwire",
+        "//pkg/sql/sqlstats/persistedsqlstats",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/httputil",
+        "//pkg/util/protoutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 go_test(
