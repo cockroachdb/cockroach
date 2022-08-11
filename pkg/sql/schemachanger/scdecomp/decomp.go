@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -103,9 +103,10 @@ func (w *walkCtx) walkRoot() {
 	case catalog.TableDescriptor:
 		w.walkRelation(d)
 	case catalog.FunctionDescriptor:
-		// TODO (Chengxiong) #83235 implement DROP FUNCTION
-		panic(unimplemented.NewWithIssue(
-			83235, "function descriptor not supported in declarative schema changer"))
+		// TODO (Chengxiong) #83235 implement DROP FUNCTION.
+		// Fall back to legacy schema changer if there is any function descriptor in
+		// the drop cascade dependency graph.
+		panic(scerrors.NotImplementedErrorf(nil, "function descriptor not supported in declarative schema changer"))
 	default:
 		panic(errors.AssertionFailedf("unexpected descriptor type %T: %+v",
 			w.desc, w.desc))
