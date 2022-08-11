@@ -930,6 +930,8 @@ type internalLookupCtx struct {
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]catalog.TypeDescriptor
 	typIDs      []descpb.ID
+	fnDescs     map[descpb.ID]catalog.FunctionDescriptor
+	fnIDs       []descpb.ID
 }
 
 // GetSchemaName looks up a schema with the given id in the LookupContext.
@@ -994,7 +996,9 @@ func newInternalLookupCtx(
 
 	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
-	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
+	fnDescs := make(map[descpb.ID]catalog.FunctionDescriptor)
+
+	var tbIDs, typIDs, dbIDs, schemaIDs, fnIDs []descpb.ID
 
 	// Record descriptors for name lookups.
 	for i := range descs {
@@ -1025,6 +1029,11 @@ func newInternalLookupCtx(
 				schemaIDs = append(schemaIDs, desc.GetID())
 				schemaNames[desc.GetID()] = desc.GetName()
 			}
+		case catalog.FunctionDescriptor:
+			fnDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.GetParentID() {
+				fnIDs = append(fnIDs, desc.GetID())
+			}
 		}
 	}
 
@@ -1036,9 +1045,11 @@ func newInternalLookupCtx(
 		schemaIDs:   schemaIDs,
 		tbDescs:     tbDescs,
 		typDescs:    typDescs,
+		fnDescs:     fnDescs,
 		tbIDs:       tbIDs,
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
+		fnIDs:       fnIDs,
 	}
 }
 
@@ -1165,6 +1176,28 @@ func getTypeNameFromTypeDescriptor(
 	typeName = tree.MakeQualifiedTypeName(tableDbDesc.GetName(),
 		parentSchemaName, typ.GetName())
 	return typeName, nil
+}
+
+func getFunctionNameFromFunctionDescriptor(
+	l simpleSchemaResolver, fn catalog.FunctionDescriptor,
+) (tree.FunctionName, error) {
+	var fnName tree.FunctionName
+	db, err := l.getDatabaseByID(fn.GetParentID())
+	if err != nil {
+		return fnName, err
+	}
+	var scName string
+	// TODO(richardjcai): Remove this in 22.2.
+	if fn.GetParentSchemaID() == keys.PublicSchemaID {
+		scName = tree.PublicSchema
+	} else {
+		sc, err := l.getSchemaByID(fn.GetParentSchemaID())
+		if err != nil {
+			return fnName, err
+		}
+		scName = sc.GetName()
+	}
+	return tree.MakeQualifiedFunctionName(db.GetName(), scName, fn.GetName()), nil
 }
 
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.

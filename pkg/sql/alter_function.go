@@ -14,8 +14,10 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -140,7 +142,32 @@ func (p *planner) AlterFunctionSetOwner(
 }
 
 func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
-	return unimplemented.NewWithIssue(85532, "alter function owner to not supported")
+	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	if err != nil {
+		return err
+	}
+	newOwner, err := decodeusername.FromRoleSpec(
+		params.p.SessionData(), username.PurposeValidation, n.n.NewOwner,
+	)
+	if err != nil {
+		return err
+	}
+
+	// No-op if the new owner is the current owner.
+	if newOwner == fnDesc.GetPrivileges().Owner() {
+		return nil
+	}
+	if err := params.p.checkCanAlterToNewOwner(params.ctx, fnDesc, newOwner); err != nil {
+		return err
+	}
+	if err := params.p.canCreateOnSchema(
+		params.ctx, fnDesc.GetParentSchemaID(), fnDesc.GetParentID(), newOwner, checkPublicSchema,
+	); err != nil {
+		return err
+	}
+
+	fnDesc.GetPrivileges().SetOwner(newOwner)
+	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
 }
 
 func (n *alterFunctionSetOwnerNode) Next(params runParams) (bool, error) { return false, nil }
