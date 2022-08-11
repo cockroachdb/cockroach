@@ -1338,247 +1338,287 @@ DROP DATABASE db1 CASCADE
 - from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 110, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnDefaultExpression:{DescID: 110, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 110, ColumnID: 3}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 111, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 111, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 111, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 111, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 111, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 111, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 112, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 113, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 114, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 117, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
-  rule: column dependents removed after column no longer public
+  rule: column no longer public before dependents
+- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: column type dependents removed right before column type
+- from: [ColumnDefaultExpression:{DescID: 110, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [ColumnDefaultExpression:{DescID: 110, ColumnID: 3}, ABSENT]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
@@ -1940,25 +1980,49 @@ DROP DATABASE db1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -1974,35 +2038,35 @@ DROP DATABASE db1 CASCADE
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents removed
+  rule: index no longer public before dependents
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT]
   kind: SameStagePrecedence
