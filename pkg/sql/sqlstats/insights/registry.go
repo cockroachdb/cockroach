@@ -53,9 +53,9 @@ func newRegistry(st *cluster.Settings, metrics Metrics) Registry {
 		},
 	}
 	r := &registry{
-		detector: anyDetector{detectors: []detector{
+		detector: compositeDetector{detectors: []detector{
 			latencyThresholdDetector{st: st},
-			newLatencyQuantileDetector(st, metrics),
+			newAnomalyDetector(st, metrics),
 		}}}
 	r.mu.statements = make(map[clusterunique.ID][]*Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
