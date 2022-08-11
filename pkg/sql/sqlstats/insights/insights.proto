@@ -14,6 +14,7 @@ option go_package = "insights";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 enum Concern {
   // SlowExecution is for statement executions that either take longer than a predetermined
@@ -63,6 +64,7 @@ message Statement {
   string auto_retry_reason = 16;
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 17;
+  google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
 }
 
 message Insight {
