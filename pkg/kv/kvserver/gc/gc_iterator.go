@@ -36,13 +36,17 @@ type gcIterator struct {
 }
 
 func makeGCIterator(
-	desc *roachpb.RangeDescriptor, snap storage.Reader, threshold hlc.Timestamp,
+	desc *roachpb.RangeDescriptor,
+	snap storage.Reader,
+	threshold hlc.Timestamp,
+	collectUserKeySpace bool,
 ) gcIterator {
 	return gcIterator{
 		it: rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
-			Reverse:  true,
-			IterKind: storage.MVCCKeyAndIntentsIterKind,
-			KeyTypes: storage.IterKeyTypePointsAndRanges,
+			Reverse:             true,
+			IterKind:            storage.MVCCKeyAndIntentsIterKind,
+			KeyTypes:            storage.IterKeyTypePointsAndRanges,
+			ExcludeUserKeySpace: !collectUserKeySpace,
 		}),
 		threshold: threshold,
 	}
