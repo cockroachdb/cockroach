@@ -295,9 +295,6 @@ WHERE id = $max_desc_id;
     }
 }
 
-statement error pq: unimplemented: alter function owner to not supported.*
-ALTER FUNCTION f() OWNER TO CURRENT_USER
-
 statement error pq: unimplemented: alter function set schema not supported.*
 ALTER FUNCTION f() SET SCHEMA test_sc
 
@@ -883,6 +880,9 @@ NULL     udf_test_user  test              public           test_priv_f1_100150  
 NULL     udf_test_user  test              public           test_priv_f2_100151  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100152  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
+statement error pq: cannot drop role/user udf_test_user: grants still exist on.*
+DROP USER udf_test_user;
+
 statement ok
 REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user;
 
@@ -1139,3 +1139,38 @@ CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
     AS $$
     SELECT 1;
 $$
+
+subtest alter_function_owner
+
+statement ok
+CREATE USER u_test_owner;
+CREATE FUNCTION f_test_alter_owner() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'f_test_alter_owner';
+----
+root
+
+statement error  pq: role/user "user_not_exists" does not exist
+ALTER FUNCTION f_test_alter_owner OWNER TO user_not_exists
+
+statement ok
+ALTER FUNCTION f_test_alter_owner OWNER TO u_test_owner;
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'f_test_alter_owner';
+----
+u_test_owner
+
+statement error pq: role u_test_owner cannot be dropped because some objects depend on it
+DROP USER u_test_owner;
+
+statement ok
+DROP FUNCTION f_test_alter_owner;
+
+statement ok
+DROP USER u_test_owner;
