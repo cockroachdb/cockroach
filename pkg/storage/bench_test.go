@@ -729,7 +729,7 @@ func setupMVCCData(
 			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
 			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
 			require.NoError(b, MVCCDeleteRangeUsingTombstone(
-				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, 0, nil))
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
 		}
 		require.NoError(b, batch.Commit(false /* sync */))
 	}
@@ -1383,6 +1383,7 @@ func runMVCCDeleteRangeUsingTombstone(
 				hlc.ClockTimestamp{},
 				leftPeekBound,
 				rightPeekBound,
+				false, // idempotent
 				0,
 				msCovered,
 			); err != nil {
