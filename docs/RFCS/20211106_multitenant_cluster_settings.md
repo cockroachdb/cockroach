@@ -1,9 +1,10 @@
 - Feature Name: Multi-tenant cluster settings
-- Status: accepted
+- Status: draft
 - Start Date: 2021-11-06
-- Authors: Radu Berinde
-- RFC PR: #73349
-- Cockroach Issue: #77935
+- Edited: 2022-08-11
+- Authors: Radu Berinde, knz, ssd
+- RFC PR: [#85970](https://github.com/cockroachdb/cockroach/pull/85970), previously [#73349](https://github.com/cockroachdb/cockroach/pull/73349)
+- Cockroach Issue: [#77935](https://github.com/cockroachdb/cockroach/issue/77935), [#85729](https://github.com/cockroachdb/cockroach/issues/85729)
 
 # Summary
 
@@ -18,16 +19,17 @@ them apply exclusively to the KV subsystem; some apply only to the SQL layer.
 Yet others are harder to classify - for example, they may apply to an aspect of
 the KV subsystem, but the SQL layer also needs to interact with the setting.
 
-Currently all cluster settings are treated homogeneously; their current values
-are stored in the `system.settings` table.
+Currently all cluster settings are treated homogeneously; their
+current values are stored in the `system.settings` table of the system
+tenant, at the level of the storage cluster.
 
 In a multi-tenant deployment, the KV and SQL layers are separated. KV is handled
-by a single shared host cluster; in contrast, each tenant runs its own separate
+by a single shared storage cluster; in contrast, each tenant runs its own separate
 instance of the SQL layer, across multiple SQL pods (that form the tenant
 "cluster").
 
 Currently each tenant has its own separate instance of all cluster settings (and
-its `system.settings` table). Some settings are designated as `SystemOnly` to
+its own `system.settings` table). Some settings are designated as `SystemOnly` to
 indicate that they are only applicable to the system tenant (these settings are
 not expected to be consulted by the tenant code). Tenants can freely change all
 other settings, but only those that affect the SQL code run by the tenant will
@@ -40,7 +42,7 @@ Beyond the obvious usability issues, there are important functional gaps:
    subsystem.
 
  - in certain cases tenant code may need to consult values for cluster settings
-   that apply to the host cluster: for example
+   that apply to the storage cluster: for example
    `kv.closed_timestamp.follower_reads_enabled` applies to the KV subsystem but
    is read by the SQL code when serving queries.
 
@@ -59,42 +61,78 @@ We propose splitting the cluster settings into three *classes*:
 
 1. System only (`system`)
 
-   Settings associated with the host cluster, only usable by the system tenant.
+   Settings associated with the storage cluster, only usable by the system tenant.
    These settings are not visible at all from other tenants. Settings code
    prevents use of values for these settings from a tenant process.
 
    Example: `kv.allocator.qps_rebalance_threshold`.
-  
+
 2. Tenant read-only (`tenant-ro`)
 
    These settings are visible from non-system tenants but the tenants cannot
    modify the values.
 
-   New SQL syntax allows the system tenant to set the value for a specific
-   tenant; this results in the tenant (asynchronously) getting the updated
-   value. The system tenant can also set an "all tenants" default value with a
-   single command; the value applies to all tenants that don't have their own
-   specific value, including future tenants.
+   The observed value of settings in this class is:
 
-   Examples: `kv.bulk_ingest.batch_size`, `tenant_cpu_usage_allowance`.
+   - by default, the value held for the setting in the system tenant
+     (the storage cluster's value in the system tenant's
+     `system.settings`).
+   - New SQL syntax allows the system tenant to set the value for a specific
+     tenant; this results in the tenant (asynchronously) getting the updated
+     value. (i.e. the value for one tenant can be overridden away from the default)
 
-3. Tenant writable (`tenant-rw`)
+   Examples:
+
+   - Settings that affect the KV layer, should not be writable by tenants,
+     but which benefit the SQL layer in tenants: `kv.raft.command.max_size`.
+
+   - Settings that benefit from being overridden per tenant, but where
+     inheriting the system tenant's value when not overridden is OK:
+     `kv.bulk_ingest.batch_size`, `tenant_cpu_usage_allowance`.
+
+3. Tenant-writable (`tenant-rw`)
 
    These settings are per tenant and can be modified by the tenant (as well as
-   the system tenant as above). The system tenant can override these settings
-   with the same syntax as above (effectively converting specific settings into
-   `tenant-ro`).
+   the system tenant as above).
+
+   The system tenant can override these settings with the same syntax
+   as above.
 
    Example: `sql.notices.enabled`.
+
+The difference between the three classes, and with/without override, is as follows:
+
+| Behavior                                                                           | SystemOnly                                                                              | TenantReadOnly                                                                            | TenantWritable                                                     |
+|------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------------------------------------------------------------------|
+| Value lookup order                                                                 | N/A on secondary tenants; in system tenant, 1) local `settings` 2) compile-time default | 1) per-tenant override 2) system tenant `settings` 3) compile-time default                | 1) per-tenant override 2) local `settings` 2) compile-time default |
+| Can run (RE)SET CLUSTER SETTING in system tenant                                   | yes                                                                                     | yes                                                                                       | yes                                                                |
+| Can run (RE)SET CLUSTER SETTING in secondary tenant                                | no                                                                                      | no                                                                                        | yes                                                                |
+| Can set tenant override from system tenant                                         | no                                                                                      | yes                                                                                       | yes                                                                |
+| Value in current tenant's `system.settings` is used as configuration               | only in system tenant                                                                   | no (local value always ignored)                                                           | yes, but only if there's no override                               |
+| Default value when the current tenant's `system.settings` does not contain a value | compile-time default                                                                    | per-tenant override if any, otherwise system tenant value, otherwise compile-time default | per-tenant override if any, otherwise compile-time default         |
+
+In effect, this means there's two ways to create a "read-only" setting
+in secondary tenants:
+
+- using a TenantReadOnly setting. In that case, the value is taken
+  from the system tenant and *shared across all tenants*.
+- using a TenantWritable setting, and adding an override in the system
+  tenant. In that case, the value is taken from the override and *can
+  be specialized per tenant*.
+
+When should one choose one over the other? The determination should be
+done based on whether the configuration is system-wide or can be
+meaningfully different per tenant.
 
 #### A note on the threat model
 
 The described restrictions assume that the SQL tenant process is not
-compromised. There is no way to prevent a compromised process from changing its
-own view of the cluster settings. However, even a compromised process should
-never be able to learn the values for the `System` settings. It's also worth
-considering how a compromised tenant process can influence future uncompromised
-processes.
+compromised. There is no way to prevent a compromised process from
+changing its own view of the cluster settings. However, even a
+compromised process should never be able to learn the values for the
+`System` settings or modify settings for other tenants. It's also worth
+considering how a compromised tenant process can influence future
+uncompromised processes.
 
 ### SQL changes
 
@@ -112,17 +150,20 @@ New statements for the system tenant only (which concern only `tenant-ro` and
      Note that this statement does not affect the system tenant settings.
 
  - `ALTER TENANT <id> RESET CLUSTER SETTING <setting>`
-   - Resets the tenant setting. For `tenant-ro`, the value reverts to the `ALL`
-     value (if it is set), otherwise to the setting default. For `tenant-rw`,
-     the value reverts to the `ALL` value (if it is set), otherwise to whatever
-     value was set by the tenant (if it is set), otherwise the setting default.
+   - Resets the tenant setting. For `tenant-ro`, the value reverts to
+     the shared value in `system.settings` (if it is set), otherwise
+     to the setting default. For `tenant-rw`, the value reverts to the
+     `ALL` value (if it is set), otherwise to whatever value was set
+     by the tenant (if it is set), otherwise the setting default.
 
  - `ALTER TENANT ALL RESET CLUSTER SETTING <setting>`
-   - Resets the all-tenants setting. For tenants that have a specific value set
-     for that tenant (using `ALTER TENANT <id>`), there is no change. For other
-     tenants, `tenant-ro` values revert to the setting default and `tenant-rw`
-     values revert to whatever value was set by the tenant (if it is set),
-     otherwise the setting default.
+   - Resets the all-tenants setting. For tenants that have a specific
+     value set for that tenant (using `ALTER TENANT <id>`), there is
+     no change. For other tenants, `tenant-ro` values revert to the
+     value set in system tenant's `system.settings`, or setting default if
+     there's no customization; and `tenant-rw` values revert to
+     whatever value was set by the tenant (if it is set), otherwise
+     the setting default.
 
  - `SHOW CLUSTER SETTING <setting> FOR TENANT <id>`
    - Display the setting override. If there is no override, the statement
@@ -137,12 +178,12 @@ In all statements above, using `id=1` (the system tenant's ID) is not valid.
 
 New semantics for existing statements for tenants:
  - `SHOW [ALL] CLUSTER SETTINGS` shows the `tenant-ro` and `tenant-rw` settings.
-   `Tenant-ro` settings that have an override from the host side are marked as
+   `Tenant-ro` settings that have an override from the KV side are marked as
    such in the description.
 
  - `SET/RESET CLUSTER SETTING` can only be used with `tenant-rw` settings.  For
-   settings that have overrides from the host side, the statement will fail
-   explaining that the setting can only be changed once the host side resets the
+   settings that have overrides from the KV side, the statement will fail
+   explaining that the setting can only be changed once the KV side resets the
    override.
 
 ## Implementation
@@ -150,8 +191,9 @@ New semantics for existing statements for tenants:
 The proposed implementation is as follows:
 
  - We update the semantics of the existing `system.settings` table:
-    - on the system tenant, this table continues to store values for all
-      settings (for the system tenant only)
+    - on the system tenant, this table continues to store values for
+      all settings (for the system tenant only, and secondary tenants
+      for `tenant-ro` settings)
     - on other tenants, this table stores only values for `tenant-rw` settings.
       Any table rows for other types of variables are ignored (in the case that
       the tenant manually inserts data into the table).
@@ -185,10 +227,10 @@ The proposed implementation is as follows:
    rangefeed on the `system.settings` table to maintain the system tenant
    settings.
 
- - On non-system tenants we continue to set up the rangefeed on the tenant's
-   `system.settings` table, and we also use the new connector API to listen to
-   updates from the host. Values from the host which are present always override
-   any local values.
+ - On non-system tenants we continue to set up the rangefeed on the
+   tenant's `system.settings` table, and we also use the new connector
+   API to listen to updates from the storage cluster. Values from the
+   storage cluster which are present always override any local values.
 
 
 ### Upgrade
@@ -220,7 +262,8 @@ following guidelines:
 
  - control settings relevant to tenant-specific internal implementation (like
    tenant throttling) that we want to be able to control per-tenant should be
-   `tenant-ro`.
+   `tenant-ro`, or possibly `tenant-rw` with an override, depending on whether
+   we want different overrides for different tenants.
 
  - when in doubt the first choice to consider should be `tenant-rw`.
 
@@ -268,7 +311,7 @@ this would be less work in the short-term, it will give us ongoing headaches
 because it breaks the tenant keyspace abstraction. For example, restoring a
 backup will be problematic.
 
-Another proposal was to store all tenant settings on the host side and allow the
+Another proposal was to store all tenant settings on the storage side and allow the
 tenant to update them via the tenant connector. This is problematic for a number
 of reasons, including transactionality of setting changes and opportunities for
 abuse.
