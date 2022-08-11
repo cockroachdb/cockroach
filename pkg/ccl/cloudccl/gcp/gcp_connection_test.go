@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	kms "cloud.google.com/go/kms/apiv1"
+	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -35,7 +36,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func TestGCSKMSExternalConnection(t *testing.T) {
+func TestGCPKMSExternalConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -79,8 +80,18 @@ func TestGCSKMSExternalConnection(t *testing.T) {
 		skip.IgnoreLint(t, "GOOGLE_KMS_KEY_NAME env var must be set")
 	}
 
+	bucket := os.Getenv("GOOGLE_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
+	}
+
+	if !cloudtestutils.IsImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
+
 	// Create an external connection where we will write the backup.
-	backupURI := "nodelocal://1/backup"
+	backupURI := fmt.Sprintf("gs://%s/backup?%s=%s", bucket,
+		cloud.AuthParam, cloud.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)
 
@@ -153,7 +164,7 @@ func TestGCSKMSExternalConnection(t *testing.T) {
 	})
 }
 
-func TestGCSExternalConnectionAssumeRole(t *testing.T) {
+func TestGCPKMSExternalConnectionAssumeRole(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -209,8 +220,18 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 	assumedAccount := os.Getenv("ASSUME_SERVICE_ACCOUNT")
 	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(os.Getenv("GOOGLE_CREDENTIALS_JSON")))
 
+	bucket := os.Getenv("GOOGLE_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
+	}
+
+	if !cloudtestutils.IsImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
+
 	// Create an external connection where we will write the backup.
-	backupURI := "nodelocal://1/backup"
+	backupURI := fmt.Sprintf("gs://%s/backup?%s=%s", bucket,
+		cloud.AuthParam, cloud.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)
 
@@ -267,5 +288,244 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 		uri := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-assume-role-chaining", uri)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName, "auth-assume-role-chaining")
+	})
+}
+
+func TestGCPAssumeRoleExternalConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(context.Background())
+
+	tc.WaitForNodeLiveness(t)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Setup some dummy data.
+	sqlDB.Exec(t, `CREATE DATABASE foo`)
+	sqlDB.Exec(t, `USE foo`)
+	sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
+
+	disallowedCreateExternalConnection := func(externalConnectionName, uri string) {
+		sqlDB.ExpectErr(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED|does not have storage.objects.create access)",
+			fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
+	}
+	createExternalConnection := func(externalConnectionName, uri string) {
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
+	}
+	backupAndRestoreFromExternalConnection := func(backupExternalConnectionName string) {
+		backupURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE foo INTO '%s'`, backupURI))
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE foo FROM LATEST IN '%s' WITH new_db_name = bar`, backupURI))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM bar.foo`, [][]string{{"1"}, {"2"}, {"3"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
+		sqlDB.Exec(t, `DROP DATABASE bar CASCADE`)
+	}
+
+	limitedBucket := os.Getenv("GOOGLE_LIMITED_BUCKET")
+	if limitedBucket == "" {
+		skip.IgnoreLint(t, "GOOGLE_LIMITED_BUCKET env var must be set")
+	}
+	assumedAccount := os.Getenv("ASSUME_SERVICE_ACCOUNT")
+	if assumedAccount == "" {
+		skip.IgnoreLint(t, "ASSUME_SERVICE_ACCOUNT env var must be set")
+	}
+
+	t.Run("ec-assume-role-specified", func(t *testing.T) {
+		ecName := "ec-assume-role-specified"
+		disallowedECName := "ec-assume-role-specified-disallowed"
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+		disallowedURI := fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, disallowedECName,
+			gcp.CredentialsParam, url.QueryEscape(encoded))
+		disallowedCreateExternalConnection(disallowedECName, disallowedURI)
+
+		uri := fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
+			limitedBucket,
+			ecName,
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			gcp.AssumeRoleParam,
+			assumedAccount, gcp.CredentialsParam,
+			url.QueryEscape(encoded),
+		)
+		createExternalConnection(ecName, uri)
+		backupAndRestoreFromExternalConnection(ecName)
+	})
+
+	t.Run("ec-assume-role-implicit", func(t *testing.T) {
+		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
+			skip.IgnoreLint(t, err)
+		}
+		ecName := "ec-assume-role-implicit"
+		disallowedECName := "ec-assume-role-implicit-disallowed"
+		disallowedURI := fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, disallowedECName,
+			cloud.AuthParam, cloud.AuthParamImplicit)
+		disallowedCreateExternalConnection(disallowedECName, disallowedURI)
+
+		uri := fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
+			limitedBucket,
+			ecName,
+			cloud.AuthParam,
+			cloud.AuthParamImplicit,
+			gcp.AssumeRoleParam,
+			assumedAccount,
+		)
+		createExternalConnection(ecName, uri)
+		backupAndRestoreFromExternalConnection(ecName)
+	})
+
+	t.Run("ec-assume-role-chaining", func(t *testing.T) {
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+
+		roleChainStr := os.Getenv("ASSUME_SERVICE_ACCOUNT_CHAIN")
+		if roleChainStr == "" {
+			skip.IgnoreLint(t, "ASSUME_SERVICE_ACCOUNT_CHAIN env var must be set")
+		}
+
+		roleChain := strings.Split(roleChainStr, ",")
+
+		for _, tc := range []struct {
+			auth        string
+			credentials string
+		}{
+			{cloud.AuthParamSpecified, encoded},
+			{cloud.AuthParamImplicit, ""},
+		} {
+			t.Run(tc.auth, func(t *testing.T) {
+				q := make(url.Values)
+				q.Set(cloud.AuthParam, tc.auth)
+				q.Set(gcp.CredentialsParam, tc.credentials)
+
+				// First verify that none of the individual roles in the chain can be used
+				// to access the storage.
+				for i, role := range roleChain {
+					i := i
+					q.Set(gcp.AssumeRoleParam, role)
+					disallowedECName := fmt.Sprintf("ec-assume-role-checking-%d", i)
+					disallowedBackupURI := fmt.Sprintf("gs://%s/%s?%s", limitedBucket,
+						disallowedECName, q.Encode())
+					disallowedCreateExternalConnection(disallowedECName, disallowedBackupURI)
+				}
+
+				// Finally, check that the chain of roles can be used to access the storage.
+				q.Set(gcp.AssumeRoleParam, roleChainStr)
+				ecName := fmt.Sprintf("ec-assume-role-checking-%s", tc.auth)
+				uri := fmt.Sprintf("gs://%s/%s?%s",
+					limitedBucket,
+					ecName,
+					q.Encode(),
+				)
+				createExternalConnection(ecName, uri)
+				backupAndRestoreFromExternalConnection(ecName)
+			})
+		}
+	})
+}
+
+func TestGCPExternalConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(context.Background())
+
+	tc.WaitForNodeLiveness(t)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Setup some dummy data.
+	sqlDB.Exec(t, `CREATE DATABASE foo`)
+	sqlDB.Exec(t, `USE foo`)
+	sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
+
+	createExternalConnection := func(externalConnectionName, uri string) {
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
+	}
+	backupAndRestoreFromExternalConnection := func(backupExternalConnectionName string) {
+		backupURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE foo INTO '%s'`, backupURI))
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE foo FROM LATEST IN '%s' WITH new_db_name = bar`, backupURI))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM bar.foo`, [][]string{{"1"}, {"2"}, {"3"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
+		sqlDB.Exec(t, `DROP DATABASE bar CASCADE`)
+	}
+
+	bucket := os.Getenv("GOOGLE_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
+	}
+
+	t.Run("ec-auth-implicit", func(t *testing.T) {
+		if !cloudtestutils.IsImplicitAuthConfigured() {
+			skip.IgnoreLint(t, "implicit auth is not configured")
+		}
+
+		ecName := "ec-auth-implicit"
+		backupURI := fmt.Sprintf("gs://%s/%s?%s=%s", bucket, ecName, cloud.AuthParam,
+			cloud.AuthParamImplicit)
+		createExternalConnection(ecName, backupURI)
+		backupAndRestoreFromExternalConnection(ecName)
+	})
+
+	t.Run("ec-auth-specified", func(t *testing.T) {
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+		ecName := "ec-auth-specified"
+		backupURI := fmt.Sprintf("gs://%s/%s?%s=%s",
+			bucket,
+			ecName,
+			gcp.CredentialsParam,
+			url.QueryEscape(encoded),
+		)
+		createExternalConnection(ecName, backupURI)
+		backupAndRestoreFromExternalConnection(ecName)
+	})
+
+	t.Run("ec-auth-specified-bearer-token", func(t *testing.T) {
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+
+		ctx := context.Background()
+		source, err := google.JWTConfigFromJSON([]byte(credentials), gcs.ScopeReadWrite)
+		require.NoError(t, err, "creating GCS oauth token source from specified credentials")
+		ts := source.TokenSource(ctx)
+
+		token, err := ts.Token()
+		require.NoError(t, err, "getting token")
+		ecName := "ec-auth-specified-bearer-token"
+		backupURI := fmt.Sprintf("gs://%s/%s?%s=%s",
+			bucket,
+			ecName,
+			gcp.BearerTokenParam,
+			token.AccessToken,
+		)
+		createExternalConnection(ecName, backupURI)
+		backupAndRestoreFromExternalConnection(ecName)
 	})
 }
