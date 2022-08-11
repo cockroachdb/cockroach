@@ -147,8 +147,6 @@ type RaftMessageHandler interface {
 // See: https://github.com/cockroachdb/cockroach/issues/83917
 type raftTransportStats struct {
 	nodeID        roachpb.NodeID
-	queue         int
-	queueMax      int32
 	clientSent    int64
 	clientRecv    int64
 	clientDropped int64
@@ -241,22 +239,13 @@ func NewRaftTransport(
 						s := (*raftTransportStats)(v)
 						// Clear the queue length stat. Note that this field is only
 						// mutated by this goroutine.
-						s.queue = 0
 						stats = append(stats, s)
 						statsMap[roachpb.NodeID(k)] = s
-						return true
-					}
-					setQueueLength := func(k int64, v unsafe.Pointer) bool {
-						ch := *(*chan *kvserverpb.RaftMessageRequest)(v)
-						if s, ok := statsMap[roachpb.NodeID(k)]; ok {
-							s.queue += len(ch)
-						}
 						return true
 					}
 					for c := range t.stats {
 						clearStatsMap()
 						t.stats[c].Range(getStats)
-						t.queues[c].Range(setQueueLength)
 					}
 					clearStatsMap() // no need to hold on to references to stats
 
@@ -268,21 +257,19 @@ func NewRaftTransport(
 					// NB: The header is 80 characters which should display in a single
 					// line on most terminals.
 					fmt.Fprintf(&buf,
-						"         qlen   qmax   qdropped client-sent client-recv server-sent server-recv\n")
+						"         qdropped client-sent client-recv server-sent server-recv\n")
 					for _, s := range stats {
 						last := lastStats[s.nodeID]
 						cur := raftTransportStats{
 							nodeID:        s.nodeID,
-							queue:         s.queue,
-							queueMax:      atomic.LoadInt32(&s.queueMax),
 							clientDropped: atomic.LoadInt64(&s.clientDropped),
 							clientSent:    atomic.LoadInt64(&s.clientSent),
 							clientRecv:    atomic.LoadInt64(&s.clientRecv),
 							serverSent:    atomic.LoadInt64(&s.serverSent),
 							serverRecv:    atomic.LoadInt64(&s.serverRecv),
 						}
-						fmt.Fprintf(&buf, "  %3d: %6d %6d %10d %11.1f %11.1f %11.1f %11.1f\n",
-							cur.nodeID, cur.queue, cur.queueMax, cur.clientDropped,
+						fmt.Fprintf(&buf, "  %3d: %6d %11.1f %11.1f %11.1f %11.1f\n",
+							cur.nodeID, cur.clientDropped,
 							float64(cur.clientSent-last.clientSent)/elapsed,
 							float64(cur.clientRecv-last.clientRecv)/elapsed,
 							float64(cur.serverSent-last.serverSent)/elapsed,
@@ -647,10 +634,6 @@ func (t *RaftTransport) SendAsync(
 
 	select {
 	case ch <- req:
-		l := int32(len(ch))
-		if v := atomic.LoadInt32(&stats.queueMax); v < l {
-			atomic.CompareAndSwapInt32(&stats.queueMax, v, l)
-		}
 		return true
 	default:
 		releaseRaftMessageRequest(req)
