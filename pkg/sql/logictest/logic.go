@@ -2395,7 +2395,7 @@ func (t *logicTest) processSubtest(
 			// sql.DB interface doesn't support COPY so fixing it the right way
 			// that would require major surgery (ie making logictest use libpq
 			// or something low level like that).
-			rows, err := sql.RunCopyFrom(context.Background(), t.cluster.Server(0), "test", nil, query.sql, []string{data.String()})
+			rows, err := sql.RunCopyFrom(context.Background(), t.cluster.Server(0), "test", nil, query.sql, []string{data.String()}, 0 /* rowsPerBatch */, true /* atomic */)
 			result := fmt.Sprintf("%d", rows)
 			if err != nil {
 				if !expectError {

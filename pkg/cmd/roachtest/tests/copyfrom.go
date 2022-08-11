@@ -76,10 +76,10 @@ func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		csv := fmt.Sprintf(tpchLineitemFmt, sf)
-		c.Run(ctx, c.Node(1), "rm -f /tmp/lineitem-table.csv")
-		c.Run(ctx, c.Node(1), fmt.Sprintf("curl '%s' -o /tmp/lineitem-table.csv", csv))
 	}
+	csv := fmt.Sprintf(tpchLineitemFmt, sf)
+	c.Run(ctx, c.Node(1), "rm -f /tmp/lineitem-table.csv")
+	c.Run(ctx, c.Node(1), fmt.Sprintf("curl '%s' -o /tmp/lineitem-table.csv", csv))
 }
 
 func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
@@ -121,10 +121,15 @@ func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) 
 	runTest(ctx, t, c, "sudo -i -u postgres psql")
 }
 
-func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
+func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int, atomic bool) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 	initTest(ctx, t, c, sf)
+	db, err := c.ConnE(ctx, t.L(), 1)
+	require.NoError(t, err)
+	stmt := fmt.Sprintf("ALTER ROLE ALL SET copy_from_atomic_enabled = %t", atomic)
+	_, err = db.ExecContext(ctx, stmt)
+	require.NoError(t, err)
 	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1))
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
@@ -150,11 +155,19 @@ func registerCopyFrom(r registry.Registry) {
 	for _, tc := range testcases {
 		tc := tc
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("copyfrom/crdb/sf=%d/nodes=%d", tc.sf, tc.nodes),
+			Name:    fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromCRDB(ctx, t, c, tc.sf)
+				runCopyFromCRDB(ctx, t, c, tc.sf, true /*atomic*/)
+			},
+		})
+		r.Add(registry.TestSpec{
+			Name:    fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(tc.nodes),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runCopyFromCRDB(ctx, t, c, tc.sf, false /*atomic*/)
 			},
 		})
 		r.Add(registry.TestSpec{

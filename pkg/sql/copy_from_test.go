@@ -17,7 +17,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -59,6 +61,46 @@ var lineitemSchema string = `CREATE DATABASE c; CREATE TABLE c.lineitem (
 const csvData = `%d|155190|7706|1|17|21168.23|0.04|0.02|N|O|1996-03-13|1996-02-12|1996-03-22|DELIVER IN PERSON|TRUCK|egular courts above the
 `
 
+func doCopyEx(
+	ctx context.Context,
+	t require.TestingT,
+	s serverutils.TestServerInterface,
+	txn *kv.Txn,
+	rows []string,
+	batchSizeOverride int,
+	atomic bool,
+) {
+	numrows, err := sql.RunCopyFrom(ctx, s, "c", nil /* txn */, "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';", rows, batchSizeOverride, atomic)
+	require.NoError(t, err)
+	require.Equal(t, len(rows), numrows)
+}
+
+func doCopyImplicit(
+	ctx context.Context, t require.TestingT, s serverutils.TestServerInterface, rows []string,
+) {
+	doCopyEx(ctx, t, s, nil, rows, 0, true)
+}
+
+func doCopyWithTxn(
+	ctx context.Context,
+	t require.TestingT,
+	s serverutils.TestServerInterface,
+	txn *kv.Txn,
+	rows []string,
+) {
+	doCopyEx(ctx, t, s, txn, rows, 0, true)
+}
+
+func doCopyOneRowBatches(
+	ctx context.Context,
+	t require.TestingT,
+	s serverutils.TestServerInterface,
+	rows []string,
+	atomic bool,
+) {
+	doCopyEx(ctx, t, s, nil, rows, 1, atomic)
+}
+
 // TestCopyFrom is a simple test to verify RunCopyFrom works for benchmarking
 // purposes.
 func TestCopyFrom(t *testing.T) {
@@ -74,16 +116,128 @@ func TestCopyFrom(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(conn)
 	r.Exec(t, lineitemSchema)
 	rows := []string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)}
-	numrows, err := sql.RunCopyFrom(ctx, s, "c", nil, "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';", rows)
-	require.Equal(t, 2, numrows)
-	require.NoError(t, err)
+	doCopyImplicit(ctx, t, s, rows)
 
 	partKey := 0
 	r.QueryRow(t, "SELECT l_partkey FROM c.lineitem WHERE l_orderkey = 1").Scan(&partKey)
 	require.Equal(t, 155190, partKey)
 }
 
-// BenchmarkCopy measures copy performance against a TestServer.
+// TestCopyFromExplicitTransaction tests that copy from rows are written with
+// same transaction timestamp.
+func TestCopyFromExplicitTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
+	defer s.Stopper().Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(conn)
+	r.Exec(t, lineitemSchema)
+	rows := []string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)}
+	txn := db.NewTxn(ctx, "test")
+	doCopyWithTxn(ctx, t, s, txn, rows)
+	if err := txn.Commit(ctx); err != nil {
+		require.NoError(t, err)
+	}
+	partKey := 0
+	r.QueryRow(t, "SELECT l_partkey FROM c.lineitem WHERE l_orderkey = 1").Scan(&partKey)
+	require.Equal(t, 155190, partKey)
+
+	sqlRows := r.Query(t, "SELECT crdb_internal_mvcc_timestamp FROM c.lineitem")
+	var lastts float64
+	firstTime := true
+	for sqlRows.Next() {
+		var ts float64
+		err := sqlRows.Scan(&ts)
+		require.NoError(t, err)
+		if !firstTime {
+			require.EqualValues(t, lastts, ts)
+		} else {
+			firstTime = false
+		}
+		lastts = ts
+	}
+}
+
+// TestCopyFromImplicitAtomicTransaction tests that copy from rows are
+// not committed in batches (22.2 default behavior).
+func TestCopyFromImplicitAtomicTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
+	defer s.Stopper().Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(conn)
+	r.Exec(t, lineitemSchema)
+	rows := []string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)}
+	doCopyOneRowBatches(ctx, t, s, rows, true /* atomic */)
+
+	partKey := 0
+	r.QueryRow(t, "SELECT l_partkey FROM c.lineitem WHERE l_orderkey = 1").Scan(&partKey)
+	require.Equal(t, 155190, partKey)
+
+	sqlRows := r.Query(t, "SELECT crdb_internal_mvcc_timestamp FROM c.lineitem")
+	var lastts apd.Decimal
+	firstTime := true
+	for sqlRows.Next() {
+		var ts apd.Decimal
+		err := sqlRows.Scan(&ts)
+		require.NoError(t, err)
+		if !firstTime {
+			require.EqualValues(t, lastts, ts)
+		} else {
+			firstTime = false
+		}
+		lastts = ts
+	}
+}
+
+// TestCopyFromImplicitNonAtomicTransaction tests that copy from rows are
+// committed in batches (pre-22.2 default behavior).
+func TestCopyFromImplicitNonAtomicTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
+	defer s.Stopper().Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(conn)
+	r.Exec(t, lineitemSchema)
+	rows := []string{fmt.Sprintf(csvData, 1), fmt.Sprintf(csvData, 2)}
+	doCopyOneRowBatches(ctx, t, s, rows, false /* atomic */)
+
+	partKey := 0
+	r.QueryRow(t, "SELECT l_partkey FROM c.lineitem WHERE l_orderkey = 1").Scan(&partKey)
+	require.Equal(t, 155190, partKey)
+
+	sqlRows := r.Query(t, "SELECT crdb_internal_mvcc_timestamp FROM c.lineitem")
+	var lastts apd.Decimal
+	firstTime := true
+	for sqlRows.Next() {
+		var ts apd.Decimal
+		err := sqlRows.Scan(&ts)
+		require.NoError(t, err)
+		if !firstTime {
+			require.NotEqualValues(t, lastts, ts)
+		} else {
+			firstTime = false
+		}
+		lastts = ts
+	}
+}
+
+// BenchmarkCopyFrom measures copy performance against a TestServer.
 func BenchmarkCopyFrom(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -113,9 +267,7 @@ func BenchmarkCopyFrom(b *testing.B) {
 			actualRows := rows[:batchSize]
 			for i := 0; i < b.N; i++ {
 				pprof.Do(ctx, pprof.Labels("run", "copy"), func(ctx context.Context) {
-					rowcount, err := sql.RunCopyFrom(ctx, s, "c", nil, "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';", actualRows)
-					require.NoError(b, err)
-					require.Equal(b, len(actualRows), rowcount)
+					doCopyImplicit(ctx, b, s, actualRows)
 				})
 				b.StopTimer()
 				r.Exec(b, "TRUNCATE TABLE c.lineitem")
@@ -126,6 +278,7 @@ func BenchmarkCopyFrom(b *testing.B) {
 	}
 }
 
+// BenchmarkParallelCopyFrom benchmarks break copy up into separate chunks in separate goroutines.
 func BenchmarkParallelCopyFrom(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -161,9 +314,7 @@ func BenchmarkParallelCopyFrom(b *testing.B) {
 		wg.Add(1)
 		go func(j int) {
 			defer wg.Done()
-			count, err := sql.RunCopyFrom(ctx, s, "c", nil, "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';", allrows[j])
-			require.NoError(b, err)
-			require.Equal(b, chunk, count)
+			doCopyImplicit(ctx, b, s, allrows[j])
 		}(j)
 	}
 	wg.Wait()

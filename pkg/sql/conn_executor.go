@@ -2839,31 +2839,8 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
-	p.txn = txn
-	p.stmt = Statement{}
-	p.instrumentation = instrumentationHelper{}
-
-	p.cancelChecker.Reset(ctx)
-
-	p.semaCtx = tree.MakeSemaContext()
-	p.semaCtx.SearchPath = &ex.sessionData().SearchPath
-	p.semaCtx.Annotations = nil
-	p.semaCtx.TypeResolver = p
-	p.semaCtx.FunctionResolver = p
-	p.semaCtx.TableNameResolver = p
-	p.semaCtx.DateStyle = ex.sessionData().GetDateStyle()
-	p.semaCtx.IntervalStyle = ex.sessionData().GetIntervalStyle()
-
+	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData())
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
-
-	p.autoCommit = false
-	p.isPreparing = false
-
-	p.schemaResolver.txn = txn
-	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
-	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
-	p.skipDescriptorCache = false
-	p.typeResolutionDbID = descpb.InvalidID
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the
