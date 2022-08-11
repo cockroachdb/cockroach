@@ -25,6 +25,9 @@ type ReplicaDataIteratorOptions struct {
 	IterKind storage.MVCCIterKind
 	// KeyTypes is passed to underlying iterator to select desired key types.
 	KeyTypes storage.IterKeyType
+	// ExcludeUserKeySpace removes UserKeySpace span portion. This is used if
+	// fast path managed to remove this part of data using ClearRange.
+	ExcludeUserKeySpace bool
 }
 
 // ReplicaMVCCDataIterator provides a complete iteration over MVCC or unversioned
@@ -100,6 +103,19 @@ func MakeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb
 		MakeRangeIDLocalKeySpan(d.RangeID, true /* replicatedOnly */),
 		makeRangeLocalKeySpan(d),
 		MakeUserKeySpan(d),
+	}
+}
+
+// MakeReplicatedKeySpansExcludingUserAndLockTable returns all key spans that are fully Raft
+// replicated for the given Range, except for the lock table spans and user key span.
+// These are returned in the following sorted order:
+// 1. Replicated range-id local key span.
+// 2. Range-local key span.
+// 3. User key span.
+func MakeReplicatedKeySpansExcludingUserAndLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
+	return []roachpb.Span{
+		MakeRangeIDLocalKeySpan(d.RangeID, true /* replicatedOnly */),
+		makeRangeLocalKeySpan(d),
 	}
 }
 
@@ -210,10 +226,14 @@ func NewReplicaMVCCDataIterator(
 	if !reader.ConsistentIterators() {
 		panic("ReplicaMVCCDataIterator needs a Reader that provides ConsistentIterators")
 	}
+	spans := MakeReplicatedKeySpansExceptLockTable(d)
+	if opts.ExcludeUserKeySpace {
+		spans = MakeReplicatedKeySpansExcludingUserAndLockTable(d)
+	}
 	ri := &ReplicaMVCCDataIterator{
 		ReplicaDataIteratorOptions: opts,
 		reader:                     reader,
-		spans:                      MakeReplicatedKeySpansExceptLockTable(d),
+		spans:                      spans,
 	}
 	if ri.Reverse {
 		ri.curIndex = len(ri.spans) - 1
