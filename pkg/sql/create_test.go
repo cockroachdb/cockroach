@@ -423,7 +423,7 @@ func TestAutoStatsTableSettingsDisallowedOnOldCluster(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.ClusterLocksVirtualTable),
+				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOPreV22_1),
 			},
 		},
 	}
