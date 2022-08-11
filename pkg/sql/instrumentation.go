@@ -678,7 +678,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 // If true it will generate and update the idx recommendations cache,
 // if false, uses the value on index recommendations cache and updates its counter.
 func (ih *instrumentationHelper) SetIndexRecommendations(
-	ctx context.Context, idxRec *idxrecommendations.IndexRecCache, planner *planner,
+	ctx context.Context, idxRec *idxrecommendations.IndexRecCache, planner *planner, isInternal bool,
 ) {
 	opc := planner.optPlanningCtx
 	opc.reset(ctx)
@@ -691,6 +691,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		ih.planGist.Hash(),
 		planner.SessionData().Database,
 		stmtType,
+		isInternal,
 	) {
 		f := opc.optimizer.Factory()
 		// EvalContext() has the context with the already closed span, so we
@@ -725,6 +726,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		ih.planGist.Hash(),
 		planner.SessionData().Database,
 		stmtType,
+		isInternal,
 		recommendations,
 		reset,
 	)
