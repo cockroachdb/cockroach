@@ -107,8 +107,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		ln = nil
 		wg.Done()
 	}()
-	var stats raftTransportStats
-	tp.startProcessNewQueue(ctxBoom, 1, rpc.SystemClass, &stats)
+	tp.startProcessNewQueue(ctxBoom, 1, rpc.SystemClass)
 
 	wg.Wait()
 }
