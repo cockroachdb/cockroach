@@ -1091,7 +1091,7 @@ sort
 
 # Try NULLS ordered last.
 # Next two plans should be the same.
-build null-ordered-last
+build set=null_ordered_last=true
 SELECT a, b FROM abcd ORDER BY b, c
 ----
 sort
@@ -1105,7 +1105,7 @@ sort
            ├── b:2 IS NULL [as=nulls_ordering_b:7]
            └── c:3 IS NULL [as=nulls_ordering_c:8]
 
-build null-ordered-last
+build set=null_ordered_last=true
 SELECT a, b FROM abcd ORDER BY b, c NULLS LAST
 ----
 sort
@@ -1120,7 +1120,7 @@ sort
            └── c:3 IS NULL [as=nulls_ordering_c:8]
 
 # Should be different from the plan above (1 null re-ordering).
-build null-ordered-last
+build set=null_ordered_last=true
 SELECT a, b FROM abcd ORDER BY b NULLS FIRST, c
 ----
 sort
@@ -1134,7 +1134,7 @@ sort
            └── c:3 IS NULL [as=nulls_ordering_c:7]
 
 # Should be different from the two plans above (2 null re-orderings).
-build null-ordered-last
+build set=null_ordered_last=true
 SELECT a, b FROM abcd ORDER BY b NULLS FIRST, c DESC NULLS LAST
 ----
 sort
@@ -1218,7 +1218,7 @@ sort
 
 # Try with NULL ordered last.
 # Next two plans should be the same.
-build null-ordered-last
+build set=null_ordered_last=true
 SELECT * FROM abcd ORDER BY b DESC
 ----
 sort
@@ -1231,7 +1231,7 @@ sort
       └── projections
            └── b:2 IS NULL [as=nulls_ordering_b:7]
 
-build null-ordered-last
+build set=null_ordered_last=true
 SELECT * FROM abcd ORDER BY b DESC NULLS FIRST
 ----
 sort
@@ -1245,7 +1245,7 @@ sort
            └── b:2 IS NULL [as=nulls_ordering_b:7]
 
 # Should be different from the plan above (1 null re-ordering).
-build null-ordered-last
+build set=null_ordered_last=true
 SELECT * FROM abcd ORDER BY b DESC NULLS LAST
 ----
 sort

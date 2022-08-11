@@ -811,7 +811,7 @@ insert c
                 └── filters (true)
 
 # The cost should be much smaller with this hint.
-opt prefer-lookup-joins-for-fks
+opt set=prefer_lookup_joins_for_fks=true
 INSERT INTO c VALUES (1,1), (2,2)
 ----
 insert c

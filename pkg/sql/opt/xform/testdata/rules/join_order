@@ -28,7 +28,7 @@ CREATE TABLE abc (
 )
 ----
 
-opt join-limit=2 expect=ReorderJoins
+opt set=reorder_joins_limit=2 expect=ReorderJoins
 SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup cy)
@@ -54,7 +54,7 @@ inner-join (lookup cy)
  │    └── filters (true)
  └── filters (true)
 
-opt join-limit=2 expect=ReorderJoins
+opt set=reorder_joins_limit=2 expect=ReorderJoins
 SELECT * FROM bx, abc, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -80,7 +80,7 @@ inner-join (lookup bx)
  │    └── filters (true)
  └── filters (true)
 
-opt join-limit=2 expect=ReorderJoins
+opt set=reorder_joins_limit=2 expect=ReorderJoins
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -107,7 +107,7 @@ inner-join (lookup bx)
  └── filters (true)
 
 # Reorder subtrees of size 2.
-exploretrace join-limit=2 rule=ReorderJoins format=hide-all
+exploretrace set=reorder_joins_limit=2 rule=ReorderJoins format=hide-all
 SELECT *
 FROM bx, cy, dz, abc
 WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c AND cy.c = dz.d
@@ -309,7 +309,7 @@ New expression 3 of 3:
 ----
 
 # No joins should be reordered besides commutation.
-memo join-limit=0 expect-not=ReorderJoins
+memo set=reorder_joins_limit=0 expect-not=ReorderJoins
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 memo (optimized, ~22KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
@@ -357,7 +357,7 @@ memo (optimized, ~22KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  ├── G18: (variable a)
  └── G19: (const 1)
 
-memo join-limit=2
+memo set=reorder_joins_limit=2
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 memo (optimized, ~33KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
@@ -409,7 +409,7 @@ memo (optimized, ~33KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  ├── G19: (variable a)
  └── G20: (const 1)
 
-opt join-limit=3 expect=ReorderJoins
+opt set=reorder_joins_limit=3 expect=ReorderJoins
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
 inner-join (cross)
@@ -447,7 +447,7 @@ inner-join (cross)
  │    └── fd: (1)-->(2)
  └── filters (true)
 
-opt join-limit=2 format=show-all
+opt set=reorder_joins_limit=2 format=show-all
 SELECT * FROM abc, bx, cy, dz WHERE a = 1
 ----
 inner-join (cross)
@@ -518,7 +518,7 @@ inner-join (cross)
 # Note the difference in memo size for with and without reorder-joins, for only four tables.
 # TODO(justin): Find a way to reduce this.
 
-memo join-limit=0
+memo set=reorder_joins_limit=0
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
 memo (optimized, ~29KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
@@ -584,7 +584,7 @@ memo (optimized, ~29KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
 # are connected, which allows every join order to be added to the memo.
 # TODO(drewk): implement branch pruning and/or a max operator limit for the
 # memo.
-memo join-limit=3
+memo set=reorder_joins_limit=3
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
 memo (optimized, ~62KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
@@ -752,7 +752,7 @@ exec-ddl
 CREATE TABLE a (id INT8 PRIMARY KEY)
 ----
 
-opt join-limit=3
+opt set=reorder_joins_limit=3
 SELECT
     1
 FROM
@@ -1965,7 +1965,7 @@ full-join (hash)
       └── y = z
 
 # Iteratively reorder subtrees of up to size 2.
-reorderjoins join-limit=2 format=hide-all
+reorderjoins set=reorder_joins_limit=2 format=hide-all
 SELECT * FROM abc AS a1
 INNER JOIN abc AS a2 ON a1.a = a2.a
 LEFT JOIN abc AS a3 ON a2.b = a3.b

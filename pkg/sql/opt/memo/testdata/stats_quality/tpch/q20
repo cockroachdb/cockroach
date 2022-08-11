@@ -18,7 +18,7 @@ import file=tpch_stats
 # TODO:
 #   1. Push 'forest%' prefix filter down into Scan
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q20
+stats-quality database=tpch set=save_tables_prefix=q20
 SELECT
     s_name,
     s_address

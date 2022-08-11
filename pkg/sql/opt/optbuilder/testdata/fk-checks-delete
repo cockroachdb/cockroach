@@ -140,7 +140,7 @@ delete doublechild
            └── p1:7 = 10
 
 # Verify that the join hint is set.
-build prefer-lookup-joins-for-fks
+build set=prefer_lookup_joins_for_fks=true
 DELETE FROM parent WHERE p = 3
 ----
 delete parent

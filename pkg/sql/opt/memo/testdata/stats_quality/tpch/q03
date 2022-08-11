@@ -15,7 +15,7 @@ import file=tpch_stats
 # decreasing order of revenue. If more than 10 unshipped orders exist, only the
 # 10 orders with the largest revenue are listed.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q3
+stats-quality database=tpch set=save_tables_prefix=q3
 SELECT
     l_orderkey,
     sum(l_extendedprice * (1 - l_discount)) AS revenue,

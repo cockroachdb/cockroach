@@ -29,7 +29,7 @@ CREATE VIEW revenue0 (supplier_no, total_revenue) AS
         l_suppkey;
 ----
 
-stats-quality database=tpch stats-quality-prefix=q15
+stats-quality database=tpch set=save_tables_prefix=q15
 SELECT
     s_suppkey,
     s_name,

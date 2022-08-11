@@ -18,7 +18,7 @@ import file=tpch_stats
 # The late lineitems are partitioned into two groups, those with priority URGENT
 # or HIGH, and those with a priority other than URGENT or HIGH.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q12
+stats-quality database=tpch set=save_tables_prefix=q12
 SELECT
     l_shipmode,
     sum(CASE

@@ -16,7 +16,7 @@ import file=tpch_stats
 # from the given nation. The query determines this for the years 1995 and 1996
 # presented in this order.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q8
+stats-quality database=tpch set=save_tables_prefix=q8
 SELECT
     o_year,
     sum(CASE

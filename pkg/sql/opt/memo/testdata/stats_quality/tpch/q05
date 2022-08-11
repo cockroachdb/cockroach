@@ -18,7 +18,7 @@ import file=tpch_stats
 # all qualifying lineitems in a particular nation is defined as
 # sum(l_extendedprice * (1 - l_discount)).
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q5
+stats-quality database=tpch set=save_tables_prefix=q5
 SELECT
     n_name,
     sum(l_extendedprice * (1 - l_discount)) AS revenue

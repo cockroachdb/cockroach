@@ -246,7 +246,7 @@ project
 # --------------------------------------------------
 # SimplifyWithBindingOrdering
 # --------------------------------------------------
-norm propagate-input-ordering expect=SimplifyWithBindingOrdering
+norm set=propagate_input_ordering=true expect=SimplifyWithBindingOrdering
 WITH cte AS (SELECT a, b FROM abcde ORDER BY a, b, c)
 SELECT * FROM cte, xyz
 ----
@@ -277,7 +277,7 @@ with &1 (cte)
       │    └── fd: (10)-->(11,12)
       └── filters (true)
 
-norm propagate-input-ordering expect=SimplifyWithBindingOrdering
+norm set=propagate_input_ordering=true expect=SimplifyWithBindingOrdering
 WITH cte AS (SELECT d, 1 AS one, e FROM abcde ORDER BY d, one, e)
 SELECT * FROM cte
 ----

@@ -181,20 +181,9 @@ type Flags struct {
 	// the coster will be in the range [c - 0.5 * c, c + 0.5 * c).
 	PerturbCost float64
 
-	// JoinLimit is the default value for SessionData.ReorderJoinsLimit.
-	JoinLimit int
-
 	// PreferLookupJoinsForFK is the default value for
 	// SessionData.PreferLookupJoinsForFKs.
 	PreferLookupJoinsForFKs bool
-
-	// PropagateInputOrdering is the default value for
-	// SessionData.PropagateInputOrdering.
-	PropagateInputOrdering bool
-
-	// NullOrderedLast is the default value for
-	// SessionData.NullOrderedLast.
-	NullOrderedLast bool
 
 	// Locality specifies the location of the planning node as a set of user-
 	// defined key/value pairs, ordered from most inclusive to least inclusive.
@@ -212,10 +201,6 @@ type Flags struct {
 	// Table specifies the current table to use for the command. This field is
 	// only used by the inject-stats commands.
 	Table string
-
-	// SaveTablesPrefix specifies the prefix of the table to create or print
-	// for each subexpression in the query.
-	SaveTablesPrefix string
 
 	// IgnoreTables specifies the subset of stats tables which should not be
 	// outputted by the stats-quality command.
@@ -259,10 +244,6 @@ type Flags struct {
 	// QueryArgs are values for placeholders, used for assign-placeholders-*.
 	QueryArgs []string
 
-	// UseMultiColStats is the value for SessionData.OptimizerUseMultiColStats.
-	// It defaults to true in New.
-	UseMultiColStats bool
-
 	// SkipRace indicates that a test should be skipped if the race detector is
 	// enabled.
 	SkipRace bool
@@ -276,13 +257,15 @@ type Flags struct {
 func New(catalog cat.Catalog, sql string) *OptTester {
 	ctx := context.Background()
 	ot := &OptTester{
-		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit, UseMultiColStats: true},
+		Flags:   Flags{},
 		catalog: catalog,
 		sql:     sql,
 		ctx:     ctx,
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
+	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.Flags.ot = ot
 	ot.semaCtx.SearchPath = tree.EmptySearchPath
 	ot.semaCtx.FunctionResolver = ot.catalog
@@ -513,16 +496,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     - import: the file path is relative to opttester/testfixtures;
 //     - inject-stats: the file path is relative to the test file.
 //
-//  - join-limit: sets the value for SessionData.ReorderJoinsLimit, which
-//    indicates the number of joins at which the optimizer should stop
-//    attempting to reorder.
-//
-//  - prefer-lookup-joins-for-fks: sets SessionData.PreferLookupJoinsForFKs to
-//    true, causing foreign key operations to prefer lookup joins.
-//
-//  - null-ordered-last: sets SessionData.NullOrderedLast to true, which orders
-//    NULL values last in ascending order.
-//
 //  - cascade-levels: used to limit the depth of recursive cascades for
 //    build-cascades.
 //
@@ -543,11 +516,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - memo-cycles: used with memo to search the memo for cycles and output a
 //    path with a cycle if one is found.
 //
-//  - use-multi-col-stats: sets the value for
-//    SessionData.OptimizerUseMultiColStats which indicates whether or not
-//    multi-column statistics are used for cardinality estimation in the
-//    optimizer. This option requires a single boolean argument.
-//
 //  - skip-race: skips the test if the race detector is enabled.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
@@ -567,15 +535,8 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
-	ot.evalCtx.SessionData().ReorderJoinsLimit = int64(ot.Flags.JoinLimit)
-	ot.evalCtx.SessionData().PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
-	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
-	ot.evalCtx.SessionData().NullOrderedLast = ot.Flags.NullOrderedLast
-	ot.evalCtx.SessionData().OptimizerUseMultiColStats = ot.Flags.UseMultiColStats
-
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
-	ot.evalCtx.SessionData().SaveTablesPrefix = ot.Flags.SaveTablesPrefix
 	ot.evalCtx.Placeholders = nil
 
 	switch d.Cmd {
@@ -954,28 +915,6 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			f.DisableRules.Add(int(r))
 		}
 
-	case "join-limit":
-		if len(arg.Vals) != 1 {
-			return fmt.Errorf("join-limit requires a single argument")
-		}
-		limit, err := strconv.ParseInt(arg.Vals[0], 10, 64)
-		if err != nil {
-			return errors.Wrap(err, "join-limit")
-		}
-		f.JoinLimit = int(limit)
-
-	case "prefer-lookup-joins-for-fks":
-		if len(arg.Vals) > 0 {
-			return fmt.Errorf("unknown vals for prefer-lookup-joins-for-fks")
-		}
-		f.PreferLookupJoinsForFKs = true
-
-	case "null-ordered-last":
-		if len(arg.Vals) > 0 {
-			return fmt.Errorf("unknown vals for null-ordered-last")
-		}
-		f.NullOrderedLast = true
-
 	case "rule":
 		if len(arg.Vals) != 1 {
 			return fmt.Errorf("rule requires one argument")
@@ -1046,12 +985,6 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return fmt.Errorf("table requires one argument")
 		}
 		f.Table = arg.Vals[0]
-
-	case "stats-quality-prefix":
-		if len(arg.Vals) != 1 {
-			return fmt.Errorf("stats-quality-prefix requires one argument")
-		}
-		f.SaveTablesPrefix = arg.Vals[0]
 
 	case "ignore-tables":
 		var tables util.FastIntSet
@@ -1136,19 +1069,6 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "query-args":
 		f.QueryArgs = arg.Vals
-
-	case "propagate-input-ordering":
-		f.PropagateInputOrdering = true
-
-	case "use-multi-col-stats":
-		if len(arg.Vals) != 1 {
-			return fmt.Errorf("use-multi-col-stats requires a single argument")
-		}
-		b, err := strconv.ParseBool(arg.Vals[0])
-		if err != nil {
-			return errors.Wrap(err, "use-multi-col-stats")
-		}
-		f.UseMultiColStats = b
 
 	case "memo-cycles":
 		f.MemoFormat = xform.FmtCycle
@@ -1924,7 +1844,7 @@ func (ot *OptTester) StatsQuality(tb testing.TB, d *datadriven.TestData) (string
 	// tree. Keep track of the name of each table so that stats can be outputted
 	// later.
 	var names []string
-	nameGen := memo.NewExprNameGenerator(ot.Flags.SaveTablesPrefix)
+	nameGen := memo.NewExprNameGenerator(ot.evalCtx.SessionData().SaveTablesPrefix)
 	var traverse func(e opt.Expr) error
 	traverse = func(e opt.Expr) error {
 		if r, ok := e.(memo.RelExpr); ok {
@@ -2020,7 +1940,7 @@ func (ot *OptTester) saveActualTables() error {
 	}
 
 	if _, err := c.ExecContext(ctx,
-		fmt.Sprintf("SET save_tables_prefix = '%s'", ot.Flags.SaveTablesPrefix),
+		fmt.Sprintf("SET save_tables_prefix = '%s'", ot.evalCtx.SessionData().SaveTablesPrefix),
 	); err != nil {
 		return err
 	}
