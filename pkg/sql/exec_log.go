@@ -394,7 +394,11 @@ func (p *planner) maybeLogStatementInternal(
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
-			contentionNanos := telemetryMetrics.getContentionTime(p.instrumentation.queryLevelStatsWithErr.Stats.ContentionTime.Nanoseconds())
+			var contentionNanos int64
+			if queryLevelStats, ok := p.instrumentation.GetQueryLevelStats(); ok {
+				contentionNanos = queryLevelStats.ContentionTime.Nanoseconds()
+			}
+
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails:     execDetails,

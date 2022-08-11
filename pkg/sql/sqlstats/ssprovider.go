@@ -217,6 +217,7 @@ type RecordedStmtStats struct {
 	EndTime              time.Time
 	FullScan             bool
 	SessionData          *sessiondata.SessionData
+	ExecStats            *execstats.QueryLevelStats
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.

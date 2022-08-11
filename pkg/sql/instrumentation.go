@@ -119,7 +119,7 @@ type instrumentationHelper struct {
 	origCtx          context.Context
 	evalCtx          *eval.Context
 
-	queryLevelStatsWithErr execstats.QueryLevelStatsWithErr
+	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -184,6 +184,18 @@ const (
 	explainAnalyzePlanOutput
 	explainAnalyzeDistSQLOutput
 )
+
+// GetQueryLevelStats gets the QueryLevelStats if they are available.
+// The query level stats are only available if tracing is enabled.
+func (ih *instrumentationHelper) GetQueryLevelStats() (stats *execstats.QueryLevelStats, ok bool) {
+	statsWithErr := ih.queryLevelStatsWithErr
+
+	if statsWithErr == nil || statsWithErr.Err != nil {
+		return nil, false
+	}
+
+	return &statsWithErr.Stats, true
+}
 
 // Tracing returns the current value of the instrumentation helper's span,
 // along with a boolean that determines whether the span is populated.
@@ -313,7 +325,6 @@ func (ih *instrumentationHelper) Finish(
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
 	var trace tracingpb.Recording
-	queryLevelStatsWithErr := ih.queryLevelStatsWithErr
 
 	if ih.shouldFinishSpan {
 		trace = ih.sp.FinishAndGetConfiguredRecording()
@@ -334,11 +345,12 @@ func (ih *instrumentationHelper) Finish(
 		)
 	}
 
+	queryLevelStats, ok := ih.GetQueryLevelStats()
 	// Accumulate txn stats if no error was encountered while collecting
 	// query-level statistics.
-	if queryLevelStatsWithErr.Err == nil {
+	if ok {
 		if collectExecStats || ih.implicitTxn {
-			txnStats.Accumulate(queryLevelStatsWithErr.Stats)
+			txnStats.Accumulate(*queryLevelStats)
 		}
 	}
 
@@ -355,7 +367,7 @@ func (ih *instrumentationHelper) Finish(
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(
 				explain.Flags{Verbose: true, ShowTypes: true},
 				phaseTimes,
-				&queryLevelStatsWithErr.Stats,
+				queryLevelStats,
 			)
 			bundle = buildStatementBundle(
 				ih.origCtx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
@@ -381,7 +393,7 @@ func (ih *instrumentationHelper) Finish(
 		if ih.outputMode == explainAnalyzeDistSQLOutput {
 			flows = p.curPlan.distSQLFlowInfos
 		}
-		return ih.setExplainAnalyzeResult(ctx, res, statsCollector.PhaseTimes(), &queryLevelStatsWithErr.Stats, flows, trace)
+		return ih.setExplainAnalyzeResult(ctx, res, statsCollector.PhaseTimes(), queryLevelStats, flows, trace)
 
 	default:
 		return nil
@@ -488,19 +500,21 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 
-	if queryStats.KVRowsRead != 0 {
-		ob.AddKVReadStats(queryStats.KVRowsRead, queryStats.KVBytesRead, queryStats.KVBatchRequestsIssued)
-	}
-	if queryStats.KVTime != 0 {
-		ob.AddKVTime(queryStats.KVTime)
-	}
-	if queryStats.ContentionTime != 0 {
-		ob.AddContentionTime(queryStats.ContentionTime)
-	}
+	if queryStats != nil {
+		if queryStats.KVRowsRead != 0 {
+			ob.AddKVReadStats(queryStats.KVRowsRead, queryStats.KVBytesRead, queryStats.KVBatchRequestsIssued)
+		}
+		if queryStats.KVTime != 0 {
+			ob.AddKVTime(queryStats.KVTime)
+		}
+		if queryStats.ContentionTime != 0 {
+			ob.AddContentionTime(queryStats.ContentionTime)
+		}
 
-	ob.AddMaxMemUsage(queryStats.MaxMemUsage)
-	ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
-	ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
+		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
+		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+	}
 
 	if len(ih.regions) > 0 {
 		ob.AddRegionsStats(ih.regions)
