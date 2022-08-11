@@ -199,9 +199,6 @@ const (
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
-	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
-	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
-	ClusterLocksVirtualTable
 	// AutoStatsTableSettings is the version where we allow auto stats related
 	// table settings.
 	AutoStatsTableSettings
@@ -397,10 +394,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableNewStoreRebalancer,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
-	},
-	{
-		Key:     ClusterLocksVirtualTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 98},
 	},
 	{
 		Key:     AutoStatsTableSettings,
