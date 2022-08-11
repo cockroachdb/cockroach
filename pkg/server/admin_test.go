@@ -387,6 +387,15 @@ func TestAdminAPIDatabases(t *testing.T) {
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
+	// Non admins now also require VIEWACTIVITY.
+	query = fmt.Sprintf(
+		"GRANT SYSTEM %s TO %s",
+		"VIEWACTIVITY",
+		authenticatedUserNameNoAdmin().SQLIdentifier(),
+	)
+	if _, err := db.Exec(query); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range []struct {
 		expectedDBs []string
