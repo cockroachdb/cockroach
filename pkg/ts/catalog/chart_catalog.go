@@ -1886,6 +1886,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"raft.transport.send-queue-size"},
 			},
 			{
+				Title:   "Raft Message Sends Dropped",
+				Metrics: []string{"raft.transport.sends-dropped"},
+			},
+			{
 				Title:   "Raft Messages Sent",
 				Metrics: []string{"raft.transport.sent"},
 			},
