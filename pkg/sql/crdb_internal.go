@@ -5571,7 +5571,7 @@ SELECT
   plan_hash,
   app_name,
   max(metadata) as metadata,
-  crdb_internal.merge_statement_stats(array_agg(statistics)),
+  crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
   max(sampled_plan),
   aggregation_interval,
   array_remove(array_agg(index_rec), NULL) AS index_recommendations
