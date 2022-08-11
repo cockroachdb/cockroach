@@ -137,6 +137,12 @@ func (desc *immutable) ByteSize() int64 {
 	return int64(desc.Size())
 }
 
+// GetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
 	return newBuilder(&desc.FunctionDescriptor, desc.IsUncommittedVersion(), desc.changes)
