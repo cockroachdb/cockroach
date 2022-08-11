@@ -235,7 +235,7 @@ func getAllDescChanges(
 // cluster backup, along with all the "complete databases" that we are backing
 // up.
 func fullClusterTargets(
-	allDescs []catalog.Descriptor,
+	allDescs []catalog.Descriptor, backupImports bool,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, error) {
 	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
 	fullClusterDBs := make([]catalog.DatabaseDescriptor, 0)
@@ -257,6 +257,11 @@ func fullClusterTargets(
 				fullClusterDBs = append(fullClusterDBs, dbDesc)
 			}
 		case catalog.TableDescriptor:
+			inProgressImportStartTime, _ := desc.GetInProgressImportInfo()
+			if desc.Offline() && (inProgressImportStartTime == 0 || !backupImports) {
+				// Ignore all offline tables except importing tables when backupImports=True
+				continue
+			}
 			if desc.GetParentID() == keys.SystemDatabaseID {
 				// Add only the system tables that we plan to include in a full cluster
 				// backup.
@@ -284,7 +289,7 @@ func fullClusterTargetsRestore(
 	[]descpb.TenantInfoWithUsage,
 	error,
 ) {
-	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs, false)
 	var filteredDescs []catalog.Descriptor
 	var filteredDBs []catalog.DatabaseDescriptor
 	for _, desc := range fullClusterDescs {
@@ -314,7 +319,7 @@ func fullClusterTargetsBackup(
 		return nil, nil, err
 	}
 
-	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -393,7 +398,7 @@ func selectTargets(
 	}
 
 	matched, err := backupresolver.DescriptorsMatchingTargets(ctx,
-		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets, asOf)
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets, asOf, false)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

@@ -75,7 +75,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
 			mkTable(tbDesc{ID: 2, Name: "bar", ParentID: 0}),
 			mkTable(tbDesc{ID: 4, Name: "baz", ParentID: 3}),
-			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: descpb.DescriptorState_OFFLINE}),
+			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: descpb.DescriptorState_OFFLINE, OfflineReason: "restoring"}),
 			mkDB(3, "data"),
 			mkDB(5, "empty"),
 			// Create some user defined types and tables that reference them.
@@ -161,6 +161,14 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			mkDB(22, "uds"),
 			mkSchema(scDesc{ParentID: 22, ID: 23, Name: "sc"}),
 			mkTable(tbDesc{ParentID: 22, UnexposedParentSchemaID: 23, ID: 24, Name: "tb1"}),
+			mkTable(tbDesc{
+				ID:                  25,
+				ParentID:            3,
+				Name:                "offline_importing",
+				State:               descpb.DescriptorState_OFFLINE,
+				ImportStartWallTime: 1,
+				ImportType:          descpb.TableDescriptor_IMPORT_EXISTS_EMPTY,
+				OfflineReason:       "importing"}),
 		}
 	}
 
@@ -170,81 +178,90 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		expected        []string
 		expectedDBs     []string
 		err             string
+		BackupImports   bool
 	}{
-		{"", "DATABASE system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
-		{"", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
-		{"", "DATABASE system, system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
-		{"", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
-		{"", "DATABASE system, data", []string{"system", "foo", "bar", "offline", "data", "baz"}, []string{"data", "system"}, ``},
-		{"", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
-		{"system", "DATABASE system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
-		{"system", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
-		{"system", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
-		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "offline", "data", "baz"}, []string{"data", "system"}, ``},
-		{"system", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
+		{"", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``,
+			true},
+		{"", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`, true},
+		{"", "DATABASE system, system", []string{"system", "foo", "bar"},
+			[]string{"system"}, ``, true},
+		{"", "DATABASE data", []string{"data", "baz", "offline_importing"}, []string{"data"}, ``, true},
+		{"", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``, false},
+		{"", "DATABASE system, data", []string{"system", "foo", "bar", "offline_importing", "data", "baz"}, []string{"data", "system"}, ``, true},
+		{"", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`, true},
+		{"system", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``, true},
+		{"system", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`, true},
+		{"system", "DATABASE data", []string{"data", "baz", "offline_importing"}, []string{"data"}, ``, true},
+		{"system", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``, false},
+		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "offline_importing", "data", "baz"}, []string{"data", "system"}, ``, true},
+		{"system", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`, true},
 
-		{"", "TABLE foo", nil, nil, `table "foo" does not exist`},
-		{"system", "TABLE foo", []string{"system", "foo"}, nil, ``},
-		{"system", "TABLE foo, foo", []string{"system", "foo"}, nil, ``},
-		{"data", "TABLE foo", nil, nil, `table "foo" does not exist`},
+		{"", "TABLE foo", nil, nil, `table "foo" does not exist`, true},
+		{"system", "TABLE foo", []string{"system", "foo"}, nil, ``, true},
+		{"system", "TABLE foo, foo", []string{"system", "foo"}, nil, ``, true},
+		{"data", "TABLE foo", nil, nil, `table "foo" does not exist`, true},
 
-		{"", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`},
-		{"", "TABLE *, system.public.foo", nil, nil, `"\*" does not match any valid database or schema`},
-		{"noexist", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`},
-		{"system", "TABLE *", []string{"system", "foo", "bar", "offline"}, nil, ``},
-		{"data", "TABLE *", []string{"data", "baz"}, nil, ``},
-		{"empty", "TABLE *", []string{"empty"}, nil, ``},
+		{"", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`, true},
+		{"", "TABLE *, system.public.foo", nil, nil, `"\*" does not match any valid database or schema`, true},
+		{"noexist", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`, true},
+		{"system", "TABLE *", []string{"system", "foo", "bar"}, nil, ``, true},
+		{"data", "TABLE *", []string{"data", "baz", "offline_importing"}, nil, ``, true},
+		{"data", "TABLE *", []string{"data", "baz"}, nil, ``, false},
+		{"empty", "TABLE *", []string{"empty"}, nil, ``, true},
 
-		{"", "TABLE foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
-		{"system", "TABLE foo, baz", nil, nil, `table "baz" does not exist`},
-		{"data", "TABLE foo, baz", nil, nil, `table "foo" does not exist`},
+		{"", "TABLE foo, baz", nil, nil, `table "(foo|baz)" does not exist`, true},
+		{"system", "TABLE foo, baz", nil, nil, `table "baz" does not exist`, true},
+		{"data", "TABLE foo, baz", nil, nil, `table "foo" does not exist`, true},
 
-		{"", "TABLE system.foo", []string{"system", "foo"}, nil, ``},
-		{"", "TABLE system.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`},
-		{"", "TABLE system.public.foo", []string{"system", "foo"}, nil, ``},
-		{"", "TABLE system.public.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`},
+		{"", "TABLE system.foo", []string{"system", "foo"}, nil, ``, true},
+		{"", "TABLE system.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`, true},
+		{"", "TABLE system.public.foo", []string{"system", "foo"}, nil, ``, true},
+		{"", "TABLE system.public.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`, true},
 
-		{"", "TABLE system.public.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`},
-		{"", "TABLE system.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`},
-		{"system", "TABLE system.public.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
-		{"system", "TABLE system.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
+		{"", "TABLE system.public.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`, true},
+		{"", "TABLE system.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`, true},
+		{"system", "TABLE system.public.foo, bar", []string{"system", "foo", "bar"}, nil, ``, true},
+		{"system", "TABLE system.foo, bar", []string{"system", "foo", "bar"}, nil, ``, true},
 
-		{"", "TABLE noexist.*", nil, nil, `"noexist\.\*" does not match any valid database or schema`},
-		{"", "TABLE empty.*", []string{"empty"}, nil, ``},
-		{"", "TABLE system.*", []string{"system", "foo", "bar", "offline"}, nil, ``},
-		{"", "TABLE system.public.*", []string{"system", "foo", "bar", "offline"}, nil, ``},
-		{"", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
-		{"system", "TABLE system.public.*, foo, baz", nil, nil, `table "baz" does not exist`},
-		{"data", "TABLE system.public.*, baz", []string{"system", "foo", "bar", "offline", "data", "baz"}, nil, ``},
-		{"data", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
+		{"", "TABLE noexist.*", nil, nil, `"noexist\.\*" does not match any valid database or schema`, true},
+		{"", "TABLE empty.*", []string{"empty"}, nil, ``, true},
+		{"", "TABLE system.*", []string{"system", "foo", "bar"}, nil, ``, true},
+		{"", "TABLE system.public.*", []string{"system", "foo", "bar"}, nil, ``, true},
+		{"", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`, true},
+		{"system", "TABLE system.public.*, foo, baz", nil, nil, `table "baz" does not exist`, true},
+		{"data", "TABLE system.public.*, baz", []string{"system", "foo", "bar", "data", "baz"}, nil, ``, true},
+		{"data", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`, true},
 
-		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, nil, ``},
-		{"", "TABLE SyStEm.pUbLic.FoO", []string{"system", "foo"}, nil, ``},
-		{"", `TABLE system."FoO"`, nil, nil, `table "system.FoO" does not exist`},
-		{"system", `TABLE "FoO"`, nil, nil, `table "FoO" does not exist`},
+		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, nil, ``, true},
+		{"", "TABLE SyStEm.pUbLic.FoO", []string{"system", "foo"}, nil, ``, true},
+		{"", `TABLE system."FoO"`, nil, nil, `table "system.FoO" does not exist`, true},
+		{"system", `TABLE "FoO"`, nil, nil, `table "FoO" does not exist`, true},
 
-		{"", `TABLE system."foo"`, []string{"system", "foo"}, nil, ``},
-		{"", `TABLE system.public."foo"`, []string{"system", "foo"}, nil, ``},
-		{"system", `TABLE "foo"`, []string{"system", "foo"}, nil, ``},
+		{"", `TABLE system."foo"`, []string{"system", "foo"}, nil, ``, true},
+		{"", `TABLE system.public."foo"`, []string{"system", "foo"}, nil, ``, true},
+		{"system", `TABLE "foo"`, []string{"system", "foo"}, nil, ``, true},
 
-		{"system", `TABLE offline`, nil, nil, `table "offline" does not exist`},
-		{"", `TABLE system.offline`, []string{"system", "foo"}, nil, `table "system.public.offline" does not exist`},
-		{"system", `TABLE *`, []string{"system", "foo", "bar", "offline"}, nil, ``},
+		{"system", `TABLE offline`, nil, nil, `table "offline" is offline, with reason restoring`, true},
+		{"", `TABLE system.offline`, []string{"system", "foo"}, nil, `table "system.public.offline" is offline, with reason restoring`, true},
+		{"system", `TABLE *`, []string{"system", "foo", "bar"}, nil, ``, true},
 		// If we backup udts, then all tables and types (even unused) should be present.
-		{"", "DATABASE udts", []string{"udts", "enum1", "_enum1", "enum2", "_enum2", "enum_tbl", "enum_arr_tbl"}, []string{"udts"}, ``},
+		{"", "DATABASE udts", []string{"udts", "enum1", "_enum1", "enum2", "_enum2", "enum_tbl", "enum_arr_tbl"}, []string{"udts"}, ``, true},
 		// Backing up enum_tbl should pull in both the enum and its array type.
-		{"", "TABLE udts.enum_tbl", []string{"udts", "enum1", "_enum1", "enum_tbl"}, nil, ``},
+		{"", "TABLE udts.enum_tbl", []string{"udts", "enum1", "_enum1", "enum_tbl"}, nil, ``, true},
 		// Backing up enum_arr_tbl should also pull in both the enum and its array type.
-		{"", "TABLE udts.enum_arr_tbl", []string{"udts", "enum1", "_enum1", "enum_arr_tbl"}, nil, ``},
+		{"", "TABLE udts.enum_arr_tbl", []string{"udts", "enum1", "_enum1", "enum_arr_tbl"}, nil, ``, true},
 		// Test collecting expressions that are present in table expressions.
-		{"", "TABLE udts_expr.def", []string{"udts_expr", "enum1", "_enum1", "def"}, nil, ``},
-		{"", "TABLE udts_expr.def_arr", []string{"udts_expr", "enum1", "_enum1", "def_arr"}, nil, ``},
-		{"", "TABLE udts_expr.comp", []string{"udts_expr", "enum1", "_enum1", "comp"}, nil, ``},
-		{"", "TABLE udts_expr.pi", []string{"udts_expr", "enum1", "_enum1", "pi"}, nil, ``},
-		{"", "TABLE udts_expr.checks", []string{"udts_expr", "enum1", "_enum1", "checks"}, nil, ``},
+		{"", "TABLE udts_expr.def", []string{"udts_expr", "enum1", "_enum1", "def"}, nil, ``, true},
+		{"", "TABLE udts_expr.def_arr", []string{"udts_expr", "enum1", "_enum1", "def_arr"}, nil, ``, true},
+		{"", "TABLE udts_expr.comp", []string{"udts_expr", "enum1", "_enum1", "comp"}, nil, ``, true},
+		{"", "TABLE udts_expr.pi", []string{"udts_expr", "enum1", "_enum1", "pi"}, nil, ``, true},
+		{"", "TABLE udts_expr.checks", []string{"udts_expr", "enum1", "_enum1", "checks"}, nil, ``, true},
 		// Test that the user defined schema shows up in the descriptors.
-		{"", "DATABASE uds", []string{"uds", "sc", "tb1"}, []string{"uds"}, ``},
-		{"", "TABLE uds.sc.tb1", []string{"uds", "sc", "tb1"}, nil, ``},
+		{"", "DATABASE uds", []string{"uds", "sc", "tb1"}, []string{"uds"}, ``, true},
+		{"", "TABLE uds.sc.tb1", []string{"uds", "sc", "tb1"}, nil, ``, true},
+		// Test that importing tables get matched
+		{"data", "TABLE offline_importing", []string{"data", "offline_importing"}, nil, ``, true},
+		{"data", "TABLE offline_importing", []string{"data", "offline_importing"}, nil, `cannot backup importing table offline_importing`, false},
 	}
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {
@@ -257,7 +274,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			targets := stmt.AST.(*tree.Backup).Targets
 
 			matched, err := DescriptorsMatchingTargets(context.Background(),
-				test.sessionDatabase, searchPath, descriptors, *targets, hlc.Timestamp{})
+				test.sessionDatabase, searchPath, descriptors, *targets, hlc.Timestamp{}, test.BackupImports)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)

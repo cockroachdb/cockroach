@@ -45,13 +45,14 @@ exec-sql
 BACKUP INTO 'nodelocal://0/cluster/dropped-database';
 ----
 
-# The offline descriptors should end up in the cluster backup.
+# The offline descriptors should end up in the cluster backup, except for the table descriptor
 query-sql
-SELECT count(*)
+SELECT object_name
   FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-database']
   WHERE object_name IN ('dd', 'foo', 's');
 ----
-3
+dd
+s
 
 subtest end
 
@@ -110,31 +111,35 @@ SELECT orig->'type'->'name', orig->'type'->'state' FROM tbls WHERE id = 110 OR i
 "typ" "OFFLINE"
 "_typ" "OFFLINE"
 
-# A database backup should succeed and should include the offline schema,
-# type, and table.
+# A database backup should succeed and should include the offline schema and type but NOT the
+# offline table t.
 exec-sql
 BACKUP DATABASE d2 INTO 'nodelocal://0/dropped-schema-in-database';
 ----
 
 query-sql
-SELECT count(*)
+SELECT object_name
   FROM [SHOW BACKUP LATEST IN 'nodelocal://0/dropped-schema-in-database']
   WHERE object_name IN ('s', 't', 'typ', '_typ');
 ----
-4
+typ
+_typ
+s
 
 # A cluster backup should succeed but should include the offline schema,
-# type, and table.
+# type, but not the offline table.
 exec-sql
 BACKUP INTO 'nodelocal://0/cluster/dropped-schema-in-database';
 ----
 
 query-sql
-SELECT count(*)
+SELECT object_name
   FROM [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database']
   WHERE object_name IN ('s', 't', 'typ', '_typ');
 ----
-4
+typ
+_typ
+s
 
 # Restore the backups to check they are valid.
 exec-sql
@@ -156,12 +161,11 @@ information_schema
 pg_catalog
 pg_extension
 
-
+# We do not expect the offline table t
 query-sql
 SELECT schema_name, table_name FROM [SHOW TABLES];
 ----
 public t2
-s t
 
 exec-sql
 RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database' WITH new_db_name ='d4';
@@ -181,10 +185,10 @@ information_schema
 pg_catalog
 pg_extension
 
+# we do not expect the offline table t
 query-sql
 SELECT schema_name, table_name FROM [SHOW TABLES];
 ----
 public t2
-s t
 
 subtest end

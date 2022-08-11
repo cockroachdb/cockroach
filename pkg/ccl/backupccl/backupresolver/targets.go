@@ -320,6 +320,7 @@ func DescriptorsMatchingTargets(
 	descriptors []catalog.Descriptor,
 	targets tree.BackupTargetList,
 	asOf hlc.Timestamp,
+	backupImports bool,
 ) (DescriptorsMatched, error) {
 	ret := DescriptorsMatched{
 		DescsByTablePattern: make(map[tree.TablePattern]catalog.Descriptor, len(targets.Tables.TablePatterns)),
@@ -460,10 +461,17 @@ func DescriptorsMatchingTargets(
 
 			// Verify that the table is in the correct state.
 			if err := catalog.FilterDescriptorState(
-				tableDesc, tree.CommonLookupFlags{},
+				tableDesc, tree.CommonLookupFlags{IncludeOffline: true},
 			); err != nil {
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
+			}
+			if tableDesc.Offline() {
+				if startTime, _ := tableDesc.GetInProgressImportInfo(); startTime == 0 {
+					return ret, errors.Errorf(`table %q is offline, with reason %v`, tree.ErrString(p), tableDesc.GetOfflineReason())
+				} else if !backupImports {
+					return ret, errors.Errorf(`cannot backup importing table %v`, tree.ErrString(p))
+				}
 			}
 
 			ret.DescsByTablePattern[origPat] = descI
@@ -577,6 +585,11 @@ func DescriptorsMatchingTargets(
 			}
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
+				inProgressImportStartTime, _ := desc.GetInProgressImportInfo()
+				if desc.Offline() && (inProgressImportStartTime == 0 || !backupImports) {
+					// Ignore all offline tables except importing tables when backupImports=True
+					continue
+				}
 				if _, ok := alreadyRequestedTables[id]; !ok {
 					ret.Descs = append(ret.Descs, desc)
 				}
@@ -663,7 +676,7 @@ func ResolveTargetsToDescriptors(
 
 	var matched DescriptorsMatched
 	if matched, err = DescriptorsMatchingTargets(ctx,
-		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime); err != nil {
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime, false); err != nil {
 		return nil, nil, nil, nil, err
 	}
 
