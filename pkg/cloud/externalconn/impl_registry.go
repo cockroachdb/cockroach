@@ -16,23 +16,78 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
 
+type schemeRegistration struct {
+	FactoryType
+	connectionpb.ConnectionProvider
+	connectionParserFactory
+	validations map[string]ValidationFn
+}
+
 // parseAndValidateFns maps a URI scheme to a constructor of instances of that external
 // connection.
-var parseAndValidateFns = map[string]connectionParserFactory{}
+var parseAndValidateFns = map[string]schemeRegistration{}
+
+type FactoryType int
+
+const (
+	SimpleURIFactory FactoryType = iota
+)
+
+var factoryFactories = map[FactoryType]func(connectionpb.ConnectionProvider) connectionParserFactory{
+	SimpleURIFactory: makeSimpleURIFactory,
+}
 
 // RegisterConnectionDetailsFromURIFactory is used by every concrete
 // implementation to register its factory method.
 func RegisterConnectionDetailsFromURIFactory(
-	providerScheme string, parseAndValidateFn connectionParserFactory,
+	providerScheme string, provider connectionpb.ConnectionProvider, factoryType FactoryType,
 ) {
-	if _, ok := parseAndValidateFns[providerScheme]; ok {
-		panic(fmt.Sprintf("parse function already registered for %s", providerScheme))
+	if existing, ok := parseAndValidateFns[providerScheme]; ok {
+		if existing.FactoryType != factoryType || existing.ConnectionProvider != provider {
+			panic(fmt.Sprintf("different parse function already registered for %s", providerScheme))
+		}
+	} else {
+		parseAndValidateFns[providerScheme] = schemeRegistration{
+			FactoryType:             factoryType,
+			ConnectionProvider:      provider,
+			connectionParserFactory: factoryFactories[factoryType](provider),
+			validations:             make(map[string]ValidationFn),
+		}
 	}
-	parseAndValidateFns[providerScheme] = parseAndValidateFn
+}
+
+const defaultValidation = `default`
+
+func RegisterDefaultValidation(providerScheme string, validation ValidationFn) {
+	RegisterNamedValidation(providerScheme, defaultValidation, validation)
+}
+
+func RegisterNamedValidation(providerScheme string, name string, validation ValidationFn) {
+	existing, ok := parseAndValidateFns[providerScheme]
+	if !ok {
+		panic(fmt.Sprintf("no parse function registered yet for %s", providerScheme))
+	}
+	existing.validations[name] = validation
+	parseAndValidateFns[providerScheme] = existing
+}
+
+func makeSimpleURIFactory(provider connectionpb.ConnectionProvider) connectionParserFactory {
+	return func(ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL) (ExternalConnection, error) {
+		connDetails := connectionpb.ConnectionDetails{
+			Provider: provider,
+			Details: &connectionpb.ConnectionDetails_SimpleURI{
+				SimpleURI: &connectionpb.SimpleURI{
+					URI: uri.String(),
+				},
+			},
+		}
+		return NewExternalConnection(connDetails), nil
+	}
 }
 
 // ExternalConnectionFromURI returns a ExternalConnection for the given URI.
@@ -44,13 +99,29 @@ func ExternalConnectionFromURI(
 		return nil, err
 	}
 
-	// Find the parseFn method for the ExternalConnection provider.
-	parseFn, registered := parseAndValidateFns[externalConnectionURI.Scheme]
+	// Find the parseAndValidateFn method for the ExternalConnection provider.
+	parseAndValidateFn, registered := parseAndValidateFns[externalConnectionURI.Scheme]
 	if !registered {
-		return nil, errors.Newf("no parseFn found for external connection provider %s", externalConnectionURI.Scheme)
+		return nil, errors.Newf("no parseAndValidateFn found for external connection provider %s", externalConnectionURI.Scheme)
 	}
 
-	return parseFn(ctx, execCfg, user, externalConnectionURI)
+	return parseAndValidateFn.parseAndValidateURI(ctx, execCfg, user, externalConnectionURI, defaultValidation)
+}
+
+type ValidationFn func(ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string) error
+
+func (s *schemeRegistration) parseAndValidateURI(
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL, validations ...string) (ExternalConnection, error) {
+	conn, err := s.connectionParserFactory(ctx, execCfg, user, uri)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range validations {
+		if validationFn, ok := s.validations[v]; ok {
+			err = errors.CombineErrors(err, validationFn(ctx, execCfg, user, uri.String()))
+		}
+	}
+	return conn, err
 }
 
 // TestingKnobs provide fine-grained control over the external connection
