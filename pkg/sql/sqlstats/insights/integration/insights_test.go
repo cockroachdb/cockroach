@@ -12,8 +12,10 @@ package integration
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -97,6 +100,99 @@ func TestInsightsIntegration(t *testing.T) {
 		require.Equal(t, "completed", status)
 		require.GreaterOrEqual(t, endInsights.Sub(startInsights).Seconds(), queryDelayInSeconds)
 
+		return nil
+	}, 1*time.Second)
+}
+
+func TestInsightsIntegrationForContention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+
+	_, err := conn.Exec("SET tracing = true;")
+	require.NoError(t, err)
+	_, err = conn.Exec("SET cluster setting sql.txn_stats.sample_rate  = 1;")
+	require.NoError(t, err)
+	_, err = conn.Exec("CREATE TABLE t (id string, s string);")
+	require.NoError(t, err)
+	_, err = conn.Exec("INSERT INTO t (id, s) VALUES ('test', 'originalValue');")
+	require.NoError(t, err)
+
+	// Enable detection by setting a latencyThreshold > 0.
+	latencyThreshold := 100 * time.Millisecond
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+
+	// Create a new connection, and then in a go routine have it start a transaction, update a row,
+	// sleep for a time, and then complete the transaction.
+	// With original connection attempt to update the same row being updated concurrently
+	// in the separate go routine, this will be blocked until the original transaction completes.
+	var wgTxnStarted sync.WaitGroup
+	wgTxnStarted.Add(1)
+
+	// Lock to wait for the txn to complete to avoid the test finishing before the txn is committed
+	var wgTxnDone sync.WaitGroup
+	wgTxnDone.Add(1)
+
+	go func() {
+		tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
+		require.NoError(t, errTxn)
+		_, errTxn = tx.ExecContext(ctx, "UPDATE t SET s = 'backgroundUpdate' where id = 'test';")
+		require.NoError(t, errTxn)
+		wgTxnStarted.Done()
+		_, errTxn = tx.ExecContext(ctx, "select pg_sleep(1);")
+		require.NoError(t, errTxn)
+		errTxn = tx.Commit()
+		require.NoError(t, errTxn)
+		wgTxnDone.Done()
+	}()
+
+	start := timeutil.Now()
+
+	// Need to wait for the txn to start to ensure lock contention
+	wgTxnStarted.Wait()
+	// This will be blocked until the updateRowWithDelay finishes.
+	_, err = conn.ExecContext(ctx, "UPDATE t SET s = 'mainThread' where id = 'test';")
+	require.NoError(t, err)
+	end := timeutil.Now()
+	require.GreaterOrEqual(t, end.Sub(start), 1*time.Second)
+
+	wgTxnDone.Wait()
+
+	// Verify the table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		rows, err := conn.QueryContext(ctx, "SELECT "+
+			"query, "+
+			"contention::FLOAT "+
+			"FROM crdb_internal.node_execution_insights where contention > '00:00:00' and query like 'UPDATE t SET s =%'")
+		require.NoError(t, err)
+
+		rowCount := 0
+		for rows.Next() {
+			rowCount++
+			require.NoError(t, err)
+
+			var contentionFromQuery float64
+			var queryText string
+			err = rows.Scan(&queryText, &contentionFromQuery)
+
+			require.NoError(t, err)
+			require.GreaterOrEqual(
+				t,
+				contentionFromQuery,
+				.5,
+				"Contention time should be greater than .5 since block is delayed by 1 seconds",
+				queryText,
+				contentionFromQuery)
+		}
+
+		require.GreaterOrEqual(t, rowCount, 1, "node_execution_insights did not return any rows")
 		return nil
 	}, 1*time.Second)
 }
