@@ -263,7 +263,7 @@ func TestChangefeedIdleness(t *testing.T) {
 
 		// Idleness functionality is version gated
 		knobs := s.TestingKnobs.Server.(*server.TestingKnobs)
-		knobs.BinaryVersionOverride = clusterversion.ByKey(clusterversion.ChangefeedIdleness)
+		knobs.BinaryVersionOverride = clusterversion.ByKey(clusterversion.TODOPreV22_1)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		currentlyIdle := registry.MetricsStruct().JobMetrics[jobspb.TypeChangefeed].CurrentlyIdle
