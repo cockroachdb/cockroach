@@ -21,7 +21,7 @@ CREATE TABLE rides (
 inject-stats file=inject-stats.json table=rides
 ----
 
-opt format=show-stats use-multi-col-stats=true
+opt format=show-stats set=optimizer_use_multicol_stats=true
 SELECT * FROM rides WHERE city = 'rome' and id = '17198184-b24f-4aa8-9933-64a72ff6665f'
 ----
 scan rides
@@ -32,7 +32,7 @@ scan rides
  ├── key: ()
  └── fd: ()-->(1-10)
 
-opt format=show-stats use-multi-col-stats=false
+opt format=show-stats set=optimizer_use_multicol_stats=false
 SELECT * FROM rides WHERE city = 'rome' and id = '17198184-b24f-4aa8-9933-64a72ff6665f'
 ----
 scan rides

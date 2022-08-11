@@ -17,7 +17,7 @@ import file=tpch_stats
 # LINESTATUS, and listed in ascending order of RETURNFLAG and LINESTATUS. A
 # count of the number of lineitems in each group is included.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q1
+stats-quality database=tpch set=save_tables_prefix=q1
 SELECT
     l_returnflag,
     l_linestatus,

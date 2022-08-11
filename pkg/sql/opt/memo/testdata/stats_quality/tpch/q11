@@ -14,7 +14,7 @@ import file=tpch_stats
 # available parts. The query displays the part number and the value of those
 # parts in descending order of value.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q11
+stats-quality database=tpch set=save_tables_prefix=q11
 SELECT
     ps_partkey,
     sum(ps_supplycost * ps_availqty::float) AS value

@@ -15,7 +15,7 @@ import file=tpch_stats
 # “positive” account balance. It also reflects the magnitude of that balance.
 # Country code is defined as the first two characters of c_phone.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q22
+stats-quality database=tpch set=save_tables_prefix=q22
 SELECT
     cntrycode,
     count(*) AS numcust,

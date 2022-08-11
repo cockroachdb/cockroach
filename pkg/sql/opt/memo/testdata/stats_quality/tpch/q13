@@ -15,7 +15,7 @@ import file=tpch_stats
 # several special categories of orders. Special categories are identified in the
 # order comment column by looking for a particular pattern.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q13
+stats-quality database=tpch set=save_tables_prefix=q13
 SELECT
     c_count, count(*) AS custdist
 FROM (
