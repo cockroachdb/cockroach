@@ -39,24 +39,30 @@ stats: key_count=+1 key_bytes=+2 val_count=+1 val_bytes=+21 live_count=+1 live_b
 >> put k=b ts=1 v=b1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=b ts=2
+del: "b": found key true
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3234
 >> del k=b ts=3
+del: "b": found key false
 stats: key_bytes=+12 val_count=+1 gc_bytes_age=+1162
 >> put k=b ts=6 v=b6
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
 >> del k=c ts=1
+del: "c": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> put k=c ts=3 v=c3
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-198
 >> del k=c ts=5
+del: "c": found key true
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3135
 >> put k=e ts=1 v=e1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=f ts=1
+del: "f": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> put k=h ts=1 v=h1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=i ts=1
+del: "i": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> del_range_ts k=d end=j ts=3
 stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-2 live_bytes=-42 gc_bytes_age=+5335
@@ -71,10 +77,13 @@ stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_b
 >> put k=f ts=6 v=f6
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-198
 >> del k=g ts=5
+del: "g": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1330
 >> del k=h ts=5
+del: "h": found key false
 stats: key_bytes=+12 val_count=+1 gc_bytes_age=+1136
 >> del k=i ts=5
+del: "i": found key false
 stats: key_bytes=+12 val_count=+1 gc_bytes_age=+1132
 >> at end:
 rangekey: {d-j}/[4.000000000,0={localTs=3.000000000,0}/<empty> 3.000000000,0=/<empty>]

@@ -112,18 +112,18 @@ SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
 ----
 perm_table
 
-new-server name=s2 share-io-dir=s1 control-temp-object-cleanup
+new-server name=s2 share-io-dir=s1
 ----
 
 exec-sql
 USE defaultdb;
 ----
 
+# On full cluster restore we do not restore temp tables
 exec-sql
 RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
 ----
 
-# The pg_temp schema from the BACKUP should show up in its original database.
 query-sql
 USE d1;
 SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
@@ -132,7 +132,6 @@ crdb_internal
 information_schema
 pg_catalog
 pg_extension
-pg_temp_0_0
 public
 
 
@@ -145,36 +144,6 @@ information_schema
 pg_catalog
 pg_extension
 public
-
-# On full cluster restore we restore temp tables to its original database.
-query-sql
-USE d1;
-SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
-----
-perm_table
-temp_seq
-temp_table
-
-# Nudge and wait for the temp cleanup job to run.
-nudge-and-wait-for-temp-cleanup
-----
-
-# The synthetic temp schema should have been erased.
-query-sql
-USE defaultdb;
-SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
-----
-crdb_internal
-information_schema
-pg_catalog
-pg_extension
-public
-
-# The temp tables should have been erased.
-query-sql
-USE defaultdb;
-SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
-----
 
 query-sql
 USE d1;

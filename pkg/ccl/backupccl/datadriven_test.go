@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -77,28 +75,24 @@ type sqlDBKey struct {
 }
 
 type datadrivenTestState struct {
-	servers map[string]serverutils.TestServerInterface
-	// tempObjectCleanupAndWait is a mapping from server name to a method that can
-	// be used to nudge and wait for temporary object cleanup.
-	tempObjectCleanupAndWait map[string]func()
-	dataDirs                 map[string]string
-	sqlDBs                   map[sqlDBKey]*gosql.DB
-	jobTags                  map[string]jobspb.JobID
-	clusterTimestamps        map[string]string
-	noticeBuffer             []string
-	cleanupFns               []func()
-	vars                     map[string]string
+	servers           map[string]serverutils.TestServerInterface
+	dataDirs          map[string]string
+	sqlDBs            map[sqlDBKey]*gosql.DB
+	jobTags           map[string]jobspb.JobID
+	clusterTimestamps map[string]string
+	noticeBuffer      []string
+	cleanupFns        []func()
+	vars              map[string]string
 }
 
 func newDatadrivenTestState() datadrivenTestState {
 	return datadrivenTestState{
-		servers:                  make(map[string]serverutils.TestServerInterface),
-		tempObjectCleanupAndWait: make(map[string]func()),
-		dataDirs:                 make(map[string]string),
-		sqlDBs:                   make(map[sqlDBKey]*gosql.DB),
-		jobTags:                  make(map[string]jobspb.JobID),
-		clusterTimestamps:        make(map[string]string),
-		vars:                     make(map[string]string),
+		servers:           make(map[string]serverutils.TestServerInterface),
+		dataDirs:          make(map[string]string),
+		sqlDBs:            make(map[sqlDBKey]*gosql.DB),
+		jobTags:           make(map[string]jobspb.JobID),
+		clusterTimestamps: make(map[string]string),
+		vars:              make(map[string]string),
 	}
 }
 
@@ -116,18 +110,12 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 type serverCfg struct {
-	name  string
-	iodir string
-	// nudgeTempObjectsCleanup is a channel used to nudge the temporary object
-	// reconciliation job to run.
-	nudgeTempObjectsCleanup chan time.Time
-	// tempObjectCleanupDone is the channel used by the temporary object
-	// reconciliation job to signal it is done cleaning up.
-	tempObjectCleanupDone chan struct{}
-	nodes                 int
-	splits                int
-	ioConf                base.ExternalIODirConfig
-	localities            string
+	name       string
+	iodir      string
+	nodes      int
+	splits     int
+	ioConf     base.ExternalIODirConfig
+	localities string
 }
 
 func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
@@ -137,17 +125,6 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-	}
-
-	// If the server needs to control temporary object cleanup, let us set that up
-	// now.
-	if cfg.nudgeTempObjectsCleanup != nil && cfg.tempObjectCleanupDone != nil {
-		params.ServerArgs.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-			OnTempObjectsCleanupDone: func() {
-				cfg.tempObjectCleanupDone <- struct{}{}
-			},
-			TempObjectsCleanupCh: cfg.nudgeTempObjectsCleanup,
-		}
 	}
 
 	settings := cluster.MakeTestingClusterSettings()
@@ -177,24 +154,11 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 			InitManualReplication, params)
 	}
 	cleanupFn := func() {
-		if cfg.nudgeTempObjectsCleanup != nil {
-			close(cfg.nudgeTempObjectsCleanup)
-		}
-		if cfg.tempObjectCleanupDone != nil {
-			close(cfg.tempObjectCleanupDone)
-		}
 		cleanup()
 	}
 	d.servers[cfg.name] = tc.Server(0)
 	d.dataDirs[cfg.name] = cfg.iodir
 	d.cleanupFns = append(d.cleanupFns, cleanupFn)
-
-	if cfg.nudgeTempObjectsCleanup != nil && cfg.tempObjectCleanupDone != nil {
-		d.tempObjectCleanupAndWait[cfg.name] = func() {
-			cfg.nudgeTempObjectsCleanup <- timeutil.Now()
-			<-cfg.tempObjectCleanupDone
-		}
-	}
 
 	return nil
 }
@@ -260,10 +224,6 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   + nodes: specifies the number of nodes in the test cluster.
 //
 //   + splits: specifies the number of ranges the bank table is split into.
-//
-//   + control-temp-object-cleanup: sets up the server in a way that the test
-//   can control when to run the temporary object reconciliation loop using
-//   nudge-and-wait-for-temp-cleanup
 //
 // - "exec-sql [server=<name>] [user=<name>] [args]"
 //   Executes the input SQL query on the target server. By default, server is
@@ -350,8 +310,6 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //
 //   + target: SQL target. Currently, only table names are supported.
 //
-// - "nudge-and-wait-for-temp-cleanup"
-//    Nudges the temporary object reconciliation loop to run, and waits for completion.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -382,8 +340,6 @@ func TestDataDriven(t *testing.T) {
 			case "new-server":
 				var name, shareDirWith, iodir, localities string
 				var splits int
-				var nudgeTempObjectCleanup chan time.Time
-				var tempObjectCleanupDone chan struct{}
 				nodes := singleNode
 				var io base.ExternalIODirConfig
 				d.ScanArgs(t, "name", &name)
@@ -408,21 +364,15 @@ func TestDataDriven(t *testing.T) {
 				if d.HasArg("splits") {
 					d.ScanArgs(t, "splits", &splits)
 				}
-				if d.HasArg("control-temp-object-cleanup") {
-					nudgeTempObjectCleanup = make(chan time.Time)
-					tempObjectCleanupDone = make(chan struct{})
-				}
 
 				lastCreatedServer = name
 				cfg := serverCfg{
-					name:                    name,
-					iodir:                   iodir,
-					nudgeTempObjectsCleanup: nudgeTempObjectCleanup,
-					tempObjectCleanupDone:   tempObjectCleanupDone,
-					nodes:                   nodes,
-					splits:                  splits,
-					ioConf:                  io,
-					localities:              localities,
+					name:       name,
+					iodir:      iodir,
+					nodes:      nodes,
+					splits:     splits,
+					ioConf:     io,
+					localities: localities,
 				}
 				err := ds.addServer(t, cfg)
 				if err != nil {
@@ -753,15 +703,6 @@ func TestDataDriven(t *testing.T) {
 				ds.clusterTimestamps[timestampTag] = ts
 				return ""
 
-			case "nudge-and-wait-for-temp-cleanup":
-				server := lastCreatedServer
-				if nudgeAndWait, ok := ds.tempObjectCleanupAndWait[server]; !ok {
-					t.Fatalf("server %s was not configured with `control-temp-object-cleanup`", server)
-				} else {
-					nudgeAndWait()
-				}
-				return ""
-
 			case "create-dummy-system-table":
 				db := ds.servers[lastCreatedServer].DB()
 				codec := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).Codec
@@ -774,8 +715,7 @@ func TestDataDriven(t *testing.T) {
 					}
 					mut := dummyTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
 					mut.ID = id
-					mut.Name = fmt.Sprintf("%s_%d",
-						catprivilege.RestoreCopySystemTablePrefix, id)
+					mut.Name = fmt.Sprintf("%s_%d", "crdb_internal_copy", id)
 					tKey := catalogkeys.EncodeNameKey(codec, mut)
 					b := txn.NewBatch()
 					b.CPut(tKey, mut.GetID(), nil)

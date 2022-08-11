@@ -685,7 +685,8 @@ func (ds *DistSender) initAndVerifyBatch(
 				// Accepted reverse range requests.
 				foundReverse = true
 
-			case *roachpb.QueryIntentRequest, *roachpb.EndTxnRequest, *roachpb.GetRequest:
+			case *roachpb.QueryIntentRequest, *roachpb.EndTxnRequest,
+				*roachpb.GetRequest, *roachpb.DeleteRequest:
 				// Accepted point requests that can be in batches with limit.
 
 			default:

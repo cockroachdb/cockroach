@@ -1003,9 +1003,11 @@ func cmdDelete(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw ReadWriter) error {
-		if err := MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn); err != nil {
+		deletedKey, err := MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn)
+		if err != nil {
 			return err
 		}
+		e.results.buf.Printf("del: %v: found key %v\n", key, deletedKey)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}

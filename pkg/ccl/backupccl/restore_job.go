@@ -718,7 +718,7 @@ func createImportingDescriptors(
 		}
 	}
 
-	tempSystemDBID := tempSystemDatabaseID(details)
+	tempSystemDBID := tempSystemDatabaseID(details, tables)
 	if tempSystemDBID != descpb.InvalidID {
 		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
 			username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
@@ -1674,22 +1674,26 @@ func (r *restoreResumer) notifyStatsRefresherOfNewTables() {
 }
 
 // tempSystemDatabaseID returns the ID of the descriptor for the temporary
-// system database used in full cluster restores.
-// This is the last of the IDs pre-allocated by the restore planner.
-// TODO(postamar): Store it directly in the details instead? This is brittle.
-func tempSystemDatabaseID(details jobspb.RestoreDetails) descpb.ID {
+// system database used in full cluster restores, by finding a table in the
+// rewrites that had the static system database ID as its parent and returning
+// the new parent assigned in the rewrites during planning. Returns InvalidID if
+// no such table appears in the rewrites.
+func tempSystemDatabaseID(
+	details jobspb.RestoreDetails, tables []catalog.TableDescriptor,
+) descpb.ID {
 	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) {
 		return descpb.InvalidID
 	}
-	var maxPreAllocatedID descpb.ID
-	for id := range details.DescriptorRewrites {
-		// This map is never empty in this case (full cluster restore),
-		// it contains at minimum the entry for the temporary system database.
-		if id > maxPreAllocatedID {
-			maxPreAllocatedID = id
+
+	for _, tbl := range tables {
+		if tbl.GetParentID() == keys.SystemDatabaseID {
+			if details.DescriptorRewrites[tbl.GetID()].ParentID != 0 {
+				return details.DescriptorRewrites[tbl.GetID()].ParentID
+			}
 		}
 	}
-	return maxPreAllocatedID
+
+	return descpb.InvalidID
 }
 
 // Insert stats re-inserts the table statistics stored in the backup manifest.
@@ -1854,7 +1858,7 @@ func (r *restoreResumer) publishDescriptors(
 		typ := all.LookupDescriptorEntry(details.TypeDescs[i].GetID()).(catalog.TypeDescriptor)
 		newTypes = append(newTypes, typ.TypeDesc())
 		if typ.GetDeclarativeSchemaChangerState() == nil &&
-			typ.HasPendingSchemaChanges() && details.DescriptorCoverage != tree.AllDescriptors {
+			typ.HasPendingSchemaChanges() {
 			if err := createTypeChangeJobFromDesc(
 				ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), typ,
 			); err != nil {
@@ -2469,16 +2473,11 @@ func (r *restoreResumer) restoreSystemTables(
 	if details.SystemTablesMigrated == nil {
 		details.SystemTablesMigrated = make(map[string]bool)
 	}
-	tempSystemDBID := tempSystemDatabaseID(details)
-
 	// Iterate through all the tables that we're restoring, and if it was restored
 	// to the temporary system DB then populate the metadata required to restore
 	// to the real system table.
 	systemTablesToRestore := make([]systemTableNameWithConfig, 0)
 	for _, table := range tables {
-		if table.GetParentID() != tempSystemDBID {
-			continue
-		}
 		systemTableName := table.GetName()
 		stagingTableName := restoreTempSystemDB + "." + systemTableName
 

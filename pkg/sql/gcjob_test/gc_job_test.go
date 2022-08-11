@@ -303,11 +303,12 @@ SELECT job_id, status, running_status
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, dbID, "foo")
-		if err := txn.Del(ctx, nameKey); err != nil {
+		if _, err := txn.Del(ctx, nameKey); err != nil {
 			return err
 		}
 		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
-		return txn.Del(ctx, descKey)
+		_, err := txn.Del(ctx, descKey)
+		return err
 	}))
 	// Update the GC TTL to tickle the job to refresh the status and discover that
 	// it has been removed. Use a SucceedsSoon to deal with races between setting

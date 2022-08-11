@@ -840,5 +840,5 @@ func (o *inputPartitioningOperator) close() {
 	// allocate a new windowed batch if necessary (which might be the case for
 	// the fallback strategy of the users of the hash-based partitioner).
 	o.windowedBatch = nil
-	o.allocator.ReleaseMemory(colmem.SizeOfBatchSizeSelVector)
+	o.allocator.ReleaseMemory(colmem.SelVectorSize(coldata.BatchSize()))
 }

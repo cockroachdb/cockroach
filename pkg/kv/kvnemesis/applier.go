@@ -159,7 +159,7 @@ type clientI interface {
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
-	Del(context.Context, ...interface{}) error
+	Del(context.Context, ...interface{}) ([]roachpb.Key, error)
 	DelRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
 	Run(context.Context, *kv.Batch) error
 }
@@ -208,8 +208,16 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			}
 		}
 	case *DeleteOperation:
-		err := db.Del(ctx, o.Key)
-		o.Result = resultError(ctx, err)
+		deletedKeys, err := db.Del(ctx, o.Key)
+		if err != nil {
+			o.Result = resultError(ctx, err)
+		} else {
+			o.Result.Type = ResultType_Keys
+			o.Result.Keys = make([][]byte, len(deletedKeys))
+			for i, deletedKey := range deletedKeys {
+				o.Result.Keys[i] = deletedKey
+			}
+		}
 	case *DeleteRangeOperation:
 		if !inTxn {
 			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))

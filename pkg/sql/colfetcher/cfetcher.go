@@ -273,27 +273,18 @@ type cFetcher struct {
 	scratch []byte
 
 	accountingHelper colmem.SetAccountingHelper
-
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when at the row finalization we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
 }
 
 func (cf *cFetcher) resetBatch() {
 	var reallocated bool
-	var minDesiredCapacity int
-	if cf.maxCapacity > 0 {
-		// If we have already exceeded the memory limit for the output batch, we
-		// will only be using the same batch from now on.
-		minDesiredCapacity = cf.maxCapacity
-	} else if cf.machine.limitHint > 0 && (cf.estimatedRowCount == 0 || uint64(cf.machine.limitHint) < cf.estimatedRowCount) {
+	var tuplesToBeSet int
+	if cf.machine.limitHint > 0 && (cf.estimatedRowCount == 0 || uint64(cf.machine.limitHint) < cf.estimatedRowCount) {
 		// If we have a limit hint, and either
 		//   1) we don't have an estimate, or
 		//   2) we have a soft limit,
 		// use the hint to size the batch. Note that if it exceeds
 		// coldata.BatchSize, ResetMaybeReallocate will chop it down.
-		minDesiredCapacity = cf.machine.limitHint
+		tuplesToBeSet = cf.machine.limitHint
 	} else {
 		// Otherwise, use the estimate. Note that if the estimate is not
 		// present, it'll be 0 and ResetMaybeReallocate will allocate the
@@ -303,14 +294,13 @@ func (cf *cFetcher) resetBatch() {
 		// into an int. We have to be careful: if we just cast it directly, a
 		// giant estimate will wrap around and become negative.
 		if cf.estimatedRowCount > uint64(coldata.BatchSize()) {
-			minDesiredCapacity = coldata.BatchSize()
+			tuplesToBeSet = coldata.BatchSize()
 		} else {
-			minDesiredCapacity = int(cf.estimatedRowCount)
+			tuplesToBeSet = int(cf.estimatedRowCount)
 		}
 	}
 	cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
-		cf.table.typs, cf.machine.batch, minDesiredCapacity, cf.memoryLimit,
-		false, /* desiredCapacitySufficient */
+		cf.table.typs, cf.machine.batch, tuplesToBeSet,
 	)
 	if reallocated {
 		cf.machine.colvecs.SetBatch(cf.machine.batch)
@@ -465,7 +455,7 @@ func (cf *cFetcher) Init(
 
 	cf.table = table
 	cf.fetcher = kvFetcher
-	cf.accountingHelper.Init(allocator, cf.table.typs)
+	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
 
 	return nil
 }
@@ -854,23 +844,14 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// column is requested) yet, but it is ok for the purposes of the
 			// memory accounting - oids are fixed length values and, thus, have
 			// already been accounted for when the batch was allocated.
-			cf.accountingHelper.AccountForSet(cf.machine.rowIdx)
+			emitBatch := cf.accountingHelper.AccountForSet(cf.machine.rowIdx)
 			cf.machine.rowIdx++
 			cf.shiftState()
 
-			var emitBatch bool
-			if cf.maxCapacity == 0 && cf.accountingHelper.Allocator.Used() >= cf.memoryLimit {
-				cf.maxCapacity = cf.machine.rowIdx
-			}
-			if cf.machine.rowIdx >= cf.machine.batch.Capacity() ||
-				(cf.maxCapacity > 0 && cf.machine.rowIdx >= cf.maxCapacity) ||
-				(cf.machine.limitHint > 0 && cf.machine.rowIdx >= cf.machine.limitHint) {
-				// We either
-				//   1. have no more room in our batch, so output it immediately
-				// or
-				//   2. we made it to our limit hint, so output our batch early
-				//      to make sure that we don't bother filling in extra data
-				//      if we don't need to.
+			if cf.machine.limitHint > 0 && cf.machine.rowIdx >= cf.machine.limitHint {
+				// We made it to our limit hint, so output our batch early to
+				// make sure that we don't bother filling in extra data if we
+				// don't need to.
 				emitBatch = true
 				// Update the limit hint to track the expected remaining rows to
 				// be fetched.

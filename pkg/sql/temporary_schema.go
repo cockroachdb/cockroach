@@ -206,7 +206,7 @@ func cleanupSessionTempObjects(
 			// dropped). So we remove the namespace table entry of the temporary
 			// schema.
 			key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
-			if err := txn.Del(ctx, key); err != nil {
+			if _, err := txn.Del(ctx, key); err != nil {
 				return err
 			}
 		}

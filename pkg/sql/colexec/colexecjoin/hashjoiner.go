@@ -12,7 +12,6 @@ package colexecjoin
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -753,10 +752,8 @@ func (hj *hashJoiner) resetOutput(nResults int) {
 	// 4. when the hashJoiner is used by the external hash joiner as the main
 	// strategy, the hash-based partitioner is responsible for making sure that
 	// partitions fit within memory limit.
-	const maxOutputBatchMemSize = math.MaxInt64
-	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(
-		hj.outputTypes, hj.output, nResults, maxOutputBatchMemSize,
-		true, /* desiredCapacitySufficient */
+	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocateNoMemLimit(
+		hj.outputTypes, hj.output, nResults,
 	)
 }
 

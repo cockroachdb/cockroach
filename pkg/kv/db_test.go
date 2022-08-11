@@ -254,7 +254,7 @@ func TestDB_InitPut(t *testing.T) {
 	if err := db.InitPut(ctx, "aa", "2", false); err == nil {
 		t.Fatal("expected error from init put")
 	}
-	if err := db.Del(ctx, "aa"); err != nil {
+	if _, err := db.Del(ctx, "aa"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.InitPut(ctx, "aa", "2", true); err == nil {
@@ -479,8 +479,15 @@ func TestDB_Del(t *testing.T) {
 	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Del(context.Background(), "ab"); err != nil {
+	if _, err := db.Del(context.Background(), "ab"); err != nil {
 		t.Fatal(err)
+	}
+	// Also try deleting a non-existent key and verify that no key is
+	// returned.
+	if deletedKeys, err := db.Del(context.Background(), "ad"); err != nil {
+		t.Fatal(err)
+	} else if len(deletedKeys) > 0 {
+		t.Errorf("expected deleted key to be empty when deleting a non-existent key, got %v", deletedKeys)
 	}
 	rows, err := db.Scan(context.Background(), "a", "b", 100)
 	if err != nil {
@@ -652,7 +659,8 @@ func TestDBDecommissionedOperations(t *testing.T) {
 		op   func() error
 	}{
 		{"Del", func() error {
-			return db.Del(ctx, key)
+			_, err := db.Del(ctx, key)
+			return err
 		}},
 		{"DelRange", func() error {
 			_, err := db.DelRange(ctx, key, keyEnd, false)

@@ -249,10 +249,29 @@ SET tracing = off
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%DelRange%' OR message LIKE '%sending batch%'
+WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
-batch flow coordinator  DelRange /Table/110/1/5 - /Table/110/1/6
-dist sender send        r52: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+batch flow coordinator  Del /Table/110/1/5/0
+dist sender send        r52: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+
+# Ensure that we send DelRanges when doing a point delete operation on a table
+# that has multiple column families.
+
+statement ok
+CREATE TABLE multicf (a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b))
+
+statement ok
+SELECT * FROM multicf
+
+statement ok
+SET tracing = on,kv; DELETE FROM multicf WHERE a = 5; SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
+----
+batch flow coordinator  DelRange /Table/111/1/5 - /Table/111/1/6
+dist sender send        r52: sending batch 1 DelRng to (n1,s1):1
 
 statement ok
 CREATE TABLE xyz (

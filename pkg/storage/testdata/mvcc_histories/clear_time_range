@@ -34,6 +34,11 @@ del k=i ts=4
 put k=k ts=5 v=k5
 put_rangekey k=m end=n ts=3 localTs=2
 ----
+del: "a": found key true
+del: "b": found key false
+del: "f": found key true
+del: "g": found key false
+del: "i": found key true
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -89,6 +94,11 @@ del k=i ts=4
 put k=k ts=5 v=k5
 put_rangekey k=m end=n ts=3 localTs=2
 ----
+del: "a": found key true
+del: "b": found key false
+del: "f": found key true
+del: "g": found key false
+del: "i": found key true
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -272,6 +282,11 @@ del k=i ts=4
 put k=k ts=5 v=k5
 put_rangekey k=m end=n ts=3 localTs=2
 ----
+del: "a": found key true
+del: "b": found key false
+del: "f": found key true
+del: "g": found key false
+del: "i": found key true
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -835,6 +850,11 @@ del k=i ts=4
 put k=k ts=5 v=k5
 put_rangekey k=m end=n ts=3 localTs=2
 ----
+del: "a": found key true
+del: "b": found key false
+del: "f": found key true
+del: "g": found key false
+del: "i": found key true
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
