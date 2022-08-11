@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -118,6 +119,7 @@ func (ex *connExecutor) recordStatementSummary(
 	rowsAffected int,
 	stmtErr error,
 	stats topLevelQueryStats,
+	queryLevelStats *execstats.QueryLevelStats,
 ) roachpb.StmtFingerprintID {
 	phaseTimes := ex.statsCollector.PhaseTimes()
 
@@ -196,6 +198,7 @@ func (ex *connExecutor) recordStatementSummary(
 		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerEndExecStmt),
 		FullScan:             fullScan,
 		SessionData:          planner.SessionData(),
+		ExecStats:            queryLevelStats,
 	}
 
 	stmtFingerprintID, err :=

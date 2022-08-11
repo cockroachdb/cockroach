@@ -6313,7 +6313,8 @@ CREATE TABLE crdb_internal.%s (
 	priority                   FLOAT NOT NULL,
 	retries                    INT8 NOT NULL,
 	last_retry_reason          STRING,
-	exec_node_ids              INT[] NOT NULL
+	exec_node_ids              INT[] NOT NULL,
+	contention                 INTERVAL
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -6380,6 +6381,14 @@ func populateExecutionInsights(
 			autoRetryReason = tree.NewDString(insight.Statement.AutoRetryReason)
 		}
 
+		contentionTime := tree.DNull
+		if insight.Statement.Contention != nil {
+			contentionTime = tree.NewDInterval(
+				duration.MakeDuration(insight.Statement.Contention.Nanoseconds(), 0, 0),
+				types.DefaultIntervalTypeMetadata,
+			)
+		}
+
 		err = errors.CombineErrors(err, addRow(
 			tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
 			tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
@@ -6401,6 +6410,7 @@ func populateExecutionInsights(
 			tree.NewDInt(tree.DInt(insight.Statement.Retries)),
 			autoRetryReason,
 			execNodeIDs,
+			contentionTime,
 		))
 	}
 	return

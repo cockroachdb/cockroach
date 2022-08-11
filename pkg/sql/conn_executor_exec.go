@@ -1195,7 +1195,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	populateQueryLevelStats(ctx, planner)
+	queryLevelStats := populateQueryLevelStats(ctx, planner)
 
 	// Set index recommendations so it can be saved on statement statistics.
 	planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner)
@@ -1204,7 +1204,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// plan has not been closed earlier.
 	stmtFingerprintID = ex.recordStatementSummary(
 		ctx, planner,
-		int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
+		int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats, queryLevelStats,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -1221,10 +1221,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // populates it in the instrumentationHelper's queryLevelStatsWithErr field.
 // Query-level execution statistics are collected using the statement's trace
 // and the plan's flow metadata.
-func populateQueryLevelStats(ctx context.Context, p *planner) {
+func populateQueryLevelStats(ctx context.Context, p *planner) (queryStats *execstats.QueryLevelStats) {
 	ih := &p.instrumentation
 	if _, ok := ih.Tracing(); !ok {
-		return
+		return nil
 	}
 	// Get the query-level stats.
 	var flowsMetadata []*execstats.FlowsMetadata
@@ -1242,7 +1242,10 @@ func populateQueryLevelStats(ctx context.Context, p *planner) {
 			panic(fmt.Sprintf(msg, ih.fingerprint, err))
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
+		return nil
 	}
+
+	return &queryLevelStats
 }
 
 type txnRowsWrittenLimitErr struct {

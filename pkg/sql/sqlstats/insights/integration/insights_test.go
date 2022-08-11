@@ -12,8 +12,10 @@ package integration
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,4 +101,82 @@ func TestInsightsIntegration(t *testing.T) {
 
 		return nil
 	}, 1*time.Second)
+}
+
+func TestInsightsIntegrationForContention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+
+	conn.Exec("SET tracing = true;")
+	conn.Exec("SET cluster setting sql.txn_stats.sample_rate  = 1;")
+	conn.Exec("CREATE TABLE t (id string, s string);")
+	conn.Exec("INSERT INTO t (id, s) VALUES ('test', 'originalValue');")
+
+	// Enable detection by setting a latencyThreshold > 0.
+	latencyThreshold := 250 * time.Millisecond
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+
+	// Create a new connection, and then in a go routine have it start a transaction, update a row,
+	// then sleep for a time then complete the transaction.
+	// With original connection attempt to update the same row being updated concurrently in the separate go routine.
+	// this will be blocked until the original transaction completes.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go updateRowWithDelay(conn, &ctx, t, &wg)
+
+	start := time.Now()
+	wg.Wait()
+
+	time.Sleep(200 * time.Millisecond)
+
+	// This will be blocked until the updateRowWithDelay finishes.
+	_, err := conn.ExecContext(ctx, "UPDATE t SET s = 'mainThread' where id = 'test';")
+	require.NoError(t, err)
+	end := time.Now()
+	require.GreaterOrEqual(t, end.Sub(start), 1*time.Second)
+
+	// Verify the table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		row := conn.QueryRowContext(ctx, "SELECT "+
+			"query, "+
+			"contention::FLOAT "+
+			"FROM crdb_internal.node_execution_insights where query like 'UPDATE t SET s =%'")
+
+		var contentionFromQuery float64
+		var queryText string
+		err = row.Scan(&queryText, &contentionFromQuery)
+
+		require.NoError(t, err)
+		log.Infof(ctx, "%s, %s", queryText, contentionFromQuery)
+		require.GreaterOrEqual(
+			t,
+			contentionFromQuery,
+			.5,
+			"Contention time should be greater than .5 since block is delayed by 1 second in updateRowWithDelay",
+			queryText,
+			contentionFromQuery)
+
+		return nil
+	}, 1*time.Second)
+}
+
+func updateRowWithDelay(conn *sql.DB, ctx *context.Context, t *testing.T, wg *sync.WaitGroup) {
+	tx, err := conn.BeginTx(*ctx, &sql.TxOptions{})
+
+	_, err = tx.ExecContext(*ctx, "UPDATE t SET s = 'backgroundUpdate' where id = 'test';")
+	require.NoError(t, err)
+	wg.Done()
+	_, err = tx.ExecContext(*ctx, "select pg_sleep(1);")
+	require.NoError(t, err)
+
+	err = tx.Commit()
+	require.NoError(t, err)
 }
