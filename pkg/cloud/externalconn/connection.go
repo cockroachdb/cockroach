@@ -45,4 +45,4 @@ type ExternalConnection interface {
 // for an external resource, and returns the ExternalConnection representation
 // of that URI.
 type connectionParserFactory func(ctx context.Context, execCfg interface{},
-	user username.SQLUsername, uri *url.URL) (ExternalConnection, error)
+	user username.SQLUsername, url *url.URL) (ExternalConnection, error)
