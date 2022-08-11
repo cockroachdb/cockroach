@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -613,29 +612,6 @@ func (ca *changeAggregator) flushFrontier() error {
 }
 
 func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
-	// TODO(smiskin): Remove post-22.2
-	if !ca.flowCtx.Cfg.Settings.Version.IsActive(ca.Ctx, clusterversion.ChangefeedIdleness) {
-		for _, resolved := range batch.ResolvedSpans {
-			resolvedBytes, err := protoutil.Marshal(&resolved)
-			if err != nil {
-				return err
-			}
-
-			// Enqueue a row to be returned that indicates some span-level resolved
-			// timestamp has advanced. If any rows were queued in `sink`, they must
-			// be emitted first.
-			ca.resolvedSpanBuf.Push(rowenc.EncDatumRow{
-				rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(resolvedBytes))},
-				rowenc.EncDatum{Datum: tree.DNull}, // topic
-				rowenc.EncDatum{Datum: tree.DNull}, // key
-				rowenc.EncDatum{Datum: tree.DNull}, // value
-			})
-			ca.metrics.ResolvedMessages.Inc(1)
-		}
-
-		return nil
-	}
-
 	progressUpdate := jobspb.ResolvedSpans{
 		ResolvedSpans: batch.ResolvedSpans,
 		Stats: jobspb.ResolvedSpans_Stats{
@@ -1128,24 +1104,12 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 	}
 
 	var resolvedSpans jobspb.ResolvedSpans
-	if cf.flowCtx.Cfg.Settings.Version.IsActive(cf.Ctx, clusterversion.ChangefeedIdleness) {
-		if err := protoutil.Unmarshal([]byte(*raw), &resolvedSpans); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err,
-				`unmarshalling aggregator progress update: %x`, raw)
-		}
-
-		cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
-	} else { // TODO(smiskin): Remove post-22.2
-		// Progress used to be sent as individual ResolvedSpans
-		var resolved jobspb.ResolvedSpan
-		if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err,
-				`unmarshalling resolved span: %x`, raw)
-		}
-		resolvedSpans = jobspb.ResolvedSpans{
-			ResolvedSpans: []jobspb.ResolvedSpan{resolved},
-		}
+	if err := protoutil.Unmarshal([]byte(*raw), &resolvedSpans); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			`unmarshalling aggregator progress update: %x`, raw)
 	}
+
+	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
 	for _, resolved := range resolvedSpans.ResolvedSpans {
 		// Inserting a timestamp less than the one the changefeed flow started at
