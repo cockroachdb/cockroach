@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -45,6 +46,20 @@ const CopyBatchRowSizeDefault = 100
 
 // When this many rows are in the copy buffer, they are inserted.
 var copyBatchRowSize = util.ConstantWithMetamorphicTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 10000)
+
+// CopyFromAtomic is a cluster setting that allows 22.2 users to opt-in to broken
+// 22.1 behavior where COPY FROM operations under auto-commit implicit
+// transaction control were not-atomic and segemented into separate transactions
+// in copyBatchRowSize chunks.
+var CopyFromAtomic = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.copyfrom.atomic.enabled",
+	"if true COPY FROM insertions done under an implicit transaction are atomic, "+
+		"large atomic COPY FROM operations may cause concurrent transaction contention, setting "+
+		"this to false will cause COPY insertions are to be committed in 100 row batches",
+		"that are not transactional"
+	true,
+)
 
 type copyMachineInterface interface {
 	run(ctx context.Context) error
@@ -120,9 +135,12 @@ type copyMachine struct {
 	// other things that statements more generally need.
 	parsingEvalCtx *eval.Context
 
-	processRows func(ctx context.Context) error
+	processRows func(ctx context.Context, finalBatch bool) error
 
 	scratchRow []tree.Datum
+
+	// For testing we want to be able to override this on the instance level.
+	copyBatchRowSize int
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -150,7 +168,7 @@ func newCopyMachine(
 
 	// We need a planner to do the initial planning, in addition
 	// to those used for the main execution of the COPY afterwards.
-	cleanup := c.p.preparePlannerForCopy(ctx, txnOpt)
+	cleanup := c.p.preparePlannerForCopy(ctx, txnOpt, false /*finalBatch*/)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
@@ -278,6 +296,7 @@ func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMo
 	c.copyMon.StartNoReserved(ctx, parentMon)
 	c.bufMemAcc = c.copyMon.MakeBoundAccount()
 	c.rowsMemAcc = c.copyMon.MakeBoundAccount()
+	c.copyBatchRowSize = copyBatchRowSize
 }
 
 // copyTxnOpt contains information about the transaction in which the copying
@@ -451,10 +470,10 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
-	if ln := c.rows.Len(); !final && (ln == 0 || ln < copyBatchRowSize) {
+	if ln := c.rows.Len(); !final && (ln == 0 || ln < c.copyBatchRowSize) {
 		return nil
 	}
-	return c.processRows(ctx)
+	return c.processRows(ctx, final)
 }
 
 func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, err error) {
@@ -577,8 +596,7 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) err
 
 		datums[i] = d
 	}
-	_, err := c.rows.AddRow(ctx, datums)
-	if err != nil {
+	if _, err := c.rows.AddRow(ctx, datums); err != nil {
 		return err
 	}
 	return nil
@@ -710,7 +728,7 @@ func (c *copyMachine) readBinarySignature() ([]byte, error) {
 // an error. If an error is passed in to the cleanup function, the
 // same error is returned.
 func (p *planner) preparePlannerForCopy(
-	ctx context.Context, txnOpt copyTxnOpt,
+	ctx context.Context, txnOpt copyTxnOpt, finalBatch bool,
 ) func(context.Context, error) error {
 	txn := txnOpt.txn
 	txnTs := txnOpt.txnTimestamp
@@ -723,7 +741,7 @@ func (p *planner) preparePlannerForCopy(
 		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, sessiondatapb.Normal)
 		txnTs = p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
-		autoCommit = true
+		autoCommit = !CopyFromAtomic.Get(p.ExecCfg().SV()) || finalBatch
 	}
 	txnOpt.resetPlanner(ctx, p, txn, txnTs, stmtTs)
 	p.autoCommit = autoCommit
@@ -749,11 +767,11 @@ func (p *planner) preparePlannerForCopy(
 }
 
 // insertRows transforms the buffered rows into an insertNode and executes it.
-func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
+func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) (retErr error) {
 	if c.rows.Len() == 0 {
 		return nil
 	}
-	cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt)
+	cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt, finalBatch)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
