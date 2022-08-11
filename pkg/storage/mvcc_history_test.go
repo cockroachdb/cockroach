@@ -81,7 +81,7 @@ var (
 // cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [noCoveredStats]
+// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [idempotent] [noCoveredStats]
 // del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
@@ -1055,6 +1055,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
+	idempotent := e.hasArg("idempotent")
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
@@ -1070,7 +1071,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	}
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, 0, msCovered)
+		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, idempotent, 0, msCovered)
 	})
 }
 

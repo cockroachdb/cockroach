@@ -181,7 +181,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 		if len(endKey) > 0 {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
-				ctx, eng, nil, key, endKey, ts, localTS, nil, nil, 0, nil))
+				ctx, eng, nil, key, endKey, ts, localTS, nil, nil, false, 0, nil))
 		} else {
 			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, ts, localTS, value, nil))
 		}

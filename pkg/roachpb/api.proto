@@ -378,6 +378,12 @@ message DeleteRangeRequest {
   // The caller must check the MVCCRangeTombstones version gate before using
   // this parameter, as it is new in 22.2.
   bool use_range_tombstone = 5;
+  // If enabled together with UseRangeTombstone, the MVCC range tombstone will
+  // only be written if there exists point key/tombstones in the span that
+  // aren't already covered by an MVCC range tombstone. As a convenience, it
+  // considers empty spans equivalent to being covered by an MVCC range
+  // tombstone, so it will omit the write across an entirely empty span too.
+  bool idempotent_tombstone = 7;
 
   DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = false];
 }

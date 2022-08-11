@@ -921,7 +921,7 @@ func TestEvalAddSSTable(t *testing.T) {
 								require.NoError(t, err)
 								require.True(t, v.IsTombstone(), "MVCC range keys must be tombstones")
 								require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
-									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, 0, nil))
+									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, false, 0, nil))
 							default:
 								t.Fatalf("unknown KV type %T", kv)
 							}
