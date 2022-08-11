@@ -1861,6 +1861,13 @@ func (t *T) SQLString() string {
 		if t.Oid() == oid.T_anyenum {
 			return "anyenum"
 		}
+		// We do not expect to be in a situation where we want to format a
+		// user-defined type to a string and do not have the TypeMeta hydrated,
+		// but there have been bugs in the past, and returning a less informative
+		// string is better than a nil-pointer panic.
+		if t.TypeMeta.Name == nil {
+			return fmt.Sprintf("@%d", t.Oid())
+		}
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
