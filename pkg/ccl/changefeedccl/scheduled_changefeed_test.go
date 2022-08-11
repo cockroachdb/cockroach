@@ -327,16 +327,6 @@ func TestCreateChangefeedScheduleIfNotExists(t *testing.T) {
 
 	const selectQuery = "SELECT label FROM [SHOW SCHEDULES FOR CHANGEFEED]"
 
-	if th.cfg == nil {
-		t.Log("cfg")
-		t.FailNow()
-	}
-
-	if th.cfg.InternalExecutor == nil {
-		t.Log("InternalExecutor")
-		t.FailNow()
-	}
-
 	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
 		context.Background(), "check-sched", nil,
 		sessiondata.RootUserSessionDataOverride,
@@ -453,7 +443,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		{
 			name: "changefeed-expressions",
 			// key_in_value is only need here to make the webhookFeed work.
-			scheduleStmt: "CREATE SCHEDULE FOR CHANGEFEED INTO $1 WITH key_in_value, initial_scan='only', schema_change_policy='stop' AS SELECT b FROM t1 RECURRING '@hourly'",
+			scheduleStmt: "CREATE SCHEDULE FOR CHANGEFEED INTO $1 WITH key_in_value, topic_in_value, initial_scan='only', schema_change_policy='stop' AS SELECT b FROM t1 RECURRING '@hourly'",
 			expectedPayload: []string{
 				`t1: [1]->{"b": "one"}`,
 				`t1: [10]->{"b": "ten"}`,
