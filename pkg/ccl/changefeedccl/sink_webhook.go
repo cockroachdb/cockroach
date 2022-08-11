@@ -299,12 +299,9 @@ func makeWebhookSink(
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if encodingOpts.Envelope != changefeedbase.OptEnvelopeBare && !encodingOpts.KeyInValue {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
-	}
-
-	if !encodingOpts.TopicInValue {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptTopicInValue)
+	if encodingOpts.Envelope != changefeedbase.OptEnvelopeBare {
+		encodingOpts.KeyInValue = true
+		encodingOpts.TopicInValue = true
 	}
 
 	var connTimeout time.Duration

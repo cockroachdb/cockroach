@@ -12,7 +12,6 @@ package amazon
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
@@ -21,27 +20,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func parseAndValidateS3ConnectionURI(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL,
-) (externalconn.ExternalConnection, error) {
-	if err := utils.CheckExternalStorageConnection(ctx, execCfg, user, uri.String()); err != nil {
-		return nil, errors.Wrap(err, "failed to create s3 external connection")
+func validateS3ConnectionURI(
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
+) error {
+	if err := utils.CheckExternalStorageConnection(ctx, execCfg, user, uri); err != nil {
+		return errors.Wrap(err, "failed to create s3 external connection")
 	}
 
-	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_s3,
-		Details: &connectionpb.ConnectionDetails_SimpleURI{
-			SimpleURI: &connectionpb.SimpleURI{
-				URI: uri.String(),
-			},
-		},
-	}
-	return externalconn.NewExternalConnection(connDetails), nil
+	return nil
 }
 
 func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
 		scheme,
-		parseAndValidateS3ConnectionURI,
+		connectionpb.ConnectionProvider_s3,
+		externalconn.SimpleURIFactory,
 	)
+
+	externalconn.RegisterDefaultValidation(scheme, validateS3ConnectionURI)
 }

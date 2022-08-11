@@ -514,12 +514,13 @@ type updateArgsFn func(args *base.TestServerArgs)
 type updateKnobsFn func(knobs *base.TestingKnobs)
 
 type feedTestOptions struct {
-	useTenant         bool
-	argsFn            updateArgsFn
-	knobsFn           updateKnobsFn
-	externalIODir     string
-	allowedSinkTypes  []string
-	disabledSinkTypes []string
+	useTenant                    bool
+	forceNoExternalConnectionURI bool
+	argsFn                       updateArgsFn
+	knobsFn                      updateKnobsFn
+	externalIODir                string
+	allowedSinkTypes             []string
+	disabledSinkTypes            []string
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -527,6 +528,11 @@ type feedTestOption func(opts *feedTestOptions)
 // feedTestNoTenants is a feedTestOption that will prohibit this tests
 // from randomly running on a tenant.
 var feedTestNoTenants = func(opts *feedTestOptions) { opts.useTenant = false }
+
+// feedTestNoExternalConnection is a feedTestOption that will prohibit this test
+// from randomly creating an external connection URI and providing that as the sink
+// rather than directly specifying it. (Feed tests never actually connect to anything external.)
+var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExternalConnectionURI = true }
 
 var feedTestForceSink = func(sinkType string) feedTestOption {
 	return feedTestRestrictSinks(sinkType)
@@ -918,12 +924,40 @@ func cdcTestNamedWithSystem(
 	t.Run(testLabel, func(t *testing.T) {
 		testServer, cleanupServer := makeServerWithOptions(t, options)
 		feedFactory, cleanupSink := makeFeedFactoryWithOptions(t, sinkType, testServer.Server, testServer.DB, options)
+		feedFactory = maybeUseExternalConnection(feedFactory, testServer.DB, sinkType, options, t)
 		defer cleanupServer()
 		defer cleanupSink()
 		defer cleanupCloudStorage()
-
 		testFn(t, testServer, feedFactory)
 	})
+}
+
+// TODO (zinger): These sometimes error when using external connections,
+// with either an ordering constraint violation or an unexpected null -> null message.
+// This is likely due to the notifyFlushSink being set up in a subtly wrong way.
+// Fix and remove this constant.
+const flakyWhenExternalConnection = `webhook, pubsub`
+
+func maybeUseExternalConnection(
+	factory cdctest.TestFeedFactory,
+	db *gosql.DB,
+	sinkType string,
+	options feedTestOptions,
+	logger *testing.T,
+) cdctest.TestFeedFactory {
+	// percentExternal is the chance of randomly running a test using an `external://` uri.
+	// Set to 1 to always do this.
+	// TODO (zinger): Set this to 0.5 before merging.
+	const percentExternal = 1
+	if sinkType == `sinkless` || sinkType == `enterprise` || strings.Contains(flakyWhenExternalConnection, sinkType) ||
+		options.forceNoExternalConnectionURI || rand.Float32() > percentExternal {
+		return factory
+	}
+	return &externalConnectionFeedFactory{
+		TestFeedFactory: factory,
+		db:              db,
+		logger:          logger,
+	}
 }
 
 func forceTableGC(

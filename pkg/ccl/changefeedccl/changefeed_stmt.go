@@ -579,6 +579,10 @@ func createChangefeedJobRecord(
 		telemetry.Count(telemetryPath + `.enterprise`)
 	}
 
+	// TODO (zinger): validateSink shouldn't need details, remove that so we only
+	// need to have this line once.
+	details.Opts = opts.AsMap()
+
 	// In the case where a user is executing a CREATE CHANGEFEED and is still
 	// waiting for the statement to return, we take the opportunity to ensure
 	// that the user has not made any obvious errors when specifying the sink in
@@ -772,7 +776,7 @@ func validateSink(
 		return err
 	}
 	var nilOracle timestampLowerBoundOracle
-	canarySink, err := getSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
+	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
 		nilOracle, p.User(), jobID, sli)
 	if err != nil {
 		return err

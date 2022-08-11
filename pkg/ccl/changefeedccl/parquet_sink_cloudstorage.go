@@ -63,6 +63,10 @@ type parquetCloudStorageSink struct {
 	compression parquet.CompressionCodec
 }
 
+func (parquetSink *parquetCloudStorageSink) getConcreteType() sinkType {
+	return parquetSink.wrapped.getConcreteType()
+}
+
 type parquetFileWriter struct {
 	parquetWriter  *goparquet.FileWriter
 	schema         *parquetschema.SchemaDefinition

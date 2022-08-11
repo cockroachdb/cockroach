@@ -12,7 +12,6 @@ package azure
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
@@ -21,32 +20,28 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func parseAndValidateAzureConnectionURI(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL,
-) (externalconn.ExternalConnection, error) {
-	if err := utils.CheckExternalStorageConnection(ctx, execCfg, user, uri.String()); err != nil {
-		return nil, errors.Wrap(err, "failed to create azure external connection")
+func validateAzureConnectionURI(
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
+) error {
+	if err := utils.CheckExternalStorageConnection(ctx, execCfg, user, uri); err != nil {
+		return errors.Wrap(err, "failed to create azure external connection")
 	}
-
-	connDetails := connectionpb.ConnectionDetails{
-		Provider: connectionpb.ConnectionProvider_azure_storage,
-		Details: &connectionpb.ConnectionDetails_SimpleURI{
-			SimpleURI: &connectionpb.SimpleURI{
-				URI: uri.String(),
-			},
-		},
-	}
-	return externalconn.NewExternalConnection(connDetails), nil
+	return nil
 }
 
 func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
 		scheme,
-		parseAndValidateAzureConnectionURI,
+		connectionpb.ConnectionProvider_azure_storage,
+		externalconn.SimpleURIFactory,
 	)
 
 	externalconn.RegisterConnectionDetailsFromURIFactory(
 		deprecatedExternalConnectionScheme,
-		parseAndValidateAzureConnectionURI,
+		connectionpb.ConnectionProvider_azure_storage,
+		externalconn.SimpleURIFactory,
 	)
+
+	externalconn.RegisterDefaultValidation(scheme, validateAzureConnectionURI)
+	externalconn.RegisterDefaultValidation(deprecatedExternalConnectionScheme, validateAzureConnectionURI)
 }
