@@ -91,10 +91,10 @@ var _ DeDupingRowContainer = &DiskRowContainer{}
 // MakeDiskRowContainer creates a DiskRowContainer with the given engine as the
 // underlying store that rows are stored on.
 // Arguments:
-// 	- diskMonitor is used to monitor this DiskRowContainer's disk usage.
-// 	- types is the schema of rows that will be added to this container.
-// 	- ordering is the output ordering; the order in which rows should be sorted.
-// 	- e is the underlying store that rows are stored on.
+//   - diskMonitor is used to monitor this DiskRowContainer's disk usage.
+//   - types is the schema of rows that will be added to this container.
+//   - ordering is the output ordering; the order in which rows should be sorted.
+//   - e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
 	diskMonitor *mon.BytesMonitor,
 	types []*types.T,
@@ -443,7 +443,7 @@ func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}
 }
 
-//NewIterator is part of the SortableRowContainer interface.
+// NewIterator is part of the SortableRowContainer interface.
 func (d *DiskRowContainer) NewIterator(ctx context.Context) RowIterator {
 	i := d.newIterator(ctx)
 	if d.topK > 0 {

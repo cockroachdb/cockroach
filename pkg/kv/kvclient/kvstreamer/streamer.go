@@ -160,34 +160,34 @@ func (r Result) Release(ctx context.Context) {
 //
 // The example usage is roughly as follows:
 //
-//  s := NewStreamer(...)
-//  s.Init(OperationMode, Hints)
-//  ...
-//  for needMoreKVs {
-//    // Check whether there are results to the previously enqueued requests.
-//    // This will block if no results are available, but there are some
-//    // enqueued requests.
-//    results, err := s.GetResults(ctx)
-//    // err check
-//    ...
-//    if len(results) > 0 {
-//      processResults(results)
-//      // return to the client
-//      ...
-//      // when results are no longer needed, Release() them
-//    }
-//    // All previously enqueued requests have already been responded to.
-//    if moreRequestsToEnqueue {
-//      err := s.Enqueue(ctx, requests)
-//      // err check
-//      ...
-//    } else {
-//      // done
-//      ...
-//    }
-//  }
-//  ...
-//  s.Close()
+//	s := NewStreamer(...)
+//	s.Init(OperationMode, Hints)
+//	...
+//	for needMoreKVs {
+//	  // Check whether there are results to the previously enqueued requests.
+//	  // This will block if no results are available, but there are some
+//	  // enqueued requests.
+//	  results, err := s.GetResults(ctx)
+//	  // err check
+//	  ...
+//	  if len(results) > 0 {
+//	    processResults(results)
+//	    // return to the client
+//	    ...
+//	    // when results are no longer needed, Release() them
+//	  }
+//	  // All previously enqueued requests have already been responded to.
+//	  if moreRequestsToEnqueue {
+//	    err := s.Enqueue(ctx, requests)
+//	    // err check
+//	    ...
+//	  } else {
+//	    // done
+//	    ...
+//	  }
+//	}
+//	...
+//	s.Close()
 //
 // The Streamer builds on top of the BatchRequest API provided by the DistSender
 // and aims to allow for executing the requests in parallel (to improve the
@@ -432,7 +432,8 @@ func (s *Streamer) Init(
 // will be sorted in the order of the lookup index if the index contains only
 // ascending columns.
 // TODO(drewk): lift the restriction that index columns must be ASC in order to
-//  return results in lookup order.
+//
+//	return results in lookup order.
 //
 // It is the caller's responsibility to ensure that the memory footprint of reqs
 // (i.e. roachpb.Spans inside of the requests) is reasonable. Enqueue will

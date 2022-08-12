@@ -17,8 +17,8 @@ import (
 
 // tokenBucket implements a token bucket. It is a more specialized form of
 // quotapool.TokenBucket. The main differences are:
-//  - it does not currently support a burst limit;
-//  - it has special debt handling.
+//   - it does not currently support a burst limit;
+//   - it has special debt handling.
 //
 // -- Debt handling --
 //
@@ -47,17 +47,17 @@ import (
 // much it can vary, imagine that at time t=0 we incur some debt D(0) and
 // consider the two extremes:
 //
-//   A. We start with debt D(0), and we never recalculate the rate (no
-//      "refinancing"). We apply debt at constant rate D(0) / T and all debt is
-//      paid at time T.
+//	A. We start with debt D(0), and we never recalculate the rate (no
+//	   "refinancing"). We apply debt at constant rate D(0) / T and all debt is
+//	   paid at time T.
 //
-//   B. We start with debt D(0), and we recalculate the rate ("refinance")
-//      continuously (or, more intuitively, every nanosecond).  The
-//      instantaneous rate is:
-//        D'(t) = - D(t) / T
-//      The debt formula is:
-//        D(t) = D(0) * e^(-t/T)
-//      We apply 63% of the debt in time T; 86% in 2T; and 95% in 3T.
+//	B. We start with debt D(0), and we recalculate the rate ("refinance")
+//	   continuously (or, more intuitively, every nanosecond).  The
+//	   instantaneous rate is:
+//	     D'(t) = - D(t) / T
+//	   The debt formula is:
+//	     D(t) = D(0) * e^(-t/T)
+//	   We apply 63% of the debt in time T; 86% in 2T; and 95% in 3T.
 //
 // The difference between these two extremes is reasonable - we apply between
 // 63% and 100% of the debt in time T, depending on the usage pattern.

@@ -967,7 +967,7 @@ CREATE TABLE pg_catalog.pg_statistic_ext (
 	stxkind "char"[]
 )`
 
-//PgCatalogSequences is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogSequences is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogSequences = `
 CREATE TABLE pg_catalog.pg_sequences (
 	schemaname NAME,
@@ -983,7 +983,7 @@ CREATE TABLE pg_catalog.pg_sequences (
 	last_value INT
 )`
 
-//PgCatalogStatDatabaseConflicts is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatDatabaseConflicts is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatDatabaseConflicts = `
 CREATE TABLE pg_catalog.pg_stat_database_conflicts (
 	datid OID,
@@ -995,14 +995,14 @@ CREATE TABLE pg_catalog.pg_stat_database_conflicts (
 	confl_deadlock INT
 )`
 
-//PgCatalogReplicationOrigin is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogReplicationOrigin is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogReplicationOrigin = `
 CREATE TABLE pg_catalog.pg_replication_origin (
 	roident OID,
 	roname STRING
 )`
 
-//PgCatalogStatistic is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatistic is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatistic = `
 CREATE TABLE pg_catalog.pg_statistic (
 	starelid OID,
@@ -1038,7 +1038,7 @@ CREATE TABLE pg_catalog.pg_statistic (
 	stavalues5 STRING[]
 )`
 
-//PgCatalogStatXactSysTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatXactSysTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatXactSysTables = `
 CREATE TABLE pg_catalog.pg_stat_xact_sys_tables (
 	relid OID,
@@ -1054,7 +1054,7 @@ CREATE TABLE pg_catalog.pg_stat_xact_sys_tables (
 	n_tup_hot_upd INT
 )`
 
-//PgCatalogAmop is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogAmop is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogAmop = `
 CREATE TABLE pg_catalog.pg_amop (
 	oid OID,
@@ -1068,7 +1068,7 @@ CREATE TABLE pg_catalog.pg_amop (
 	amopsortfamily OID
 )`
 
-//PgCatalogStatProgressVacuum is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatProgressVacuum is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatProgressVacuum = `
 CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
 	pid INT4,
@@ -1084,7 +1084,7 @@ CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
 	num_dead_tuples INT
 )`
 
-//PgCatalogStatSysIndexes is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatSysIndexes is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatSysIndexes = `
 CREATE TABLE pg_catalog.pg_stat_sys_indexes (
 	relid OID,
@@ -1097,7 +1097,7 @@ CREATE TABLE pg_catalog.pg_stat_sys_indexes (
 	idx_tup_fetch INT
 )`
 
-//PgCatalogStatioAllTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioAllTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioAllTables = `
 CREATE TABLE pg_catalog.pg_statio_all_tables (
 	relid OID,
@@ -1113,7 +1113,7 @@ CREATE TABLE pg_catalog.pg_statio_all_tables (
 	tidx_blks_hit INT
 )`
 
-//PgCatalogTsTemplate is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTsTemplate is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTsTemplate = `
 CREATE TABLE pg_catalog.pg_ts_template (
 	oid OID,
@@ -1123,7 +1123,7 @@ CREATE TABLE pg_catalog.pg_ts_template (
 	tmpllexize REGPROC
 )`
 
-//PgCatalogPublicationRel is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPublicationRel is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPublicationRel = `
 CREATE TABLE pg_catalog.pg_publication_rel (
 	oid OID,
@@ -1131,7 +1131,7 @@ CREATE TABLE pg_catalog.pg_publication_rel (
 	prrelid OID
 )`
 
-//PgCatalogAvailableExtensionVersions is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogAvailableExtensionVersions is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogAvailableExtensionVersions = `
 CREATE TABLE pg_catalog.pg_available_extension_versions (
 	name NAME,
@@ -1145,7 +1145,7 @@ CREATE TABLE pg_catalog.pg_available_extension_versions (
 	comment STRING
 )`
 
-//PgCatalogStatReplication is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatReplication is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatReplication = `
 CREATE TABLE pg_catalog.pg_stat_replication (
 	pid INT4,
@@ -1170,7 +1170,7 @@ CREATE TABLE pg_catalog.pg_stat_replication (
 	reply_time TIMESTAMPTZ
 )`
 
-//PgCatalogOpfamily is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogOpfamily is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogOpfamily = `
 CREATE TABLE pg_catalog.pg_opfamily (
 	oid OID,
@@ -1180,7 +1180,7 @@ CREATE TABLE pg_catalog.pg_opfamily (
 	opfowner OID
 )`
 
-//PgCatalogStatioAllSequences is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioAllSequences is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioAllSequences = `
 CREATE TABLE pg_catalog.pg_statio_all_sequences (
 	relid OID,
@@ -1190,7 +1190,7 @@ CREATE TABLE pg_catalog.pg_statio_all_sequences (
 	blks_hit INT
 )`
 
-//PgCatalogInitPrivs is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogInitPrivs is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogInitPrivs = `
 CREATE TABLE pg_catalog.pg_init_privs (
 	objoid OID,
@@ -1200,7 +1200,7 @@ CREATE TABLE pg_catalog.pg_init_privs (
 	initprivs STRING[]
 )`
 
-//PgCatalogStatProgressCreateIndex is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatProgressCreateIndex is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatProgressCreateIndex = `
 CREATE TABLE pg_catalog.pg_stat_progress_create_index (
 	pid INT4,
@@ -1221,7 +1221,7 @@ CREATE TABLE pg_catalog.pg_stat_progress_create_index (
 	partitions_done INT
 )`
 
-//PgCatalogUserMappings is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogUserMappings is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogUserMappings = `
 CREATE TABLE pg_catalog.pg_user_mappings (
 	umid OID,
@@ -1232,7 +1232,7 @@ CREATE TABLE pg_catalog.pg_user_mappings (
 	umoptions STRING[]
 )`
 
-//PgCatalogStatGssapi is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatGssapi is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatGssapi = `
 CREATE TABLE pg_catalog.pg_stat_gssapi (
 	pid INT4,
@@ -1241,7 +1241,7 @@ CREATE TABLE pg_catalog.pg_stat_gssapi (
 	encrypted BOOL
 )`
 
-//PgCatalogPolicies is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPolicies is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPolicies = `
 CREATE TABLE pg_catalog.pg_policies (
 	schemaname NAME,
@@ -1254,7 +1254,7 @@ CREATE TABLE pg_catalog.pg_policies (
 	with_check STRING
 )`
 
-//PgCatalogStatsExt is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatsExt is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatsExt = `
 CREATE TABLE pg_catalog.pg_stats_ext (
 	schemaname NAME,
@@ -1272,7 +1272,7 @@ CREATE TABLE pg_catalog.pg_stats_ext (
 	most_common_base_freqs FLOAT[]
 )`
 
-//PgCatalogTimezoneAbbrevs is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTimezoneAbbrevs is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTimezoneAbbrevs = `
 CREATE TABLE pg_catalog.pg_timezone_abbrevs (
 	abbrev STRING,
@@ -1280,7 +1280,7 @@ CREATE TABLE pg_catalog.pg_timezone_abbrevs (
 	is_dst BOOL
 )`
 
-//PgCatalogStatSysTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatSysTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatSysTables = `
 CREATE TABLE pg_catalog.pg_stat_sys_tables (
 	relid OID,
@@ -1308,7 +1308,7 @@ CREATE TABLE pg_catalog.pg_stat_sys_tables (
 	autoanalyze_count INT
 )`
 
-//PgCatalogStatioSysSequences is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioSysSequences is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioSysSequences = `
 CREATE TABLE pg_catalog.pg_statio_sys_sequences (
 	relid OID,
@@ -1318,7 +1318,7 @@ CREATE TABLE pg_catalog.pg_statio_sys_sequences (
 	blks_hit INT
 )`
 
-//PgCatalogStatDatabase is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatDatabase is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatDatabase = `
 CREATE TABLE pg_catalog.pg_stat_database (
 	datid OID,
@@ -1344,7 +1344,7 @@ CREATE TABLE pg_catalog.pg_stat_database (
 	stats_reset TIMESTAMPTZ
 )`
 
-//PgCatalogStatioUserIndexes is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioUserIndexes is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioUserIndexes = `
 CREATE TABLE pg_catalog.pg_statio_user_indexes (
 	relid OID,
@@ -1356,7 +1356,7 @@ CREATE TABLE pg_catalog.pg_statio_user_indexes (
 	idx_blks_hit INT
 )`
 
-//PgCatalogStatSsl is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatSsl is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatSsl = `
 CREATE TABLE pg_catalog.pg_stat_ssl (
 	pid INT4,
@@ -1370,7 +1370,7 @@ CREATE TABLE pg_catalog.pg_stat_ssl (
 	issuer_dn STRING
 )`
 
-//PgCatalogStatioAllIndexes is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioAllIndexes is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioAllIndexes = `
 CREATE TABLE pg_catalog.pg_statio_all_indexes (
 	relid OID,
@@ -1382,7 +1382,7 @@ CREATE TABLE pg_catalog.pg_statio_all_indexes (
 	idx_blks_hit INT
 )`
 
-//PgCatalogTsConfig is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTsConfig is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTsConfig = `
 CREATE TABLE pg_catalog.pg_ts_config (
 	oid OID,
@@ -1392,7 +1392,7 @@ CREATE TABLE pg_catalog.pg_ts_config (
 	cfgparser OID
 )`
 
-//PgCatalogStats is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStats is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStats = `
 CREATE TABLE pg_catalog.pg_stats (
 	schemaname NAME,
@@ -1411,7 +1411,7 @@ CREATE TABLE pg_catalog.pg_stats (
 	elem_count_histogram FLOAT4[]
 )`
 
-//PgCatalogStatAllTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatAllTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatAllTables = `
 CREATE TABLE pg_catalog.pg_stat_all_tables (
 	relid OID,
@@ -1439,7 +1439,7 @@ CREATE TABLE pg_catalog.pg_stat_all_tables (
 	autoanalyze_count INT
 )`
 
-//PgCatalogStatioSysTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioSysTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioSysTables = `
 CREATE TABLE pg_catalog.pg_statio_sys_tables (
 	relid OID,
@@ -1455,7 +1455,7 @@ CREATE TABLE pg_catalog.pg_statio_sys_tables (
 	tidx_blks_hit INT
 )`
 
-//PgCatalogStatXactUserFunctions is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatXactUserFunctions is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatXactUserFunctions = `
 CREATE TABLE pg_catalog.pg_stat_xact_user_functions (
 	funcid OID,
@@ -1466,7 +1466,7 @@ CREATE TABLE pg_catalog.pg_stat_xact_user_functions (
 	self_time FLOAT
 )`
 
-//PgCatalogStatUserFunctions is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatUserFunctions is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatUserFunctions = `
 CREATE TABLE pg_catalog.pg_stat_user_functions (
 	funcid OID,
@@ -1477,7 +1477,7 @@ CREATE TABLE pg_catalog.pg_stat_user_functions (
 	self_time FLOAT
 )`
 
-//PgCatalogStatProgressBasebackup is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatProgressBasebackup is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatProgressBasebackup = `
 CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
 	pid INT4,
@@ -1488,7 +1488,7 @@ CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
 	tablespaces_streamed INT
 )`
 
-//PgCatalogPolicy is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPolicy is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPolicy = `
 CREATE TABLE pg_catalog.pg_policy (
 	oid OID,
@@ -1501,7 +1501,7 @@ CREATE TABLE pg_catalog.pg_policy (
 	polwithcheck STRING
 )`
 
-//PgCatalogStatArchiver is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatArchiver is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatArchiver = `
 CREATE TABLE pg_catalog.pg_stat_archiver (
 	archived_count INT,
@@ -1513,7 +1513,7 @@ CREATE TABLE pg_catalog.pg_stat_archiver (
 	stats_reset TIMESTAMPTZ
 )`
 
-//PgCatalogStatXactAllTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatXactAllTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatXactAllTables = `
 CREATE TABLE pg_catalog.pg_stat_xact_all_tables (
 	relid OID,
@@ -1529,7 +1529,7 @@ CREATE TABLE pg_catalog.pg_stat_xact_all_tables (
 	n_tup_hot_upd INT
 )`
 
-//PgCatalogHbaFileRules is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogHbaFileRules is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogHbaFileRules = `
 CREATE TABLE pg_catalog.pg_hba_file_rules (
 	line_number INT4,
@@ -1543,7 +1543,7 @@ CREATE TABLE pg_catalog.pg_hba_file_rules (
 	error STRING
 )`
 
-//PgCatalogPublication is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPublication is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPublication = `
 CREATE TABLE pg_catalog.pg_publication (
 	oid OID,
@@ -1557,7 +1557,7 @@ CREATE TABLE pg_catalog.pg_publication (
 	pubviaroot BOOL
 )`
 
-//PgCatalogAmproc is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogAmproc is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogAmproc = `
 CREATE TABLE pg_catalog.pg_amproc (
 	oid OID,
@@ -1568,7 +1568,7 @@ CREATE TABLE pg_catalog.pg_amproc (
 	amproc REGPROC
 )`
 
-//PgCatalogStatProgressAnalyze is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatProgressAnalyze is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatProgressAnalyze = `
 CREATE TABLE pg_catalog.pg_stat_progress_analyze (
 	pid INT4,
@@ -1585,7 +1585,7 @@ CREATE TABLE pg_catalog.pg_stat_progress_analyze (
 	current_child_table_relid OID
 )`
 
-//PgCatalogStatSlru is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatSlru is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatSlru = `
 CREATE TABLE pg_catalog.pg_stat_slru (
 	name STRING,
@@ -1599,7 +1599,7 @@ CREATE TABLE pg_catalog.pg_stat_slru (
 	stats_reset TIMESTAMPTZ
 )`
 
-//PgCatalogFileSettings is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogFileSettings is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogFileSettings = `
 CREATE TABLE pg_catalog.pg_file_settings (
 	sourcefile STRING,
@@ -1611,7 +1611,7 @@ CREATE TABLE pg_catalog.pg_file_settings (
 	error STRING
 )`
 
-//PgCatalogCursors is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogCursors is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogCursors = `
 CREATE TABLE pg_catalog.pg_cursors (
 	name STRING,
@@ -1622,7 +1622,7 @@ CREATE TABLE pg_catalog.pg_cursors (
 	creation_time TIMESTAMPTZ
 )`
 
-//PgCatalogRules is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogRules is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogRules = `
 CREATE TABLE pg_catalog.pg_rules (
 	schemaname NAME,
@@ -1631,7 +1631,7 @@ CREATE TABLE pg_catalog.pg_rules (
 	definition STRING
 )`
 
-//PgCatalogStatioUserSequences is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioUserSequences is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioUserSequences = `
 CREATE TABLE pg_catalog.pg_statio_user_sequences (
 	relid OID,
@@ -1641,7 +1641,7 @@ CREATE TABLE pg_catalog.pg_statio_user_sequences (
 	blks_hit INT
 )`
 
-//PgCatalogStatUserIndexes is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatUserIndexes is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatUserIndexes = `
 CREATE TABLE pg_catalog.pg_stat_user_indexes (
 	relid OID,
@@ -1654,7 +1654,7 @@ CREATE TABLE pg_catalog.pg_stat_user_indexes (
 	idx_tup_fetch INT
 )`
 
-//PgCatalogStatXactUserTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatXactUserTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatXactUserTables = `
 CREATE TABLE pg_catalog.pg_stat_xact_user_tables (
 	relid OID,
@@ -1670,7 +1670,7 @@ CREATE TABLE pg_catalog.pg_stat_xact_user_tables (
 	n_tup_hot_upd INT
 )`
 
-//PgCatalogPublicationTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPublicationTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPublicationTables = `
 CREATE TABLE pg_catalog.pg_publication_tables (
 	pubname NAME,
@@ -1678,7 +1678,7 @@ CREATE TABLE pg_catalog.pg_publication_tables (
 	tablename NAME
 )`
 
-//PgCatalogStatProgressCluster is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatProgressCluster is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatProgressCluster = `
 CREATE TABLE pg_catalog.pg_stat_progress_cluster (
 	pid INT4,
@@ -1695,7 +1695,7 @@ CREATE TABLE pg_catalog.pg_stat_progress_cluster (
 	index_rebuild_count INT
 )`
 
-//PgCatalogGroup is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogGroup is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogGroup = `
 CREATE TABLE pg_catalog.pg_group (
 	groname NAME,
@@ -1703,7 +1703,7 @@ CREATE TABLE pg_catalog.pg_group (
 	grolist OID[]
 )`
 
-//PgCatalogStatAllIndexes is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatAllIndexes is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatAllIndexes = `
 CREATE TABLE pg_catalog.pg_stat_all_indexes (
 	relid OID,
@@ -1716,7 +1716,7 @@ CREATE TABLE pg_catalog.pg_stat_all_indexes (
 	idx_tup_fetch INT
 )`
 
-//PgCatalogTsConfigMap is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTsConfigMap is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTsConfigMap = `
 CREATE TABLE pg_catalog.pg_ts_config_map (
 	mapcfg OID,
@@ -1725,7 +1725,7 @@ CREATE TABLE pg_catalog.pg_ts_config_map (
 	mapdict OID
 )`
 
-//PgCatalogStatBgwriter is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatBgwriter is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatBgwriter = `
 CREATE TABLE pg_catalog.pg_stat_bgwriter (
 	checkpoints_timed INT,
@@ -1741,7 +1741,7 @@ CREATE TABLE pg_catalog.pg_stat_bgwriter (
 	stats_reset TIMESTAMPTZ
 )`
 
-//PgCatalogTransform is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTransform is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTransform = `
 CREATE TABLE pg_catalog.pg_transform (
 	oid OID,
@@ -1751,7 +1751,7 @@ CREATE TABLE pg_catalog.pg_transform (
 	trftosql REGPROC
 )`
 
-//PgCatalogTsParser is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTsParser is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTsParser = `
 CREATE TABLE pg_catalog.pg_ts_parser (
 	oid OID,
@@ -1764,7 +1764,7 @@ CREATE TABLE pg_catalog.pg_ts_parser (
 	prslextype REGPROC
 )`
 
-//PgCatalogStatisticExtData is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatisticExtData is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatisticExtData = `
 CREATE TABLE pg_catalog.pg_statistic_ext_data (
 	stxoid OID,
@@ -1773,7 +1773,7 @@ CREATE TABLE pg_catalog.pg_statistic_ext_data (
 	stxdmcv BYTES
 )`
 
-//PgCatalogLargeobjectMetadata is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogLargeobjectMetadata is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogLargeobjectMetadata = `
 CREATE TABLE pg_catalog.pg_largeobject_metadata (
 	oid OID,
@@ -1781,7 +1781,7 @@ CREATE TABLE pg_catalog.pg_largeobject_metadata (
 	lomacl STRING[]
 )`
 
-//PgCatalogReplicationSlots is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogReplicationSlots is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogReplicationSlots = `
 CREATE TABLE pg_catalog.pg_replication_slots (
 	slot_name NAME,
@@ -1800,7 +1800,7 @@ CREATE TABLE pg_catalog.pg_replication_slots (
 	safe_wal_size INT
 )`
 
-//PgCatalogSubscriptionRel is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogSubscriptionRel is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogSubscriptionRel = `
 CREATE TABLE pg_catalog.pg_subscription_rel (
 	srsubid OID,
@@ -1809,7 +1809,7 @@ CREATE TABLE pg_catalog.pg_subscription_rel (
 	srsublsn STRING
 )`
 
-//PgCatalogStatioUserTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioUserTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioUserTables = `
 CREATE TABLE pg_catalog.pg_statio_user_tables (
 	relid OID,
@@ -1825,7 +1825,7 @@ CREATE TABLE pg_catalog.pg_statio_user_tables (
 	tidx_blks_hit INT
 )`
 
-//PgCatalogTimezoneNames is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTimezoneNames is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTimezoneNames = `
 CREATE TABLE pg_catalog.pg_timezone_names (
 	name STRING,
@@ -1834,7 +1834,7 @@ CREATE TABLE pg_catalog.pg_timezone_names (
 	is_dst BOOL
 )`
 
-//PgCatalogPartitionedTable is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPartitionedTable is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPartitionedTable = `
 CREATE TABLE pg_catalog.pg_partitioned_table (
 	partrelid OID,
@@ -1847,7 +1847,7 @@ CREATE TABLE pg_catalog.pg_partitioned_table (
 	partexprs STRING
 )`
 
-//PgCatalogStatioSysIndexes is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatioSysIndexes is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatioSysIndexes = `
 CREATE TABLE pg_catalog.pg_statio_sys_indexes (
 	relid OID,
@@ -1859,14 +1859,14 @@ CREATE TABLE pg_catalog.pg_statio_sys_indexes (
 	idx_blks_hit INT
 )`
 
-//PgCatalogConfig is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogConfig is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogConfig = `
 CREATE TABLE pg_catalog.pg_config (
 	name STRING,
 	setting STRING
 )`
 
-//PgCatalogStatUserTables is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatUserTables is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatUserTables = `
 CREATE TABLE pg_catalog.pg_stat_user_tables (
 	relid OID,
@@ -1894,7 +1894,7 @@ CREATE TABLE pg_catalog.pg_stat_user_tables (
 	autoanalyze_count INT
 )`
 
-//PgCatalogSubscription is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogSubscription is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogSubscription = `
 CREATE TABLE pg_catalog.pg_subscription (
 	oid OID,
@@ -1908,7 +1908,7 @@ CREATE TABLE pg_catalog.pg_subscription (
 	subpublications STRING[]
 )`
 
-//PgCatalogTsDict is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogTsDict is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogTsDict = `
 CREATE TABLE pg_catalog.pg_ts_dict (
 	oid OID,
@@ -1919,7 +1919,7 @@ CREATE TABLE pg_catalog.pg_ts_dict (
 	dictinitoption STRING
 )`
 
-//PgCatalogLargeobject is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogLargeobject is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogLargeobject = `
 CREATE TABLE pg_catalog.pg_largeobject (
 	loid OID,
@@ -1927,7 +1927,7 @@ CREATE TABLE pg_catalog.pg_largeobject (
 	data BYTES
 )`
 
-//PgCatalogReplicationOriginStatus is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogReplicationOriginStatus is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogReplicationOriginStatus = `
 CREATE TABLE pg_catalog.pg_replication_origin_status (
 	local_id OID,
@@ -1936,7 +1936,7 @@ CREATE TABLE pg_catalog.pg_replication_origin_status (
 	local_lsn STRING
 )`
 
-//PgCatalogShmemAllocations is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogShmemAllocations is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogShmemAllocations = `
 CREATE TABLE pg_catalog.pg_shmem_allocations (
 	name STRING,
@@ -1945,7 +1945,7 @@ CREATE TABLE pg_catalog.pg_shmem_allocations (
 	allocated_size INT
 )`
 
-//PgCatalogStatWalReceiver is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatWalReceiver is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatWalReceiver = `
 CREATE TABLE pg_catalog.pg_stat_wal_receiver (
 	pid INT4,
@@ -1965,7 +1965,7 @@ CREATE TABLE pg_catalog.pg_stat_wal_receiver (
 	conninfo STRING
 )`
 
-//PgCatalogStatSubscription is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogStatSubscription is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogStatSubscription = `
 CREATE TABLE pg_catalog.pg_stat_subscription (
 	subid OID,

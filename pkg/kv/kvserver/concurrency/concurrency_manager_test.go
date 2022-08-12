@@ -57,7 +57,9 @@ import (
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [priority] [uncertainty-limit=<int>[,<int>]]
 // new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
-//   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
+//
+//	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
+//
 // sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
 // poison       req=<req-name>
 // finish       req=<req-name>
@@ -85,7 +87,6 @@ import (
 // debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
 // debug-set-max-locks n=<count>
 // reset
-//
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

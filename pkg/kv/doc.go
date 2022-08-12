@@ -16,7 +16,7 @@ http://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-v
 Package kv provides clients for accessing the various externally-facing
 Cockroach database endpoints.
 
-DB Client
+# DB Client
 
 The DB client is a fully-featured client of Cockroach's key-value database. It
 provides a simple, synchronous interface well-suited to parallel updates and

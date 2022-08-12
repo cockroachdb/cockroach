@@ -18,7 +18,7 @@ import (
 // The soundex code consists of four characters.
 const soundexLen = 4
 
-//                    ABCDEFGHIJKLMNOPQRSTUVWXYZ
+// ABCDEFGHIJKLMNOPQRSTUVWXYZ
 const soundexTable = "01230120022455012623010202"
 
 func isAlpha(r rune) bool {

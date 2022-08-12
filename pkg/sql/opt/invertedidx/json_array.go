@@ -735,7 +735,9 @@ func buildFetchContainmentObjects(
 }
 
 // buildObject constructs a new JSON object of the form:
-//   {<keyN>: ... {<key1>: {key0: <val>}}}
+//
+//	{<keyN>: ... {<key1>: {key0: <val>}}}
+//
 // Where the keys and val are extracted from a fetch val expression by the
 // caller. Note that key0 is the outer-most fetch val index, so the expression
 // j->'a'->'b' = 1 results in {"a": {"b": 1}}.

@@ -34,11 +34,11 @@ import (
 // https://en.wikipedia.org/wiki/Quantile_function for more background.
 //
 // We use quantile functions within our modeling for a few reasons:
-// * Unlike histograms, quantile functions are independent of the absolute
-//   counts. They are a "shape" not a "size".
-// * Unlike cumulative distribution functions or probability density functions,
-//   we can always take the definite integral of a quantile function from p=0 to
-//   p=1. We use this when performing linear regression over quantiles.
+//   - Unlike histograms, quantile functions are independent of the absolute
+//     counts. They are a "shape" not a "size".
+//   - Unlike cumulative distribution functions or probability density functions,
+//     we can always take the definite integral of a quantile function from p=0 to
+//     p=1. We use this when performing linear regression over quantiles.
 //
 // Type quantile represents a piecewise quantile function with float64 values as
 // a series of quantilePoints. The pieces of the quantile function are line
@@ -59,29 +59,29 @@ import (
 //
 // For example, given this population of 10 values:
 //
-//  {200, 200, 210, 210, 210, 211, 212, 221, 222, 230}
+//	{200, 200, 210, 210, 210, 211, 212, 221, 222, 230}
 //
 // One possible histogram might be:
 //
-//   {{UpperBound: 200, NumRange: 0, NumEq: 2},
-//    {UpperBound: 210, NumRange: 0, NumEq: 3},
-//    {UpperBound: 220, NumRange: 2, NumEq: 0},
-//    {UpperBound: 230, NumRange: 2, NumEq: 1}}
+//	{{UpperBound: 200, NumRange: 0, NumEq: 2},
+//	 {UpperBound: 210, NumRange: 0, NumEq: 3},
+//	 {UpperBound: 220, NumRange: 2, NumEq: 0},
+//	 {UpperBound: 230, NumRange: 2, NumEq: 1}}
 //
 // And the corresponding quantile function would be:
 //
-//   {{0, 200}, {0.2, 200}, {0.2, 210}, {0.5, 210}, {0.7, 220}, {0.9, 230}, {1, 230}}
+//	{{0, 200}, {0.2, 200}, {0.2, 210}, {0.5, 210}, {0.7, 220}, {0.9, 230}, {1, 230}}
 //
-//   230 |                 *-*
-//       |               /
-//   220 |             *
-//       |           /
-//   210 |   o-----*
-//       |
-//   200 o---*
-//       |
-//   190 + - - - - - - - - - -
-//       0  .2  .4  .6  .8   1
+//	230 |                 *-*
+//	    |               /
+//	220 |             *
+//	    |           /
+//	210 |   o-----*
+//	    |
+//	200 o---*
+//	    |
+//	190 + - - - - - - - - - -
+//	    0  .2  .4  .6  .8   1
 //
 // All quantile functions and methods treat quantiles as immutable. We always
 // allocate new quantiles rather than modifying them in-place.
@@ -406,11 +406,12 @@ var (
 // fromQuantileValue converts from a quantile value back to a datum suitable for
 // use in a histogram. It is the inverse of toQuantileValue. It differs from
 // eval.PerformCast in a few ways:
-// 1. It supports conversions that are not legal casts (e.g. FLOAT to DATE).
-// 2. It errors on NaN and infinite values because they indicate a problem with
-//    the regression model rather than valid values.
-// 3. On overflow or underflow it clamps to maximum or minimum finite values
-//    rather than failing the conversion (and thus the entire histogram).
+//  1. It supports conversions that are not legal casts (e.g. FLOAT to DATE).
+//  2. It errors on NaN and infinite values because they indicate a problem with
+//     the regression model rather than valid values.
+//  3. On overflow or underflow it clamps to maximum or minimum finite values
+//     rather than failing the conversion (and thus the entire histogram).
+//
 // TODO(michae2): Add support for DECIMAL, TIME, TIMETZ, and INTERVAL.
 func fromQuantileValue(colType *types.T, val float64) (tree.Datum, error) {
 	if math.IsNaN(val) || math.IsInf(val, 0) {

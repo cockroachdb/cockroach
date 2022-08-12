@@ -20,9 +20,9 @@ import "net/http"
 // served and an HTTP 304 with no body is sent to clients instead, to indicate
 // that the client's stale cache entry is still valid.
 //
-// - contentHashes is a map of URL path (including a leading "/") to the ETag
-//	 value to use for that file
-// - next is the next handler in the http.Handler chain, used
+//   - contentHashes is a map of URL path (including a leading "/") to the ETag
+//     value to use for that file
+//   - next is the next handler in the http.Handler chain, used
 func EtagHandler(contentHashes map[string]string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if contentHashes == nil {

@@ -45,14 +45,13 @@ import (
 //
 //       Information about the left columns.
 
-//     - right=(<column> <type> [not null] [as <expr> [stored|virtual], ...)
+// - right=(<column> <type> [not null] [as <expr> [stored|virtual], ...)
 //
-//       Information about the left columns.
+//	Information about the left columns.
 //
-//     - index=(<column> [asc|desc], ...)
+// - index=(<column> [asc|desc], ...)
 //
-//       Information for the index on the right table.
-//
+//	Information for the index on the right table.
 func TestLookupConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

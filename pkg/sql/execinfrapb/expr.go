@@ -221,10 +221,11 @@ func RunFilter(filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
 
 // Eval - given a row - evaluates the wrapped expression and returns the
 // resulting datum. For example, given a row (1, 2, 3, 4, 5):
-//  '@2' would return '2'
-//  '@2 + @5' would return '7'
-//  '@1' would return '1'
-//  '@2 + 10' would return '12'
+//
+//	'@2' would return '2'
+//	'@2 + @5' would return '7'
+//	'@1' would return '1'
+//	'@2 + 10' would return '12'
 func (eh *ExprHelper) Eval(row rowenc.EncDatumRow) (tree.Datum, error) {
 	eh.Row = row
 

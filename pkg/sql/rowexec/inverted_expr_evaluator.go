@@ -304,15 +304,17 @@ type batchedInvertedExprEvaluator struct {
 //
 // Example 1:
 // pendingSpans contains
-//    c---g
-//    c-----i
-//    c--e
+//
+//	c---g
+//	c-----i
+//	c--e
 //
 // And fragmentUntil = i. Since end keys are exclusive we can fragment and
 // remove all spans in pendingSpans. These will be:
-//    c-e-g
-//    c-e-g-i
-//    c-e
+//
+//	c-e-g
+//	c-e-g-i
+//	c-e
 //
 // For the c-e span, all the exprAndSetIndexList slices for these spans are
 // appended since any row in that span needs to be routed to all these
@@ -324,10 +326,10 @@ type batchedInvertedExprEvaluator struct {
 // Same pendingSpans, and fragmentUntil = f. The fragments that are generated
 // for fragmentedSpans and the remaining spans in pendingSpans are:
 //
-//    fragments        remaining
-//    c-e-f            f-g
-//    c-e-f            f-i
-//    c-e
+//	fragments        remaining
+//	c-e-f            f-g
+//	c-e-f            f-i
+//	c-e
 func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
 	pendingSpans []invertedSpanRoutingInfo, fragmentUntil inverted.EncVal,
 ) []invertedSpanRoutingInfo {

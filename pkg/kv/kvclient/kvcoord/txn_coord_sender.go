@@ -41,6 +41,7 @@ var DisableCommitSanityCheck = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_COMMI
 
 // txnState represents states relating to whether an EndTxn request needs
 // to be sent.
+//
 //go:generate stringer -type=txnState
 type txnState int
 

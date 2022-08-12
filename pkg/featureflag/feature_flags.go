@@ -72,7 +72,7 @@ func CheckEnabled(
 }
 
 // metaFeatureDenialMetric is a metric counting the statements denied by a
-//feature flag.
+// feature flag.
 var metaFeatureDenialMetric = metric.Metadata{
 	Name:        "sql.feature_flag_denial",
 	Help:        "Counter of the number of statements denied by a feature flag",

@@ -98,8 +98,9 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 // So, 1KB per span.  We could be looking at 10MB checkpoint record.
 //
 // The default for this setting was chosen as follows:
-//   * Assume a very long backfill, running for 25 hours (GC TTL default duration).
-//   * Assume we want to have at most 150MB worth of checkpoints in the job record.
+//   - Assume a very long backfill, running for 25 hours (GC TTL default duration).
+//   - Assume we want to have at most 150MB worth of checkpoints in the job record.
+//
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
 // FrontierCheckpointFrequency setting, 1 MB per checkpoint.
 var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(

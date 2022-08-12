@@ -12,7 +12,7 @@
 Package apply provides abstractions and routines associated with the application
 of committed raft entries to a replicated state machine.
 
-State Machine Replication
+# State Machine Replication
 
 Raft entry application is the process of taking entries that have been committed
 to a raft group's "raft log" through raft consensus and using them to drive the
@@ -42,7 +42,7 @@ reject the command and handle the rejection in the same way (e.g. decide not to
 make any state transition). The latter, on the other hand, it not permissible,
 and is typically handled by crashing the node.
 
-Performance Concerns
+# Performance Concerns
 
 The state machine replication approach also poses complications that affect
 performance.
@@ -106,7 +106,7 @@ batches (will batching improve system throughput?), and a number of other
 factors. This package has not begun to answer these questions, but it serves to
 provide the abstractions necessary to perform such prioritization in the future.
 
-Usage
+# Usage
 
 The package exports a set of interfaces that users must provide implementations
 for. Notably, users of the package must provide a StateMachine that encapsulates

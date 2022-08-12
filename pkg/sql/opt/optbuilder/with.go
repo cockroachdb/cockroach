@@ -388,7 +388,9 @@ func (b *Builder) getCTECols(cteScope *scope, name tree.AliasClause) physical.Pr
 }
 
 // splitRecursiveCTE splits a CTE statement of the form
-//   initial_query UNION [ALL] recursive_query
+//
+//	initial_query UNION [ALL] recursive_query
+//
 // into the initial and recursive parts.
 // If the statement is not of this form, returns ok=false.
 func (b *Builder) splitRecursiveCTE(

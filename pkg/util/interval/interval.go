@@ -122,9 +122,9 @@ type Interface interface {
 //
 // Given c = Compare(a, b):
 //
-//  c == -1  if (a.Range().Start, a.ID()) < (b.Range().Start, b.ID());
-//  c == 0 if (a.Range().Start, a.ID()) == (b.Range().Start, b.ID()); and
-//  c == 1 if (a.Range().Start, a.ID()) > (b.Range().Start, b.ID()).
+//	c == -1  if (a.Range().Start, a.ID()) < (b.Range().Start, b.ID());
+//	c == 0 if (a.Range().Start, a.ID()) == (b.Range().Start, b.ID()); and
+//	c == 1 if (a.Range().Start, a.ID()) > (b.Range().Start, b.ID()).
 //
 // "c == 0" is equivalent to "Equal(a, b) == true".
 func Compare(a, b Interface) int {
@@ -159,10 +159,10 @@ type Comparable []byte
 // receiver and the parameter.
 //
 // Given c = a.Compare(b):
-//  c == -1 if a < b;
-//  c == 0 if a == b; and
-//  c == 1 if a > b.
 //
+//	c == -1 if a < b;
+//	c == 0 if a == b; and
+//	c == 1 if a > b.
 func (c Comparable) Compare(o Comparable) int {
 	return bytes.Compare(c, o)
 }

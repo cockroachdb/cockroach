@@ -288,11 +288,14 @@ type Gossip struct {
 // expected to already contain the node ID.
 //
 // grpcServer: The server on which the new Gossip instance will register its RPC
-//   service. Can be nil, in which case the Gossip will not register the
-//   service.
+//
+//	service. Can be nil, in which case the Gossip will not register the
+//	service.
+//
 // rpcContext: The context used to connect to other nodes. Can be nil for tests
-//   that also specify a nil grpcServer and that plan on using the Gossip in a
-//   restricted way by populating it with data manually.
+//
+//	that also specify a nil grpcServer and that plan on using the Gossip in a
+//	restricted way by populating it with data manually.
 func New(
 	ambient log.AmbientContext,
 	clusterID *base.ClusterIDContainer,
@@ -348,11 +351,14 @@ func New(
 // ClusterIDContainer and NodeIDContainer internally. Used for testing.
 //
 // grpcServer: The server on which the new Gossip instance will register its RPC
-//   service. Can be nil, in which case the Gossip will not register the
-//   service.
+//
+//	service. Can be nil, in which case the Gossip will not register the
+//	service.
+//
 // rpcContext: The context used to connect to other nodes. Can be nil for tests
-//   that also specify a nil grpcServer and that plan on using the Gossip in a
-//   restricted way by populating it with data manually.
+//
+//	that also specify a nil grpcServer and that plan on using the Gossip in a
+//	restricted way by populating it with data manually.
 func NewTest(
 	nodeID roachpb.NodeID,
 	rpcContext *rpc.Context,

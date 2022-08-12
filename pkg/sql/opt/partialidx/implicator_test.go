@@ -38,18 +38,17 @@ import (
 //
 //   - predtest vars=(var1 type1, var2 type2, ...)"
 //
-//   The vars argument sets the names and types of the variables in the
-//   expressions.
+//     The vars argument sets the names and types of the variables in the
+//     expressions.
 //
-//   The test input must be in the format:
+//     The test input must be in the format:
 //
-//      [filter expression]
-//      =>
-//      [predicate expression]
+//     [filter expression]
+//     =>
+//     [predicate expression]
 //
-//   The "=>" symbol denotes implication. For example, "a => b" tests if
-//   expression a implies expression b.
-//
+//     The "=>" symbol denotes implication. For example, "a => b" tests if
+//     expression a implies expression b.
 func TestImplicator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

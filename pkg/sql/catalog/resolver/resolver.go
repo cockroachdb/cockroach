@@ -295,7 +295,8 @@ func ResolveTargetObject(
 // ResolveSchemaNameByID resolves a schema's name based on db and schema id.
 // Instead, we have to rely on a scan of the kv table.
 // TODO (SQLSchema): The remaining uses of this should be plumbed through
-//  the desc.Collection's ResolveSchemaByID.
+//
+//	the desc.Collection's ResolveSchemaByID.
 func ResolveSchemaNameByID(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -327,7 +328,7 @@ type SchemaEntryForDB struct {
 
 // GetForDatabase looks up and returns all available
 // schema ids to SchemaEntryForDB structures for a
-//given database.
+// given database.
 func GetForDatabase(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]SchemaEntryForDB, error) {

@@ -1113,10 +1113,10 @@ func TestShowLastQueryStatisticsUnknown(t *testing.T) {
 }
 
 // TestTransactionDeadline tests that the transaction deadline is set correctly:
-// - In a single-tenant environment, the transaction deadline should use the leased
-//   descriptor expiration.
-// - In a multi-tenant environment, the transaction deadline should be set to
-//   min(sqlliveness.Session expiry, lease descriptor expiration).
+//   - In a single-tenant environment, the transaction deadline should use the leased
+//     descriptor expiration.
+//   - In a multi-tenant environment, the transaction deadline should be set to
+//     min(sqlliveness.Session expiry, lease descriptor expiration).
 func TestTransactionDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1689,8 +1689,8 @@ func TestEmptyTxnIsBeingCorrectlyCounted(t *testing.T) {
 			"after executing empty transactions, but it was not")
 }
 
-//TestSessionTotalActiveTime tests that a session's total active time is
-//correctly being recorded as transactions are executed.
+// TestSessionTotalActiveTime tests that a session's total active time is
+// correctly being recorded as transactions are executed.
 func TestSessionTotalActiveTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

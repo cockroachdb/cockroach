@@ -146,12 +146,17 @@ type checkOptions struct {
 //
 // Args:
 // expSatisfied: A set of indexes into spans representing the scans that
-// 	have been completed and don't need a ResumeSpan. For these scans, having no
-// 	results and also no resume span is acceptable by this function.
+//
+//	have been completed and don't need a ResumeSpan. For these scans, having no
+//	results and also no resume span is acceptable by this function.
+//
 // resultsMode: Specifies how strict the result checking is supposed to be.
-// 	expCount
+//
+//	expCount
+//
 // expCount: If resultsMode == AcceptPrefix, this is the total number of
-// 	expected results. Ignored for resultsMode == Strict.
+//
+//	expected results. Ignored for resultsMode == Strict.
 func checkSpanResults(
 	t *testing.T, spans [][]string, results []kv.Result, expResults [][]string, opt checkOptions,
 ) {
@@ -3232,15 +3237,15 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 // EndTxn batch and a STAGING txn record written by a newer attempt of that
 // batch.
 // Namely, the scenario is as follows:
-// 1. client sends CPut(a) + CPut(b) + EndTxn. The CPut(a) is split by the
-//    DistSender from the rest. Note that the parallel commit mechanism is in
-//    effect here.
-// 2. One of the two sides gets a WriteTooOldError, the other succeeds.
-//    The client needs to refresh.
-// 3. The refresh succeeds.
-// 4. The client resends the whole batch (note that we don't keep track of the
-//    previous partial success).
-// 5. The batch is split again, and one of the two sides fails.
+//  1. client sends CPut(a) + CPut(b) + EndTxn. The CPut(a) is split by the
+//     DistSender from the rest. Note that the parallel commit mechanism is in
+//     effect here.
+//  2. One of the two sides gets a WriteTooOldError, the other succeeds.
+//     The client needs to refresh.
+//  3. The refresh succeeds.
+//  4. The client resends the whole batch (note that we don't keep track of the
+//     previous partial success).
+//  5. The batch is split again, and one of the two sides fails.
 //
 // This tests checks that, for the different combinations of failures across the
 // two attempts of the request, the transaction is not erroneously considered to
@@ -3416,17 +3421,17 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 // above the previous time when they've been refreshed, not from the
 // transaction's original read timestamp. To wit, the following scenario should
 // NOT result in a failed refresh:
-// - txn starts at ts 100
-// - someone else writes "a" @ 200
-// - txn attempts to write "a" and is pushed to (200,1). The refresh succeeds.
-// - txn reads something that has a value in [100,200]. For example, "a", which
-//   it just wrote.
-// - someone else writes "b" @ 300
-// - txn attempts to write "b" and is pushed to (300,1). This refresh must also
-//   succeed. If this Refresh request would check for values in the range
-//   [100-300], it would fail (as it would find a@200). But since it only checks
-//   for values in the range [200-300] (i.e. values written beyond the timestamp
-//   that was refreshed before), we're good.
+//   - txn starts at ts 100
+//   - someone else writes "a" @ 200
+//   - txn attempts to write "a" and is pushed to (200,1). The refresh succeeds.
+//   - txn reads something that has a value in [100,200]. For example, "a", which
+//     it just wrote.
+//   - someone else writes "b" @ 300
+//   - txn attempts to write "b" and is pushed to (300,1). This refresh must also
+//     succeed. If this Refresh request would check for values in the range
+//     [100-300], it would fail (as it would find a@200). But since it only checks
+//     for values in the range [200-300] (i.e. values written beyond the timestamp
+//     that was refreshed before), we're good.
 func TestRefreshNoFalsePositive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

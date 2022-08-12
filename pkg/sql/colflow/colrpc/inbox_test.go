@@ -201,9 +201,9 @@ func TestInboxTimeout(t *testing.T) {
 // These goroutines race against each other and the
 // desired state is that everything is cleaned up at the end. Examples of
 // scenarios that are tested by this test include but are not limited to:
-//  - DrainMeta called before Next and before a stream arrives.
-//  - DrainMeta called with an active stream.
-//  - A forceful cancellation of Next but no call to DrainMeta.
+//   - DrainMeta called before Next and before a stream arrives.
+//   - DrainMeta called with an active stream.
+//   - A forceful cancellation of Next but no call to DrainMeta.
 func TestInboxShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

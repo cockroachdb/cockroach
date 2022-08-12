@@ -76,8 +76,7 @@ func generate(outDir string) error {
 // The targets should be thought of as the following expression, constructed
 // additively in code.
 //
-//  build/...:* + //docs/...:* + //pkg/...:* - //pkg//ui/...:* - //pkg/gen/...:*
-//
+//	build/...:* + //docs/...:* + //pkg/...:* - //pkg//ui/...:* - //pkg/gen/...:*
 func getQueryData() (*queryData, error) {
 	dirs := []string{"build", "docs"}
 	ents, err := os.ReadDir("pkg")

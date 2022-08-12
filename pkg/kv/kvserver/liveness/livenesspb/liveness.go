@@ -99,9 +99,9 @@ func (c MembershipStatus) String() string {
 // (which also includes decommissioning a decommissioned node) the valid state
 // transitions for Membership are as follows:
 //
-// 	  Decommissioning  => Active
-// 	  Active           => Decommissioning
-// 	  Decommissioning  => Decommissioned
+//	Decommissioning  => Active
+//	Active           => Decommissioning
+//	Decommissioning  => Decommissioned
 //
 // See diagram above the Membership type for more details.
 func ValidateTransition(old, new Liveness) error {

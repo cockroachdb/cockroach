@@ -139,17 +139,17 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *liveness.NodeLiveness) NodeLive
 // The timeline of the states that a liveness goes through as time passes after
 // the respective liveness record is written is the following:
 //
-//  -----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
-//       tWrite         tExp                 tExp+threshold
+//	-----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
+//	     tWrite         tExp                 tExp+threshold
 //
 // Explanation:
 //
-//  - Let's say a node write its liveness record at tWrite. It sets the
-//    Expiration field of the record as tExp=tWrite+livenessThreshold.
-//    The node is considered LIVE (or DECOMMISSIONING or DRAINING).
-//  - At tExp, the IsLive() method starts returning false. The state becomes
-//    UNAVAILABLE (or stays DECOMMISSIONING or DRAINING).
-//  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//   - Let's say a node write its liveness record at tWrite. It sets the
+//     Expiration field of the record as tExp=tWrite+livenessThreshold.
+//     The node is considered LIVE (or DECOMMISSIONING or DRAINING).
+//   - At tExp, the IsLive() method starts returning false. The state becomes
+//     UNAVAILABLE (or stays DECOMMISSIONING or DRAINING).
+//   - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
 //
 // NB: There's a bit of discrepancy between what "Decommissioned" represents, as
 // seen by NodeStatusLiveness, and what "Decommissioned" represents as

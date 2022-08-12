@@ -333,13 +333,13 @@ func fullClusterTargetsBackup(
 // filters the descriptors based on the targets specified in the restore, and
 // calculates the max descriptor ID in the backup.
 // Post filtering, the method returns:
-//  - A list of all descriptors (table, type, database, schema) along with their
-//    parent databases.
-//  - A list of database descriptors IFF the user is restoring on the cluster or
-//    database level.
-//  - A map of table patterns to the resolved descriptor IFF the user is
-//    restoring on the table leve.
-//  - A list of tenants to restore, if applicable.
+//   - A list of all descriptors (table, type, database, schema) along with their
+//     parent databases.
+//   - A list of database descriptors IFF the user is restoring on the cluster or
+//     database level.
+//   - A map of table patterns to the resolved descriptor IFF the user is
+//     restoring on the table leve.
+//   - A list of tenants to restore, if applicable.
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,

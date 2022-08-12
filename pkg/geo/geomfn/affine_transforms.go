@@ -23,16 +23,21 @@ import (
 
 // AffineMatrix defines an affine transformation matrix for a geom object.
 // It is expected to be of the form:
-//     a  b  c  x_off
-//     d  e  f  y_off
-//     g  h  i  z_off
-//     0  0  0  1
+//
+//	a  b  c  x_off
+//	d  e  f  y_off
+//	g  h  i  z_off
+//	0  0  0  1
+//
 // Which gets applies onto a coordinate of form:
-//     (x y z 0)^T
+//
+//	(x y z 0)^T
+//
 // With the following transformation:
-//   x' = a*x + b*y + c*z + x_off
-//   y' = d*x + e*y + f*z + y_off
-//   z' = g*x + h*y + i*z + z_off
+//
+//	x' = a*x + b*y + c*z + x_off
+//	y' = d*x + e*y + f*z + y_off
+//	z' = g*x + h*y + i*z + z_off
 type AffineMatrix [][]float64
 
 // Affine applies a 3D affine transformation onto the given geometry.

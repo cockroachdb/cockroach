@@ -40,36 +40,36 @@ import (
 // we'd expect. Only fields that differ from the static RANGE DEFAULT are
 // printed in the test output for readability. The following syntax is provided:
 //
-// - "initialize" tenant=<int>
-//   Initialize a secondary tenant with the given ID.
+//   - "initialize" tenant=<int>
+//     Initialize a secondary tenant with the given ID.
 //
-// - "exec-sql" [tenant=<int>]
-//   Executes the input SQL query for the given tenant. All statements are
-//   executed in a single transaction.
+//   - "exec-sql" [tenant=<int>]
+//     Executes the input SQL query for the given tenant. All statements are
+//     executed in a single transaction.
 //
-// - "query-sql" [tenant=<int>]
-//   Executes the input SQL query for the given tenant and print the results.
+//   - "query-sql" [tenant=<int>]
+//     Executes the input SQL query for the given tenant and print the results.
 //
-// - "reconcile" [tenant=<int>]
-//   Start the reconciliation process for the given tenant.
+//   - "reconcile" [tenant=<int>]
+//     Start the reconciliation process for the given tenant.
 //
-// - "mutations" [tenant=<int>] [discard]
-//   Print the latest set of mutations issued by the reconciler for the given
-//   tenant. If 'discard' is specified, nothing is printed.
+//   - "mutations" [tenant=<int>] [discard]
+//     Print the latest set of mutations issued by the reconciler for the given
+//     tenant. If 'discard' is specified, nothing is printed.
 //
-// - "state" [offset=<int>] [limit=<int]
-//   Print out the contents of KVAccessor directly, skipping 'offset' entries,
-//   returning up to the specified limit if any.
+//   - "state" [offset=<int>] [limit=<int]
+//     Print out the contents of KVAccessor directly, skipping 'offset' entries,
+//     returning up to the specified limit if any.
 //
-// - "protect" [record-id=<int>] [ts=<int>]
-//   cluster                  OR
-//   tenants       id1,id2... OR
-//   descs         id1,id2...
-//   Creates and writes a protected timestamp record with id and ts with an
-//   appropriate ptpb.Target.
+//   - "protect" [record-id=<int>] [ts=<int>]
+//     cluster                  OR
+//     tenants       id1,id2... OR
+//     descs         id1,id2...
+//     Creates and writes a protected timestamp record with id and ts with an
+//     appropriate ptpb.Target.
 //
-// - "release" [record-id=<int>]
-//   Releases the protected timestamp record with id.
+//   - "release" [record-id=<int>]
+//     Releases the protected timestamp record with id.
 //
 // TODO(irfansharif): Provide a way to stop reconcilers and/or start them back
 // up again. It would let us add simulate for suspended tenants, and behavior of

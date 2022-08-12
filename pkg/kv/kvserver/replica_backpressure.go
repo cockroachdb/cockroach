@@ -53,7 +53,7 @@ var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(
 //
 // We additionally mitigate this situation further by doing the following:
 //
-//  1) We store in-memory on each replica the largest zone configuration range
+//  1. We store in-memory on each replica the largest zone configuration range
 //     size (largestPreviousMaxRangeBytes) we've seen and we do not backpressure
 //     if the current range size is less than that. That value is cleared when
 //     a range splits or runs GC such that the range size becomes smaller than
@@ -61,10 +61,9 @@ var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(
 //     a node may restart before the splitting has concluded, leaving the
 //     cluster in a state of backpressure.
 //
-//  2) We assign a higher priority in the snapshot queue to ranges which are
+//  2. We assign a higher priority in the snapshot queue to ranges which are
 //     currently backpressuring than ranges which are larger but are not
 //     applying backpressure.
-//
 var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"kv.range.backpressure_byte_tolerance",

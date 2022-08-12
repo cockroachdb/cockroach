@@ -36,9 +36,13 @@ import (
 // to the details of a GRPC connection failure.
 //
 // On *nix, a connect error looks like:
-//    dial tcp <addr>: <syscall>: connection refused
+//
+//	dial tcp <addr>: <syscall>: connection refused
+//
 // On Windows, it looks like:
-//    dial tcp <addr>: <syscall>: No connection could be made because the target machine actively refused it.
+//
+//	dial tcp <addr>: <syscall>: No connection could be made because the target machine actively refused it.
+//
 // So we look for the common bit.
 var reGRPCConnRefused = regexp.MustCompile(`Error while dialing dial tcp .*: connection.* refused`)
 

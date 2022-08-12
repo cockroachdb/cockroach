@@ -28,16 +28,17 @@ import (
 )
 
 // evalPrivate evaluates a list of the form
-//   [ (FieldName <value>) ... ]
+//
+//	[ (FieldName <value>) ... ]
+//
 // into an operation private of the given type (e.g. ScanPrivate, etc).
 //
 // Various implicit conversions are supported. Examples:
-//  - table ID: "table"
-//  - index ordinal: "table@index"
-//  - column lists or sets: "a,b,c"
-//  - orderings and ordering choices: "+a,-b"
-//  - operators: "inner-join"
-//
+//   - table ID: "table"
+//   - index ordinal: "table@index"
+//   - column lists or sets: "a,b,c"
+//   - orderings and ordering choices: "+a,-b"
+//   - operators: "inner-join"
 func (eg *exprGen) evalPrivate(privType reflect.Type, expr lang.Expr) interface{} {
 	if expr.Op() != lang.ListOp {
 		panic(errorf("private must be a list of the form [ (FieldName Value) ... ]"))

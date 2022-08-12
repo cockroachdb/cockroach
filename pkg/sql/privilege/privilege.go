@@ -356,7 +356,8 @@ var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, UPDATE, 
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.
 // See: https://www.postgresql.org/docs/13/ddl-priv.html#PRIVILEGE-ABBREVS-TABLE
-//     for privileges and their ACL abbreviations.
+//
+//	for privileges and their ACL abbreviations.
 func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
 	privileges := pl
 	// If ALL is present, explode ALL into the underlying privileges.

@@ -215,10 +215,13 @@ func FlowVerIsCompatible(
 //
 // Args:
 // reserved: Specifies the upfront memory reservation that the flow takes
-//   ownership of. This account is already closed if an error is returned or
-//   will be closed through Flow.Cleanup.
+//
+//	ownership of. This account is already closed if an error is returned or
+//	will be closed through Flow.Cleanup.
+//
 // localState: Specifies if the flow runs entirely on this node and, if it does,
-//   specifies the txn and other attributes.
+//
+//	specifies the txn and other attributes.
 //
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.

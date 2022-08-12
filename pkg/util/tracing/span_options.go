@@ -157,12 +157,12 @@ type parentOption spanRef
 // WithParent will be a no-op (i.e. the span resulting from
 // applying this option will be a root span, just as if this option hadn't been
 // specified) in the following cases:
-// - if `sp` is nil
-// - if `sp` is a no-op span
-// - if `sp` is a sterile span (i.e. a span explicitly marked as not wanting
-//   children). Note that the singleton Tracer.noop span is marked as sterile,
-//   which makes this condition mostly encompass the previous one, however in
-//   theory there could be no-op spans other than the singleton one.
+//   - if `sp` is nil
+//   - if `sp` is a no-op span
+//   - if `sp` is a sterile span (i.e. a span explicitly marked as not wanting
+//     children). Note that the singleton Tracer.noop span is marked as sterile,
+//     which makes this condition mostly encompass the previous one, however in
+//     theory there could be no-op spans other than the singleton one.
 //
 // The child inherits the parent's log tags. The data collected in the
 // child trace will be retrieved automatically when the parent's data is
@@ -241,7 +241,9 @@ type remoteParent SpanMeta
 // node 1                         (network)          node 2
 // --------------------------------------------------------------------------
 // Span.Meta()                   ----------> sp2 := Tracer.StartSpan(WithRemoteParentFromSpanMeta(.))
-//                                           doSomething(sp2)
+//
+//	doSomething(sp2)
+//
 // Span.ImportRemoteRecording(.) <---------- sp2.FinishAndGetRecording()
 //
 // By default, the child span is derived using a ChildOf relationship, which

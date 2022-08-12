@@ -20,10 +20,10 @@ import (
 
 // TestTypingBinaryAssumptions ensures that binary overloads conform to certain
 // assumptions we're making in the type inference code:
-//   1. The return type can be inferred from the operator type and the data
-//      types of its operands.
-//   2. When of the operands is null, and if CalledOnNullInput is true, then the
-//      return type can be inferred from just the non-null operand.
+//  1. The return type can be inferred from the operator type and the data
+//     types of its operands.
+//  2. When of the operands is null, and if CalledOnNullInput is true, then the
+//     return type can be inferred from just the non-null operand.
 func TestTypingBinaryAssumptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -367,8 +367,8 @@ func (b *Batch) get(key interface{}, forUpdate bool) {
 // Get retrieves the value for a key. A new result will be appended to the batch
 // which will contain a single row.
 //
-//   r, err := db.Get("a")
-//   // string(r.Rows[0].Key) == "a"
+//	r, err := db.Get("a")
+//	// string(r.Rows[0].Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Get(key interface{}) {
@@ -379,8 +379,8 @@ func (b *Batch) Get(key interface{}) {
 // is acquired on the key, if it exists. A new result will be appended to the
 // batch which will contain a single row.
 //
-//   r, err := db.GetForUpdate("a")
-//   // string(r.Rows[0].Key) == "a"
+//	r, err := db.GetForUpdate("a")
+//	// string(r.Rows[0].Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (b *Batch) GetForUpdate(key interface{}) {

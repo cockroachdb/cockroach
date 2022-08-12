@@ -69,7 +69,6 @@ func (r *runParams) Ann() *tree.Annotations {
 // - planNodeNames                 (walk.go)
 // - setLimitHint()                (limit_hint.go)
 // - planColumns()                 (plan_columns.go)
-//
 type planNode interface {
 	startExec(params runParams) error
 

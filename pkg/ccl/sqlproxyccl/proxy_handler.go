@@ -615,15 +615,15 @@ func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 //
 // We currently support embedding the cluster identifier in three ways:
 //
-// - Through server name identification (SNI) when using TLS connections
-//   (e.g. happy-koala-3.5xj.gcp-us-central1.cockroachlabs.cloud)
+//   - Through server name identification (SNI) when using TLS connections
+//     (e.g. happy-koala-3.5xj.gcp-us-central1.cockroachlabs.cloud)
 //
 // - Within the database param (e.g. "happy-koala-3.defaultdb")
 //
-// - Within the options param (e.g. "... --cluster=happy-koala-5 ...").
-//   PostgreSQL supports three different ways to set a run-time parameter
-//   through its command-line options, i.e. "-c NAME=VALUE", "-cNAME=VALUE", and
-//   "--NAME=VALUE".
+//   - Within the options param (e.g. "... --cluster=happy-koala-5 ...").
+//     PostgreSQL supports three different ways to set a run-time parameter
+//     through its command-line options, i.e. "-c NAME=VALUE", "-cNAME=VALUE", and
+//     "--NAME=VALUE".
 func clusterNameAndTenantFromParams(
 	ctx context.Context, fe *FrontendAdmitInfo,
 ) (*pgproto3.StartupMessage, string, roachpb.TenantID, error) {
@@ -790,9 +790,10 @@ func parseDatabaseParam(databaseParam string) (clusterIdentifier, databaseName s
 // options parameter with the cluster key stripped out. Just like PostgreSQL,
 // the sqlproxy supports three different ways to set a run-time parameter
 // through its command-line options:
-//     -c NAME=VALUE (commonly used throughout documentation around PGOPTIONS)
-//     -cNAME=VALUE
-//     --NAME=VALUE
+//
+//	-c NAME=VALUE (commonly used throughout documentation around PGOPTIONS)
+//	-cNAME=VALUE
+//	--NAME=VALUE
 //
 // Note that this parsing approach is not perfect as it allows a negative case
 // like options="-c --cluster=happy-koala -c -c -c" to go through. To properly

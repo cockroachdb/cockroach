@@ -27,8 +27,7 @@ good step towards that goal. This package provides a specialized time series
 database, relatively narrow in scope, that can store this data with good
 performance characteristics.
 
-
-Organization Structure
+# Organization Structure
 
 Time series data is organized on disk according to two basic, sortable properties:
 + Time series name (i.e "sql.operations.selects")
@@ -38,8 +37,7 @@ This is optimized for querying data for a single series over multiple
 timestamps: data for the same series at different timestamps is stored
 contiguously.
 
-
-Downsampling
+# Downsampling
 
 The amount of data produced by time series sampling can be considerable; storing
 every incoming data point with perfect fidelity can command a tremendous amount
@@ -63,8 +61,7 @@ server side before returning the data. One restriction is that a query cannot
 request a downsampling period which is shorter than the smallest on-disk
 resolution (e.g. one data point per second).
 
-
-Slab Storage
+# Slab Storage
 
 In order to use key space efficiently, we pack data for multiple contiguous
 samples into "slab" values, with data for each slab stored in a CockroachDB key.
@@ -75,8 +72,7 @@ a "slab duration" of 1 hour, meaning that all samples that fall in the same hour
 are stored at the same key. This strategy helps reduce the number of keys
 scanned during a query.
 
-
-Source Keys
+# Source Keys
 
 Another common use case of time series queries is the aggregation of multiple
 series; for example, you may want to query the same metric (e.g. "queries per
@@ -93,8 +89,7 @@ this means that data that is from the same series and time period, but from
 different nodes, will be stored contiguously in the key space. Data from all
 sources in a series can thus be queried in a single scan.
 
-
-Multiple resolutions
+# Multiple resolutions
 
 In order to save space on disk, the database stores older data for time series
 at lower resolution, more commonly known as a "rollup".
@@ -110,8 +105,7 @@ count and variance of the original 10 second points used to create the 30
 minute point; this means that any downsampler that could have been used on the
 original data is still accessible in the rolled-up data.
 
-
-Example
+# Example
 
 A hypothetical example from CockroachDB: we want to record the available
 capacity of all stores in the cluster.

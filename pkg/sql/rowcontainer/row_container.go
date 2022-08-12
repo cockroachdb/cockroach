@@ -107,20 +107,20 @@ type DeDupingRowContainer interface {
 
 // RowIterator is a simple iterator used to iterate over sqlbase.EncDatumRows.
 // Example use:
-// 	var i RowIterator
-// 	for i.Rewind(); ; i.Next() {
-// 		if ok, err := i.Valid(); err != nil {
-// 			// Handle error.
-// 		} else if !ok {
+//
+//	var i RowIterator
+//	for i.Rewind(); ; i.Next() {
+//		if ok, err := i.Valid(); err != nil {
+//			// Handle error.
+//		} else if !ok {
 //			break
-// 		}
+//		}
 //		row, err := i.Row()
 //		if err != nil {
 //			// Handle error.
 //		}
 //		// Do something.
-// 	}
-//
+//	}
 type RowIterator interface {
 	// Rewind seeks to the first row.
 	Rewind()
@@ -388,16 +388,16 @@ var _ DeDupingRowContainer = &DiskBackedRowContainer{}
 
 // Init initializes a DiskBackedRowContainer.
 // Arguments:
-//  - ordering is the output ordering; the order in which rows should be sorted.
-//  - types is the schema of rows that will be added to this container.
-//  - evalCtx defines the context in which to evaluate comparisons, only used
-//    when storing rows in memory.
-//  - engine is the store used for rows when spilling to disk.
-//  - memoryMonitor is used to monitor the DiskBackedRowContainer's memory usage.
-//    If this monitor denies an allocation, the DiskBackedRowContainer will
-//    spill to disk.
-//  - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
-//    and when it spills to disk.
+//   - ordering is the output ordering; the order in which rows should be sorted.
+//   - types is the schema of rows that will be added to this container.
+//   - evalCtx defines the context in which to evaluate comparisons, only used
+//     when storing rows in memory.
+//   - engine is the store used for rows when spilling to disk.
+//   - memoryMonitor is used to monitor the DiskBackedRowContainer's memory usage.
+//     If this monitor denies an allocation, the DiskBackedRowContainer will
+//     spill to disk.
+//   - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
+//     and when it spills to disk.
 func (f *DiskBackedRowContainer) Init(
 	ordering colinfo.ColumnOrdering,
 	types []*types.T,
@@ -670,14 +670,14 @@ var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
 // with the given engine as the underlying store that rows are stored on when
 // it spills to disk.
 // Arguments:
-//  - ordering is the output ordering; the order in which rows should be sorted.
-//  - types is the schema of rows that will be added to this container.
-//  - evalCtx defines the context in which to evaluate comparisons, only used
-//    when storing rows in memory.
-//  - engine is the underlying store that rows are stored on when the container
-//    spills to disk.
-//  - memoryMonitor is used to monitor this container's memory usage.
-//  - diskMonitor is used to monitor this container's disk usage.
+//   - ordering is the output ordering; the order in which rows should be sorted.
+//   - types is the schema of rows that will be added to this container.
+//   - evalCtx defines the context in which to evaluate comparisons, only used
+//     when storing rows in memory.
+//   - engine is the underlying store that rows are stored on when the container
+//     spills to disk.
+//   - memoryMonitor is used to monitor this container's memory usage.
+//   - diskMonitor is used to monitor this container's disk usage.
 func NewDiskBackedIndexedRowContainer(
 	ordering colinfo.ColumnOrdering,
 	typs []*types.T,

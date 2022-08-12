@@ -26,7 +26,7 @@ type ComputedColumnRewritesMap map[string]tree.Expr
 
 // ParseComputedColumnRewrites parses a string of the form:
 //
-//   (before expression) -> (after expression) [, (before expression) -> (after expression) ...]
+//	(before expression) -> (after expression) [, (before expression) -> (after expression) ...]
 //
 // into a ComputedColumnRewritesMap.
 //

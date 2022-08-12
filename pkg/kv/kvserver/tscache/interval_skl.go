@@ -53,12 +53,13 @@ const (
 // timestamp for that range is called the "gap timestamp". Here is a simplified
 // representation that would result after these ranges were added to an empty
 // intervalSkl:
-//   ["apple", "orange") = 200
-//   ["kiwi", "raspberry"] = 100
 //
-//   "apple"    "orange"   "raspberry"
-//   keyts=200  keyts=100  keyts=100
-//   gapts=200  gapts=100  gapts=0
+//	["apple", "orange") = 200
+//	["kiwi", "raspberry"] = 100
+//
+//	"apple"    "orange"   "raspberry"
+//	keyts=200  keyts=100  keyts=100
+//	gapts=200  gapts=100  gapts=0
 //
 // That is, the range from apple (inclusive) to orange (exclusive) has a read
 // timestamp of 200. The range from orange (inclusive) to raspberry (inclusive)
@@ -127,20 +128,18 @@ var initialSklAllocSize = func() int {
 // uses an arena allocator. Skiplist nodes refer to one another by offset into
 // the arena rather than by pointer, so the GC has very few objects to track.
 //
-//
 // The data structure can conceptually be thought of as being parameterized over
 // a key and a value type, such that the key implements a Comparable interface
 // (see interval.Comparable) and the value implements a Ratchetable interface:
 //
-//   type Ratchetable interface {
-//     Ratchet(other Ratchetable) (changed bool)
-//   }
+//	type Ratchetable interface {
+//	  Ratchet(other Ratchetable) (changed bool)
+//	}
 //
 // In other words, if Go supported zero-cost abstractions, this type might look
 // like:
 //
-//   type intervalSkl<K: Comparable, V: Ratchetable>
-//
+//	type intervalSkl<K: Comparable, V: Ratchetable>
 type intervalSkl struct {
 	// rotMutex synchronizes page rotation with all other operations. The read
 	// lock is acquired by the Add and Lookup operations. The write lock is
@@ -695,50 +694,50 @@ func (p *sklPage) addNode(
 // nodes between the previous node and the lookup node, which could change the
 // choice for the "previous gap value". The solution is two-fold:
 //
-// 1. Add new nodes in two phases - initializing and then initialized. Nodes in
-//    the initializing state act as a synchronization point between goroutines
-//    that are adding a particular node and goroutines that are scanning for gap
-//    values. Scanning goroutines encounter the initializing nodes and are
-//    forced to ratchet them before continuing. If they fail to ratchet them
-//    because an arena is full, the nodes must never be initialized so they are
-//    set to cantInit. This is critical for correctness, because if one of these
-//    initializing nodes was not ratcheted when encountered during a forward
-//    scan and later initialized, we could see a ratchet inversion. For example,
-//    the inversion would occur if:
-//    - 1: a goroutine is scanning forwards after finding a previous gap value
-//         from node A in which it plans to initialize node C.
-//    - 2: node B is created and initialized between node A and node C with a
-//         larger value than either.
-//    - 1: the iterator scanning forwards to node C is already past node B when
-//         it is created.
-//    - 3: a lookup for the timestamp of node C comes in. Since it's not
-//         initialized, it uses node B's gap value.
-//    - 1: the iterator reaches node C and initializes it with node A's gap
-//         value, which is smaller than node B's.
-//    - 4: another lookup for the timestamp of node C comes it. It returns the
-//         nodes newly initialized value, which is smaller than the one it
-//         reported before.
-//    Ratcheting initializing nodes when encountered with the current gap value
-//    avoids this race.
+//  1. Add new nodes in two phases - initializing and then initialized. Nodes in
+//     the initializing state act as a synchronization point between goroutines
+//     that are adding a particular node and goroutines that are scanning for gap
+//     values. Scanning goroutines encounter the initializing nodes and are
+//     forced to ratchet them before continuing. If they fail to ratchet them
+//     because an arena is full, the nodes must never be initialized so they are
+//     set to cantInit. This is critical for correctness, because if one of these
+//     initializing nodes was not ratcheted when encountered during a forward
+//     scan and later initialized, we could see a ratchet inversion. For example,
+//     the inversion would occur if:
+//     - 1: a goroutine is scanning forwards after finding a previous gap value
+//     from node A in which it plans to initialize node C.
+//     - 2: node B is created and initialized between node A and node C with a
+//     larger value than either.
+//     - 1: the iterator scanning forwards to node C is already past node B when
+//     it is created.
+//     - 3: a lookup for the timestamp of node C comes in. Since it's not
+//     initialized, it uses node B's gap value.
+//     - 1: the iterator reaches node C and initializes it with node A's gap
+//     value, which is smaller than node B's.
+//     - 4: another lookup for the timestamp of node C comes it. It returns the
+//     nodes newly initialized value, which is smaller than the one it
+//     reported before.
+//     Ratcheting initializing nodes when encountered with the current gap value
+//     avoids this race.
 //
-//    However, only a goroutine that saw a node in an uninitialized state before
-//    scanning backwards can switch it from initializing to initialized. This
-//    enforces a "happens-before" relationship between the creation of a node
-//    and the discovery of the gap value that is used when initializing it. If
-//    any goroutine was able to initialize a node, then this relationship would
-//    not exist and we could experience races where a newly inserted node A's
-//    call to ensureFloorValue could come before the insertion of a node B, but
-//    node B could be initialized with a gap value discovered before the
-//    insertion of node A. For more on this, see the discussion in #19672.
+//     However, only a goroutine that saw a node in an uninitialized state before
+//     scanning backwards can switch it from initializing to initialized. This
+//     enforces a "happens-before" relationship between the creation of a node
+//     and the discovery of the gap value that is used when initializing it. If
+//     any goroutine was able to initialize a node, then this relationship would
+//     not exist and we could experience races where a newly inserted node A's
+//     call to ensureFloorValue could come before the insertion of a node B, but
+//     node B could be initialized with a gap value discovered before the
+//     insertion of node A. For more on this, see the discussion in #19672.
 //
-// 2. After the gap value of the first initialized node with a key less than or
-//    equal to the desired key has been found, the scanning goroutine will scan
-//    forwards until it reaches the original key. It will ratchet any
-//    uninitialized nodes along the way and inherit the gap value from them as
-//    it goes. By the time it reaches the original key, it has a valid gap
-//    value, which we have called the "previous gap value". At this point, if
-//    the node at key is uninitialized, the node can be initialized with the
-//    "previous gap value".
+//  2. After the gap value of the first initialized node with a key less than or
+//     equal to the desired key has been found, the scanning goroutine will scan
+//     forwards until it reaches the original key. It will ratchet any
+//     uninitialized nodes along the way and inherit the gap value from them as
+//     it goes. By the time it reaches the original key, it has a valid gap
+//     value, which we have called the "previous gap value". At this point, if
+//     the node at key is uninitialized, the node can be initialized with the
+//     "previous gap value".
 //
 // It is an error to call ensureInitialized on a key without a node. When
 // finished, the iterator will be positioned the same as if it.Seek(key) had
@@ -825,13 +824,13 @@ func (p *sklPage) getMaxTimestamp() hlc.Timestamp {
 // to a larger value. This provides the guarantee that the following relation
 // holds, regardless of the value of x:
 //
-//   x.LessEq(makeRatchetingTime(x).get())
+//	x.LessEq(makeRatchetingTime(x).get())
 //
 // It also provides the guarantee that if the synthetic flag is set on the
 // initial timestamp, then this flag is set on the resulting Timestamp. So the
 // following relation is guaranteed to hold, regardless of the value of x:
 //
-//   x.IsFlagSet(SYNTHETIC) == makeRatchetingTime(x).get().IsFlagSet(SYNTHETIC)
+//	x.IsFlagSet(SYNTHETIC) == makeRatchetingTime(x).get().IsFlagSet(SYNTHETIC)
 //
 // Compressed ratchetingTime values compare such that taking the maximum of any
 // two ratchetingTime values and converting that back to a Timestamp is always
@@ -839,12 +838,13 @@ func (p *sklPage) getMaxTimestamp() hlc.Timestamp {
 // method. So the following relation is guaranteed to hold, regardless of the
 // value of x or y:
 //
-//   z := max(makeRatchetingTime(x), makeRatchetingTime(y)).get()
-//   x.Forward(y).LessEq(z)
+//	z := max(makeRatchetingTime(x), makeRatchetingTime(y)).get()
+//	x.Forward(y).LessEq(z)
 //
 // Bit layout (LSB to MSB):
-//  bits 0:      inverted synthetic flag
-//  bits 1 - 63: upper 63 bits of wall time
+//
+//	bits 0:      inverted synthetic flag
+//	bits 1 - 63: upper 63 bits of wall time
 type ratchetingTime int64
 
 func makeRatchetingTime(ts hlc.Timestamp) ratchetingTime {
@@ -1068,13 +1068,13 @@ func (p *sklPage) maxInRange(it *arenaskl.Iterator, from, to []byte, opt rangeOp
 // During forward iteration, if another goroutine inserts a new gap node in the
 // interval between the previous node and the original key, then either:
 //
-// 1. The forward iteration finds it and looks up its gap value. That node's gap
-//    value now becomes the new "previous gap value", and iteration continues.
+//  1. The forward iteration finds it and looks up its gap value. That node's gap
+//     value now becomes the new "previous gap value", and iteration continues.
 //
-// 2. The new node is created after the iterator has move past its position. As
-//    part of node creation, the creator had to scan backwards to find the gap
-//    value of the previous node. It is guaranteed to find a gap value that is
-//    >= the gap value found by the original goroutine.
+//  2. The new node is created after the iterator has move past its position. As
+//     part of node creation, the creator had to scan backwards to find the gap
+//     value of the previous node. It is guaranteed to find a gap value that is
+//     >= the gap value found by the original goroutine.
 //
 // This means that no matter what gets inserted, or when it gets inserted, the
 // scanning goroutine is guaranteed to end up with a value that will never

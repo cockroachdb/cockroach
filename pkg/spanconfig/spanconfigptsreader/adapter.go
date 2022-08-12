@@ -39,7 +39,8 @@ import (
 // interface.
 //
 // TODO(arul): In 22.2, we would have completely migrated away from the old
-//  subsystem, and we'd be able to get rid of this interface.
+//
+//	subsystem, and we'd be able to get rid of this interface.
 type adapter struct {
 	cache        protectedts.Cache
 	kvSubscriber spanconfig.KVSubscriber

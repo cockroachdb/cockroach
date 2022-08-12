@@ -86,34 +86,39 @@ func intCols(numCols int) []*types.T {
 // not important). If it drains the depicted inbox, that is pulling from node 2
 // which is in turn pulling from an outbox, a cycle is created and the flow is
 // blocked.
-//          +------------+
-//          |  Node 3    |
-//          +-----+------+
-//                ^
-//      Node 1    |           Node 2
+//
+//	    +------------+
+//	    |  Node 3    |
+//	    +-----+------+
+//	          ^
+//	Node 1    |           Node 2
+//
 // +------------------------+-----------------+
-//          +------------+  |
-//     Spec C +--------+ |  |
-//          | |  noop  | |  |
-//          | +---+----+ |  |
-//          |     ^      |  |
-//          |  +--+---+  |  |
-//          |  |outbox|  +<----------+
-//          |  +------+  |  |        |
-//          +------------+  |        |
+//
+//	     +------------+  |
+//	Spec C +--------+ |  |
+//	     | |  noop  | |  |
+//	     | +---+----+ |  |
+//	     |     ^      |  |
+//	     |  +--+---+  |  |
+//	     |  |outbox|  +<----------+
+//	     |  +------+  |  |        |
+//	     +------------+  |        |
+//
 // Drain cycle!---+         |   +----+-----------------+
-//                v         |   |Any group of operators|
-//          +------------+  |   +----+-----------------+
-//          |  +------+  |  |        ^
-//     Spec A  |inbox +--------------+
-//          |  +------+  |  |
-//          +------------+  |
-//                ^         |
-//                |         |
-//          +-----+------+  |
-//     Spec B    noop    |  |
-//          |materializer|  +
-//          +------------+
+//
+//	           v         |   |Any group of operators|
+//	     +------------+  |   +----+-----------------+
+//	     |  +------+  |  |        ^
+//	Spec A  |inbox +--------------+
+//	     |  +------+  |  |
+//	     +------------+  |
+//	           ^         |
+//	           |         |
+//	     +-----+------+  |
+//	Spec B    noop    |  |
+//	     |materializer|  +
+//	     +------------+
 func TestDrainOnlyInputDAG(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

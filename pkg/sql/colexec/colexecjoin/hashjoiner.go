@@ -95,12 +95,12 @@ type hashJoinerSourceSpec struct {
 //
 // In the vectorized implementation of the build phase, the following tasks are
 // performed:
-// 1. The bucket number (hash value) of each key tuple is computed and stored
-//    into a buckets array.
-// 2. The values in the buckets array is normalized to fit within the hash table
-//    numBuckets.
-// 3. The bucket-chaining hash table organization is prepared with the computed
-//    buckets.
+//  1. The bucket number (hash value) of each key tuple is computed and stored
+//     into a buckets array.
+//  2. The values in the buckets array is normalized to fit within the hash table
+//     numBuckets.
+//  3. The bucket-chaining hash table organization is prepared with the computed
+//     buckets.
 //
 // Depending on the value of the spec.rightDistinct flag, there are two
 // variations of the probe phase. The planner will set rightDistinct to true if
@@ -109,54 +109,54 @@ type hashJoinerSourceSpec struct {
 // In the columnarized implementation of the distinct build table probe phase,
 // the following tasks are performed by the fastProbe function:
 //
-// 1. Compute the bucket number for each probe row's key tuple and store the
-//    results into the buckets array.
-// 2. In order to find the position of these key tuples in the hash table:
-// - First find the first element in the bucket's linked list for each key tuple
-//   and store it in the ToCheckID array. Initialize the ToCheck array with the
-//   full sequence of input indices (0...batchSize - 1).
-// - While ToCheck is not empty, each element in ToCheck represents a position
-//   of the key tuples for which the key has not yet been found in the hash
-//   table. Perform a multi-column equality check to see if the key columns
-//   match that of the build table's key columns at ToCheckID.
-// - Update the differs array to store whether or not the probe's key tuple
-//   matched the corresponding build's key tuple.
-// - Select the indices that differed and store them into ToCheck since they
-//   need to be further processed.
-// - For the differing tuples, find the next ID in that bucket of the hash table
-//   and put it into the ToCheckID array.
-// 3. Now, ToCheckID for every probe's key tuple contains the index of the
-//    matching build's key tuple in the hash table. Use it to project output
-//    columns from the has table to build the resulting batch.
+//  1. Compute the bucket number for each probe row's key tuple and store the
+//     results into the buckets array.
+//  2. In order to find the position of these key tuples in the hash table:
+//     - First find the first element in the bucket's linked list for each key tuple
+//     and store it in the ToCheckID array. Initialize the ToCheck array with the
+//     full sequence of input indices (0...batchSize - 1).
+//     - While ToCheck is not empty, each element in ToCheck represents a position
+//     of the key tuples for which the key has not yet been found in the hash
+//     table. Perform a multi-column equality check to see if the key columns
+//     match that of the build table's key columns at ToCheckID.
+//     - Update the differs array to store whether or not the probe's key tuple
+//     matched the corresponding build's key tuple.
+//     - Select the indices that differed and store them into ToCheck since they
+//     need to be further processed.
+//     - For the differing tuples, find the next ID in that bucket of the hash table
+//     and put it into the ToCheckID array.
+//  3. Now, ToCheckID for every probe's key tuple contains the index of the
+//     matching build's key tuple in the hash table. Use it to project output
+//     columns from the has table to build the resulting batch.
 //
 // In the columnarized implementation of the non-distinct build table probe
 // phase, the following tasks are performed by the probe function:
 //
-// 1. Compute the bucket number for each probe row's key tuple and store the
-//    results into the buckets array.
-// 2. In order to find the position of these key tuples in the hash table:
-// - First find the first element in the bucket's linked list for each key tuple
-//   and store it in the ToCheckID array. Initialize the ToCheck array with the
-//   full sequence of input indices (0...batchSize - 1).
-// - While ToCheck is not empty, each element in ToCheck represents a position
-//   of the key tuples for which the key has not yet been visited by any prior
-//   probe. Perform a multi-column equality check to see if the key columns
-//   match that of the build table's key columns at ToCheckID.
-// - Update the differs array to store whether or not the probe's key tuple
-//   matched the corresponding build's key tuple.
-// - For the indices that did not differ, we can lazily update the HashTable's
-//   same linked list to store a list of all identical keys starting at head.
-//   Once a key has been added to ht.Same, ht.Visited is set to true. For the
-//   indices that have never been visited, we want to continue checking this
-//   bucket for identical values by adding this key to ToCheck.
-// - Select the indices that differed and store them into ToCheck since they
-//   need to be further processed.
-// - For the differing tuples, find the next ID in that bucket of the hash table
-//   and put it into the ToCheckID array.
-// 3. Now, head stores the keyID of the first match in the build table for every
-//    probe table key. ht.Same is used to select all build key matches for each
-//    probe key, which are added to the resulting batch. Output batching is done
-//    to ensure that each batch is at most coldata.BatchSize().
+//  1. Compute the bucket number for each probe row's key tuple and store the
+//     results into the buckets array.
+//  2. In order to find the position of these key tuples in the hash table:
+//     - First find the first element in the bucket's linked list for each key tuple
+//     and store it in the ToCheckID array. Initialize the ToCheck array with the
+//     full sequence of input indices (0...batchSize - 1).
+//     - While ToCheck is not empty, each element in ToCheck represents a position
+//     of the key tuples for which the key has not yet been visited by any prior
+//     probe. Perform a multi-column equality check to see if the key columns
+//     match that of the build table's key columns at ToCheckID.
+//     - Update the differs array to store whether or not the probe's key tuple
+//     matched the corresponding build's key tuple.
+//     - For the indices that did not differ, we can lazily update the HashTable's
+//     same linked list to store a list of all identical keys starting at head.
+//     Once a key has been added to ht.Same, ht.Visited is set to true. For the
+//     indices that have never been visited, we want to continue checking this
+//     bucket for identical values by adding this key to ToCheck.
+//     - Select the indices that differed and store them into ToCheck since they
+//     need to be further processed.
+//     - For the differing tuples, find the next ID in that bucket of the hash table
+//     and put it into the ToCheckID array.
+//  3. Now, head stores the keyID of the first match in the build table for every
+//     probe table key. ht.Same is used to select all build key matches for each
+//     probe key, which are added to the resulting batch. Output batching is done
+//     to ensure that each batch is at most coldata.BatchSize().
 //
 // In the case that an outer join on the probe table side is performed, every
 // single probe row is kept even if its ToCheckID is 0. If a ToCheckID of 0 is

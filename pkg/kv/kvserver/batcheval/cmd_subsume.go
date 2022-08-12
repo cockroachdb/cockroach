@@ -51,15 +51,15 @@ func declareKeysSubsume(
 //
 // Specifically, the receiving replica guarantees that:
 //
-//   1. it is the leaseholder at the time the request executes,
-//   2. when it responds, there are no commands in flight with a timestamp
-//      greater than the FreezeStart timestamp provided in the response,
-//   3. the MVCC statistics in the response reflect the latest writes,
-//   4. it, and all future leaseholders for the range, will not process another
-//      command until they refresh their range descriptor with a consistent read
-//      from meta2, and
-//   5. if it or any future leaseholder for the range finds that its range
-//      descriptor has been deleted, it self destructs.
+//  1. it is the leaseholder at the time the request executes,
+//  2. when it responds, there are no commands in flight with a timestamp
+//     greater than the FreezeStart timestamp provided in the response,
+//  3. the MVCC statistics in the response reflect the latest writes,
+//  4. it, and all future leaseholders for the range, will not process another
+//     command until they refresh their range descriptor with a consistent read
+//     from meta2, and
+//  5. if it or any future leaseholder for the range finds that its range
+//     descriptor has been deleted, it self destructs.
 //
 // To achieve guarantees four and five, when issuing a Subsume request, the
 // caller must have a merge transaction open that has already placed deletion

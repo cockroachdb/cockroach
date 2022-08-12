@@ -36,13 +36,15 @@ func WriteProfile(t testing.TB, name string, path string) {
 // -memprofile does not.
 //
 // Example usage:
-//     setupCode()
-//     AllocProfileDiff(t, "mem.before", "mem.after", func() {
-//       interestingCode()
-//     })
+//
+//	setupCode()
+//	AllocProfileDiff(t, "mem.before", "mem.after", func() {
+//	  interestingCode()
+//	})
 //
 // The resulting profiles are then diffed via:
-//     go tool pprof -base mem.before mem.after
+//
+//	go tool pprof -base mem.before mem.after
 func AllocProfileDiff(t testing.TB, beforePath, afterPath string, fn func()) {
 	// Use "allocs" instead of "heap" to match what -memprofile does. Also run
 	// runtime.GC immediately before grabbing the profile because the allocs

@@ -398,10 +398,10 @@ func (ts *testState) notCompleted(t *testing.T, d *datadriven.TestData, args cmd
 // advance advances the clock by the provided duration and returns the new
 // current time.
 //
-//  advance
-//  2s
-//  ----
-//  00:00:02.000
+//	advance
+//	2s
+//	----
+//	00:00:02.000
 //
 // An optional "wait" argument will cause advance to block until it receives a
 // tick event, indicating the clock change has been processed.
@@ -457,11 +457,10 @@ func (ts *testState) unblockRequest(t *testing.T, d *datadriven.TestData, args c
 // The following example would wait for there to be two outstanding timers at
 // 00:00:01.000 and 00:00:02.000.
 //
-//  timers
-//  ----
-//  00:00:01.000
-//  00:00:02.000
-//
+//	timers
+//	----
+//	00:00:01.000
+//	00:00:02.000
 func (ts *testState) timers(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
 	// If we are rewriting the test, just sleep a bit before returning the
 	// timers.

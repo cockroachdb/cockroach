@@ -18,14 +18,14 @@ import (
 )
 
 // These rules ensure that:
-// - a descriptor element reaches the DROPPED state in the statement txn before
-//   its dependent elements (namespace entry, comments, column names, etc) reach
-//   the ABSENT state;
-// - for those dependent elements which have to wait post-commit to reach the
-//   ABSENT state, we tie them to the same stage as when the descriptor element
-//   reaches the ABSENT state, but afterwards in the stage, so as to not
-//   interfere with the event logging op which is tied to the descriptor element
-//   removal.
+//   - a descriptor element reaches the DROPPED state in the statement txn before
+//     its dependent elements (namespace entry, comments, column names, etc) reach
+//     the ABSENT state;
+//   - for those dependent elements which have to wait post-commit to reach the
+//     ABSENT state, we tie them to the same stage as when the descriptor element
+//     reaches the ABSENT state, but afterwards in the stage, so as to not
+//     interfere with the event logging op which is tied to the descriptor element
+//     removal.
 func init() {
 
 	registerDepRule(

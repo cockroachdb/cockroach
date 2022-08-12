@@ -77,7 +77,7 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 // PrettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
 //
-//   /Table/<tableID>/<indexID>/...
+//	/Table/<tableID>/<indexID>/...
 //
 // We always strip off the /Table prefix and then `skip` more fields. Note that
 // this assumes that the fields themselves do not contain '/', but that is

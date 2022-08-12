@@ -62,11 +62,13 @@ func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 
 // InferWhensType returns the type of a CASE expression, which is
 // of the form:
-//   CASE [ <cond> ]
-//       WHEN <condval1> THEN <expr1>
-//     [ WHEN <condval2> THEN <expr2> ] ...
-//     [ ELSE <expr> ]
-//   END
+//
+//	CASE [ <cond> ]
+//	    WHEN <condval1> THEN <expr1>
+//	  [ WHEN <condval2> THEN <expr2> ] ...
+//	  [ ELSE <expr> ]
+//	END
+//
 // All possible values should have the same type, and that is the type of the
 // case.
 func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) *types.T {
@@ -348,11 +350,13 @@ func typeCoalesce(e opt.ScalarExpr) *types.T {
 
 // typeCase returns the type of a CASE expression, which is
 // of the form:
-//   CASE [ <cond> ]
-//       WHEN <condval1> THEN <expr1>
-//     [ WHEN <condval2> THEN <expr2> ] ...
-//     [ ELSE <expr> ]
-//   END
+//
+//	CASE [ <cond> ]
+//	    WHEN <condval1> THEN <expr1>
+//	  [ WHEN <condval2> THEN <expr2> ] ...
+//	  [ ELSE <expr> ]
+//	END
+//
 // The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
 // the type of the ELSE <expr> value if all the previous types are unknown.
 func typeCase(e opt.ScalarExpr) *types.T {

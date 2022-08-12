@@ -27,9 +27,12 @@ func (c *CustomFuncs) ConcatLeftDeepAnds(left, right opt.ScalarExpr) opt.ScalarE
 }
 
 // NegateComparison negates a comparison op like:
-//   a.x = 5
+//
+//	a.x = 5
+//
 // to:
-//   a.x <> 5
+//
+//	a.x <> 5
 func (c *CustomFuncs) NegateComparison(
 	cmp opt.Operator, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
@@ -48,11 +51,11 @@ func (c *CustomFuncs) CanNegateComparison(cmp opt.Operator) bool {
 // whether it appears as a conjunct in the right expression. If so, it returns
 // the matching conjunct. Otherwise, it returns ok=false. For example:
 //
-//   A OR A                               =>  A
-//   B OR A                               =>  nil
-//   A OR (A AND B)                       =>  A
-//   (A AND B) OR (A AND C)               =>  A
-//   (A AND B AND C) OR (A AND (D OR E))  =>  A
+//	A OR A                               =>  A
+//	B OR A                               =>  nil
+//	A OR (A AND B)                       =>  A
+//	(A AND B) OR (A AND C)               =>  A
+//	(A AND B AND C) OR (A AND (D OR E))  =>  A
 //
 // Once a redundant conjunct has been found, it is extracted via a call to the
 // ExtractRedundantConjunct function. Redundant conjuncts are extracted from
@@ -98,13 +101,13 @@ func (c *CustomFuncs) isConjunct(candidate, conjunction opt.ScalarExpr) bool {
 // and returns an And of the conjunct with the remaining Or expression (a
 // logically equivalent expression). For example:
 //
-//   (A AND B) OR (A AND C)  =>  A AND (B OR C)
+//	(A AND B) OR (A AND C)  =>  A AND (B OR C)
 //
 // If extracting the conjunct from one of the OR conditions would result in an
 // empty condition, the conjunct itself is returned (a logically equivalent
 // expression). For example:
 //
-//   A OR (A AND B)  =>  A
+//	A OR (A AND B)  =>  A
 //
 // These transformations are useful for finding a conjunct that can be pushed
 // down in the query tree. For example, if the redundant conjunct A is fully

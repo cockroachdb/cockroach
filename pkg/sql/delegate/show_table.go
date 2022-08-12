@@ -247,12 +247,13 @@ func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
 // showTableDetails returns the AST of a query which extracts information about
 // the given table using the given query patterns in SQL. The query pattern must
 // accept the following formatting parameters:
-//   %[1]s the database name as SQL string literal.
-//   %[2]s the unqualified table name as SQL string literal.
-//   %[3]s the given table name as SQL string literal.
-//   %[4]s the database name as SQL identifier.
-//   %[5]s the schema name as SQL string literal.
-//   %[6]s the table ID.
+//
+//	%[1]s the database name as SQL string literal.
+//	%[2]s the unqualified table name as SQL string literal.
+//	%[3]s the given table name as SQL string literal.
+//	%[4]s the database name as SQL identifier.
+//	%[5]s the schema name as SQL string literal.
+//	%[6]s the table ID.
 func (d *delegator) showTableDetails(
 	name *tree.UnresolvedObjectName, query string,
 ) (tree.Statement, error) {

@@ -84,7 +84,7 @@ func (c *CustomFuncs) inlineConstants(
 // one time, or if the projection expressions contain a correlated subquery.
 // For example:
 //
-//   SELECT x+1, x+2, y FROM a
+//	SELECT x+1, x+2, y FROM a
 //
 // HasDuplicateRefs would be true, since the x column is referenced twice.
 //
@@ -189,9 +189,8 @@ func (c *CustomFuncs) VirtualColumns(scanPrivate *memo.ScanPrivate) opt.ColSet {
 // InlinableVirtualColumnFilters returns a new filters expression containing any
 // of the given filters that meet the criteria:
 //
-//   1. The filter has references to any of the columns in virtualColumns.
-//   2. The filter is not a correlated subquery.
-//
+//  1. The filter has references to any of the columns in virtualColumns.
+//  2. The filter is not a correlated subquery.
 func (c *CustomFuncs) InlinableVirtualColumnFilters(
 	filters memo.FiltersExpr, virtualColumns opt.ColSet,
 ) (inlinableFilters memo.FiltersExpr) {
@@ -309,9 +308,12 @@ func (c *CustomFuncs) extractVarEqualsConst(
 
 // CanInlineConstVar returns true if there is an opportunity in the filters to
 // inline a variable restricted to be a constant, as in:
-//   SELECT * FROM foo WHERE a = 4 AND a IN (1, 2, 3, 4).
+//
+//	SELECT * FROM foo WHERE a = 4 AND a IN (1, 2, 3, 4).
+//
 // =>
-//   SELECT * FROM foo WHERE a = 4 AND 4 IN (1, 2, 3, 4).
+//
+//	SELECT * FROM foo WHERE a = 4 AND 4 IN (1, 2, 3, 4).
 func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 	// usedIndices tracks the set of filter indices we've used to infer constant
 	// values, so we don't inline into them.

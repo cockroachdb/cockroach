@@ -28,11 +28,11 @@ import (
 // these parts specify a simple pattern that can match one or more candidate
 // orderings. Here are some examples:
 //
-//   +1                  ORDER BY a
-//   +1,-2               ORDER BY a,b DESC
-//   +(1|2)              ORDER BY a        | ORDER BY b
-//   +(1|2),+3           ORDER BY a,c      | ORDER BY b, c
-//   -(3|4),+5 opt(1,2)  ORDER BY c DESC,e | ORDER BY a,d DESC,b DESC,e | ...
+//	+1                  ORDER BY a
+//	+1,-2               ORDER BY a,b DESC
+//	+(1|2)              ORDER BY a        | ORDER BY b
+//	+(1|2),+3           ORDER BY a,c      | ORDER BY b, c
+//	-(3|4),+5 opt(1,2)  ORDER BY c DESC,e | ORDER BY a,d DESC,b DESC,e | ...
 //
 // Each column in the ordering sequence forms the corresponding column of the
 // sort key, from most significant to least significant. Each column has a sort
@@ -46,12 +46,12 @@ import (
 // the group can be used to form the corresponding column in the sort key. The
 // equivalent group columns come from SQL expressions like:
 //
-//   a=b
+//	a=b
 //
 // The optional column set contains columns that can appear anywhere (or
 // nowhere) in the ordering. Optional columns come from SQL expressions like:
 //
-//   a=1
+//	a=1
 //
 // Another case for optional columns is when we are grouping along a set of
 // columns and only care about the intra-group ordering.
@@ -100,9 +100,9 @@ var optRegex, ordColRegex *regexp.Regexp
 // ParseOrderingChoice parses the string representation of an OrderingChoice for
 // testing purposes. Here are some examples of the string format:
 //
-//   +1
-//   -(1|2),+3
-//   +(1|2),+3 opt(5,6)
+//	+1
+//	-(1|2),+3
+//	+(1|2),+3 opt(5,6)
 //
 // The input string is expected to be valid; ParseOrderingChoice will panic if
 // it is not.
@@ -247,8 +247,7 @@ func (oc *OrderingChoice) ToOrdering() opt.Ordering {
 // ColSet returns the set of all non-optional columns that are part of this
 // instance. For example, (1,2,3) will be returned if the OrderingChoice is:
 //
-//   +1,(2|3) opt(4,5)
-//
+//	+1,(2|3) opt(4,5)
 func (oc *OrderingChoice) ColSet() opt.ColSet {
 	var cs opt.ColSet
 	for i := range oc.Columns {
@@ -264,30 +263,29 @@ func (oc *OrderingChoice) ColSet() opt.ColSet {
 //
 // Examples:
 //
-//   <empty>           implies <empty>
-//   +1                implies <empty>        (given set is prefix)
-//   +1                implies +1
-//   +1,-2             implies +1             (given set is prefix)
-//   +1,-2             implies +1,-2
-//   +1                implies +1 opt(2)      (unused optional col is ignored)
-//   -2,+1             implies +1 opt(2)      (optional col is ignored)
-//   +1                implies +(1|2)         (subset of choice)
-//   +(1|2)            implies +(1|2|3)       (subset of choice)
-//   +(1|2),-4         implies +(1|2|3),-(4|5)
-//   +(1|2) opt(4)     implies +(1|2|3) opt(4)
-//   +1,+2,+3          implies +(1|2),+3      (unused group columns become optional)
+//	<empty>           implies <empty>
+//	+1                implies <empty>        (given set is prefix)
+//	+1                implies +1
+//	+1,-2             implies +1             (given set is prefix)
+//	+1,-2             implies +1,-2
+//	+1                implies +1 opt(2)      (unused optional col is ignored)
+//	-2,+1             implies +1 opt(2)      (optional col is ignored)
+//	+1                implies +(1|2)         (subset of choice)
+//	+(1|2)            implies +(1|2|3)       (subset of choice)
+//	+(1|2),-4         implies +(1|2|3),-(4|5)
+//	+(1|2) opt(4)     implies +(1|2|3) opt(4)
+//	+1,+2,+3          implies +(1|2),+3      (unused group columns become optional)
 //
-//   <empty>           !implies +1
-//   +1                !implies -1            (direction mismatch)
-//   +1                !implies +1,-2         (prefix matching not commutative)
-//   +1 opt(2)         !implies +1            (extra optional cols not allowed)
-//   +1 opt(2)         !implies +1 opt(3)
-//   +(1|2)            !implies -(1|2)        (direction mismatch)
-//   +(1|2)            !implies +(3|4)        (no intersection)
-//   +(1|2)            !implies +(2|3)        (intersects, but not subset)
-//   +(1|2|3)          !implies +(1|2)        (subset of choice not commutative)
-//   +(1|2)            !implies +1 opt(2)
-//
+//	<empty>           !implies +1
+//	+1                !implies -1            (direction mismatch)
+//	+1                !implies +1,-2         (prefix matching not commutative)
+//	+1 opt(2)         !implies +1            (extra optional cols not allowed)
+//	+1 opt(2)         !implies +1 opt(3)
+//	+(1|2)            !implies -(1|2)        (direction mismatch)
+//	+(1|2)            !implies +(3|4)        (no intersection)
+//	+(1|2)            !implies +(2|3)        (intersects, but not subset)
+//	+(1|2|3)          !implies +(1|2)        (subset of choice not commutative)
+//	+(1|2)            !implies +1 opt(2)
 func (oc *OrderingChoice) Implies(other *OrderingChoice) bool {
 	if !oc.Optional.SubsetOf(other.Optional) {
 		return false
@@ -358,14 +356,16 @@ func (oc *OrderingChoice) Intersects(other *OrderingChoice) bool {
 // Intersection returns an OrderingChoice that Implies both ordering choices.
 // Can only be called if Intersects is true. Some examples:
 //
-//  +1           ∩ <empty> = +1
-//  +1           ∩ +1,+2   = +1,+2
-//  +1,+2 opt(3) ∩ +1,+3   = +1,+3,+2
+//	+1           ∩ <empty> = +1
+//	+1           ∩ +1,+2   = +1,+2
+//	+1,+2 opt(3) ∩ +1,+3   = +1,+3,+2
 //
 // In general, OrderingChoice is not expressive enough to represent the
 // intersection. In such cases, an OrderingChoice representing a subset of the
 // intersection is returned. For example,
-//  +1 opt(2) ∩ +2 opt(1)
+//
+//	+1 opt(2) ∩ +2 opt(1)
+//
 // can be either +1,+2 or +2,+1; only one of these is returned. Note that
 // the function may not be commutative in this case. In practice, such cases are
 // unlikely.
@@ -451,16 +451,15 @@ func (oc *OrderingChoice) Intersection(other *OrderingChoice) OrderingChoice {
 // are non-intersecting. Instead, it returns the longest prefix of intersecting
 // columns. Some examples:
 //
-//  +1           common prefix <empty> = <empty>
-//  +1           common prefix +1,+2   = +1
-//  +1,+2 opt(3) common prefix +1,+3   = +1,+3
+//	+1           common prefix <empty> = <empty>
+//	+1           common prefix +1,+2   = +1
+//	+1,+2 opt(3) common prefix +1,+3   = +1,+3
 //
 // Note that CommonPrefix is asymmetric: optional columns of oc will be used to
 // match trailing columns of other, but the reverse is not true. For example:
 //
-//  +1 opt(2) common prefix +1,+2     = +1,+2
-//  +1,+2     common prefix +1 opt(2) = +1
-//
+//	+1 opt(2) common prefix +1,+2     = +1,+2
+//	+1,+2     common prefix +1 opt(2) = +1
 func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 	if oc.Any() || other.Any() {
 		return OrderingChoice{}
@@ -612,16 +611,15 @@ func (oc *OrderingChoice) SubsetOfCols(cs opt.ColSet) bool {
 // CanProjectCols is true if at least one column in each ordering column group is
 // part of the given column set. For example, if the OrderingChoice is:
 //
-//   +1,-(2|3) opt(4,5)
+//	+1,-(2|3) opt(4,5)
 //
 // then CanProjectCols will behave as follows for these input sets:
 //
-//   (1,2)   => true
-//   (1,3)   => true
-//   (1,2,4) => true
-//   (1)     => false
-//   (3,4)   => false
-//
+//	(1,2)   => true
+//	(1,3)   => true
+//	(1,2,4) => true
+//	(1)     => false
+//	(3,4)   => false
 func (oc *OrderingChoice) CanProjectCols(cs opt.ColSet) bool {
 	for i := range oc.Columns {
 		if !oc.Group(i).Intersects(cs) {
@@ -719,21 +717,21 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 // Simplify uses the given FD set to streamline the orderings allowed by this
 // instance. It can both increase and decrease the number of allowed orderings:
 //
-//   1. Constant columns add additional optional column choices.
+//  1. Constant columns add additional optional column choices.
 //
-//   2. Equivalent columns allow additional choices within an ordering column
-//      group.
+//  2. Equivalent columns allow additional choices within an ordering column
+//     group.
 //
-//   3. Non-equivalent columns in an ordering column group are removed.
+//  3. Non-equivalent columns in an ordering column group are removed.
 //
-//   4. If the columns in a group are functionally determined by columns from
-//      previous groups, the group can be dropped. This technique is described
-//      in the "Reduce Order" section of this paper:
+//  4. If the columns in a group are functionally determined by columns from
+//     previous groups, the group can be dropped. This technique is described
+//     in the "Reduce Order" section of this paper:
 //
-//        Simmen, David & Shekita, Eugene & Malkemus, Timothy. (1996).
-//        Fundamental Techniques for Order Optimization.
-//        Sigmod Record. Volume 25 Issue 2, June 1996. Pages 57-67.
-//        https://cs.uwaterloo.ca/~gweddell/cs798/p57-simmen.pdf
+//     Simmen, David & Shekita, Eugene & Malkemus, Timothy. (1996).
+//     Fundamental Techniques for Order Optimization.
+//     Sigmod Record. Volume 25 Issue 2, June 1996. Pages 57-67.
+//     https://cs.uwaterloo.ca/~gweddell/cs798/p57-simmen.pdf
 //
 // This logic should be changed in concert with the CanSimplify logic.
 func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
@@ -784,11 +782,10 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 // Truncate removes all ordering columns beyond the given index. For example,
 // +1,+(2|3),-4 opt(5,6) would be truncated to:
 //
-//   prefix=0  => opt(5,6)
-//   prefix=1  => +1 opt(5,6)
-//   prefix=2  => +1,+(2|3) opt(5,6)
-//   prefix=3+ => +1,+(2|3),-4 opt(5,6)
-//
+//	prefix=0  => opt(5,6)
+//	prefix=1  => +1 opt(5,6)
+//	prefix=2  => +1,+(2|3) opt(5,6)
+//	prefix=3+ => +1,+(2|3),-4 opt(5,6)
 func (oc *OrderingChoice) Truncate(prefix int) {
 	if prefix < len(oc.Columns) {
 		oc.Columns = oc.Columns[:prefix]
@@ -833,22 +830,21 @@ func (oc *OrderingChoice) RestrictToCols(cols opt.ColSet) {
 }
 
 // PrefixIntersection computes an OrderingChoice which:
-//  - implies <oc> (this instance), and
-//  - implies a "segmented ordering", which is any ordering which starts with a
-//    permutation of all columns in <prefix> followed by the <suffix> ordering.
+//   - implies <oc> (this instance), and
+//   - implies a "segmented ordering", which is any ordering which starts with a
+//     permutation of all columns in <prefix> followed by the <suffix> ordering.
 //
 // Note that <prefix> and <suffix> cannot have any columns in common.
 //
 // Such an ordering can be computed via the following rules:
 //
-//  - if <prefix> and <suffix> are empty: return this instance.
+//   - if <prefix> and <suffix> are empty: return this instance.
 //
-//  - if <oc> is empty: generate an arbitrary segmented ordering.
+//   - if <oc> is empty: generate an arbitrary segmented ordering.
 //
-//  - if the first column of <oc> is either in <prefix> or is the first column
-//    of <suffix> while <prefix> is empty: this column is the first column of
-//    the result; calculate the rest recursively.
-//
+//   - if the first column of <oc> is either in <prefix> or is the first column
+//     of <suffix> while <prefix> is empty: this column is the first column of
+//     the result; calculate the rest recursively.
 func (oc OrderingChoice) PrefixIntersection(
 	prefix opt.ColSet, suffix []OrderingColumnChoice,
 ) (_ OrderingChoice, ok bool) {
@@ -939,12 +935,11 @@ func (oc OrderingChoice) String() string {
 // Format writes the OrderingChoice to the given buffer in a human-readable
 // string representation that can also be parsed by ParseOrderingChoice:
 //
-//   +1
-//   +1,-2
-//   +(1|2)
-//   +(1|2),+3
-//   -(3|4),+5 opt(1,2)
-//
+//	+1
+//	+1,-2
+//	+(1|2)
+//	+(1|2),+3
+//	-(3|4),+5 opt(1,2)
 func (oc OrderingChoice) Format(buf *bytes.Buffer) {
 	for g := range oc.Columns {
 		group := &oc.Columns[g]

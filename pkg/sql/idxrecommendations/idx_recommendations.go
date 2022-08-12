@@ -35,18 +35,21 @@ type IdxRecommendations interface {
 }
 
 // FormatIdxRecommendations received a list with recommendations info, e.g.:
-//{
-//	"index recommendations: 2",
-//	"1. type: index replacement",
-//	"SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-//  "2. type: index creation",
-//  "SQL command: CREATE INDEX ON t2 (i) STORING (k);",
-//}
+//
+//	{
+//		"index recommendations: 2",
+//		"1. type: index replacement",
+//		"SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+//	 "2. type: index creation",
+//	 "SQL command: CREATE INDEX ON t2 (i) STORING (k);",
+//	}
+//
 // and returns a list of type and recommendations, e.g.:
-//{
-//		"replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-//    "creation : CREATE INDEX ON t2 (i) STORING (k);",
-//}
+//
+//	{
+//			"replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+//	   "creation : CREATE INDEX ON t2 (i) STORING (k);",
+//	}
 func FormatIdxRecommendations(idxRec []string) []string {
 	recommendations := []string{}
 	if len(idxRec) == 0 {

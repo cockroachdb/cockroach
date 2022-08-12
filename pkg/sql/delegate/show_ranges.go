@@ -44,9 +44,10 @@ func checkPrivilegesForShowRanges(d *delegator, table cat.Table) error {
 }
 
 // delegateShowRanges implements the SHOW RANGES statement:
-//   SHOW RANGES FROM TABLE t
-//   SHOW RANGES FROM INDEX t@idx
-//   SHOW RANGES FROM DATABASE db
+//
+//	SHOW RANGES FROM TABLE t
+//	SHOW RANGES FROM INDEX t@idx
+//	SHOW RANGES FROM DATABASE db
 //
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.

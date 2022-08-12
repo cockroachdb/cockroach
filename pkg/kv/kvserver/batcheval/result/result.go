@@ -153,9 +153,12 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 //
 // a) changes to be written to disk when applying the command
 // b) changes to the state which may require special handling (i.e. code
-//    execution) on all Replicas
+//
+//	execution) on all Replicas
+//
 // c) data which isn't sent to the followers but the proposer needs for tasks
-//    it must run when the command has applied (such as resolving intents).
+//
+//	it must run when the command has applied (such as resolving intents).
 type Result struct {
 	Local        LocalResult
 	Replicated   kvserverpb.ReplicatedEvalResult

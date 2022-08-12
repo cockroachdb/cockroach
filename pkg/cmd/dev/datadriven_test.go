@@ -39,8 +39,8 @@ const (
 // DataDriven divvies up these files as subtests, so individual "files" are
 // runnable through:
 //
-//  		dev test pkg/cmd/dev -f TestDataDriven/<fname> [--rewrite]
-// 	OR  go test ./pkg/cmd/dev -run TestDataDriven/<fname> [-rewrite]
+//	 		dev test pkg/cmd/dev -f TestDataDriven/<fname> [--rewrite]
+//		OR  go test ./pkg/cmd/dev -run TestDataDriven/<fname> [-rewrite]
 //
 // NB: See commentary on TestRecorderDriven to see how they compare.
 // TestDataDriven is well suited for exercising flows that don't depend on

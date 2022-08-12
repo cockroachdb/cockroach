@@ -7,7 +7,6 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 /*
-
 Package cdcevent facilitates conversion from low level roachpb.KeyValue into a higher
 level Row.  This package abstracts away the low level catalog objects
 (catalog.TableDescriptor, catalog.ColumnDescriptor, etc) so that the rest of the cdc code

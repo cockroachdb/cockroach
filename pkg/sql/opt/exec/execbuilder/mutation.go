@@ -890,11 +890,11 @@ func (b *Builder) buildFKCascades(withID opt.WithID, cascades memo.FKCascades) e
 // Mutations can commit the transaction as part of the same KV request,
 // potentially taking advantage of the 1PC optimization. This is not ok to do in
 // general; a sufficient set of conditions is:
-//   1. There is a single mutation in the query.
-//   2. The mutation is the root operator, or it is directly under a Project
-//      with no side-effecting expressions. An example of why we can't allow
-//      side-effecting expressions: if the projection encounters a
-//      division-by-zero error, the mutation shouldn't have been committed.
+//  1. There is a single mutation in the query.
+//  2. The mutation is the root operator, or it is directly under a Project
+//     with no side-effecting expressions. An example of why we can't allow
+//     side-effecting expressions: if the projection encounters a
+//     division-by-zero error, the mutation shouldn't have been committed.
 //
 // An extra condition relates to how the FK checks are run. If they run before
 // the mutation (via the insert fast path), auto commit is possible. If they run
@@ -977,9 +977,9 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr
 // existing rows) then this method determines whether the builder should perform
 // the following transformation:
 //
-//   UPDATE t = SELECT FROM t + INSERT INTO t
-//   =>
-//   UPDATE t = SELECT FROM t FOR UPDATE + INSERT INTO t
+//	UPDATE t = SELECT FROM t + INSERT INTO t
+//	=>
+//	UPDATE t = SELECT FROM t FOR UPDATE + INSERT INTO t
 //
 // The transformation is conditional on the UPDATE expression tree matching a
 // pattern. Specifically, the FOR UPDATE locking mode is only used during the

@@ -19,97 +19,100 @@ type Key int
 // migrations. Before you add a version or consider removing one, please
 // familiarize yourself with the rules below.
 //
-// Adding Versions
+// # Adding Versions
 //
 // You'll want to add a new one in the following cases:
 //
 // (a) When introducing a backwards incompatible feature. Broadly, by this we
-//     mean code that's structured as follows:
 //
-//      if (specific-version is active) {
-//          // Implies that all nodes in the cluster are running binaries that
-//          // have this code. We can "enable" the new feature knowing that
-//          // outbound RPCs, requests, etc. will be handled by nodes that know
-//          // how to do so.
-//      } else {
-//          // There may be some nodes running older binaries without this code.
-//          // To be safe, we'll want to behave as we did before introducing
-//          // this feature.
-//      }
+//	 mean code that's structured as follows:
 //
-//     Authors of migrations need to be careful in ensuring that end-users
-//     aren't able to enable feature gates before they're active. This is fine:
+//	  if (specific-version is active) {
+//	      // Implies that all nodes in the cluster are running binaries that
+//	      // have this code. We can "enable" the new feature knowing that
+//	      // outbound RPCs, requests, etc. will be handled by nodes that know
+//	      // how to do so.
+//	  } else {
+//	      // There may be some nodes running older binaries without this code.
+//	      // To be safe, we'll want to behave as we did before introducing
+//	      // this feature.
+//	  }
 //
-//      func handleSomeNewStatement() error {
-//          if !(specific-version is active) {
-//              return errors.New("cluster version needs to be bumped")
-//          }
-//          // ...
-//      }
+//	 Authors of migrations need to be careful in ensuring that end-users
+//	 aren't able to enable feature gates before they're active. This is fine:
 //
-//     At the same time, with requests/RPCs originating at other crdb nodes, the
-//     initiator of the request gets to decide what's supported. A node should
-//     not refuse functionality on the grounds that its view of the version gate
-//     is as yet inactive. Consider the sender:
+//	  func handleSomeNewStatement() error {
+//	      if !(specific-version is active) {
+//	          return errors.New("cluster version needs to be bumped")
+//	      }
+//	      // ...
+//	  }
 //
-//      func invokeSomeRPC(req) {
-//          if (specific-version is active) {
-//              // Like mentioned above, this implies that all nodes in the
-//              // cluster are running binaries that can handle this new
-//              // feature. We may have learned about this fact before the
-//              // node on the other end. This is due to the fact that migration
-//              // manager informs each node about the specific-version being
-//              // activated active concurrently. See BumpClusterVersion for
-//              // where that happens. Still, it's safe for us to enable the new
-//              // feature flags as we trust the recipient to know how to deal
-//              // with it.
-//            req.NewFeatureFlag = true
-//          }
-//          send(req)
-//      }
+//	 At the same time, with requests/RPCs originating at other crdb nodes, the
+//	 initiator of the request gets to decide what's supported. A node should
+//	 not refuse functionality on the grounds that its view of the version gate
+//	 is as yet inactive. Consider the sender:
 //
-//    And consider the recipient:
+//	  func invokeSomeRPC(req) {
+//	      if (specific-version is active) {
+//	          // Like mentioned above, this implies that all nodes in the
+//	          // cluster are running binaries that can handle this new
+//	          // feature. We may have learned about this fact before the
+//	          // node on the other end. This is due to the fact that migration
+//	          // manager informs each node about the specific-version being
+//	          // activated active concurrently. See BumpClusterVersion for
+//	          // where that happens. Still, it's safe for us to enable the new
+//	          // feature flags as we trust the recipient to know how to deal
+//	          // with it.
+//	        req.NewFeatureFlag = true
+//	      }
+//	      send(req)
+//	  }
 //
-//     func someRPC(req) {
-//         if !req.NewFeatureFlag {
-//             // Legacy behavior...
-//         }
-//         // There's no need to even check if the specific-version is active.
-//         // If the flag is enabled, the specific-version must have been
-//         // activated, even if we haven't yet heard about it (we will pretty
-//         // soon).
-//     }
+//	And consider the recipient:
 //
-//     See clusterversion.Handle.IsActive and usage of some existing versions
-//     below for more clues on the matter.
+//	 func someRPC(req) {
+//	     if !req.NewFeatureFlag {
+//	         // Legacy behavior...
+//	     }
+//	     // There's no need to even check if the specific-version is active.
+//	     // If the flag is enabled, the specific-version must have been
+//	     // activated, even if we haven't yet heard about it (we will pretty
+//	     // soon).
+//	 }
+//
+//	 See clusterversion.Handle.IsActive and usage of some existing versions
+//	 below for more clues on the matter.
 //
 // (b) When cutting a major release branch. When cutting release-20.2 for
-//     example, you'll want to introduce the following to `master`.
 //
-//       (i)  V20_2 (keyed to v20.2.0-0})
-//       (ii) Start21_1 (keyed to v20.2.0-1})
+//	 example, you'll want to introduce the following to `master`.
 //
-//    You'll then want to backport (i) to the release branch itself (i.e.
-//    release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
-//    example above, you'll set it to V20_2. This indicates that the
-//    minimum binary version required in a cluster with nodes running
-//    v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
-//    upgrade into such a binary must start out from at least v20.2 nodes.
+//	   (i)  V20_2 (keyed to v20.2.0-0})
+//	   (ii) Start21_1 (keyed to v20.2.0-1})
 //
-//    Aside: At the time of writing, the binary min supported version is the
-//    last major release, though we may consider relaxing this in the future
-//    (i.e. for example could skip up to one major release) as we move to a more
-//    frequent release schedule.
+//	You'll then want to backport (i) to the release branch itself (i.e.
+//	release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
+//	example above, you'll set it to V20_2. This indicates that the
+//	minimum binary version required in a cluster with nodes running
+//	v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
+//	upgrade into such a binary must start out from at least v20.2 nodes.
+//
+//	Aside: At the time of writing, the binary min supported version is the
+//	last major release, though we may consider relaxing this in the future
+//	(i.e. for example could skip up to one major release) as we move to a more
+//	frequent release schedule.
 //
 // When introducing a version constant, you'll want to:
-//   (1) Add it at the end of this block. For versions introduced during and
-//       after the 21.1 release, Internal versions must be even-numbered. The
-//       odd versions are used for internal book-keeping. The Internal version
-//       should be the previous Internal version for the same minor release plus
-//       two.
-//   (2) Add it at the end of the `versionsSingleton` block below.
 //
-// Migrations
+//	(1) Add it at the end of this block. For versions introduced during and
+//	    after the 21.1 release, Internal versions must be even-numbered. The
+//	    odd versions are used for internal book-keeping. The Internal version
+//	    should be the previous Internal version for the same minor release plus
+//	    two.
+//	(2) Add it at the end of the `versionsSingleton` block below.
+//
+// # Migrations
 //
 // Migrations are idempotent functions that can be attached to versions and will
 // be rolled out before the respective cluster version gets rolled out. They are
@@ -119,7 +122,7 @@ type Key int
 // their own documentation in ./pkg/upgrade, which you should peruse should you
 // feel that a migration is necessary for your use case.
 //
-// Phasing out Versions and Migrations
+// # Phasing out Versions and Migrations
 //
 // Versions and Migrations can be removed once they are no longer going to be
 // exercised. This is primarily driven by the BinaryMinSupportedVersion, which

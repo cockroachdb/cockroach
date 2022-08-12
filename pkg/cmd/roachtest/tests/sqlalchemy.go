@@ -30,7 +30,8 @@ var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
 // TODO(arul): Investigate why we need this and can't install sql alchemy using
-//  pip.
+//
+//	pip.
 var supportedSQLAlchemyTag = "rel_1_4_26"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach

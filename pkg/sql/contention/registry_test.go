@@ -195,9 +195,9 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 
 // TestSerializedRegistryInvariants verifies that the serialized registries
 // maintain all invariants, namely that
-// - all three levels of objects are subject to the respective maximum size
-// - all three levels of objects satisfy the respective ordering
-//   requirements.
+//   - all three levels of objects are subject to the respective maximum size
+//   - all three levels of objects satisfy the respective ordering
+//     requirements.
 func TestSerializedRegistryInvariants(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	const nonSQLKeyProbability = 0.1

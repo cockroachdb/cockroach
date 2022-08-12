@@ -214,7 +214,8 @@ func (s *Builder) SpanToPointSpan(span roachpb.Span, family descpb.FamilyID) roa
 // A span.Splitter can be used to generate more specific family spans.
 //
 // TODO (rohany): In future work, there should be a single API to generate spans
-//  from constraints, datums and encdatums.
+//
+//	from constraints, datums and encdatums.
 func (s *Builder) SpansFromConstraint(
 	c *constraint.Constraint, splitter Splitter,
 ) (roachpb.Spans, error) {

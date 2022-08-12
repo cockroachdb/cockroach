@@ -90,9 +90,9 @@ var EnumNamesIntervalUnit = map[IntervalUnit]string{
 	IntervalUnitDAY_TIME:   "DAY_TIME",
 }
 
-/// ----------------------------------------------------------------------
-/// Top-level Type value, enabling extensible type-specific metadata. We can
-/// add new logical types to Type without breaking backwards compatibility
+// / ----------------------------------------------------------------------
+// / Top-level Type value, enabling extensible type-specific metadata. We can
+// / add new logical types to Type without breaking backwards compatibility
 type Type = byte
 
 const (
@@ -137,8 +137,8 @@ var EnumNamesType = map[Type]string{
 	TypeMap:             "Map",
 }
 
-/// ----------------------------------------------------------------------
-/// Endianness of the platform producing the data
+// / ----------------------------------------------------------------------
+// / Endianness of the platform producing the data
 type Endianness = int16
 
 const (
@@ -151,7 +151,7 @@ var EnumNamesEndianness = map[Endianness]string{
 	EndiannessBig:    "Big",
 }
 
-/// These are stored in the flatbuffer in the Type union below
+// / These are stored in the flatbuffer in the Type union below
 type Null struct {
 	_tab flatbuffers.Table
 }
@@ -179,9 +179,9 @@ func NullEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// A Struct_ in the flatbuffer metadata is the same as an Arrow Struct
-/// (according to the physical memory layout). We used Struct_ here as
-/// Struct is a reserved word in Flatbuffers
+// / A Struct_ in the flatbuffer metadata is the same as an Arrow Struct
+// / (according to the physical memory layout). We used Struct_ here as
+// / Struct is a reserved word in Flatbuffers
 type Struct_ struct {
 	_tab flatbuffers.Table
 }
@@ -256,7 +256,7 @@ func (rcv *FixedSizeList) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// Number of list items per value
+// / Number of list items per value
 func (rcv *FixedSizeList) ListSize() int32 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -265,7 +265,7 @@ func (rcv *FixedSizeList) ListSize() int32 {
 	return 0
 }
 
-/// Number of list items per value
+// / Number of list items per value
 func (rcv *FixedSizeList) MutateListSize(n int32) bool {
 	return rcv._tab.MutateInt32Slot(4, n)
 }
@@ -280,30 +280,30 @@ func FixedSizeListEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// A Map is a logical nested type that is represented as
-///
-/// List<entry: Struct<key: K, value: V>>
-///
-/// In this layout, the keys and values are each respectively contiguous. We do
-/// not constrain the key and value types, so the application is responsible
-/// for ensuring that the keys are hashable and unique. Whether the keys are sorted
-/// may be set in the metadata for this field
-///
-/// In a Field with Map type, the Field has a child Struct field, which then
-/// has two children: key type and the second the value type. The names of the
-/// child fields may be respectively "entry", "key", and "value", but this is
-/// not enforced
-///
-/// Map
-///   - child[0] entry: Struct
-///     - child[0] key: K
-///     - child[1] value: V
-///
-/// Neither the "entry" field nor the "key" field may be nullable.
-///
-/// The metadata is structured so that Arrow systems without special handling
-/// for Map can make Map an alias for List. The "layout" attribute for the Map
-/// field must have the same contents as a List.
+// / A Map is a logical nested type that is represented as
+// /
+// / List<entry: Struct<key: K, value: V>>
+// /
+// / In this layout, the keys and values are each respectively contiguous. We do
+// / not constrain the key and value types, so the application is responsible
+// / for ensuring that the keys are hashable and unique. Whether the keys are sorted
+// / may be set in the metadata for this field
+// /
+// / In a Field with Map type, the Field has a child Struct field, which then
+// / has two children: key type and the second the value type. The names of the
+// / child fields may be respectively "entry", "key", and "value", but this is
+// / not enforced
+// /
+// / Map
+// /   - child[0] entry: Struct
+// /     - child[0] key: K
+// /     - child[1] value: V
+// /
+// / Neither the "entry" field nor the "key" field may be nullable.
+// /
+// / The metadata is structured so that Arrow systems without special handling
+// / for Map can make Map an alias for List. The "layout" attribute for the Map
+// / field must have the same contents as a List.
 type Map struct {
 	_tab flatbuffers.Table
 }
@@ -324,7 +324,7 @@ func (rcv *Map) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// Set to true if the keys within each value are sorted
+// / Set to true if the keys within each value are sorted
 func (rcv *Map) KeysSorted() byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -333,7 +333,7 @@ func (rcv *Map) KeysSorted() byte {
 	return 0
 }
 
-/// Set to true if the keys within each value are sorted
+// / Set to true if the keys within each value are sorted
 func (rcv *Map) MutateKeysSorted(n byte) bool {
 	return rcv._tab.MutateByteSlot(4, n)
 }
@@ -348,10 +348,10 @@ func MapEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// A union is a complex type with children in Field
-/// By default ids in the type vector refer to the offsets in the children
-/// optionally typeIds provides an indirection between the child offset and the type id
-/// for each child typeIds[offset] is the id used in the type vector
+// / A union is a complex type with children in Field
+// / By default ids in the type vector refer to the offsets in the children
+// / optionally typeIds provides an indirection between the child offset and the type id
+// / for each child typeIds[offset] is the id used in the type vector
 type Union struct {
 	_tab flatbuffers.Table
 }
@@ -516,7 +516,7 @@ func FloatingPointEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// Unicode with UTF-8 encoding
+// / Unicode with UTF-8 encoding
 type Utf8 struct {
 	_tab flatbuffers.Table
 }
@@ -591,7 +591,7 @@ func (rcv *FixedSizeBinary) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// Number of bytes per value
+// / Number of bytes per value
 func (rcv *FixedSizeBinary) ByteWidth() int32 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -600,7 +600,7 @@ func (rcv *FixedSizeBinary) ByteWidth() int32 {
 	return 0
 }
 
-/// Number of bytes per value
+// / Number of bytes per value
 func (rcv *FixedSizeBinary) MutateByteWidth(n int32) bool {
 	return rcv._tab.MutateInt32Slot(4, n)
 }
@@ -662,7 +662,7 @@ func (rcv *Decimal) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// Total number of decimal digits
+// / Total number of decimal digits
 func (rcv *Decimal) Precision() int32 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -671,12 +671,12 @@ func (rcv *Decimal) Precision() int32 {
 	return 0
 }
 
-/// Total number of decimal digits
+// / Total number of decimal digits
 func (rcv *Decimal) MutatePrecision(n int32) bool {
 	return rcv._tab.MutateInt32Slot(4, n)
 }
 
-/// Number of digits after the decimal point "."
+// / Number of digits after the decimal point "."
 func (rcv *Decimal) Scale() int32 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -685,7 +685,7 @@ func (rcv *Decimal) Scale() int32 {
 	return 0
 }
 
-/// Number of digits after the decimal point "."
+// / Number of digits after the decimal point "."
 func (rcv *Decimal) MutateScale(n int32) bool {
 	return rcv._tab.MutateInt32Slot(6, n)
 }
@@ -703,12 +703,12 @@ func DecimalEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// Date is either a 32-bit or 64-bit type representing elapsed time since UNIX
-/// epoch (1970-01-01), stored in either of two units:
-///
-/// * Milliseconds (64 bits) indicating UNIX time elapsed since the epoch (no
-///   leap seconds), where the values are evenly divisible by 86400000
-/// * Days (32 bits) since the UNIX epoch
+// / Date is either a 32-bit or 64-bit type representing elapsed time since UNIX
+// / epoch (1970-01-01), stored in either of two units:
+// /
+// / * Milliseconds (64 bits) indicating UNIX time elapsed since the epoch (no
+// /   leap seconds), where the values are evenly divisible by 86400000
+// / * Days (32 bits) since the UNIX epoch
 type Date struct {
 	_tab flatbuffers.Table
 }
@@ -751,9 +751,9 @@ func DateEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// Time type. The physical storage type depends on the unit
-/// - SECOND and MILLISECOND: 32 bits
-/// - MICROSECOND and NANOSECOND: 64 bits
+// / Time type. The physical storage type depends on the unit
+// / - SECOND and MILLISECOND: 32 bits
+// / - MICROSECOND and NANOSECOND: 64 bits
 type Time struct {
 	_tab flatbuffers.Table
 }
@@ -811,12 +811,12 @@ func TimeEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// Time elapsed from the Unix epoch, 00:00:00.000 on 1 January 1970, excluding
-/// leap seconds, as a 64-bit integer. Note that UNIX time does not include
-/// leap seconds.
-///
-/// The Timestamp metadata supports both "time zone naive" and "time zone
-/// aware" timestamps. Read about the timezone attribute for more detail
+// / Time elapsed from the Unix epoch, 00:00:00.000 on 1 January 1970, excluding
+// / leap seconds, as a 64-bit integer. Note that UNIX time does not include
+// / leap seconds.
+// /
+// / The Timestamp metadata supports both "time zone naive" and "time zone
+// / aware" timestamps. Read about the timezone attribute for more detail
 type Timestamp struct {
 	_tab flatbuffers.Table
 }
@@ -849,26 +849,26 @@ func (rcv *Timestamp) MutateUnit(n int16) bool {
 	return rcv._tab.MutateInt16Slot(4, n)
 }
 
-/// The time zone is a string indicating the name of a time zone, one of:
-///
-/// * As used in the Olson time zone database (the "tz database" or
-///   "tzdata"), such as "America/New_York"
-/// * An absolute time zone offset of the form +XX:XX or -XX:XX, such as +07:30
-///
-/// Whether a timezone string is present indicates different semantics about
-/// the data:
-///
-/// * If the time zone is null or equal to an empty string, the data is "time
-///   zone naive" and shall be displayed *as is* to the user, not localized
-///   to the locale of the user. This data can be though of as UTC but
-///   without having "UTC" as the time zone, it is not considered to be
-///   localized to any time zone
-///
-/// * If the time zone is set to a valid value, values can be displayed as
-///   "localized" to that time zone, even though the underlying 64-bit
-///   integers are identical to the same data stored in UTC. Converting
-///   between time zones is a metadata-only operation and does not change the
-///   underlying values
+// / The time zone is a string indicating the name of a time zone, one of:
+// /
+// / * As used in the Olson time zone database (the "tz database" or
+// /   "tzdata"), such as "America/New_York"
+// / * An absolute time zone offset of the form +XX:XX or -XX:XX, such as +07:30
+// /
+// / Whether a timezone string is present indicates different semantics about
+// / the data:
+// /
+// / * If the time zone is null or equal to an empty string, the data is "time
+// /   zone naive" and shall be displayed *as is* to the user, not localized
+// /   to the locale of the user. This data can be though of as UTC but
+// /   without having "UTC" as the time zone, it is not considered to be
+// /   localized to any time zone
+// /
+// / * If the time zone is set to a valid value, values can be displayed as
+// /   "localized" to that time zone, even though the underlying 64-bit
+// /   integers are identical to the same data stored in UTC. Converting
+// /   between time zones is a metadata-only operation and does not change the
+// /   underlying values
 func (rcv *Timestamp) Timezone() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -877,26 +877,26 @@ func (rcv *Timestamp) Timezone() []byte {
 	return nil
 }
 
-/// The time zone is a string indicating the name of a time zone, one of:
-///
-/// * As used in the Olson time zone database (the "tz database" or
-///   "tzdata"), such as "America/New_York"
-/// * An absolute time zone offset of the form +XX:XX or -XX:XX, such as +07:30
-///
-/// Whether a timezone string is present indicates different semantics about
-/// the data:
-///
-/// * If the time zone is null or equal to an empty string, the data is "time
-///   zone naive" and shall be displayed *as is* to the user, not localized
-///   to the locale of the user. This data can be though of as UTC but
-///   without having "UTC" as the time zone, it is not considered to be
-///   localized to any time zone
-///
-/// * If the time zone is set to a valid value, values can be displayed as
-///   "localized" to that time zone, even though the underlying 64-bit
-///   integers are identical to the same data stored in UTC. Converting
-///   between time zones is a metadata-only operation and does not change the
-///   underlying values
+// / The time zone is a string indicating the name of a time zone, one of:
+// /
+// / * As used in the Olson time zone database (the "tz database" or
+// /   "tzdata"), such as "America/New_York"
+// / * An absolute time zone offset of the form +XX:XX or -XX:XX, such as +07:30
+// /
+// / Whether a timezone string is present indicates different semantics about
+// / the data:
+// /
+// / * If the time zone is null or equal to an empty string, the data is "time
+// /   zone naive" and shall be displayed *as is* to the user, not localized
+// /   to the locale of the user. This data can be though of as UTC but
+// /   without having "UTC" as the time zone, it is not considered to be
+// /   localized to any time zone
+// /
+// / * If the time zone is set to a valid value, values can be displayed as
+// /   "localized" to that time zone, even though the underlying 64-bit
+// /   integers are identical to the same data stored in UTC. Converting
+// /   between time zones is a metadata-only operation and does not change the
+// /   underlying values
 func TimestampStart(builder *flatbuffers.Builder) {
 	builder.StartObject(2)
 }
@@ -952,9 +952,9 @@ func IntervalEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// ----------------------------------------------------------------------
-/// user defined key value pairs to add custom metadata to arrow
-/// key namespacing is the responsibility of the user
+// / ----------------------------------------------------------------------
+// / user defined key value pairs to add custom metadata to arrow
+// / key namespacing is the responsibility of the user
 type KeyValue struct {
 	_tab flatbuffers.Table
 }
@@ -1004,8 +1004,8 @@ func KeyValueEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// ----------------------------------------------------------------------
-/// Dictionary encoding metadata
+// / ----------------------------------------------------------------------
+// / Dictionary encoding metadata
 type DictionaryEncoding struct {
 	_tab flatbuffers.Table
 }
@@ -1026,9 +1026,9 @@ func (rcv *DictionaryEncoding) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// The known dictionary id in the application where this data is used. In
-/// the file or streaming formats, the dictionary ids are found in the
-/// DictionaryBatch messages
+// / The known dictionary id in the application where this data is used. In
+// / the file or streaming formats, the dictionary ids are found in the
+// / DictionaryBatch messages
 func (rcv *DictionaryEncoding) Id() int64 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -1037,15 +1037,15 @@ func (rcv *DictionaryEncoding) Id() int64 {
 	return 0
 }
 
-/// The known dictionary id in the application where this data is used. In
-/// the file or streaming formats, the dictionary ids are found in the
-/// DictionaryBatch messages
+// / The known dictionary id in the application where this data is used. In
+// / the file or streaming formats, the dictionary ids are found in the
+// / DictionaryBatch messages
 func (rcv *DictionaryEncoding) MutateId(n int64) bool {
 	return rcv._tab.MutateInt64Slot(4, n)
 }
 
-/// The dictionary indices are constrained to be positive integers. If this
-/// field is null, the indices must be signed int32
+// / The dictionary indices are constrained to be positive integers. If this
+// / field is null, the indices must be signed int32
 func (rcv *DictionaryEncoding) IndexType(obj *Int) *Int {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -1059,12 +1059,12 @@ func (rcv *DictionaryEncoding) IndexType(obj *Int) *Int {
 	return nil
 }
 
-/// The dictionary indices are constrained to be positive integers. If this
-/// field is null, the indices must be signed int32
-/// By default, dictionaries are not ordered, or the order does not have
-/// semantic meaning. In some statistical, applications, dictionary-encoding
-/// is used to represent ordered categorical data, and we provide a way to
-/// preserve that metadata here
+// / The dictionary indices are constrained to be positive integers. If this
+// / field is null, the indices must be signed int32
+// / By default, dictionaries are not ordered, or the order does not have
+// / semantic meaning. In some statistical, applications, dictionary-encoding
+// / is used to represent ordered categorical data, and we provide a way to
+// / preserve that metadata here
 func (rcv *DictionaryEncoding) IsOrdered() byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
@@ -1073,10 +1073,10 @@ func (rcv *DictionaryEncoding) IsOrdered() byte {
 	return 0
 }
 
-/// By default, dictionaries are not ordered, or the order does not have
-/// semantic meaning. In some statistical, applications, dictionary-encoding
-/// is used to represent ordered categorical data, and we provide a way to
-/// preserve that metadata here
+// / By default, dictionaries are not ordered, or the order does not have
+// / semantic meaning. In some statistical, applications, dictionary-encoding
+// / is used to represent ordered categorical data, and we provide a way to
+// / preserve that metadata here
 func (rcv *DictionaryEncoding) MutateIsOrdered(n byte) bool {
 	return rcv._tab.MutateByteSlot(8, n)
 }
@@ -1097,13 +1097,13 @@ func DictionaryEncodingEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// ----------------------------------------------------------------------
-/// A field represents a named column in a record / row batch or child of a
-/// nested type.
-///
-/// - children is only for nested Arrow arrays
-/// - For primitive types, children will have length 0
-/// - nullable should default to true in general
+// / ----------------------------------------------------------------------
+// / A field represents a named column in a record / row batch or child of a
+// / nested type.
+// /
+// / - children is only for nested Arrow arrays
+// / - For primitive types, children will have length 0
+// / - nullable should default to true in general
 type Field struct {
 	_tab flatbuffers.Table
 }
@@ -1254,8 +1254,8 @@ func FieldEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// ----------------------------------------------------------------------
-/// A Buffer represents a single contiguous memory segment
+// / ----------------------------------------------------------------------
+// / A Buffer represents a single contiguous memory segment
 type Buffer struct {
 	_tab flatbuffers.Struct
 }
@@ -1269,26 +1269,26 @@ func (rcv *Buffer) Table() flatbuffers.Table {
 	return rcv._tab.Table
 }
 
-/// The relative offset into the shared memory page where the bytes for this
-/// buffer starts
+// / The relative offset into the shared memory page where the bytes for this
+// / buffer starts
 func (rcv *Buffer) Offset() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(0))
 }
 
-/// The relative offset into the shared memory page where the bytes for this
-/// buffer starts
+// / The relative offset into the shared memory page where the bytes for this
+// / buffer starts
 func (rcv *Buffer) MutateOffset(n int64) bool {
 	return rcv._tab.MutateInt64(rcv._tab.Pos+flatbuffers.UOffsetT(0), n)
 }
 
-/// The absolute length (in bytes) of the memory buffer. The memory is found
-/// from offset (inclusive) to offset + length (non-inclusive).
+// / The absolute length (in bytes) of the memory buffer. The memory is found
+// / from offset (inclusive) to offset + length (non-inclusive).
 func (rcv *Buffer) Length() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(8))
 }
 
-/// The absolute length (in bytes) of the memory buffer. The memory is found
-/// from offset (inclusive) to offset + length (non-inclusive).
+// / The absolute length (in bytes) of the memory buffer. The memory is found
+// / from offset (inclusive) to offset + length (non-inclusive).
 func (rcv *Buffer) MutateLength(n int64) bool {
 	return rcv._tab.MutateInt64(rcv._tab.Pos+flatbuffers.UOffsetT(8), n)
 }
@@ -1300,8 +1300,8 @@ func CreateBuffer(builder *flatbuffers.Builder, offset int64, length int64) flat
 	return builder.Offset()
 }
 
-/// ----------------------------------------------------------------------
-/// A Schema describes the columns in a row batch
+// / ----------------------------------------------------------------------
+// / A Schema describes the columns in a row batch
 type Schema struct {
 	_tab flatbuffers.Table
 }
@@ -1322,9 +1322,9 @@ func (rcv *Schema) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// endianness of the buffer
-/// it is Little Endian by default
-/// if endianness doesn't match the underlying system then the vectors need to be converted
+// / endianness of the buffer
+// / it is Little Endian by default
+// / if endianness doesn't match the underlying system then the vectors need to be converted
 func (rcv *Schema) Endianness() int16 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -1333,9 +1333,9 @@ func (rcv *Schema) Endianness() int16 {
 	return 0
 }
 
-/// endianness of the buffer
-/// it is Little Endian by default
-/// if endianness doesn't match the underlying system then the vectors need to be converted
+// / endianness of the buffer
+// / it is Little Endian by default
+// / if endianness doesn't match the underlying system then the vectors need to be converted
 func (rcv *Schema) MutateEndianness(n int16) bool {
 	return rcv._tab.MutateInt16Slot(4, n)
 }

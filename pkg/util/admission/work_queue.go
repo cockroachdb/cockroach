@@ -192,19 +192,20 @@ type WorkInfo struct {
 // used slots or tokens.
 //
 // Usage example:
-//  var grantCoord *GrantCoordinator
-//  <initialize grantCoord>
-//  kvQueue := grantCoord.GetWorkQueue(KVWork)
-//  <hand kvQueue to the code that does kv server work>
 //
-//  // Before starting some kv server work
-//  if enabled, err := kvQueue.Admit(ctx, WorkInfo{TenantID: tid, ...}); err != nil {
-//    return err
-//  }
-//  <do the work>
-//  if enabled {
-//    kvQueue.AdmittedWorkDone(tid)
-//  }
+//	var grantCoord *GrantCoordinator
+//	<initialize grantCoord>
+//	kvQueue := grantCoord.GetWorkQueue(KVWork)
+//	<hand kvQueue to the code that does kv server work>
+//
+//	// Before starting some kv server work
+//	if enabled, err := kvQueue.Admit(ctx, WorkInfo{TenantID: tid, ...}); err != nil {
+//	  return err
+//	}
+//	<do the work>
+//	if enabled {
+//	  kvQueue.AdmittedWorkDone(tid)
+//	}
 type WorkQueue struct {
 	ambientCtx  context.Context
 	workKind    WorkKind
@@ -1371,10 +1372,11 @@ func (wwh *waitingWorkHeap) Len() int { return len(*wwh) }
 // satisfied in the presence of elements that have different values of
 // arrivalTimeWorkOrdering. This is acceptable for heap maintenance.
 // Example: Three work items with the same epoch where t1 < t2 < t3
-//  w3: (fifo, create: t3, epoch: e)
-//  w2: (lifo, create: t2, epoch: e)
-//  w1: (fifo, create: t1, epoch: e)
-//  w1 < w3, w3 < w2, w2 < w1, which is a cycle.
+//
+//	w3: (fifo, create: t3, epoch: e)
+//	w2: (lifo, create: t2, epoch: e)
+//	w1: (fifo, create: t1, epoch: e)
+//	w1 < w3, w3 < w2, w2 < w1, which is a cycle.
 func (wwh *waitingWorkHeap) Less(i, j int) bool {
 	if (*wwh)[i].priority == (*wwh)[j].priority {
 		if (*wwh)[i].arrivalTimeWorkOrdering == lifoWorkOrdering ||

@@ -200,7 +200,9 @@ func (m FastIntMap) ForEach(fn func(key, val int)) {
 
 // ContentsIntoBuffer writes the contents of the map into the provided buffer in
 // the following format:
-//   key1:val1 key2:val2 ...
+//
+//	key1:val1 key2:val2 ...
+//
 // The keys are in ascending order.
 func (m FastIntMap) ContentsIntoBuffer(buf *bytes.Buffer) {
 	first := true
@@ -231,7 +233,9 @@ func (m FastIntMap) ContentsIntoBuffer(buf *bytes.Buffer) {
 }
 
 // String prints out the contents of the map in the following format:
-//   map[key1:val1 key2:val2 ...]
+//
+//	map[key1:val1 key2:val2 ...]
+//
 // The keys are in ascending order.
 func (m FastIntMap) String() string {
 	var buf bytes.Buffer

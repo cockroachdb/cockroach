@@ -721,28 +721,32 @@ func valueSort(numCols int, values []string) {
 // This is useful when comparing results for a statement that guarantees a
 // partial, but not a total order. Consider:
 //
-//   SELECT a, b FROM ab ORDER BY a
+//	SELECT a, b FROM ab ORDER BY a
 //
 // Some possible outputs for the same data:
-//   1 2        1 5        1 2
-//   1 5        1 4        1 4
-//   1 4   or   1 2   or   1 5
-//   2 3        2 2        2 3
-//   2 2        2 3        2 2
+//
+//	1 2        1 5        1 2
+//	1 5        1 4        1 4
+//	1 4   or   1 2   or   1 5
+//	2 3        2 2        2 3
+//	2 2        2 3        2 2
 //
 // After a partialSort with orderedCols = {0} all become:
-//   1 2
-//   1 4
-//   1 5
-//   2 2
-//   2 3
+//
+//	1 2
+//	1 4
+//	1 5
+//	2 2
+//	2 3
 //
 // An incorrect output like:
-//   1 5                          1 2
-//   1 2                          1 5
-//   2 3          becomes:        2 2
-//   2 2                          2 3
-//   1 4                          1 4
+//
+//	1 5                          1 2
+//	1 2                          1 5
+//	2 3          becomes:        2 2
+//	2 2                          2 3
+//	1 4                          1 4
+//
 // and it is detected as different.
 func partialSort(numCols int, orderedCols []int, values []string) {
 	// We use rowSorter here only as a container.

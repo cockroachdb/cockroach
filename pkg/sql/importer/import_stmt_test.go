@@ -2034,9 +2034,9 @@ func TestFailedImportGC(t *testing.T) {
 }
 
 // Verify that a failed import will clean up after itself. This means:
-//  - Delete the garbage data that it partially imported.
-//  - Delete the table descriptor for the table that was created during the
-//  import.
+//   - Delete the garbage data that it partially imported.
+//   - Delete the table descriptor for the table that was created during the
+//     import.
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

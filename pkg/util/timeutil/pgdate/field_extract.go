@@ -682,9 +682,12 @@ func (fe *fieldExtract) MakeTimeWithoutTimezone() time.Time {
 
 // stropTimezone converts the given time to a time that looks the same but is in
 // UTC, e.g. from
-//   2020-06-26 01:02:03 +0200 CEST
+//
+//	2020-06-26 01:02:03 +0200 CEST
+//
 // to
-//   2020-06-27 01:02:03 +0000 UTC.
+//
+//	2020-06-27 01:02:03 +0000 UTC.
 //
 // Note that the two times don't represent the same time instant.
 func stripTimezone(t time.Time) time.Time {

@@ -240,10 +240,11 @@ func (b *Builder) constructJoin(
 //
 // With NATURAL JOIN or JOIN USING (a,b,c,...), SQL allows us to refer to the
 // columns a,b,c directly; these columns have the following semantics:
-//   a = IFNULL(left.a, right.a)
-//   b = IFNULL(left.b, right.b)
-//   c = IFNULL(left.c, right.c)
-//   ...
+//
+//	a = IFNULL(left.a, right.a)
+//	b = IFNULL(left.b, right.b)
+//	c = IFNULL(left.c, right.c)
+//	...
 //
 // Furthermore, a star has to resolve the columns in the following order:
 // merged columns, non-equality columns from the left table, non-equality
@@ -259,37 +260,37 @@ func (b *Builder) constructJoin(
 //
 // Example:
 //
-//  left has columns (a,b,x)
-//  right has columns (a,b,y)
+//	left has columns (a,b,x)
+//	right has columns (a,b,y)
 //
-//  - SELECT * FROM left JOIN right USING(a,b)
+//	- SELECT * FROM left JOIN right USING(a,b)
 //
-//  join has columns:
-//    1: left.a
-//    2: left.b
-//    3: left.x
-//    4: right.a
-//    5: right.b
-//    6: right.y
+//	join has columns:
+//	  1: left.a
+//	  2: left.b
+//	  3: left.x
+//	  4: right.a
+//	  5: right.b
+//	  6: right.y
 //
-//  projection has columns and corresponding variable expressions:
-//    1: a aka left.a        @1
-//    2: b aka left.b        @2
-//    3: left.x              @3
-//    4: right.a (hidden)    @4
-//    5: right.b (hidden)    @5
-//    6: right.y             @6
+//	projection has columns and corresponding variable expressions:
+//	  1: a aka left.a        @1
+//	  2: b aka left.b        @2
+//	  3: left.x              @3
+//	  4: right.a (hidden)    @4
+//	  5: right.b (hidden)    @5
+//	  6: right.y             @6
 //
 // If the join was a FULL OUTER JOIN, the columns would be:
-//    1: a                   IFNULL(@1,@4)
-//    2: b                   IFNULL(@2,@5)
-//    3: left.a (hidden)     @1
-//    4: left.b (hidden)     @2
-//    5: left.x              @3
-//    6: right.a (hidden)    @4
-//    7: right.b (hidden)    @5
-//    8: right.y             @6
 //
+//	1: a                   IFNULL(@1,@4)
+//	2: b                   IFNULL(@2,@5)
+//	3: left.a (hidden)     @1
+//	4: left.b (hidden)     @2
+//	5: left.x              @3
+//	6: right.a (hidden)    @4
+//	7: right.b (hidden)    @5
+//	8: right.y             @6
 type usingJoinBuilder struct {
 	b          *Builder
 	joinType   descpb.JoinType

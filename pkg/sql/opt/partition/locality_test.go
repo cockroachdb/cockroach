@@ -133,7 +133,8 @@ func TestPrefixSorter(t *testing.T) {
 
 // parsePartitionKeys parses a PARTITION BY LIST representation with integer
 // values like:
-//   "[/1] [/1/2] [/1/3] [/1/3/5]"
+//
+//	"[/1] [/1/2] [/1/3] [/1/3/5]"
 func parsePartitionKeys(evalCtx *eval.Context, str string) []tree.Datums {
 	if str == "" {
 		return []tree.Datums{}

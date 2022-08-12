@@ -33,30 +33,29 @@ import (
 // It provides a mechanism to classify and understand how the schemafeed
 // will interpret different schema change operations.
 //
-// - "exec"
-//   Executes the input SQL query.
+//   - "exec"
+//     Executes the input SQL query.
 //
-// - "create" f=<int>
-//   Creates a schemafeed with the targets specified as the input with the
-//   provided ID.
+//   - "create" f=<int>
+//     Creates a schemafeed with the targets specified as the input with the
+//     provided ID.
 //
-// - "pop" f=<int>
-//   Pop all events from the schemafeed with the given ID.
-//   The structure of the events looks like as follows:
+//   - "pop" f=<int>
+//     Pop all events from the schemafeed with the given ID.
+//     The structure of the events looks like as follows:
 //
-//    t 1->2: Unknown
-//    t 2->3: Unknown
-//    t 3->4: Unknown
-//    t 4->5: Unknown
-//    t 5->6: Unknown
-//    t 6->7: PrimaryKeyChange
-//    t 7->8: Unknown
-//    t 8->9: Unknown
+//     t 1->2: Unknown
+//     t 2->3: Unknown
+//     t 3->4: Unknown
+//     t 4->5: Unknown
+//     t 5->6: Unknown
+//     t 6->7: PrimaryKeyChange
+//     t 7->8: Unknown
+//     t 8->9: Unknown
 //
-//  The first column is the name of the table in question.
-//  The second is the version transition. The third indicates
-//  the event classification.
-//
+//     The first column is the name of the table in question.
+//     The second is the version transition. The third indicates
+//     the event classification.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

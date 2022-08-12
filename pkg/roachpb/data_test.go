@@ -774,14 +774,14 @@ func TestTransactionRefresh(t *testing.T) {
 // with the former and contains a subset of its protos.
 //
 // Assertions:
-// 1. Transaction->TransactionRecord->Transaction is lossless for the fields
-//    in TransactionRecord. It drops all other fields.
-// 2. TransactionRecord->Transaction->TransactionRecord is lossless.
-//    Fields not in TransactionRecord are set as zero values.
-// 3. Transaction messages can be decoded as TransactionRecord messages.
-//    Fields not in TransactionRecord are dropped.
-// 4. TransactionRecord messages can be decoded as Transaction messages.
-//    Fields not in TransactionRecord are decoded as zero values.
+//  1. Transaction->TransactionRecord->Transaction is lossless for the fields
+//     in TransactionRecord. It drops all other fields.
+//  2. TransactionRecord->Transaction->TransactionRecord is lossless.
+//     Fields not in TransactionRecord are set as zero values.
+//  3. Transaction messages can be decoded as TransactionRecord messages.
+//     Fields not in TransactionRecord are dropped.
+//  4. TransactionRecord messages can be decoded as Transaction messages.
+//     Fields not in TransactionRecord are decoded as zero values.
 func TestTransactionRecordRoundtrips(t *testing.T) {
 	// Verify that converting from a Transaction to a TransactionRecord
 	// strips out fields but is lossless for the desired fields.

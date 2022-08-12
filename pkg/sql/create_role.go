@@ -44,8 +44,9 @@ type CreateRoleNode struct {
 
 // CreateRole represents a CREATE ROLE statement.
 // Privileges: INSERT on system.users.
-//   notes: postgres allows the creation of users with an empty password. We do
-//          as well, but disallow password authentication for these users.
+//
+//	notes: postgres allows the creation of users with an empty password. We do
+//	       as well, but disallow password authentication for these users.
 func (p *planner) CreateRole(ctx context.Context, n *tree.CreateRole) (planNode, error) {
 	return p.CreateRoleNode(ctx, n.Name, n.IfNotExists, n.IsRole,
 		"CREATE ROLE", n.KVOptions)

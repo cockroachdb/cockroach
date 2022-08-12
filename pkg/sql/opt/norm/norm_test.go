@@ -26,17 +26,19 @@ import (
 
 // TestNormRules tests the various Optgen normalization rules found in the rules
 // directory. The tests are data-driven cases of the form:
-//   <command>
-//   <SQL statement>
-//   ----
-//   <expected results>
+//
+//	<command>
+//	<SQL statement>
+//	----
+//	<expected results>
 //
 // See OptTester.Handle for supported commands.
 //
 // Rules files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/bool"
-//   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
-//   ...
+//
+//	make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/bool"
+//	make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
+//	...
 func TestNormRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -55,8 +57,9 @@ func TestNormRules(t *testing.T) {
 }
 
 // TestRuleProps files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRuleProps/orderings"
-//   ...
+//
+//	make test PKG=./pkg/sql/opt/norm TESTS="TestNormRuleProps/orderings"
+//	...
 func TestNormRuleProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

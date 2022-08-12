@@ -28,9 +28,9 @@ existing diagnostics reporting if enabled. Some notes on using these:
   - "some.feature" should always be a literal string constant -- it must not
     include any user-submitted data.
   - Contention-sensitive, high-volume callers should use an initial `GetCounter`
-		to get a Counter they can then `Inc` repeatedly instead to avoid contention
-		and map lookup over around the name resolution on each increment.
-	-	When naming a counter, by convention we use dot-separated, dashed names, eg.
-		`feature-area.specific-feature`.
+    to get a Counter they can then `Inc` repeatedly instead to avoid contention
+    and map lookup over around the name resolution on each increment.
+  - When naming a counter, by convention we use dot-separated, dashed names, eg.
+    `feature-area.specific-feature`.
 */
 package telemetry

@@ -133,12 +133,12 @@ var MaxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 // This results in 4 statement fingerprints and 1 txn fingerprint.
 // Let's suppose currently our statement fingerprint limit is 6.
 // If we are to execute the same statement again:
-// * BEGIN; <- this increments current statement fingerprint count to 5
-//             since we hold statement stats for explicit transaction in a
-//             temporary container before we can perform the upsert.
-// * SELECT 1; <- this increments the count to 6
-// * SELECT 1, 1; <- ERR: this causes the count to exceed our stmt fingerprint
-//                        limit before we can perform the upsert.
+//   - BEGIN; <- this increments current statement fingerprint count to 5
+//     since we hold statement stats for explicit transaction in a
+//     temporary container before we can perform the upsert.
+//   - SELECT 1; <- this increments the count to 6
+//   - SELECT 1, 1; <- ERR: this causes the count to exceed our stmt fingerprint
+//     limit before we can perform the upsert.
 //
 // The total amount of memory consumed will still be constrained by the
 // top-level memory monitor created for SQL Stats.

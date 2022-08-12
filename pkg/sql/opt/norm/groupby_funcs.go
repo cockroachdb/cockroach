@@ -36,12 +36,11 @@ func (c *CustomFuncs) RemoveGroupingCols(
 // aggregates are written into outElems and outColList. As an example, for
 // columns (1,2) and operator ConstAggOp, makeAggCols will set the following:
 //
-//   outElems[0] = (ConstAggOp (Variable 1))
-//   outElems[1] = (ConstAggOp (Variable 2))
+//	outElems[0] = (ConstAggOp (Variable 1))
+//	outElems[1] = (ConstAggOp (Variable 2))
 //
-//   outColList[0] = 1
-//   outColList[1] = 2
-//
+//	outColList[0] = 1
+//	outColList[1] = 2
 func (c *CustomFuncs) makeAggCols(
 	aggOp opt.Operator, cols opt.ColSet, outAggs memo.AggregationsExpr,
 ) {
@@ -298,9 +297,9 @@ func (c *CustomFuncs) SingleRegressionCountArgument(
 
 // CanMergeAggs returns true if one of the following applies to each of the
 // given outer aggregation expressions:
-//   1. The aggregation can be merged with a single inner aggregation.
-//   2. The aggregation takes an inner grouping column as input and ignores
-//      duplicates.
+//  1. The aggregation can be merged with a single inner aggregation.
+//  2. The aggregation takes an inner grouping column as input and ignores
+//     duplicates.
 func (c *CustomFuncs) CanMergeAggs(
 	innerAggs, outerAggs memo.AggregationsExpr, innerGroupingCols opt.ColSet,
 ) bool {

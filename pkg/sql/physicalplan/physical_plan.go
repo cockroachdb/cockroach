@@ -644,15 +644,17 @@ func (p *PhysicalPlan) AddRendering(
 // columns (i.e. after post-processing).
 //
 // Inputs:
-//   indexVarMap is a mapping from columns that appear in an expression
-//               (planNode columns) to columns in the output stream of a
-//               processor.
-//   outputColumns is the list of output columns in the processor's
-//                 PostProcessSpec; it is effectively a mapping from the output
-//                 schema to the internal schema of a processor.
+//
+//	indexVarMap is a mapping from columns that appear in an expression
+//	            (planNode columns) to columns in the output stream of a
+//	            processor.
+//	outputColumns is the list of output columns in the processor's
+//	              PostProcessSpec; it is effectively a mapping from the output
+//	              schema to the internal schema of a processor.
 //
 // Result: a "composite map" that maps the planNode columns to the internal
-//         columns of the processor.
+//
+//	columns of the processor.
 //
 // For efficiency, the indexVarMap and the resulting map are represented as
 // slices, with missing elements having values -1.
@@ -660,27 +662,27 @@ func (p *PhysicalPlan) AddRendering(
 // Used when adding expressions (filtering, rendering) to a processor's
 // PostProcessSpec. For example:
 //
-//  TableReader // table columns A,B,C,D
-//  Internal schema (before post-processing): A, B, C, D
-//  OutputColumns:  [1 3]
-//  Output schema (after post-processing): B, D
+//	TableReader // table columns A,B,C,D
+//	Internal schema (before post-processing): A, B, C, D
+//	OutputColumns:  [1 3]
+//	Output schema (after post-processing): B, D
 //
-//  Expression "B < D" might be represented as:
-//    IndexedVar(4) < IndexedVar(1)
-//  with associated indexVarMap:
-//    [-1 1 -1 -1 0]  // 1->1, 4->0
-//  This is effectively equivalent to "IndexedVar(0) < IndexedVar(1)"; 0 means
-//  the first output column (B), 1 means the second output column (D).
+//	Expression "B < D" might be represented as:
+//	  IndexedVar(4) < IndexedVar(1)
+//	with associated indexVarMap:
+//	  [-1 1 -1 -1 0]  // 1->1, 4->0
+//	This is effectively equivalent to "IndexedVar(0) < IndexedVar(1)"; 0 means
+//	the first output column (B), 1 means the second output column (D).
 //
-//  To get an index var map that refers to the internal schema:
-//    reverseProjection(
-//      [1 3],           // OutputColumns
-//      [-1 1 -1 -1 0],
-//    ) =
-//      [-1 3 -1 -1 1]   // 1->3, 4->1
-//  This is effectively equivalent to "IndexedVar(1) < IndexedVar(3)"; 1
-//  means the second internal column (B), 3 means the fourth internal column
-//  (D).
+//	To get an index var map that refers to the internal schema:
+//	  reverseProjection(
+//	    [1 3],           // OutputColumns
+//	    [-1 1 -1 -1 0],
+//	  ) =
+//	    [-1 3 -1 -1 1]   // 1->3, 4->1
+//	This is effectively equivalent to "IndexedVar(1) < IndexedVar(3)"; 1
+//	means the second internal column (B), 3 means the fourth internal column
+//	(D).
 func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 	if indexVarMap == nil {
 		panic("no indexVarMap")

@@ -49,9 +49,10 @@ type walkCtx struct {
 // verifies scerrors.HasNotImplemented.
 //
 // TODO(postamar): remove the dependency on the lookup function
-//  This is required to look up the the multi-region enum type ID and the
-//  type ID closure of types referenced in expressions. This data should
-//  instead be stored in the backing struct of the catalog.Descriptor.
+//
+//	This is required to look up the the multi-region enum type ID and the
+//	type ID closure of types referenced in expressions. This data should
+//	instead be stored in the backing struct of the catalog.Descriptor.
 func WalkDescriptor(
 	ctx context.Context,
 	desc catalog.Descriptor,

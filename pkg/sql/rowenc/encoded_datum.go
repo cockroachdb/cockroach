@@ -349,9 +349,10 @@ func (ed *EncDatum) Fingerprint(
 }
 
 // Compare returns:
-//    -1 if the receiver is less than rhs,
-//    0  if the receiver is equal to rhs,
-//    +1 if the receiver is greater than rhs.
+//
+//	-1 if the receiver is less than rhs,
+//	0  if the receiver is equal to rhs,
+//	+1 if the receiver is greater than rhs.
 func (ed *EncDatum) Compare(
 	typ *types.T, a *tree.DatumAlloc, evalCtx *eval.Context, rhs *EncDatum,
 ) (int, error) {
@@ -493,10 +494,11 @@ func EncDatumRowToDatums(
 
 // Compare returns the relative ordering of two EncDatumRows according to a
 // ColumnOrdering:
-//   -1 if the receiver comes before the rhs in the ordering,
-//   +1 if the receiver comes after the rhs in the ordering,
-//   0 if the relative order does not matter (i.e. the two rows have the same
-//     values for the columns in the ordering).
+//
+//	-1 if the receiver comes before the rhs in the ordering,
+//	+1 if the receiver comes after the rhs in the ordering,
+//	0 if the relative order does not matter (i.e. the two rows have the same
+//	  values for the columns in the ordering).
 //
 // Note that a return value of 0 does not (in general) imply that the rows are
 // equal; for example, rows [1 1 5] and [1 1 6] when compared against ordering

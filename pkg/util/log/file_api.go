@@ -30,8 +30,8 @@ import (
 // accidentally and it splits the details of the filename into groups for easy
 // parsing. The log file format is
 //
-//   {program}.{host}.{username}.{timestamp}.{pid}.log
-//   cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.log
+//	{program}.{host}.{username}.{timestamp}.{pid}.log
+//	cockroach.Brams-MacBook-Pro.bram.2015-06-09T16-10-48Z.30209.log
 //
 // All underscore in process, host and username are escaped to double
 // underscores and all periods are escaped to an underscore.
@@ -115,10 +115,11 @@ func listLogGroups() (logGroups [][]logpb.FileInfo, err error) {
 // the log configuration. For example, consider the following config:
 //
 // file-groups:
-//    groupA:
-//      dir: dir1
-//    groupB:
-//      dir: dir2
+//
+//	groupA:
+//	  dir: dir1
+//	groupB:
+//	  dir: dir2
 //
 // The result of ListLogFiles on this config will return the list
 // {cockroach-groupA.XXX.log, cockroach-groupB.XXX.log}, without

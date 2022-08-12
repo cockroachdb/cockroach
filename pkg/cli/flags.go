@@ -47,11 +47,11 @@ import (
 // structs.
 //
 // Corollaries:
-// - it would be a programming error to access these variables directly
-//   outside of this file (flags.go)
-// - the underlying context parameters must receive defaults in
-//   initCLIDefaults() even when they are otherwise overridden by the
-//   flags logic, because some tests to not use the flag logic at all.
+//   - it would be a programming error to access these variables directly
+//     outside of this file (flags.go)
+//   - the underlying context parameters must receive defaults in
+//     initCLIDefaults() even when they are otherwise overridden by the
+//     flags logic, because some tests to not use the flag logic at all.
 var serverListenPort, serverSocketDir string
 var serverAdvertiseAddr, serverAdvertisePort string
 var serverSQLAddr, serverSQLPort string

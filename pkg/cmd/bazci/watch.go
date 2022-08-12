@@ -307,7 +307,8 @@ func (w *cancelableWriter) Close() error {
 //
 // For example, one might stage a set of log files with a call like:
 // w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/*/test.log",
-//                      0644, incrementalUpdatePhase, copycontentTo)
+//
+//	0644, incrementalUpdatePhase, copycontentTo)
 func (w watcher) maybeStageArtifact(
 	rootPath string,
 	pattern string,

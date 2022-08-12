@@ -1581,19 +1581,19 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 // inline with their columns and makes them table-level constraints, stored in
 // n.Defs. For example, the foreign key constraint in
 //
-//     CREATE TABLE foo (a INT REFERENCES bar(a))
+//	CREATE TABLE foo (a INT REFERENCES bar(a))
 //
 // gets pulled into a top-level constraint like:
 //
-//     CREATE TABLE foo (a INT, FOREIGN KEY (a) REFERENCES bar(a))
+//	CREATE TABLE foo (a INT, FOREIGN KEY (a) REFERENCES bar(a))
 //
 // Similarly, the CHECK constraint in
 //
-//    CREATE TABLE foo (a INT CHECK (a < 1), b INT)
+//	CREATE TABLE foo (a INT CHECK (a < 1), b INT)
 //
 // gets pulled into a top-level constraint like:
 //
-//    CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
+//	CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
 //
 // Note that some SQL databases require that a constraint attached to a column
 // to refer only to the column it is attached to. We follow Postgres' behavior,
@@ -1601,10 +1601,9 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 // constraints. For example, the following table definition is accepted in
 // CockroachDB and Postgres, but not necessarily other SQL databases:
 //
-//    CREATE TABLE foo (a INT CHECK (a < b), b INT)
+//	CREATE TABLE foo (a INT CHECK (a < b), b INT)
 //
 // Unique constraints are not hoisted.
-//
 func (node *CreateTable) HoistConstraints() {
 	for _, d := range node.Defs {
 		if col, ok := d.(*ColumnTableDef); ok {

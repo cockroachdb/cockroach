@@ -5,7 +5,7 @@ go_library(
     name = "goschedstats",
     srcs = [
         "runnable.go",
-        "runtime_go1.18.go",
+        "runtime_go1.19.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/goschedstats",
     visibility = ["//visibility:public"],

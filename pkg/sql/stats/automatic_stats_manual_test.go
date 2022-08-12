@@ -37,21 +37,21 @@ var runManual = flag.Bool(
 // varying load on the system and prints out the times. It should be run on a
 // lightly loaded system using:
 //
-//   make test PKG=./pkg/sql/stats TESTS=AdaptiveThrottling TESTFLAGS='-v --run-manual -logtostderr NONE'
+//	make test PKG=./pkg/sql/stats TESTS=AdaptiveThrottling TESTFLAGS='-v --run-manual -logtostderr NONE'
 //
 // Sample output:
 //
 // --- PASS: TestAdaptiveThrottling (114.51s)
-//     automatic_stats_manual_test.go:72: Populate table took 7.639067726s
-//     automatic_stats_manual_test.go:72: --- Load 0% ---
-//     automatic_stats_manual_test.go:72: Create stats took 1.198634729s
-//     automatic_stats_manual_test.go:72: --- Load 30% ---
-//     automatic_stats_manual_test.go:72: Create stats took 2.270165784s
-//     automatic_stats_manual_test.go:72: --- Load 50% ---
-//     automatic_stats_manual_test.go:72: Create stats took 7.324599981s
-//     automatic_stats_manual_test.go:72: --- Load 70% ---
-//     automatic_stats_manual_test.go:72: Create stats took 15.886412857s
 //
+//	automatic_stats_manual_test.go:72: Populate table took 7.639067726s
+//	automatic_stats_manual_test.go:72: --- Load 0% ---
+//	automatic_stats_manual_test.go:72: Create stats took 1.198634729s
+//	automatic_stats_manual_test.go:72: --- Load 30% ---
+//	automatic_stats_manual_test.go:72: Create stats took 2.270165784s
+//	automatic_stats_manual_test.go:72: --- Load 50% ---
+//	automatic_stats_manual_test.go:72: Create stats took 7.324599981s
+//	automatic_stats_manual_test.go:72: --- Load 70% ---
+//	automatic_stats_manual_test.go:72: Create stats took 15.886412857s
 func TestAdaptiveThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

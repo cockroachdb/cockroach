@@ -26,7 +26,9 @@ type ColumnOrderInfo struct {
 }
 
 // ColumnOrdering is used to describe a desired column ordering. For example,
-//     []ColumnOrderInfo{ {3, encoding.Descending}, {1, encoding.Ascending} }
+//
+//	[]ColumnOrderInfo{ {3, encoding.Descending}, {1, encoding.Ascending} }
+//
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
 
@@ -67,9 +69,9 @@ func (ordering ColumnOrdering) String(columns ResultColumns) string {
 var NoOrdering ColumnOrdering
 
 // CompareDatums compares two datum rows according to a column ordering. Returns:
-//  - 0 if lhs and rhs are equal on the ordering columns;
-//  - less than 0 if lhs comes first;
-//  - greater than 0 if rhs comes first.
+//   - 0 if lhs and rhs are equal on the ordering columns;
+//   - less than 0 if lhs comes first;
+//   - greater than 0 if rhs comes first.
 func CompareDatums(ordering ColumnOrdering, evalCtx *eval.Context, lhs, rhs tree.Datums) int {
 	for _, c := range ordering {
 		// TODO(pmattis): This is assuming that the datum types are compatible. I'm

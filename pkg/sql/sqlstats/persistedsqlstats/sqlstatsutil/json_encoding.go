@@ -45,21 +45,22 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 // BuildStmtMetadataJSON returns a json.JSON object for the metadata section of
 // the roachpb.CollectedStatementStatistics.
 // JSON Schema for statement metadata:
-//    {
-//      "$schema": "https://json-schema.org/draft/2020-12/schema",
-//      "title": "system.statement_statistics.metadata",
-//      "type": "object",
-//      "properties": {
-//        "stmtTyp":              { "type": "string" },
-//        "query":                { "type": "string" },
-//        "db":                   { "type": "string" },
-//        "distsql":              { "type": "boolean" },
-//        "failed":               { "type": "boolean" },
-//        "implicitTxn":          { "type": "boolean" },
-//        "vec":                  { "type": "boolean" },
-//        "fullScan":             { "type": "boolean" },
-//      }
-//    }
+//
+//	{
+//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//	  "title": "system.statement_statistics.metadata",
+//	  "type": "object",
+//	  "properties": {
+//	    "stmtTyp":              { "type": "string" },
+//	    "query":                { "type": "string" },
+//	    "db":                   { "type": "string" },
+//	    "distsql":              { "type": "boolean" },
+//	    "failed":               { "type": "boolean" },
+//	    "implicitTxn":          { "type": "boolean" },
+//	    "vec":                  { "type": "boolean" },
+//	    "fullScan":             { "type": "boolean" },
+//	  }
+//	}
 func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (json.JSON, error) {
 	return (*stmtStatsMetadata)(statistics).jsonFields().encodeJSON()
 }
@@ -68,85 +69,86 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 // roachpb.CollectedStatementStatistics into a json.JSON object.
 //
 // JSON Schema for stats portion:
-//    {
-//      "$schema": "https://json-schema.org/draft/2020-12/schema",
-//      "title": "system.statement_statistics.statistics",
-//      "type": "object",
 //
-//      "definitions": {
-//        "numeric_stats": {
-//          "type": "object",
-//          "properties": {
-//            "mean":   { "type": "number" },
-//            "sqDiff": { "type": "number" }
-//          },
-//          "required": ["mean", "sqDiff"]
-//        },
-//        "node_ids": {
-//          "type": "array",
-//          "items": {
-//            "type": "int",
-//          },
-//        },
-//        "statistics": {
-//          "type": "object",
-//          "properties": {
-//            "firstAttemptCnt":   { "type": "number" },
-//            "maxRetries":        { "type": "number" },
-//            "numRows":           { "$ref": "#/definitions/numeric_stats" },
-//            "parseLat":          { "$ref": "#/definitions/numeric_stats" },
-//            "planLat":           { "$ref": "#/definitions/numeric_stats" },
-//            "runLat":            { "$ref": "#/definitions/numeric_stats" },
-//            "svcLat":            { "$ref": "#/definitions/numeric_stats" },
-//            "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
-//            "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
-//            "rowsRead":          { "$ref": "#/definitions/numeric_stats" }
-//            "firstExecAt":       { "type": "string" },
-//            "lastExecAt":        { "type": "string" },
-//            "nodes":             { "type": "node_ids" },
-//          },
-//          "required": [
-//            "firstAttemptCnt",
-//            "maxRetries",
-//            "numRows",
-//            "parseLat",
-//            "planLat",
-//            "runLat",
-//            "svcLat",
-//            "ovhLat",
-//            "bytesRead",
-//            "rowsRead",
-//            "nodes"
-//          ]
-//        },
-//        "execution_statistics": {
-//          "type": "object",
-//          "properties": {
-//            "cnt":             { "type": "number" },
-//            "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
-//            "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
-//            "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
-//            "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
-//            "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
-//          },
-//          "required": [
-//            "cnt",
-//            "networkBytes",
-//            "maxMemUsage",
-//            "contentionTime",
-//            "networkMsgs",
-//            "maxDiskUsage",
-//          ]
-//        }
-//      },
+//	{
+//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//	  "title": "system.statement_statistics.statistics",
+//	  "type": "object",
 //
-//      "properties": {
-//        "stats": { "$ref": "#/definitions/statistics" },
-//        "execStats": {
-//          "$ref": "#/definitions/execution_statistics"
-//        }
-//      }
-//    }
+//	  "definitions": {
+//	    "numeric_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "mean":   { "type": "number" },
+//	        "sqDiff": { "type": "number" }
+//	      },
+//	      "required": ["mean", "sqDiff"]
+//	    },
+//	    "node_ids": {
+//	      "type": "array",
+//	      "items": {
+//	        "type": "int",
+//	      },
+//	    },
+//	    "statistics": {
+//	      "type": "object",
+//	      "properties": {
+//	        "firstAttemptCnt":   { "type": "number" },
+//	        "maxRetries":        { "type": "number" },
+//	        "numRows":           { "$ref": "#/definitions/numeric_stats" },
+//	        "parseLat":          { "$ref": "#/definitions/numeric_stats" },
+//	        "planLat":           { "$ref": "#/definitions/numeric_stats" },
+//	        "runLat":            { "$ref": "#/definitions/numeric_stats" },
+//	        "svcLat":            { "$ref": "#/definitions/numeric_stats" },
+//	        "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
+//	        "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
+//	        "rowsRead":          { "$ref": "#/definitions/numeric_stats" }
+//	        "firstExecAt":       { "type": "string" },
+//	        "lastExecAt":        { "type": "string" },
+//	        "nodes":             { "type": "node_ids" },
+//	      },
+//	      "required": [
+//	        "firstAttemptCnt",
+//	        "maxRetries",
+//	        "numRows",
+//	        "parseLat",
+//	        "planLat",
+//	        "runLat",
+//	        "svcLat",
+//	        "ovhLat",
+//	        "bytesRead",
+//	        "rowsRead",
+//	        "nodes"
+//	      ]
+//	    },
+//	    "execution_statistics": {
+//	      "type": "object",
+//	      "properties": {
+//	        "cnt":             { "type": "number" },
+//	        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
+//	        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
+//	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
+//	        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
+//	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	      },
+//	      "required": [
+//	        "cnt",
+//	        "networkBytes",
+//	        "maxMemUsage",
+//	        "contentionTime",
+//	        "networkMsgs",
+//	        "maxDiskUsage",
+//	      ]
+//	    }
+//	  },
+//
+//	  "properties": {
+//	    "stats": { "$ref": "#/definitions/statistics" },
+//	    "execStats": {
+//	      "$ref": "#/definitions/execution_statistics"
+//	    }
+//	  }
+//	}
 func BuildStmtStatisticsJSON(statistics *roachpb.StatementStatistics) (json.JSON, error) {
 	return (*stmtStats)(statistics).encodeJSON()
 }
@@ -155,21 +157,23 @@ func BuildStmtStatisticsJSON(statistics *roachpb.StatementStatistics) (json.JSON
 // roachpb.CollectedTransactionStatistics into a json.JSON object.
 //
 // JSON Schema:
-// {
-//   "$schema": "https://json-schema.org/draft/2020-12/schema",
-//   "title": "system.transaction_statistics.metadata",
-//   "type": "object",
-//   "properties": {
-//     "stmtFingerprintIDs": {
-//       "type": "array",
-//       "items": {
-//         "type": "string"
-//       }
-//     },
-//     "firstExecAt": { "type": "string" },
-//     "lastExecAt":  { "type": "string" }
-//   }
-// }
+//
+//	{
+//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//	  "title": "system.transaction_statistics.metadata",
+//	  "type": "object",
+//	  "properties": {
+//	    "stmtFingerprintIDs": {
+//	      "type": "array",
+//	      "items": {
+//	        "type": "string"
+//	      }
+//	    },
+//	    "firstExecAt": { "type": "string" },
+//	    "lastExecAt":  { "type": "string" }
+//	  }
+//	}
+//
 // TODO(azhng): add `firstExecAt` and `lastExecAt` into the protobuf definition.
 func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (json.JSON, error) {
 	return jsonFields{
@@ -181,69 +185,70 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 // roachpb.CollectedTransactionStatistics into a json.JSON.
 //
 // JSON Schema
-// {
-//   "$schema": "https://json-schema.org/draft/2020-12/schema",
-//   "title": "system.statement_statistics.statistics",
-//   "type": "object",
 //
-//   "definitions": {
-//     "numeric_stats": {
-//       "type": "object",
-//       "properties": {
-//         "mean":   { "type": "number" },
-//         "sqDiff": { "type": "number" }
-//       },
-//       "required": ["mean", "sqDiff"]
-//     },
-//     "statistics": {
-//       "type": "object",
-//       "properties": {
-//         "maxRetries": { "type": "number" },
-//         "numRows":    { "$ref": "#/definitions/numeric_stats" },
-//         "svcLat":     { "$ref": "#/definitions/numeric_stats" },
-//         "retryLat":   { "$ref": "#/definitions/numeric_stats" },
-//         "commitLat":  { "$ref": "#/definitions/numeric_stats" },
-//         "bytesRead":  { "$ref": "#/definitions/numeric_stats" },
-//         "rowsRead":   { "$ref": "#/definitions/numeric_stats" }
-//       },
-//       "required": [
-//         "maxRetries",
-//         "numRows",
-//         "svcLat",
-//         "retryLat",
-//         "commitLat",
-//         "bytesRead",
-//         "rowsRead",
-//       ]
-//     },
-//     "execution_statistics": {
-//       "type": "object",
-//       "properties": {
-//         "cnt":             { "type": "number" },
-//         "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
-//         "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
-//         "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
-//         "networkMsg":      { "$ref": "#/definitions/numeric_stats" },
-//         "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
-//       },
-//       "required": [
-//         "cnt",
-//         "networkBytes",
-//         "maxMemUsage",
-//         "contentionTime",
-//         "networkMsg",
-//         "maxDiskUsage",
-//       ]
-//     }
-//   },
+//	{
+//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//	  "title": "system.statement_statistics.statistics",
+//	  "type": "object",
 //
-//   "properties": {
-//     "stats": { "$ref": "#/definitions/statistics" },
-//     "execStats": {
-//       "$ref": "#/definitions/execution_statistics"
-//     }
-//   }
-// }
+//	  "definitions": {
+//	    "numeric_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "mean":   { "type": "number" },
+//	        "sqDiff": { "type": "number" }
+//	      },
+//	      "required": ["mean", "sqDiff"]
+//	    },
+//	    "statistics": {
+//	      "type": "object",
+//	      "properties": {
+//	        "maxRetries": { "type": "number" },
+//	        "numRows":    { "$ref": "#/definitions/numeric_stats" },
+//	        "svcLat":     { "$ref": "#/definitions/numeric_stats" },
+//	        "retryLat":   { "$ref": "#/definitions/numeric_stats" },
+//	        "commitLat":  { "$ref": "#/definitions/numeric_stats" },
+//	        "bytesRead":  { "$ref": "#/definitions/numeric_stats" },
+//	        "rowsRead":   { "$ref": "#/definitions/numeric_stats" }
+//	      },
+//	      "required": [
+//	        "maxRetries",
+//	        "numRows",
+//	        "svcLat",
+//	        "retryLat",
+//	        "commitLat",
+//	        "bytesRead",
+//	        "rowsRead",
+//	      ]
+//	    },
+//	    "execution_statistics": {
+//	      "type": "object",
+//	      "properties": {
+//	        "cnt":             { "type": "number" },
+//	        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
+//	        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
+//	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
+//	        "networkMsg":      { "$ref": "#/definitions/numeric_stats" },
+//	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	      },
+//	      "required": [
+//	        "cnt",
+//	        "networkBytes",
+//	        "maxMemUsage",
+//	        "contentionTime",
+//	        "networkMsg",
+//	        "maxDiskUsage",
+//	      ]
+//	    }
+//	  },
+//
+//	  "properties": {
+//	    "stats": { "$ref": "#/definitions/statistics" },
+//	    "execStats": {
+//	      "$ref": "#/definitions/execution_statistics"
+//	    }
+//	  }
+//	}
 func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) (json.JSON, error) {
 	return (*txnStats)(&statistics.Stats).encodeJSON()
 }
@@ -251,29 +256,30 @@ func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) 
 // BuildStmtDetailsMetadataJSON returns a json.JSON object for the aggregated metadata
 // roachpb.AggregatedStatementMetadata.
 // JSON Schema for statement aggregated metadata:
-//   {
-//     "$schema": "https://json-schema.org/draft/2020-12/schema",
-//     "title": "system.statement_statistics.aggregated_metadata",
-//     "type": "object",
 //
-//     "properties": {
-//       "stmtType":             { "type": "string" },
-//       "query":                { "type": "string" },
-//       "querySummary":         { "type": "string" },
-//       "implicitTxn":          { "type": "boolean" },
-//       "distSQLCount":         { "type": "number" },
-//       "failedCount":          { "type": "number" },
-//       "vecCount":             { "type": "number" },
-//       "fullScanCount":        { "type": "number" },
-//       "totalCount":           { "type": "number" },
-//       "db":                   {
-//      		"type": "array",
-//      		"items": {
-//      		  "type": "string"
-//      		}
-//     	},
-//     }
-//   }
+//	{
+//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//	  "title": "system.statement_statistics.aggregated_metadata",
+//	  "type": "object",
+//
+//	  "properties": {
+//	    "stmtType":             { "type": "string" },
+//	    "query":                { "type": "string" },
+//	    "querySummary":         { "type": "string" },
+//	    "implicitTxn":          { "type": "boolean" },
+//	    "distSQLCount":         { "type": "number" },
+//	    "failedCount":          { "type": "number" },
+//	    "vecCount":             { "type": "number" },
+//	    "fullScanCount":        { "type": "number" },
+//	    "totalCount":           { "type": "number" },
+//	    "db":                   {
+//	   		"type": "array",
+//	   		"items": {
+//	   		  "type": "string"
+//	   		}
+//	  	},
+//	  }
+//	}
 func BuildStmtDetailsMetadataJSON(
 	metadata *roachpb.AggregatedStatementMetadata,
 ) (json.JSON, error) {

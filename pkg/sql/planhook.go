@@ -52,7 +52,7 @@ type planHookFn func(
 // sends on it when necessary. Any subplans returned by the hook when initially
 // called are passed back, planned and started, for the RowFn's use.
 //
-//TODO(dt): should this take runParams like a normal planNode.Next?
+// TODO(dt): should this take runParams like a normal planNode.Next?
 type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
 
 type planHook struct {

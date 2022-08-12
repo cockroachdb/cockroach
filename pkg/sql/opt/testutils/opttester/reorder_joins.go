@@ -24,15 +24,16 @@ import (
 // ReorderJoins optimizes the given query and outputs intermediate steps taken
 // during join enumeration. For each call to joinOrderBuilder.Reorder, the
 // output is as follows:
-//   1. The original join tree that is used to form the join graph.
-//   2. The vertexes of the join graph (as well as compact aliases that will be
-//      used to output joins added to the memo).
-//   3. The edges of the join graph.
-//   4. The joins which joinOrderBuilder attempts to add to the memo. An output
-//      like 'AB CD' means a join tree containing relations A and B is being
-//      joined to a join tree containing relations C and D. There is also a
-//      'refs' field containing all relations that are referenced by the join's
-//      ON condition.
+//  1. The original join tree that is used to form the join graph.
+//  2. The vertexes of the join graph (as well as compact aliases that will be
+//     used to output joins added to the memo).
+//  3. The edges of the join graph.
+//  4. The joins which joinOrderBuilder attempts to add to the memo. An output
+//     like 'AB CD' means a join tree containing relations A and B is being
+//     joined to a join tree containing relations C and D. There is also a
+//     'refs' field containing all relations that are referenced by the join's
+//     ON condition.
+//
 // The final optimized plan is then output.
 func (ot *OptTester) ReorderJoins() (string, error) {
 	ot.builder.Reset()

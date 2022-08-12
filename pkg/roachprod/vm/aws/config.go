@@ -33,23 +33,23 @@ import (
 // The struct is constructed by deserializing json that follows the form of
 // the below example.
 //
-//  {
-//    "regions": {
-//      "sensitive": false,
-//      "type": "list",
-//      "value": [
-//          {
-//              "ami_id": "ami-48630c2e",
-//              "region": "ap-northeast-1",
-//              "security_group": "sg-0006e480d77a10104",
-//              "subnets": {
-//                  "ap-northeast-1a": "subnet-0d144db3c9e47edf5",
-//                  "ap-northeast-1c": "subnet-02fcaaa6212fc3c1a",
-//                  "ap-northeast-1d": "subnet-0e9006ef8b3bef61f"
-//              }
-//          }
-//      ]
-//  }
+//	{
+//	  "regions": {
+//	    "sensitive": false,
+//	    "type": "list",
+//	    "value": [
+//	        {
+//	            "ami_id": "ami-48630c2e",
+//	            "region": "ap-northeast-1",
+//	            "security_group": "sg-0006e480d77a10104",
+//	            "subnets": {
+//	                "ap-northeast-1a": "subnet-0d144db3c9e47edf5",
+//	                "ap-northeast-1c": "subnet-02fcaaa6212fc3c1a",
+//	                "ap-northeast-1d": "subnet-0e9006ef8b3bef61f"
+//	            }
+//	        }
+//	    ]
+//	}
 //
 // It has this awkward structure to deal with the terraform serialization
 // of lists. Ideally terraform would output an artifact whose structure mirrors

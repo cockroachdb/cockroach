@@ -436,10 +436,11 @@ func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta 
 // DELETE).
 //
 // NOTE: Callers must take care that mutation columns (columns that are being
-//       added or dropped from the table) are only used when performing mutation
-//       DML statements (INSERT, UPDATE, UPSERT, DELETE). They cannot be used in
-//       any other way because they may not have been initialized yet by the
-//       backfiller!
+//
+//	added or dropped from the table) are only used when performing mutation
+//	DML statements (INSERT, UPDATE, UPSERT, DELETE). They cannot be used in
+//	any other way because they may not have been initialized yet by the
+//	backfiller!
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
@@ -1158,11 +1159,11 @@ func (b *Builder) buildFromTables(
 // in the reverse order that they appear in the list, with the innermost join
 // involving the tables at the end of the list. For example:
 //
-//   SELECT * FROM a,b,c
+//	SELECT * FROM a,b,c
 //
 // is joined like:
 //
-//   SELECT * FROM a JOIN (b JOIN c ON true) ON true
+//	SELECT * FROM a JOIN (b JOIN c ON true) ON true
 //
 // This ordering is guaranteed for queries not involving lateral joins for the
 // time being, to ensure we don't break any queries which have been
@@ -1216,10 +1217,10 @@ func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
 // left-to-right) rather than right-deep (from right-to-left) which we do
 // typically for perf backwards-compatibility.
 //
-//   SELECT * FROM a, b, c
+//	SELECT * FROM a, b, c
 //
-//   buildFromTablesRightDeep: a JOIN (b JOIN c)
-//   buildFromWithLateral:     (a JOIN b) JOIN c
+//	buildFromTablesRightDeep: a JOIN (b JOIN c)
+//	buildFromWithLateral:     (a JOIN b) JOIN c
 func (b *Builder) buildFromWithLateral(
 	tables tree.TableExprs, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {

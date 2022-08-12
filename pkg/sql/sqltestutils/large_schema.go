@@ -33,19 +33,21 @@ type GenerateViewBasedGraphSchemaParams struct {
 
 // GenerateViewBasedGraphSchema generates a complex nested schema that takes
 // the following form:
-// 1) Tables generated at depth 0 will have NumColumnsPerTable, where
-//	  NumTablesPerDepth tables will be created with the name format:
-//		table{tableIndex}.
-//    Columns will have the name format: {tableName}_{columnIndex}.
-// 2) All greater than zero depths we will generate views, where NumTablesPerDepth
-//    views will be generated. The views at a given depth will select from all
-//		the columns from the views/tables from the previous depth. This means
-// 		a view at depth N will have (NumTablesPerDepth^(depth)) * NumColumnsPerTable
-// 		Each generate view will have the name format: view{depth}_{tableIndex}.
-//    Columns will have the name format: {viewName}_{columnIndex}.
 //
-//    This setup will generate a large number of column references between views,
-//    as the depth increases.
+//  1. Tables generated at depth 0 will have NumColumnsPerTable, where
+//     NumTablesPerDepth tables will be created with the name format:
+//     table{tableIndex}.
+//     Columns will have the name format: {tableName}_{columnIndex}.
+//
+//  2. All greater than zero depths we will generate views, where NumTablesPerDepth
+//     views will be generated. The views at a given depth will select from all
+//     the columns from the views/tables from the previous depth. This means
+//     a view at depth N will have (NumTablesPerDepth^(depth)) * NumColumnsPerTable
+//     Each generate view will have the name format: view{depth}_{tableIndex}.
+//     Columns will have the name format: {viewName}_{columnIndex}.
+//
+//     This setup will generate a large number of column references between views,
+//     as the depth increases.
 func GenerateViewBasedGraphSchema(
 	params GenerateViewBasedGraphSchemaParams,
 ) (parser.Statements, error) {

@@ -74,9 +74,9 @@ func TestSetups(t *testing.T) {
 //
 // If this test fails, there is likely a bug in:
 //
-//   1. sqlsmith that makes valid INSERTs impossible or very unlikely
-//   2. Or rand-tables that makes it impossible or very unlikely to ever
-//      generate a successful INSERT
+//  1. sqlsmith that makes valid INSERTs impossible or very unlikely
+//  2. Or rand-tables that makes it impossible or very unlikely to ever
+//     generate a successful INSERT
 //
 // Note that there is a small but non-zero chance that this test produces a
 // false-negative.

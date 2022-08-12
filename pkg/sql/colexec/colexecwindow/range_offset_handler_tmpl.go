@@ -173,16 +173,16 @@ var _ rangeOffsetHandler = &_OP_STRING{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,

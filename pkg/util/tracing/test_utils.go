@@ -58,15 +58,15 @@ func CountLogMessages(sp tracingpb.RecordedSpan, msg string) int {
 // one represented by a string with one line per expected span and one line per
 // expected event (i.e. log message), with a tab-indentation for child spans.
 //
-//      if err := CheckRecordedSpans(Span.GetRecording(), `
-//          span: root
-//              event: a
-//              span: child
-//                  event: [ambient] b
-//                  event: c
-//      `); err != nil {
-//        t.Fatal(err)
-//      }
+//	if err := CheckRecordedSpans(Span.GetRecording(), `
+//	    span: root
+//	        event: a
+//	        span: child
+//	            event: [ambient] b
+//	            event: c
+//	`); err != nil {
+//	  t.Fatal(err)
+//	}
 //
 // The event lines can (and generally should) omit the file:line part that they
 // might contain (depending on the level at which they were logged).
@@ -164,16 +164,15 @@ func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 // one. The expected string is allowed to elide timing information, and the
 // outer-most indentation level is adjusted for when comparing.
 //
-//       if err := CheckRecording(sp.GetRecording(), `
-//           === operation:root
-//           [childrenMetadata]
-//           event:root 1
-//               === operation:remote child
-//               event:remote child 1
-//       `); err != nil {
-//           t.Fatal(err)
-//       }
-//
+//	if err := CheckRecording(sp.GetRecording(), `
+//	    === operation:root
+//	    [childrenMetadata]
+//	    event:root 1
+//	        === operation:remote child
+//	        event:remote child 1
+//	`); err != nil {
+//	    t.Fatal(err)
+//	}
 func CheckRecording(rec tracingpb.Recording, expected string) error {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.

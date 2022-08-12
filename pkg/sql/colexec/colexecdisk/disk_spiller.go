@@ -60,18 +60,18 @@ import (
 
 // NewOneInputDiskSpiller returns a new oneInputDiskSpiller. It takes the
 // following arguments:
-// - inMemoryOp - the in-memory operator that will be consuming input and doing
-//   computations until it either successfully processes the whole input or
-//   reaches its memory limit.
-// - inMemoryMemMonitorName - the name of the memory monitor of the in-memory
-//   operator. diskSpiller will catch an OOM error only if this name is
-//   contained within the error message.
-// - diskBackedOpConstructor - the function to construct the disk-backed
-//   operator when given an input operator. We take in a constructor rather
-//   than an already created operator in order to hide the complexity of buffer
-//   exporting operator that serves as the input to the disk-backed operator.
-// - spillingCallbackFn will be called when the spilling from in-memory to disk
-//   backed operator occurs. It should only be set in tests.
+//   - inMemoryOp - the in-memory operator that will be consuming input and doing
+//     computations until it either successfully processes the whole input or
+//     reaches its memory limit.
+//   - inMemoryMemMonitorName - the name of the memory monitor of the in-memory
+//     operator. diskSpiller will catch an OOM error only if this name is
+//     contained within the error message.
+//   - diskBackedOpConstructor - the function to construct the disk-backed
+//     operator when given an input operator. We take in a constructor rather
+//     than an already created operator in order to hide the complexity of buffer
+//     exporting operator that serves as the input to the disk-backed operator.
+//   - spillingCallbackFn will be called when the spilling from in-memory to disk
+//     backed operator occurs. It should only be set in tests.
 func NewOneInputDiskSpiller(
 	input colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
@@ -127,18 +127,18 @@ func NewOneInputDiskSpiller(
 
 // NewTwoInputDiskSpiller returns a new twoInputDiskSpiller. It takes the
 // following arguments:
-// - inMemoryOp - the in-memory operator that will be consuming inputs and
-//   doing computations until it either successfully processes the whole inputs
-//   or reaches its memory limit.
-// - inMemoryMemMonitorName - the name of the memory monitor of the in-memory
-//   operator. diskSpiller will catch an OOM error only if this name is
-//   contained within the error message.
-// - diskBackedOpConstructor - the function to construct the disk-backed
-//   operator when given two input operators. We take in a constructor rather
-//   than an already created operator in order to hide the complexity of buffer
-//   exporting operators that serves as inputs to the disk-backed operator.
-// - spillingCallbackFn will be called when the spilling from in-memory to disk
-//   backed operator occurs. It should only be set in tests.
+//   - inMemoryOp - the in-memory operator that will be consuming inputs and
+//     doing computations until it either successfully processes the whole inputs
+//     or reaches its memory limit.
+//   - inMemoryMemMonitorName - the name of the memory monitor of the in-memory
+//     operator. diskSpiller will catch an OOM error only if this name is
+//     contained within the error message.
+//   - diskBackedOpConstructor - the function to construct the disk-backed
+//     operator when given two input operators. We take in a constructor rather
+//     than an already created operator in order to hide the complexity of buffer
+//     exporting operators that serves as inputs to the disk-backed operator.
+//   - spillingCallbackFn will be called when the spilling from in-memory to disk
+//     backed operator occurs. It should only be set in tests.
 func NewTwoInputDiskSpiller(
 	inputOne, inputTwo colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,

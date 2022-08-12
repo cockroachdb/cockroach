@@ -38,6 +38,7 @@ func (ids IDs) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
 
 // FormatVersion is a custom type for TableDescriptor versions of the sql to
 // key:value mapping.
+//
 //go:generate stringer -type=FormatVersion
 type FormatVersion uint32
 

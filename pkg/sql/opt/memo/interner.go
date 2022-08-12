@@ -71,20 +71,20 @@ type internHash uint64
 // The non-cryptographic hash function is adapted from fnv.go in Golang's
 // standard library. That in turn was taken from FNV-1a, described here:
 //
-//   https://en.wikipedia.org/wiki/Fowler-Noll-Vo_hash_function
+//	https://en.wikipedia.org/wiki/Fowler-Noll-Vo_hash_function
 //
 // Each expression type follows the same interning pattern:
 //
-//   1. Compute an int64 hash value for the expression using FNV-1a.
-//   2. Do a fast 64-bit Go map lookup to determine if an expression with the
-//      same hash is already in the cache.
-//   3. If so, then test whether the existing expression is equivalent, since
-//      there may be a hash value collision.
-//   4. Expressions with colliding hash values are linked together in a list.
-//      Rather than use an explicit linked list data structure, colliding
-//      entries are rehashed using a randomly generated hash value that is
-//      stored in the existing entry. This effectively uses the Go map as if it
-//      were a hash table of size 2^64.
+//  1. Compute an int64 hash value for the expression using FNV-1a.
+//  2. Do a fast 64-bit Go map lookup to determine if an expression with the
+//     same hash is already in the cache.
+//  3. If so, then test whether the existing expression is equivalent, since
+//     there may be a hash value collision.
+//  4. Expressions with colliding hash values are linked together in a list.
+//     Rather than use an explicit linked list data structure, colliding
+//     entries are rehashed using a randomly generated hash value that is
+//     stored in the existing entry. This effectively uses the Go map as if it
+//     were a hash table of size 2^64.
 //
 // This pattern enables very low overhead hashing of expressions - the
 // allocation of a Go map with a fast 64-bit key, plus a couple of reusable
@@ -138,14 +138,14 @@ func (in *interner) InternPhysicalProps(val *physical.Required) *physical.Requir
 // internCache is a helper class that implements the interning pattern described
 // in the comment for the interner struct. Here is a usage example:
 //
-//   var cache internCache
-//   cache.Start(hash)
-//   for cache.Next() {
-//     if isEqual(cache.Item(), other) {
-//       // Found existing item in cache.
-//     }
-//   }
-//   cache.Add(other)
+//	var cache internCache
+//	cache.Start(hash)
+//	for cache.Next() {
+//	  if isEqual(cache.Item(), other) {
+//	    // Found existing item in cache.
+//	  }
+//	}
+//	cache.Add(other)
 //
 // The calls to the Next method iterate over any entries with the same hash,
 // until either a match is found or it is proven their are no matches, in which

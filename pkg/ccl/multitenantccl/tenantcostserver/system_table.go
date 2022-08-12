@@ -406,7 +406,9 @@ func (h *sysTableHelper) maybeCleanupStaleInstance(
 
 // maybeCleanupStaleInstances removes up to maxInstancesCleanup stale instances
 // (where the last update time is before the cutoff) with IDs in the range
-//   [startID, endID).
+//
+//	[startID, endID).
+//
 // If endID is -1, then the range is unrestricted [startID, ∞).
 //
 // Returns the ID of the instance following the deleted instances. This is

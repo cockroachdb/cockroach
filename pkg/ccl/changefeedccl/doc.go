@@ -17,7 +17,7 @@ Changefeeds are built on top of rangefeeds, which provide a stream of
 KV events for a given keyspan as well as periodic "resolved
 timestamps" for those spans. For more information on rangefeeds see
 
-    docs/RFCS/20170613_range_feeds_storage_primitive.md
+	docs/RFCS/20170613_range_feeds_storage_primitive.md
 
 The changefeed machinery encodes and delivers both the KV events
 and resolved timestamps to the sinks. It further uses the resolved
@@ -54,38 +54,37 @@ schemafeed: Periodically polls the table descriptors
 table. Rangefeed events are held until it is sure it knows the
 schema for the relevant table at the event's timestamp.
 
-                 +-----------------+
-  +------+       |                 |       +-----+
-  | sink |<------+  changeFrontier +------>| job |
-  +------+       |                 |       +-----+
-                 +--------+--------+
-                          ^
-                          |
-                  +-------+--------+
-  +------+        |                |
-  | sink +<-------+  changefeedAgg |<------------+
-  +------+        |                |             |
-                  +--+-------------+         chanBuffer
-                     |                           |
-                     v                    +------+------+
-                   +--------------+       |             |
-                   |              +------>|  copyFromTo +--+
-                   |  kvfeed      |       |             |  |
-                   |              |       +------+------+  |
-                   +--------+---+-+              ^         |
-                            |   |             memBuffer    |
-                            |   |                |         |
-                            |   |          +-----+------+  |   +-----------+
-                            |   |          |            |  |   |           |
-                            |   +--------> |physical    +----->| rangefeed |
-                            |              |   feed     |  |   |           |
-                            |              +------------+  |   +-----------+
-                            |                              |
-                            |                              |
-                            |              +------------+  |
-                            +------------> | schemafeed |<-|
-                                           |  (polls)   |
-                                           +------------+
-
+	               +-----------------+
+	+------+       |                 |       +-----+
+	| sink |<------+  changeFrontier +------>| job |
+	+------+       |                 |       +-----+
+	               +--------+--------+
+	                        ^
+	                        |
+	                +-------+--------+
+	+------+        |                |
+	| sink +<-------+  changefeedAgg |<------------+
+	+------+        |                |             |
+	                +--+-------------+         chanBuffer
+	                   |                           |
+	                   v                    +------+------+
+	                 +--------------+       |             |
+	                 |              +------>|  copyFromTo +--+
+	                 |  kvfeed      |       |             |  |
+	                 |              |       +------+------+  |
+	                 +--------+---+-+              ^         |
+	                          |   |             memBuffer    |
+	                          |   |                |         |
+	                          |   |          +-----+------+  |   +-----------+
+	                          |   |          |            |  |   |           |
+	                          |   +--------> |physical    +----->| rangefeed |
+	                          |              |   feed     |  |   |           |
+	                          |              +------------+  |   +-----------+
+	                          |                              |
+	                          |                              |
+	                          |              +------------+  |
+	                          +------------> | schemafeed |<-|
+	                                         |  (polls)   |
+	                                         +------------+
 */
 package changefeedccl

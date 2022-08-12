@@ -189,7 +189,7 @@ func randTime(rng *rand.Rand) time.Time {
 	return timeutil.Unix(0, rng.Int63())
 }
 
-//Create a thin, in-memory user-defined enum type
+// Create a thin, in-memory user-defined enum type
 func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T {
 
 	members := make([]descpb.TypeDescriptor_EnumMember, len(enumLabels))

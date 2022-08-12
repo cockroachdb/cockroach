@@ -33,28 +33,27 @@ import (
 // It provides a method to build the cascading delete in the child table,
 // equivalent to a query like:
 //
-//   DELETE FROM child WHERE fk IN (SELECT fk FROM original_mutation_input)
+//	DELETE FROM child WHERE fk IN (SELECT fk FROM original_mutation_input)
 //
 // The input to the mutation is a semi-join of the table with the mutation
 // input:
 //
-//   delete child
-//    └── semi-join (hash)
-//         ├── columns: c:5!null child.p:6!null
-//         ├── scan child
-//         │    └── columns: c:5!null child.p:6!null
-//         ├── with-scan &1
-//         │    ├── columns: p:7!null
-//         │    └── mapping:
-//         │         └──  parent.p:2 => p:7
-//         └── filters
-//              └── child.p:6 = p:7
+//	delete child
+//	 └── semi-join (hash)
+//	      ├── columns: c:5!null child.p:6!null
+//	      ├── scan child
+//	      │    └── columns: c:5!null child.p:6!null
+//	      ├── with-scan &1
+//	      │    ├── columns: p:7!null
+//	      │    └── mapping:
+//	      │         └──  parent.p:2 => p:7
+//	      └── filters
+//	           └── child.p:6 = p:7
 //
 // Note that NULL values in the mutation input don't require any special
 // handling - they will be effectively ignored by the semi-join.
 //
 // See testdata/fk-on-delete-cascades for more examples.
-//
 type onDeleteCascadeBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
@@ -121,23 +120,23 @@ func (cb *onDeleteCascadeBuilder) Build(
 // It provides a method to build the cascading delete in the child table,
 // equivalent to a query like:
 //
-//   DELETE FROM child WHERE <condition on fk column> AND fk IS NOT NULL
+//	DELETE FROM child WHERE <condition on fk column> AND fk IS NOT NULL
 //
 // The input to the mutation is a Select on top of a Scan. For example:
 //
 // ── delete child
-//    ├── columns: <none>
-//    ├── fetch columns: c:8 child.p:9
-//    └── select
-//         ├── columns: c:8!null child.p:9!null
-//         ├── scan child
-//         │    └── columns: c:8!null child.p:9!null
-//         └── filters
-//              ├── child.p:9 > 1
-//              └── child.p:9 IS DISTINCT FROM CAST(NULL AS INT8)
+//
+//	├── columns: <none>
+//	├── fetch columns: c:8 child.p:9
+//	└── select
+//	     ├── columns: c:8!null child.p:9!null
+//	     ├── scan child
+//	     │    └── columns: c:8!null child.p:9!null
+//	     └── filters
+//	          ├── child.p:9 > 1
+//	          └── child.p:9 IS DISTINCT FROM CAST(NULL AS INT8)
 //
 // See testdata/fk-on-delete-cascades for more examples.
-//
 type onDeleteFastCascadeBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
@@ -360,39 +359,38 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 // It provides a method to build the cascading delete in the child table,
 // equivalent to a query like:
 //
-//   UPDATE SET fk = NULL FROM child WHERE fk IN (SELECT fk FROM original_mutation_input)
-//   or
-//   UPDATE SET fk = DEFAULT FROM child WHERE fk IN (SELECT fk FROM original_mutation_input)
+//	UPDATE SET fk = NULL FROM child WHERE fk IN (SELECT fk FROM original_mutation_input)
+//	or
+//	UPDATE SET fk = DEFAULT FROM child WHERE fk IN (SELECT fk FROM original_mutation_input)
 //
 // The input to the mutation is a semi-join of the table with the mutation
 // input:
 //
-//   update child
-//    ├── columns: <none>
-//    ├── fetch columns: c:5 child.p:6
-//    ├── update-mapping:
-//    │    └── column8:8 => child.p:4
-//    └── project
-//         ├── columns: column8:8 c:5!null child.p:6
-//         ├── semi-join (hash)
-//         │    ├── columns: c:5!null child.p:6
-//         │    ├── scan child
-//         │    │    └── columns: c:5!null child.p:6
-//         │    ├── with-scan &1
-//         │    │    ├── columns: p:7!null
-//         │    │    └── mapping:
-//         │    │         └──  parent.p:2 => p:7
-//         │    └── filters
-//         │         └── child.p:6 = p:7
-//         └── projections
-//                  └── NULL::INT8 [as=column8:8]
+//	update child
+//	 ├── columns: <none>
+//	 ├── fetch columns: c:5 child.p:6
+//	 ├── update-mapping:
+//	 │    └── column8:8 => child.p:4
+//	 └── project
+//	      ├── columns: column8:8 c:5!null child.p:6
+//	      ├── semi-join (hash)
+//	      │    ├── columns: c:5!null child.p:6
+//	      │    ├── scan child
+//	      │    │    └── columns: c:5!null child.p:6
+//	      │    ├── with-scan &1
+//	      │    │    ├── columns: p:7!null
+//	      │    │    └── mapping:
+//	      │    │         └──  parent.p:2 => p:7
+//	      │    └── filters
+//	      │         └── child.p:6 = p:7
+//	      └── projections
+//	               └── NULL::INT8 [as=column8:8]
 //
 // Note that NULL values in the mutation input don't require any special
 // handling - they will be effectively ignored by the semi-join.
 //
 // See testdata/fk-on-delete-set-null and fk-on-delete-set-default for more
 // examples.
-//
 type onDeleteSetBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
@@ -490,20 +488,19 @@ func (cb *onDeleteSetBuilder) Build(
 // For example, if we have a child table with foreign key on p, the expression
 // will look like this:
 //
-//   semi-join (hash)
-//    ├── columns: c:5!null child.p:6!null
-//    ├── scan child
-//    │    └── columns: c:5!null child.p:6!null
-//    ├── with-scan &1
-//    │    ├── columns: p:7!null
-//    │    └── mapping:
-//    │         └──  parent.p:2 => p:7
-//    └── filters
-//         └── child.p:6 = p:7
+//	semi-join (hash)
+//	 ├── columns: c:5!null child.p:6!null
+//	 ├── scan child
+//	 │    └── columns: c:5!null child.p:6!null
+//	 ├── with-scan &1
+//	 │    ├── columns: p:7!null
+//	 │    └── mapping:
+//	 │         └──  parent.p:2 => p:7
+//	 └── filters
+//	      └── child.p:6 = p:7
 //
 // Note that NULL values in the mutation input don't require any special
 // handling - they will be effectively ignored by the semi-join.
-//
 func (b *Builder) buildDeleteCascadeMutationInput(
 	childTable cat.Table,
 	childTableAlias *tree.TableName,
@@ -571,34 +568,34 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 // It provides a method to build the cascading update in the child table,
 // equivalent to a query like:
 //
-//   UPDATE child SET fk = fk_new_val
-//   FROM (SELECT fk_old_val, fk_new_val FROM original_mutation_input)
-//   WHERE fk_old_val IS DISTINCT FROM fk_new_val AND fk = fk_old_val
+//	UPDATE child SET fk = fk_new_val
+//	FROM (SELECT fk_old_val, fk_new_val FROM original_mutation_input)
+//	WHERE fk_old_val IS DISTINCT FROM fk_new_val AND fk = fk_old_val
 //
 // The input to the mutation is an inner-join of the table with the mutation
 // input, producing the old and new FK values for each row:
 //
-//   update child
-//    ├── columns: <none>
-//    ├── fetch columns: c:6 child.p:7
-//    ├── update-mapping:
-//    │    └── p_new:9 => child.p:5
-//    ├── input binding: &2
-//    └─── inner-join (hash)
-//         ├── columns: c:6!null child.p:7!null p:8!null p_new:9!null
-//         ├── scan child
-//         │    └── columns: c:6!null child.p:7!null
-//         ├── select
-//         │    ├── columns: p:8!null p_new:9!null
-//         │    ├── with-scan &1
-//         │    │    ├── columns: p:8!null p_new:9!null
-//         │    │    └── mapping:
-//         │    │         ├──  parent.p:2 => p:8
-//         │    │         └──  p_new:3 => p_new:9
-//         │    └── filters
-//         │         └── p:8 IS DISTINCT FROM p_new:9
-//         └── filters
-//              └── child.p:7 = p:8
+//	update child
+//	 ├── columns: <none>
+//	 ├── fetch columns: c:6 child.p:7
+//	 ├── update-mapping:
+//	 │    └── p_new:9 => child.p:5
+//	 ├── input binding: &2
+//	 └─── inner-join (hash)
+//	      ├── columns: c:6!null child.p:7!null p:8!null p_new:9!null
+//	      ├── scan child
+//	      │    └── columns: c:6!null child.p:7!null
+//	      ├── select
+//	      │    ├── columns: p:8!null p_new:9!null
+//	      │    ├── with-scan &1
+//	      │    │    ├── columns: p:8!null p_new:9!null
+//	      │    │    └── mapping:
+//	      │    │         ├──  parent.p:2 => p:8
+//	      │    │         └──  p_new:3 => p_new:9
+//	      │    └── filters
+//	      │         └── p:8 IS DISTINCT FROM p_new:9
+//	      └── filters
+//	           └── child.p:7 = p:8
 //
 // The inner join equality columns form a key in the with-scan (because they
 // form a key in the parent table); so the inner-join is essentially equivalent
@@ -608,7 +605,6 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 // handling - they will be effectively ignored by the join.
 //
 // See testdata/fk-on-update-* for more examples.
-//
 type onUpdateCascadeBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
@@ -703,21 +699,21 @@ func (cb *onUpdateCascadeBuilder) Build(
 // For example, if we have a child table with foreign key on p, the expression
 // will look like this:
 //
-//   inner-join (hash)
-//    ├── columns: c:6!null child.p:7!null p:8!null p_new:9!null
-//    ├── scan child
-//    │    └── columns: c:6!null child.p:7!null
-//    ├── select
-//    │    ├── columns: p:8!null p_new:9!null
-//    │    ├── with-scan &1
-//    │    │    ├── columns: p:8!null p_new:9!null
-//    │    │    └── mapping:
-//    │    │         ├──  parent.p:2 => p:8
-//    │    │         └──  p_new:3 => p_new:9
-//    │    └── filters
-//    │         └── p:8 IS DISTINCT FROM p_new:9
-//    └── filters
-//         └── child.p:7 = p:8
+//	inner-join (hash)
+//	 ├── columns: c:6!null child.p:7!null p:8!null p_new:9!null
+//	 ├── scan child
+//	 │    └── columns: c:6!null child.p:7!null
+//	 ├── select
+//	 │    ├── columns: p:8!null p_new:9!null
+//	 │    ├── with-scan &1
+//	 │    │    ├── columns: p:8!null p_new:9!null
+//	 │    │    └── mapping:
+//	 │    │         ├──  parent.p:2 => p:8
+//	 │    │         └──  p_new:3 => p_new:9
+//	 │    └── filters
+//	 │         └── p:8 IS DISTINCT FROM p_new:9
+//	 └── filters
+//	      └── child.p:7 = p:8
 //
 // The inner join equality columns form a key in the with-scan (because they
 // form a key in the parent table); so the inner-join is essentially equivalent
@@ -739,7 +735,6 @@ func (cb *onUpdateCascadeBuilder) Build(
 // inserted rows the "old" values are all NULL and won't match anything in the
 // inner-join anyway. This reasoning is very similar to that of FK checks for
 // Upserts (see buildFKChecksForUpsert).
-//
 func (b *Builder) buildUpdateCascadeMutationInput(
 	childTable cat.Table,
 	childTableAlias *tree.TableName,

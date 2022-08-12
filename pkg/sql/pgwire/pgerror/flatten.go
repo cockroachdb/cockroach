@@ -25,9 +25,9 @@ import (
 // the name implies, the details from the chain of causes is projected
 // into a single struct. This is useful in at least two places:
 //
-// - to generate Error objects suitable for 19.1 nodes, which
-//   only recognize this type of payload.
-// - to generate an error packet on pgwire.
+//   - to generate Error objects suitable for 19.1 nodes, which
+//     only recognize this type of payload.
+//   - to generate an error packet on pgwire.
 //
 // Additionally, this can be used in the remainder of the code
 // base when an Error object is expected, until that code

@@ -1641,17 +1641,22 @@ func BenchmarkJoinReader(b *testing.B) {
 //
 // input: 0,1,2,3,4 (size of input is 'numLookupRows')
 // table: one | four | sixteen |
-//          0 |    0 |       0
-//          1 |    0 |       0
-//          2 |    0 |       0
-//          3 |    0 |       0
-//          4 |    1 |       0
-//          5 |    1 |       0
-//  ...
+//
+//	        0 |    0 |       0
+//	        1 |    0 |       0
+//	        2 |    0 |       0
+//	        3 |    0 |       0
+//	        4 |    1 |       0
+//	        5 |    1 |       0
+//	...
+//
 // SELECT one FROM input INNER LOOKUP JOIN t64 ON i = one;
-//    -> 0,1,2,3,4
+//
+//	-> 0,1,2,3,4
+//
 // SELECT four FROM input INNER LOOKUP JOIN t64 ON i = four;
-//    -> 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3
+//
+//	-> 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3
 func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 	// Create an *on-disk* store spec for the primary store and temp engine to

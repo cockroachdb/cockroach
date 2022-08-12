@@ -110,10 +110,10 @@ func newMeta2Planner(
 // two design goals for our approach to probabilistically selecting a place in
 // the keyspace to probe:
 //
-// 1. That the approach is efficient enough. Resource requirements shouldn't
-//    scale with the number of ranges in the cluster, for example.
-// 2. That the approach is available enough in times of outage that the
-//    prober is able to generate useful signal when we need it most.
+//  1. That the approach is efficient enough. Resource requirements shouldn't
+//     scale with the number of ranges in the cluster, for example.
+//  2. That the approach is available enough in times of outage that the
+//     prober is able to generate useful signal when we need it most.
 //
 // How do we do it? The first option we considered was to probe
 // crdb_internal.ranges_no_leases. We reject that approach in favor of making a
@@ -135,19 +135,19 @@ func newMeta2Planner(
 // should not scale up as the number of ranges in the cluster grows.
 //
 // Memory:
-// - The meta2Planner struct's mem usage scales with
-//   size(the Plan struct) * the kv.prober.planner.n_probes_at_a_time cluster
-//   setting.
-// - The Plan function's mem usage scales with
-//   size(KV pairs holding range descriptors) * the
-//   kv.prober.planner.n_probes_at_a_time cluster setting.
+//   - The meta2Planner struct's mem usage scales with
+//     size(the Plan struct) * the kv.prober.planner.n_probes_at_a_time cluster
+//     setting.
+//   - The Plan function's mem usage scales with
+//     size(KV pairs holding range descriptors) * the
+//     kv.prober.planner.n_probes_at_a_time cluster setting.
 //
 // CPU:
-// - Again scales with the kv.prober.planner.n_probes_at_a_time cluster
-//   setting. Note the proto unmarshalling. We also shuffle a slice of size
-//   kv.prober.planner.n_probes_at_a_time. If the setting is set to a high
-//   number, we pay a higher CPU cost less often; if it's set to a low number,
-//   we pay a smaller CPU cost more often.
+//   - Again scales with the kv.prober.planner.n_probes_at_a_time cluster
+//     setting. Note the proto unmarshalling. We also shuffle a slice of size
+//     kv.prober.planner.n_probes_at_a_time. If the setting is set to a high
+//     number, we pay a higher CPU cost less often; if it's set to a low number,
+//     we pay a smaller CPU cost more often.
 func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 	if len(p.plan) == 0 {
 		// Protect CRDB from planning executing too often, due to either issues

@@ -38,9 +38,10 @@ import (
 // This is done by running three node cluster with disk backed storage,
 // stopping it and verifying content of collected replica info file.
 // This check verifies that:
-//   we successfully iterate requested stores,
-//   data is written in expected location,
-//   data contains info only about stores requested.
+//
+//	we successfully iterate requested stores,
+//	data is written in expected location,
+//	data contains info only about stores requested.
 func TestCollectInfoFromMultipleStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

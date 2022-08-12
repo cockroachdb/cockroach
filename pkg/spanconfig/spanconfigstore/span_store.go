@@ -286,21 +286,21 @@ func (s *spanConfigStore) apply(
 // overlapping spans in their entirety and re-adding the non-overlapping
 // segments. Pseudo-code:
 //
-//   for entry in store.overlapping(update.span):
-//       union, intersection = union(update.span, entry), intersection(update.span, entry)
-//       pre  = span{union.start_key, intersection.start_key}
-//       post = span{intersection.end_key, union.end_key}
+//	for entry in store.overlapping(update.span):
+//	    union, intersection = union(update.span, entry), intersection(update.span, entry)
+//	    pre  = span{union.start_key, intersection.start_key}
+//	    post = span{intersection.end_key, union.end_key}
 //
-//       delete {span=entry.span, conf=entry.conf}
-//       if entry.contains(update.span.start_key):
-//           # First entry overlapping with update.
-//           add {span=pre, conf=entry.conf} if non-empty
-//       if entry.contains(update.span.end_key):
-//           # Last entry overlapping with update.
-//           add {span=post, conf=entry.conf} if non-empty
+//	    delete {span=entry.span, conf=entry.conf}
+//	    if entry.contains(update.span.start_key):
+//	        # First entry overlapping with update.
+//	        add {span=pre, conf=entry.conf} if non-empty
+//	    if entry.contains(update.span.end_key):
+//	        # Last entry overlapping with update.
+//	        add {span=post, conf=entry.conf} if non-empty
 //
-//   if adding:
-//       add {span=update.span, conf=update.conf} # add ourselves
+//	if adding:
+//	    add {span=update.span, conf=update.conf} # add ourselves
 //
 // When extending to a set of updates, things are more involved (but only
 // slightly!). Let's assume that the updates are non-overlapping and sorted
@@ -310,9 +310,9 @@ func (s *spanConfigStore) apply(
 // processing one update at a time in sorted order, we want to only re-add the
 // gap between the consecutive updates.
 //
-//   keyspace         a  b  c  d  e  f  g  h  i  j
-//   existing state      [--------X--------)
-//   updates          [--A--)           [--B--)
+//	keyspace         a  b  c  d  e  f  g  h  i  j
+//	existing state      [--------X--------)
+//	updates          [--A--)           [--B--)
 //
 // When processing [a,c):A, after deleting [b,h):X, it would be incorrect to
 // re-add [c,h):X since we're also looking to apply [g,i):B. Instead of
@@ -326,9 +326,9 @@ func (s *spanConfigStore) apply(
 // want to re-add [c,d):X and carry forward [f,h):X to the update after (i.e.
 // [g,i):C)).
 //
-//   keyspace         a  b  c  d  e  f  g  h  i  j
-//   existing state      [--------X--------)
-//   updates          [--A--)  [--B--)  [--C--)
+//	keyspace         a  b  c  d  e  f  g  h  i  j
+//	existing state      [--------X--------)
+//	updates          [--A--)  [--B--)  [--C--)
 //
 // One final note: we're iterating through the updates without actually applying
 // any mutations. Going back to our first example, when processing [g,i):B,
@@ -339,38 +339,37 @@ func (s *spanConfigStore) apply(
 // we need to exclude any that overlap with the segment that was carried over.
 // Pseudo-code:
 //
-//   carry-over = <empty>
-//   for update in updates:
-//       carried-over, carry-over = carry-over, <empty>
-//       if update.overlap(carried-over):
-//           # Fill in the gap between consecutive updates.
-//           add {span=span{carried-over.start_key, update.start_key}, conf=carried-over.conf}
-//           # Consider the trailing span after update; carry it forward if non-empty.
-//           carry-over = {span=span{update.end_key, carried-over.end_key}, conf=carried-over.conf}
-//       else:
-//           add {span=carried-over.span, conf=carried-over.conf} if non-empty
+//	carry-over = <empty>
+//	for update in updates:
+//	    carried-over, carry-over = carry-over, <empty>
+//	    if update.overlap(carried-over):
+//	        # Fill in the gap between consecutive updates.
+//	        add {span=span{carried-over.start_key, update.start_key}, conf=carried-over.conf}
+//	        # Consider the trailing span after update; carry it forward if non-empty.
+//	        carry-over = {span=span{update.end_key, carried-over.end_key}, conf=carried-over.conf}
+//	    else:
+//	        add {span=carried-over.span, conf=carried-over.conf} if non-empty
 //
-//       for entry in store.overlapping(update.span):
-//          if entry.overlap(carried-over):
-//               continue # already processed
+//	    for entry in store.overlapping(update.span):
+//	       if entry.overlap(carried-over):
+//	            continue # already processed
 //
-//           union, intersection = union(update.span, entry), intersection(update.span, entry)
-//           pre  = span{union.start_key, intersection.start_key}
-//           post = span{intersection.end_key, union.end_key}
+//	        union, intersection = union(update.span, entry), intersection(update.span, entry)
+//	        pre  = span{union.start_key, intersection.start_key}
+//	        post = span{intersection.end_key, union.end_key}
 //
-//           delete {span=entry.span, conf=entry.conf}
-//           if entry.contains(update.span.start_key):
-//               # First entry overlapping with update.
-//               add {span=pre, conf=entry.conf} if non-empty
-//           if entry.contains(update.span.end_key):
-//               # Last entry overlapping with update.
-//               carry-over = {span=post, conf=entry.conf}
+//	        delete {span=entry.span, conf=entry.conf}
+//	        if entry.contains(update.span.start_key):
+//	            # First entry overlapping with update.
+//	            add {span=pre, conf=entry.conf} if non-empty
+//	        if entry.contains(update.span.end_key):
+//	            # Last entry overlapping with update.
+//	            carry-over = {span=post, conf=entry.conf}
 //
-//        if adding:
-//           add {span=update.span, conf=update.conf} # add ourselves
+//	     if adding:
+//	        add {span=update.span, conf=update.conf} # add ourselves
 //
-//   add {span=carry-over.span, conf=carry-over.conf} if non-empty
-//
+//	add {span=carry-over.span, conf=carry-over.conf} if non-empty
 func (s *spanConfigStore) accumulateOpsFor(
 	ctx context.Context, dryrun bool, updates []spanconfig.Update,
 ) (toDelete, toAdd []entry, _ error) {

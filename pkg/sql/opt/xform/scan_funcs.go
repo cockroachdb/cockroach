@@ -31,13 +31,14 @@ import (
 // in that it behaves the exactly the same as a non-partial secondary index.
 //
 // NOTE: This does not generate index joins for non-covering indexes (except in
-//       case of ForceIndex). Index joins are usually only introduced "one level
-//       up", when the Scan operator is wrapped by an operator that constrains
-//       or limits scan output in some way (e.g. Select, Limit, InnerJoin).
-//       Index joins are only lower cost when their input does not include all
-//       rows from the table. See GenerateConstrainedScans,
-//       GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
-//       index joins are introduced into the memo.
+//
+//	case of ForceIndex). Index joins are usually only introduced "one level
+//	up", when the Scan operator is wrapped by an operator that constrains
+//	or limits scan output in some way (e.g. Select, Limit, InnerJoin).
+//	Index joins are only lower cost when their input does not include all
+//	rows from the table. See GenerateConstrainedScans,
+//	GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
+//	index joins are introduced into the memo.
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
@@ -244,53 +245,54 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 // spans may be produced which don't maximize the number of rows accessed as a
 // 100% local operation.
 // For example:
-//    CREATE TABLE abc_part (
-//       r STRING NOT NULL ,
-//       t INT NOT NULL,
-//       a INT PRIMARY KEY,
-//       b INT,
-//       c INT,
-//       d INT,
-//       UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
-//         PARTITION west VALUES IN (('west', 1), ('east', 4)),
-//         PARTITION east VALUES IN (('east', DEFAULT), ('east', 2)),
-//         PARTITION default VALUES IN (DEFAULT)
-//       )
-//    );
-//    ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
-//     num_voters = 5,
-//     voter_constraints = '{+region=east: 2}',
-//     lease_preferences = '[[+region=east]]'
 //
-//    ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
-//     num_voters = 5,
-//     voter_constraints = '{+region=west: 2}',
-//     lease_preferences = '[[+region=west]]'
+//	CREATE TABLE abc_part (
+//	   r STRING NOT NULL ,
+//	   t INT NOT NULL,
+//	   a INT PRIMARY KEY,
+//	   b INT,
+//	   c INT,
+//	   d INT,
+//	   UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
+//	     PARTITION west VALUES IN (('west', 1), ('east', 4)),
+//	     PARTITION east VALUES IN (('east', DEFAULT), ('east', 2)),
+//	     PARTITION default VALUES IN (DEFAULT)
+//	   )
+//	);
+//	ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//	 num_voters = 5,
+//	 voter_constraints = '{+region=east: 2}',
+//	 lease_preferences = '[[+region=east]]'
 //
-//    ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
-//     num_voters = 5,
-//     lease_preferences = '[[+region=central]]';
+//	ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//	 num_voters = 5,
+//	 voter_constraints = '{+region=west: 2}',
+//	 lease_preferences = '[[+region=west]]'
 //
-//    EXPLAIN SELECT c FROM abc_part@c_idx LIMIT 3;
-//                         info
-//    ----------------------------------------------
-//      distribution: local
-//      vectorized: true
+//	ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//	 num_voters = 5,
+//	 lease_preferences = '[[+region=central]]';
 //
-//      • union all
-//      │ limit: 3
-//      │
-//      ├── • scan
-//      │     missing stats
-//      │     table: abc_part@c_idx
-//      │     spans: [/'east'/2 - /'east'/3]
-//      │     limit: 3
-//      │
-//      └── • scan
-//            missing stats
-//            table: abc_part@c_idx
-//            spans: [ - /'east'/1] [/'east'/4 - ]
-//            limit: 3
+//	EXPLAIN SELECT c FROM abc_part@c_idx LIMIT 3;
+//	                     info
+//	----------------------------------------------
+//	  distribution: local
+//	  vectorized: true
+//
+//	  • union all
+//	  │ limit: 3
+//	  │
+//	  ├── • scan
+//	  │     missing stats
+//	  │     table: abc_part@c_idx
+//	  │     spans: [/'east'/2 - /'east'/3]
+//	  │     limit: 3
+//	  │
+//	  └── • scan
+//	        missing stats
+//	        table: abc_part@c_idx
+//	        spans: [ - /'east'/1] [/'east'/4 - ]
+//	        limit: 3
 //
 // Because of the partial-default east partition, ('east', DEFAULT), the spans
 // in the local (left) branch of the union all should be

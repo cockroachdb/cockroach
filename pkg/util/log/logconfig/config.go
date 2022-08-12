@@ -158,21 +158,21 @@ type CaptureFd2Config struct {
 // Buffering may be configured with the following fields. It may also be explicitly
 // set to "NONE" to disable buffering. Example configuration:
 //
-//     file-defaults:
-//        dir: logs
-//        buffering:
-//           max-staleness: 20s
-//           flush-trigger-size: 25KB
-//           max-buffer-size: 10MB
-//     sinks:
-//        file-groups:
-//           health:
-//              channels: HEALTH
-//              buffering:
-//                 max-staleness: 5s  # Override max-staleness for this sink.
-//           ops:
-//              channels: OPS
-//              buffering: NONE  # Disable buffering for this sink.
+//	file-defaults:
+//	   dir: logs
+//	   buffering:
+//	      max-staleness: 20s
+//	      flush-trigger-size: 25KB
+//	      max-buffer-size: 10MB
+//	sinks:
+//	   file-groups:
+//	      health:
+//	         channels: HEALTH
+//	         buffering:
+//	            max-staleness: 5s  # Override max-staleness for this sink.
+//	      ops:
+//	         channels: OPS
+//	         buffering: NONE  # Disable buffering for this sink.
 type CommonBufferSinkConfig struct {
 	// MaxStaleness is the maximum time a log message will sit in the buffer
 	// before a flush is triggered.
@@ -256,9 +256,9 @@ type SinkConfig struct {
 // The configuration key under the `sinks` key in the YAML configuration
 // is `stderr`. Example configuration:
 //
-//     sinks:
-//        stderr:           # standard error sink configuration starts here
-//           channels: DEV
+//	sinks:
+//	   stderr:           # standard error sink configuration starts here
+//	      channels: DEV
 //
 // {{site.data.alerts.callout_info}}
 // The server start-up messages are still emitted at the start of the standard error
@@ -279,7 +279,6 @@ type SinkConfig struct {
 // For a similar reason, no guarantee of parsability of the output format is available
 // when `capture-stray-errors` is disabled, since the standard error stream can then
 // contain an arbitrary interleaving of non-formatted error data.
-//
 type StderrSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
 	Channels ChannelFilters `yaml:",omitempty,flow"`
@@ -330,25 +329,25 @@ type FluentDefaults struct {
 // The configuration key under the `sinks` key in the YAML
 // configuration is `fluent-servers`. Example configuration:
 //
-//     sinks:
-//        fluent-servers:        # fluent configurations start here
-//           health:             # defines one sink called "health"
-//              channels: HEALTH
-//              address: 127.0.0.1:5170
+//	sinks:
+//	   fluent-servers:        # fluent configurations start here
+//	      health:             # defines one sink called "health"
+//	         channels: HEALTH
+//	         address: 127.0.0.1:5170
 //
 // Every new server sink configured automatically inherits the configurations set in the `fluent-defaults` section.
 //
 // For example:
 //
-//      fluent-defaults:
-//          redactable: false # default: disable redaction markers
-//      sinks:
-//        fluent-servers:
-//          health:
-//             channels: HEALTH
-//             # This sink has redactable set to false,
-//             # as the setting is inherited from fluent-defaults
-//             # unless overridden here.
+//	fluent-defaults:
+//	    redactable: false # default: disable redaction markers
+//	sinks:
+//	  fluent-servers:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from fluent-defaults
+//	       # unless overridden here.
 //
 // The default output format for Fluent sinks is
 // `json-fluent-compact`. The `fluent` variants of the JSON formats
@@ -358,7 +357,6 @@ type FluentDefaults struct {
 // {{site.data.alerts.callout_info}}
 // Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
 // {{site.data.alerts.end}}
-//
 type FluentSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
 	Channels ChannelFilters `yaml:",omitempty,flow"`
@@ -423,10 +421,10 @@ type FileDefaults struct {
 // The configuration key under the `sinks` key in the YAML
 // configuration is `file-groups`. Example configuration:
 //
-//     sinks:
-//        file-groups:           # file group configurations start here
-//           health:             # defines one group called "health"
-//              channels: HEALTH
+//	sinks:
+//	   file-groups:           # file group configurations start here
+//	      health:             # defines one group called "health"
+//	         channels: HEALTH
 //
 // Each generated log file is prefixed by the name of the process,
 // followed by the name of the group, separated by a hyphen. For example,
@@ -444,24 +442,23 @@ type FileDefaults struct {
 //
 // For example:
 //
-//      file-defaults:
-//          redactable: false # default: disable redaction markers
-//          dir: logs
-//      sinks:
-//        file-groups:
-//          health:
-//             channels: HEALTH
-//             # This sink has redactable set to false,
-//             # as the setting is inherited from file-defaults
-//             # unless overridden here.
-//             #
-//             # Example override:
-//             dir: health-logs # override the default 'logs'
+//	file-defaults:
+//	    redactable: false # default: disable redaction markers
+//	    dir: logs
+//	sinks:
+//	  file-groups:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from file-defaults
+//	       # unless overridden here.
+//	       #
+//	       # Example override:
+//	       dir: health-logs # override the default 'logs'
 //
 // {{site.data.alerts.callout_success}}
 // Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
 // {{site.data.alerts.end}}
-//
 type FileSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
 	Channels ChannelFilters `yaml:",omitempty,flow"`
@@ -513,25 +510,25 @@ type HTTPDefaults struct {
 // The configuration key under the `sinks` key in the YAML
 // configuration is `http-servers`. Example configuration:
 //
-//      sinks:
-//         http-servers:
-//            health:
-//               channels: HEALTH
-//               address: http://127.0.0.1
+//	sinks:
+//	   http-servers:
+//	      health:
+//	         channels: HEALTH
+//	         address: http://127.0.0.1
 //
 // Every new server sink configured automatically inherits the configuration set in the `http-defaults` section.
 //
 // For example:
 //
-//      http-defaults:
-//          redactable: false # default: disable redaction markers
-//      sinks:
-//        http-servers:
-//          health:
-//             channels: HEALTH
-//             # This sink has redactable set to false,
-//             # as the setting is inherited from fluent-defaults
-//             # unless overridden here.
+//	http-defaults:
+//	    redactable: false # default: disable redaction markers
+//	sinks:
+//	  http-servers:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from fluent-defaults
+//	       # unless overridden here.
 //
 // The default output format for HTTP sinks is
 // `json-compact`. [Other supported formats.](log-formats.html)
@@ -539,7 +536,6 @@ type HTTPDefaults struct {
 // {{site.data.alerts.callout_info}}
 // Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
 // {{site.data.alerts.end}}
-//
 type HTTPSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
 	Channels ChannelFilters `yaml:",omitempty,flow"`
@@ -675,12 +671,13 @@ func (c *ChannelList) Sort() {
 }
 
 // parseChannelList recognizes the following formats:
-//     all
-//     X,Y,Z
-//     [all]
-//     [X,Y,Z]
-//     all except X,Y,Z
-//     all except [X,Y,Z]
+//
+//	all
+//	X,Y,Z
+//	[all]
+//	[X,Y,Z]
+//	all except X,Y,Z
+//	all except [X,Y,Z]
 func parseChannelList(s string) ([]logpb.Channel, error) {
 	// We accept mixed case -- normalize everything.
 	s = strings.ToUpper(strings.TrimSpace(s))

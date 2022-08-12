@@ -37,25 +37,27 @@ const (
 
 // intentInterleavingIter makes separated intents appear as interleaved. It
 // relies on the following assumptions:
-// - There can also be intents that are physically interleaved.
-//   However, for a particular roachpb.Key there will be at most one intent,
-//   either interleaved or separated.
-// - An intent will have a corresponding provisional value.
-// - The only single key locks in the lock table key space are intents.
+//   - There can also be intents that are physically interleaved.
+//     However, for a particular roachpb.Key there will be at most one intent,
+//     either interleaved or separated.
+//   - An intent will have a corresponding provisional value.
+//   - The only single key locks in the lock table key space are intents.
 //
 // Semantically, the functionality is equivalent to merging two MVCCIterators:
-// - A MVCCIterator on the MVCC key space.
-// - A MVCCIterator constructed by wrapping an EngineIterator on the lock table
-//   key space where the EngineKey is transformed into the corresponding
-//   intent key and appears as MVCCKey{Key: intentKey}.
+//   - A MVCCIterator on the MVCC key space.
+//   - A MVCCIterator constructed by wrapping an EngineIterator on the lock table
+//     key space where the EngineKey is transformed into the corresponding
+//     intent key and appears as MVCCKey{Key: intentKey}.
+//
 // The implementation below is specialized to reduce unnecessary comparisons
 // and iteration, by utilizing the aforementioned assumptions. The intentIter
 // iterates over the lock table key space and iter over the MVCC key space.
 // They are kept synchronized in the following way (for forward iteration):
-// - At the same MVCCKey.Key: the intentIter is at the intent and iter at the
-//   provisional value.
-// - At different MVCCKey.Keys: the intentIter is ahead of iter, at the first
-//   key after iter's MVCCKey.Key that has a separated intent.
+//   - At the same MVCCKey.Key: the intentIter is at the intent and iter at the
+//     provisional value.
+//   - At different MVCCKey.Keys: the intentIter is ahead of iter, at the first
+//     key after iter's MVCCKey.Key that has a separated intent.
+//
 // Note that in both cases the iterators are apart by the minimal possible
 // distance. This minimal distance rule applies for reverse iteration too, and
 // can be used to construct similar invariants.

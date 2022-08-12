@@ -78,16 +78,15 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 // The result is a row tuple providing values for every column in insertCols.
 // This results contains:
 //
-// - the values provided by rowVals, the tuple of source values. The
-//   caller ensures this provides values 1-to-1 to the prefix of
-//   insertCols that was specified explicitly in the INSERT statement.
-// - the default values for any additional columns in insertCols that
-//   have default values in defaultExprs.
-// - the computed values for any additional columns in insertCols
-//   that are computed. The mapping in rowContainerForComputedCols
-//   maps the indexes of the comptuedCols/computeExpr slices
-//   back into indexes in the result row tuple.
-//
+//   - the values provided by rowVals, the tuple of source values. The
+//     caller ensures this provides values 1-to-1 to the prefix of
+//     insertCols that was specified explicitly in the INSERT statement.
+//   - the default values for any additional columns in insertCols that
+//     have default values in defaultExprs.
+//   - the computed values for any additional columns in insertCols
+//     that are computed. The mapping in rowContainerForComputedCols
+//     maps the indexes of the comptuedCols/computeExpr slices
+//     back into indexes in the result row tuple.
 func GenerateInsertRow(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,

@@ -27,19 +27,20 @@ import (
 // must be initialized, after which we can use the handles returned by Define.
 //
 // Sample usage:
-//   sr := &workload.SQLRunner{}
 //
-//   sel:= sr.Define("SELECT x FROM t WHERE y = $1")
-//   ins:= sr.Define("INSERT INTO t(x, y) VALUES ($1, $2)")
+//	sr := &workload.SQLRunner{}
 //
-//   err := sr.Init(ctx, conn, flags)
-//   // [handle err]
+//	sel:= sr.Define("SELECT x FROM t WHERE y = $1")
+//	ins:= sr.Define("INSERT INTO t(x, y) VALUES ($1, $2)")
 //
-//   row := sel.QueryRow(1)
-//   // [use row]
+//	err := sr.Init(ctx, conn, flags)
+//	// [handle err]
 //
-//   _, err := ins.Exec(5, 6)
-//   // [handle err]
+//	row := sel.QueryRow(1)
+//	// [use row]
+//
+//	_, err := ins.Exec(5, 6)
+//	// [handle err]
 //
 // A runner should typically be associated with a single worker.
 type SQLRunner struct {
@@ -85,23 +86,22 @@ func (sr *SQLRunner) Define(sql string) StmtHandle {
 //
 // The way we issue queries is set by flags.Method:
 //
-//  - "prepare": explicitly prepare the query once per connection, then we reuse
-//    it for each execution. This results in a Bind and Execute on the server
-//    each time we run a query (on the given connection). Note that it's
-//    important to prepare on separate connections if there are many parallel
-//    workers; this avoids lock contention in the sql.Rows objects they produce.
-//    See #30811.
+//   - "prepare": explicitly prepare the query once per connection, then we reuse
+//     it for each execution. This results in a Bind and Execute on the server
+//     each time we run a query (on the given connection). Note that it's
+//     important to prepare on separate connections if there are many parallel
+//     workers; this avoids lock contention in the sql.Rows objects they produce.
+//     See #30811.
 //
-//  - "noprepare": each query is issued separately (on the given connection).
-//    This results in Parse, Bind, Execute on the server each time we run a
-//    query. The statement is an anonymous prepared statement; that is, the
-//    name is the empty string.
+//   - "noprepare": each query is issued separately (on the given connection).
+//     This results in Parse, Bind, Execute on the server each time we run a
+//     query. The statement is an anonymous prepared statement; that is, the
+//     name is the empty string.
 //
-//  - "simple": each query is issued in a single string; parameters are
-//    rendered inside the string. This results in a single SimpleExecute
-//    request to the server for each query. Note that only a few parameter types
-//    are supported.
-//
+//   - "simple": each query is issued in a single string; parameters are
+//     rendered inside the string. This results in a single SimpleExecute
+//     request to the server for each query. Note that only a few parameter types
+//     are supported.
 func (sr *SQLRunner) Init(
 	ctx context.Context, name string, mcp *MultiConnPool, flags *ConnFlags,
 ) error {

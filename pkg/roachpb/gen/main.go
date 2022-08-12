@@ -98,12 +98,11 @@ func initVariants(ins *inspector.Inspector) {
 // The code in question looks like the below snippet, where we would pull
 // "ErrorDetail_NotLeaseholder" one of the returned strings.
 //
-//  // XXX_OneofWrappers is for the internal use of the proto package.
-//  func (*ErrorDetail) XXX_OneofWrappers() []interface{} {
-//  return []interface{}{
-//    (*ErrorDetail_NotLeaseHolder)(nil),
-//    ...
-//
+//	// XXX_OneofWrappers is for the internal use of the proto package.
+//	func (*ErrorDetail) XXX_OneofWrappers() []interface{} {
+//	return []interface{}{
+//	  (*ErrorDetail_NotLeaseHolder)(nil),
+//	  ...
 func findVariantTypes(ins *inspector.Inspector, oneofName string) []string {
 	var variants []string
 	var inFunc bool
@@ -149,10 +148,9 @@ func findVariantTypes(ins *inspector.Inspector, oneofName string) []string {
 // The code in question looks like the below snippet, where we would return
 // ("NotLeaseHolder", "NotLeaseHolderError").
 //
-//  type ErrorDetail_NotLeaseHolder struct {
-//    NotLeaseHolder *NotLeaseHolderError
-//  }
-//
+//	type ErrorDetail_NotLeaseHolder struct {
+//	  NotLeaseHolder *NotLeaseHolderError
+//	}
 func findVariantField(ins *inspector.Inspector, vType string) (fieldName, msgName string) {
 	ins.Preorder([]ast.Node{
 		(*ast.TypeSpec)(nil),

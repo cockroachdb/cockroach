@@ -21,7 +21,9 @@ import (
 // Exchange controls the dissemination of a store's state, to every other
 // store in a simulation. The contract requires that:
 // (1) Single value per tick: Multiple puts at tick t, with desc d should
-// 	   provide an identical d to all other puts for d.
+//
+//	provide an identical d to all other puts for d.
+//
 // (2) Calls to Put are monotonic w.r.t tick value passed in.
 type Exchange interface {
 	// Put inserts store state(s) at tick t. This state will be visible to

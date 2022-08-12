@@ -35,16 +35,16 @@ var timeTimerPool sync.Pool
 // channel is read from, the next call to Timer.Reset will deadlock.
 // This pattern looks something like:
 //
-//  var timer timeutil.Timer
-//  defer timer.Stop()
-//  for {
-//      timer.Reset(wait)
-//      select {
-//      case <-timer.C:
-//          timer.Read = true
-//          ...
-//      }
-//  }
+//	var timer timeutil.Timer
+//	defer timer.Stop()
+//	for {
+//	    timer.Reset(wait)
+//	    select {
+//	    case <-timer.C:
+//	        timer.Read = true
+//	        ...
+//	    }
+//	}
 //
 // Note that unlike the standard library's Timer type, this Timer will
 // not begin counting down until Reset is called for the first time, as

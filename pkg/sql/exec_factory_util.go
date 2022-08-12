@@ -132,9 +132,9 @@ func tableToScanOrdinals(
 // getResultColumnsForSimpleProject populates result columns for a simple
 // projection. inputCols must be non-nil and contain the result columns before
 // the projection has been applied. It supports two configurations:
-// 1. colNames and resultTypes are non-nil. resultTypes indicates the updated
-//    types (after the projection has been applied)
-// 2. colNames is nil.
+//  1. colNames and resultTypes are non-nil. resultTypes indicates the updated
+//     types (after the projection has been applied)
+//  2. colNames is nil.
 func getResultColumnsForSimpleProject(
 	cols []exec.NodeColumnOrdinal,
 	colNames []string,

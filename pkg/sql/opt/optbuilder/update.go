@@ -30,30 +30,30 @@ import (
 // provide updated values are projected for each of the SET expressions, as well
 // as for any computed columns. For example:
 //
-//   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
-//   UPDATE abc SET b=1 WHERE a=2
+//	CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+//	UPDATE abc SET b=1 WHERE a=2
 //
 // This would create an input expression similar to this SQL:
 //
-//   SELECT a AS oa, b AS ob, c AS oc, 1 AS nb FROM abc WHERE a=2
+//	SELECT a AS oa, b AS ob, c AS oc, 1 AS nb FROM abc WHERE a=2
 //
 // The execution engine evaluates this relational expression and uses the
 // resulting values to form the KV keys and values.
 //
 // Tuple SET expressions are decomposed into individual columns:
 //
-//   UPDATE abc SET (b, c)=(1, 2) WHERE a=3
-//   =>
-//   SELECT a AS oa, b AS ob, c AS oc, 1 AS nb, 2 AS nc FROM abc WHERE a=3
+//	UPDATE abc SET (b, c)=(1, 2) WHERE a=3
+//	=>
+//	SELECT a AS oa, b AS ob, c AS oc, 1 AS nb, 2 AS nc FROM abc WHERE a=3
 //
 // Subqueries become correlated left outer joins:
 //
-//   UPDATE abc SET b=(SELECT y FROM xyz WHERE x=a)
-//   =>
-//   SELECT a AS oa, b AS ob, c AS oc, y AS nb
-//   FROM abc
-//   LEFT JOIN LATERAL (SELECT y FROM xyz WHERE x=a)
-//   ON True
+//	UPDATE abc SET b=(SELECT y FROM xyz WHERE x=a)
+//	=>
+//	SELECT a AS oa, b AS ob, c AS oc, y AS nb
+//	FROM abc
+//	LEFT JOIN LATERAL (SELECT y FROM xyz WHERE x=a)
+//	ON True
 //
 // Computed columns result in an additional wrapper projection that can depend
 // on input columns.
@@ -165,17 +165,17 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // addUpdateCols builds nested Project and LeftOuterJoin expressions that
 // correspond to the given SET expressions:
 //
-//   SET a=1 (single-column SET)
-//     Add as synthesized Project column:
-//       SELECT <fetch-cols>, 1 FROM <input>
+//	SET a=1 (single-column SET)
+//	  Add as synthesized Project column:
+//	    SELECT <fetch-cols>, 1 FROM <input>
 //
-//   SET (a, b)=(1, 2) (tuple SET)
-//     Add as multiple Project columns:
-//       SELECT <fetch-cols>, 1, 2 FROM <input>
+//	SET (a, b)=(1, 2) (tuple SET)
+//	  Add as multiple Project columns:
+//	    SELECT <fetch-cols>, 1, 2 FROM <input>
 //
-//   SET (a, b)=(SELECT 1, 2) (subquery)
-//     Wrap input in Max1Row + LeftJoinApply expressions:
-//       SELECT * FROM <fetch-cols> LEFT JOIN LATERAL (SELECT 1, 2) ON True
+//	SET (a, b)=(SELECT 1, 2) (subquery)
+//	  Wrap input in Max1Row + LeftJoinApply expressions:
+//	    SELECT * FROM <fetch-cols> LEFT JOIN LATERAL (SELECT 1, 2) ON True
 //
 // Multiple subqueries result in multiple left joins successively wrapping the
 // input. A final Project operator is built if any single-column or tuple SET

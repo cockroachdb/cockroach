@@ -90,7 +90,9 @@ func testGetReplLocations(state State, r Range) ([]int, []int) {
 // (1) changes either all succeed or all fail.
 // (2) removes fail if it is the leaseholder.
 // (3) add and removes fail if the removed store is the leaseholder and it
-//     cannot be transferred to the added store.
+//
+//	cannot be transferred to the added store.
+//
 // (4) In (3) the lease transfers when to the newly added store when possible.
 func TestReplicaChange(t *testing.T) {
 	testCases := []struct {
