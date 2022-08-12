@@ -437,17 +437,17 @@ var LogicTestConfigs = []TestClusterConfig{
 		NumNodes:   15,
 		Localities: multiregion15node5region3azsLocalities,
 	},
-	{
-		Name:                "local-mixed-21.2-22.1",
-		NumNodes:            1,
-		OverrideDistSQLMode: "off",
-		// Test fails when run within a test tenant. Tracked with
-		// #76378.
-		DisableDefaultTestTenant: true,
-		BootstrapVersion:         roachpb.Version{Major: 21, Minor: 2},
-		BinaryVersion:            roachpb.Version{Major: 22, Minor: 1},
-		DisableUpgrade:           true,
-	},
+	//{
+	//	Name:                "local-mixed-21.2-22.1",
+	//	NumNodes:            1,
+	//	OverrideDistSQLMode: "off",
+	//	// Test fails when run within a test tenant. Tracked with
+	//	// #76378.
+	//	DisableDefaultTestTenant: true,
+	//	BootstrapVersion:         roachpb.Version{Major: 21, Minor: 2},
+	//	BinaryVersion:            roachpb.Version{Major: 22, Minor: 1},
+	//	DisableUpgrade:           true,
+	//},
 	{
 		Name:                "local-mixed-22.1-22.2",
 		NumNodes:            1,
