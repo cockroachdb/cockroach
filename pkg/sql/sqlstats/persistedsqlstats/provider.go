@@ -164,7 +164,8 @@ func (s *PersistedSQLStats) GetNextFlushAt() time.Time {
 
 // nextFlushInterval calculates the wait interval that is between:
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
-//  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
+//
+//	(1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 func (s *PersistedSQLStats) nextFlushInterval() time.Duration {
 	baseInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
 	waitInterval := s.jitterInterval(baseInterval)

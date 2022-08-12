@@ -78,27 +78,27 @@ const (
 //
 // The (simplified) diagram of the components involved is as follows:
 //
-//                      input
-//                        |
-//                        ↓
-//                 input partitioner
-//                        |
-//                        ↓
-//                 in-memory sorter
-//                        |
-//                        ↓
-//    ------------------------------------------
-//   |             external sorter              |
-//   |             ---------------              |
-//   |                                          |
-//   | partition1     partition2 ... partitionN |
-//   |     |              |              |      |
-//   |     ↓              ↓              ↓      |
-//   |      merger (ordered synchronizer)       |
-//    ------------------------------------------
-//                        |
-//                        ↓
-//                      output
+//	                   input
+//	                     |
+//	                     ↓
+//	              input partitioner
+//	                     |
+//	                     ↓
+//	              in-memory sorter
+//	                     |
+//	                     ↓
+//	 ------------------------------------------
+//	|             external sorter              |
+//	|             ---------------              |
+//	|                                          |
+//	| partition1     partition2 ... partitionN |
+//	|     |              |              |      |
+//	|     ↓              ↓              ↓      |
+//	|      merger (ordered synchronizer)       |
+//	 ------------------------------------------
+//	                     |
+//	                     ↓
+//	                   output
 //
 // There are a couple of implicit upstream links in the setup:
 // - input partitioner checks the allocator used by the in-memory sorter to see

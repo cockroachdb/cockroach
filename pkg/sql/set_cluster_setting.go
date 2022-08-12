@@ -628,7 +628,8 @@ func (n *setClusterSettingNode) Close(_ context.Context)        {}
 //
 // Args:
 // prev: Only specified if the setting is a StateMachineSetting. Represents the
-//   current value of the setting, read from the system.settings table.
+//
+//	current value of the setting, read from the system.settings table.
 func toSettingString(
 	ctx context.Context, st *cluster.Settings, name string, s settings.Setting, d tree.Datum,
 ) (string, error) {

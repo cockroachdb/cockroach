@@ -24,7 +24,9 @@ import (
 )
 
 // ClusterStat represents a filtered query by the given LabelName. For example,
-//   ClusterStat{Query: "rebalancing_queriespersecond", LabelName: "store"}
+//
+//	ClusterStat{Query: "rebalancing_queriespersecond", LabelName: "store"}
+//
 // would collect a QPS stat per store in the cluster.
 type ClusterStat struct {
 	Query     string
@@ -201,14 +203,15 @@ func (cs *clusterStatCollector) collectSummaries(
 // time series into a single one, for the same metric. This can either be a
 // query (2a) or aggregating function (2b), depending on whether the function
 // is supported by prometheus.
-//   (2a) AggQuery.Query declares a prometheus query to be used over the given
-//   interval. For example, AggQuery.Query = "sum(rebalancing_queriespersecond)"
-//   would return StatSummary.Value = {600, 600, 600}.
-//   (2b) AggQuery.AggFn is a substitute for 2a, it aggregates over a collection
-//   of labeled time series, returning a single time series. For example,
-//   AggQuery.AggFn = func(...) {return max(...)} would return
-//   StatSummary.Value{300, 300, 300}. It must also return an AggregateTag to
-//   identify the resulting timeseries.
+//
+//	(2a) AggQuery.Query declares a prometheus query to be used over the given
+//	interval. For example, AggQuery.Query = "sum(rebalancing_queriespersecond)"
+//	would return StatSummary.Value = {600, 600, 600}.
+//	(2b) AggQuery.AggFn is a substitute for 2a, it aggregates over a collection
+//	of labeled time series, returning a single time series. For example,
+//	AggQuery.AggFn = func(...) {return max(...)} would return
+//	StatSummary.Value{300, 300, 300}. It must also return an AggregateTag to
+//	identify the resulting timeseries.
 func (cs *clusterStatCollector) getStatSummary(
 	ctx context.Context, l *logger.Logger, summaryQuery AggQuery,
 ) (StatSummary, error) {

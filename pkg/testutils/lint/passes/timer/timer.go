@@ -43,15 +43,14 @@ var Analyzer = &analysis.Analyzer{
 // statement. The timers are usually used as timeouts on these select
 // statements, and need to be reset after each iteration.
 //
-// for {
-//   timer.Reset(...)
-//   select {
-//     case <-timer.C:
-//       timer.Read = true   <--  lint verifies that this line is present
-//     case ...:
-//   }
-// }
-//
+//	for {
+//	  timer.Reset(...)
+//	  select {
+//	    case <-timer.C:
+//	      timer.Read = true   <--  lint verifies that this line is present
+//	    case ...:
+//	  }
+//	}
 func run(pass *analysis.Pass) (interface{}, error) {
 	selectorIsTimer := func(s *ast.SelectorExpr) bool {
 		tv, ok := pass.TypesInfo.Types[s.X]

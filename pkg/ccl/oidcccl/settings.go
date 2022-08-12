@@ -159,13 +159,13 @@ func validateOIDCRedirectURL(values *settings.Values, s string) error {
 // callback URL that matches its own `region` locality tag.
 //
 // Example valid values:
-// - 'https://cluster.example.com:8080/oidc/v1/callback'
-// - '{
-//    "redirect_urls": {
-//      "us-east-1": "https://localhost:8080/oidc/v1/callback",
-//      "eu-west-1": "example.com"
-//    }
-//   }'
+//   - 'https://cluster.example.com:8080/oidc/v1/callback'
+//   - '{
+//     "redirect_urls": {
+//     "us-east-1": "https://localhost:8080/oidc/v1/callback",
+//     "eu-west-1": "example.com"
+//     }
+//     }'
 //
 // In a multi-region cluster where this setting is set to a URL string, we will
 // use the same callback URL on all auth requests. In a multi-region setting

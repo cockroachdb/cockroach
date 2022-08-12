@@ -157,14 +157,15 @@ func (c *CustomFuncs) remapJoinColsInScalarExpr(
 // indexes to be constrained and used. Consider the following example:
 //
 // CREATE TABLE abc (
-// 	a INT PRIMARY KEY,
-// 	b INT NOT NULL,
-// 	c STRING NOT NULL,
-// 	CHECK (a < 10 AND a > 1),
-// 	CHECK (b < 10 AND b > 1),
-// 	CHECK (c in ('first', 'second')),
-// 	INDEX secondary (b, a),
-// 	INDEX tertiary (c, b, a))
+//
+//	a INT PRIMARY KEY,
+//	b INT NOT NULL,
+//	c STRING NOT NULL,
+//	CHECK (a < 10 AND a > 1),
+//	CHECK (b < 10 AND b > 1),
+//	CHECK (c in ('first', 'second')),
+//	INDEX secondary (b, a),
+//	INDEX tertiary (c, b, a))
 //
 // Now consider the query: SELECT a, b WHERE a > 5
 //
@@ -174,14 +175,15 @@ func (c *CustomFuncs) remapJoinColsInScalarExpr(
 // indexes. In fact, for the above query we can do the following:
 //
 // select
-//  ├── columns: a:1(int!null) b:2(int!null)
-//  ├── scan abc@tertiary
-//  │		├── columns: a:1(int!null) b:2(int!null)
-//  │		└── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
-//  └── filters
-//        └── gt [type=bool]
-//            ├── variable: a [type=int]
-//            └── const: 5 [type=int]
+//
+//	├── columns: a:1(int!null) b:2(int!null)
+//	├── scan abc@tertiary
+//	│		├── columns: a:1(int!null) b:2(int!null)
+//	│		└── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
+//	└── filters
+//	      └── gt [type=bool]
+//	          ├── variable: a [type=int]
+//	          └── const: 5 [type=int]
 //
 // Similarly, the secondary index could also be used. All such index scans
 // will be added to the memo group.
@@ -236,10 +238,10 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 // computed column expressions from the given table. A computed column can be
 // used as a filter when it has a constant value. That is true when:
 //
-//   1. All other columns it references are constant, because other filters in
-//      the query constrain them to be so.
-//   2. All functions in the computed column expression can be folded into
-//      constants (i.e. they do not have problematic side effects).
+//  1. All other columns it references are constant, because other filters in
+//     the query constrain them to be so.
+//  2. All functions in the computed column expression can be folded into
+//     constants (i.e. they do not have problematic side effects).
 //
 // Note that computed columns can depend on other computed columns; in general
 // the dependencies form an acyclic directed graph. computedColFilters will
@@ -251,13 +253,13 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 // filters may allow some indexes to be constrained and used. Consider the
 // following example:
 //
-//   CREATE TABLE t (
-//     k INT NOT NULL,
-//     hash INT AS (k % 4) STORED,
-//     PRIMARY KEY (hash, k)
-//   )
+//	CREATE TABLE t (
+//	  k INT NOT NULL,
+//	  hash INT AS (k % 4) STORED,
+//	  PRIMARY KEY (hash, k)
+//	)
 //
-//   SELECT * FROM t WHERE k = 5
+//	SELECT * FROM t WHERE k = 5
 //
 // Notice that the filter provided explicitly wouldn't allow the optimizer to
 // seek using the primary index (it would have to fall back to a table scan).
@@ -265,11 +267,11 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 // it's dependent on column "k", which has the constant value of 5. This enables
 // usage of the primary index:
 //
-//     scan t
-//      ├── columns: k:1(int!null) hash:2(int!null)
-//      ├── constraint: /2/1: [/1/5 - /1/5]
-//      ├── key: (2)
-//      └── fd: ()-->(1)
+//	scan t
+//	 ├── columns: k:1(int!null) hash:2(int!null)
+//	 ├── constraint: /2/1: [/1/5 - /1/5]
+//	 ├── key: (2)
+//	 └── fd: ()-->(1)
 //
 // The values of both columns in that index are known, enabling a single value
 // constraint to be generated.
@@ -314,16 +316,17 @@ func (c *CustomFuncs) computedColFilters(
 // logically equal but not identical values, like the decimals 1.0 and 1.00.
 //
 // For example:
-//   CREATE TABLE t (
-//     d DECIMAL,
-//     c DECIMAL AS (d*10) STORED
-//   );
-//   INSERT INTO t VALUES (1.0), (1.00), (1.000);
-//   SELECT c::STRING FROM t WHERE d=1;
-//   ----
-//     10.0
-//     10.00
-//     10.000
+//
+//	CREATE TABLE t (
+//	  d DECIMAL,
+//	  c DECIMAL AS (d*10) STORED
+//	);
+//	INSERT INTO t VALUES (1.0), (1.00), (1.000);
+//	SELECT c::STRING FROM t WHERE d=1;
+//	----
+//	  10.0
+//	  10.00
+//	  10.000
 //
 // We can infer that c has a constant value of 1 but we can't replace it with 1
 // in any expression.
@@ -334,7 +337,7 @@ type constColsMap map[opt.ColumnID]opt.ScalarExpr
 // given lists of filters and finding expressions that constrain columns to a
 // single constant value. For example:
 //
-//   x = 5 AND y = 'foo'
+//	x = 5 AND y = 'foo'
 //
 // This would add a mapping from x => 5 and y => 'foo', which constants can
 // then be used to prove that dependent computed columns are also constant.
@@ -753,7 +756,6 @@ func (c *CustomFuncs) wrapScanInLimitedSelect(
 // keyLength: 1,
 // =>
 // hasSequence: False, reverse: False
-//
 func indexHasOrderingSequence(
 	md *opt.Metadata,
 	scan memo.RelExpr,

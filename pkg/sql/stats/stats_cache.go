@@ -51,10 +51,13 @@ type TableStatistic struct {
 
 // A TableStatisticsCache contains two underlying LRU caches:
 // (1) A cache of []*TableStatistic objects, keyed by table ID.
-//     Each entry consists of all the statistics for different columns and
-//     column groups for the given table.
+//
+//	Each entry consists of all the statistics for different columns and
+//	column groups for the given table.
+//
 // (2) A cache of *HistogramData objects, keyed by
-//     HistogramCacheKey{table ID, statistic ID}.
+//
+//	HistogramCacheKey{table ID, statistic ID}.
 type TableStatisticsCache struct {
 	// NB: This can't be a RWMutex for lookup because UnorderedCache.Get
 	// manipulates an internal LRU list.
@@ -364,11 +367,10 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 // addCacheEntryLocked creates a new cache entry and retrieves table statistics
 // from the database. It does this in a way so that the other goroutines that
 // need the same stats can wait on us:
-//  - an cache entry with wait=true is created;
-//  - mutex is unlocked;
-//  - stats are retrieved from database:
-//  - mutex is locked again and the entry is updated.
-//
+//   - an cache entry with wait=true is created;
+//   - mutex is unlocked;
+//   - stats are retrieved from database:
+//   - mutex is locked again and the entry is updated.
 func (sc *TableStatisticsCache) addCacheEntryLocked(
 	ctx context.Context, tableID descpb.ID, forecast bool,
 ) (stats []*TableStatistic, err error) {
@@ -408,11 +410,10 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 // an existing cache entry. It does this in a way so that the other goroutines
 // can continue using the stale stats from the existing entry until the new
 // stats are added:
-//  - the existing cache entry is retrieved;
-//  - mutex is unlocked;
-//  - stats are retrieved from database:
-//  - mutex is locked again and the entry is updated.
-//
+//   - the existing cache entry is retrieved;
+//   - mutex is unlocked;
+//   - stats are retrieved from database:
+//   - mutex is locked again and the entry is updated.
 func (sc *TableStatisticsCache) refreshCacheEntry(
 	ctx context.Context, tableID descpb.ID, ts hlc.Timestamp,
 ) {

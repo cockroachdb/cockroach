@@ -48,7 +48,6 @@ func NewExprNameGenerator(prefix string) *ExprNameGenerator {
 // was encountered during tree traversal. Thus, in order to generate a
 // consistent name, always call GenerateName in a pre-order traversal of the
 // expression tree.
-//
 func (g *ExprNameGenerator) GenerateName(op opt.Operator) string {
 	// Replace all instances of "-" in the operator name with "_" in order to
 	// create a legal table name.

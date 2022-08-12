@@ -1087,17 +1087,17 @@ func MVCCGetAsTxn(
 // A prefix scan using the iterator is performed, resulting in one of the
 // following successful outcomes:
 //
-// 1) iterator finds nothing; returns (false, 0, 0, nil).
-// 2) iterator finds an explicit meta key; unmarshals and returns its size.
-//    ok is set to true.
-// 3) iterator finds a value, i.e. the meta key is implicit.
-//    In this case, it accounts for the size of the key with the portion
-//    of the user key found which is not the MVCC timestamp suffix (since
-//    that is the usual contribution of the meta key). The value size returned
-//    will be zero, as there is no stored MVCCMetadata.
-//    ok is set to true.
-// 4) iterator finds an MVCC range tombstone above a value. In this case,
-//    metadata for a synthetic point tombstone is returned.
+//  1. iterator finds nothing; returns (false, 0, 0, nil).
+//  2. iterator finds an explicit meta key; unmarshals and returns its size.
+//     ok is set to true.
+//  3. iterator finds a value, i.e. the meta key is implicit.
+//     In this case, it accounts for the size of the key with the portion
+//     of the user key found which is not the MVCC timestamp suffix (since
+//     that is the usual contribution of the meta key). The value size returned
+//     will be zero, as there is no stored MVCCMetadata.
+//     ok is set to true.
+//  4. iterator finds an MVCC range tombstone above a value. In this case,
+//     metadata for a synthetic point tombstone is returned.
 //
 // The timestamp where the real point key last changed is also returned, if a
 // real point key was found. This may differ from the metadata timestamp when a
@@ -2878,7 +2878,8 @@ func MVCCDeleteRange(
 // t3
 // t2 a2 b2    d2 e2
 // t1    b1 c1
-//    a  b  c  d  e
+//
+//	a  b  c  d  e
 func MVCCPredicateDeleteRange(
 	ctx context.Context,
 	rw ReadWriter,
@@ -4082,12 +4083,12 @@ func mvccGetIntent(
 // Note that a transaction can "partially abort" and still commit due to nested
 // SAVEPOINTs, such as in the below example:
 //
-//   BEGIN;
-//     SAVEPOINT foo;
-//       INSERT INTO kv VALUES(1, 1);
-//     ROLLBACK TO SAVEPOINT foo;
-//     INSERT INTO kv VALUES(1, 2);
-//   COMMIT;
+//	BEGIN;
+//	  SAVEPOINT foo;
+//	    INSERT INTO kv VALUES(1, 1);
+//	  ROLLBACK TO SAVEPOINT foo;
+//	  INSERT INTO kv VALUES(1, 2);
+//	COMMIT;
 //
 // This would first remove the intent (1,1) during the ROLLBACK using a Del (the
 // anomaly below would occur the same if a SingleDel were used here), and thus
@@ -4103,12 +4104,12 @@ func mvccGetIntent(
 // However, this sequence could compact as follows (at the time of writing, bound
 // to change with #69891):
 //
-// - Set (Del Set') SingleDel
-//          ↓
-// - Set   Set'     SingleDel
-// - Set  (Set'     SingleDel)
-//               ↓
-// - Set
+//   - Set (Del Set') SingleDel
+//     ↓
+//   - Set   Set'     SingleDel
+//   - Set  (Set'     SingleDel)
+//     ↓
+//   - Set
 //
 // which means that a previously deleted intent metadata would erroneously
 // become visible again. So on top of restricting SingleDel to the COMMIT case,
@@ -6154,7 +6155,9 @@ type MVCCIsSpanEmptyOptions struct {
 // with the (unsafe) range key stack:
 //
 // -1: range key to the left not touching the peek key, or no range key found.
-//  0: range key to the left ends at the peek key.
+//
+//	0: range key to the left ends at the peek key.
+//
 // +1: range key to the left overlaps with the peek key, extending to the right.
 func PeekRangeKeysLeft(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKeyStack, error) {
 	iter.SeekLT(MVCCKey{Key: peekKey})
@@ -6174,7 +6177,9 @@ func PeekRangeKeysLeft(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKe
 // with the (unsafe) range key stack:
 //
 // -1: range key to the right overlaps with the peek key, existing to the left.
-//  0: range key to the right starts at the peek key.
+//
+//	0: range key to the right starts at the peek key.
+//
 // +1: range key to the right not touching the peek key, or no range key found.
 func PeekRangeKeysRight(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKeyStack, error) {
 	iter.SeekGE(MVCCKey{Key: peekKey})

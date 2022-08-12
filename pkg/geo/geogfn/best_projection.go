@@ -25,11 +25,12 @@ import (
 // geometry-type projection.
 //
 // The algorithm is described by ST_Buffer/ST_Intersection documentation (paraphrased):
-//   It first determines the best SRID that fits the bounding box of the 2 geography objects (ST_Intersection only).
-//   It favors a north/south pole projection, then UTM, then LAEA for smaller zones, otherwise falling back
-//   to web mercator.
-//   If geography objects are within one half zone UTM but not the same UTM it will pick one of those.
-//   After the calculation is complete, it will fall back to WGS84 Geography.
+//
+//	It first determines the best SRID that fits the bounding box of the 2 geography objects (ST_Intersection only).
+//	It favors a north/south pole projection, then UTM, then LAEA for smaller zones, otherwise falling back
+//	to web mercator.
+//	If geography objects are within one half zone UTM but not the same UTM it will pick one of those.
+//	After the calculation is complete, it will fall back to WGS84 Geography.
 func BestGeomProjection(boundingRect s2.Rect) (geoprojbase.Proj4Text, error) {
 	center := boundingRect.Center()
 

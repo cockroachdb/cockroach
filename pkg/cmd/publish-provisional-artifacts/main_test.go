@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,7 +47,7 @@ func (s *mockStorage) GetObject(i *release.GetObjectInput) (*release.GetObjectOu
 	url := fmt.Sprintf(`s3://%s/%s`, s.Bucket(), *i.Key)
 	s.gets = append(s.gets, url)
 	o := &release.GetObjectOutput{
-		Body: ioutil.NopCloser(bytes.NewBufferString(url)),
+		Body: io.NopCloser(bytes.NewBufferString(url)),
 	}
 	return o, nil
 }

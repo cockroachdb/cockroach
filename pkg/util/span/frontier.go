@@ -396,11 +396,14 @@ func (f *Frontier) Entries(fn Operation) {
 // 4|      .             h__k  .
 // 3|      .      e__f         .
 // 1 ---a----------------------m---q-- Frontier
-//      |___________span___________|
+//
+//	|___________span___________|
 //
 // In the above example, frontier tracks [b, m) and the current frontier
 // timestamp is 1.  SpanEntries for span [a-q) will invoke op with:
-//   ([b-c), 5), ([c-e), 1), ([e-f), 3], ([f, h], 1) ([h, k), 4), ([k, m), 1).
+//
+//	([b-c), 5), ([c-e), 1), ([e-f), 3], ([f, h], 1) ([h, k), 4), ([k, m), 1).
+//
 // Note: neither [a-b) nor [m, q) will be emitted since they fall outside the spans
 // tracked by this frontier.
 func (f *Frontier) SpanEntries(span roachpb.Span, op Operation) {

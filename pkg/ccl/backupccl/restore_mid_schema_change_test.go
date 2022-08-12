@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -83,7 +82,7 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 				// after the backfill portion of the schema change.
 				for _, blockLocation := range []string{"before", "after"} {
 					t.Run(blockLocation, func(t *testing.T) {
-						versionDirs, err := ioutil.ReadDir(filepath.Join(exportDirs, blockLocation))
+						versionDirs, err := os.ReadDir(filepath.Join(exportDirs, blockLocation))
 						require.NoError(t, err)
 						for _, clusterVersionDir := range versionDirs {
 							clusterVersion, err := parseMajorVersion(clusterVersionDir.Name())
@@ -101,7 +100,7 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 
 								// In each version folder (e.g. "19.2", "20.1"), there is a backup for
 								// each schema change.
-								backupDirs, err := ioutil.ReadDir(fullClusterVersionDir)
+								backupDirs, err := os.ReadDir(fullClusterVersionDir)
 								require.NoError(t, err)
 
 								for _, backupDir := range backupDirs {

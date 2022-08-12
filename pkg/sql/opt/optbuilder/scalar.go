@@ -516,8 +516,9 @@ func (b *Builder) buildAnyScalar(
 // f        The given function expression.
 // outCol   The output column of the function being built.
 // colRefs  The set of columns referenced so far by the scalar expression
-//          being built. If not nil, it is updated with any columns seen in
-//          finishBuildScalarRef.
+//
+//	being built. If not nil, it is updated with any columns seen in
+//	finishBuildScalarRef.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
@@ -721,12 +722,12 @@ func (b *Builder) buildRangeCond(
 // checkSubqueryOuterCols uses the subquery outer columns to update the given
 // set of column references and the set of outer columns for any enclosing
 // subuqery. It also performs the following checks:
-//   1. If aggregates are not allowed in the current context (e.g., if we
-//      are building the WHERE clause), it checks that the subquery does not
-//      reference any aggregates from this scope.
-//   2. If this is a grouping context, it checks that any outer columns from
-//      the given subquery that reference inScope are either aggregate or
-//      grouping columns in inScope.
+//  1. If aggregates are not allowed in the current context (e.g., if we
+//     are building the WHERE clause), it checks that the subquery does not
+//     reference any aggregates from this scope.
+//  2. If this is a grouping context, it checks that any outer columns from
+//     the given subquery that reference inScope are either aggregate or
+//     grouping columns in inScope.
 func (b *Builder) checkSubqueryOuterCols(
 	subqueryOuterCols opt.ColSet, inGroupingContext bool, inScope *scope, colRefs *opt.ColSet,
 ) {

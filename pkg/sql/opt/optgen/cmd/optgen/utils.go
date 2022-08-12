@@ -61,8 +61,9 @@ func expandFields(compiled *lang.CompiledExpr, define *lang.DefineExpr) lang.Def
 // converting an Optgen comment to a Go comment. The comments are assumed to
 // start with the name of an op or field and follow with a description, similar
 // to this:
-//   # <name> <description of what this op or field does>
-//   # ...
+//
+//	# <name> <description of what this op or field does>
+//	# ...
 //
 // The initial name is replaced with the given replaceName, in order to adapt
 // it to different enums and structs that are generated.

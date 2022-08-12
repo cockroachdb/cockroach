@@ -26,10 +26,10 @@ import (
 // indexCheckOperation implements the checkOperation interface. It is a
 // scrub check for a secondary index's integrity. This operation will
 // detect:
-// 1) Missing index entries. When there is a secondary index entry
-//    expected, but is not found.
-// 2) Dangling index references. When there is a secondary index entry
-//    that refers to a primary index key that cannot be found.
+//  1. Missing index entries. When there is a secondary index entry
+//     expected, but is not found.
+//  2. Dangling index references. When there is a secondary index entry
+//     that refers to a primary index key that cannot be found.
 type indexCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc catalog.TableDescriptor
@@ -234,49 +234,49 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 //
 // For example, given the following table schema:
 //
-//   CREATE TABLE table (
-//     k INT, l INT, a INT, b INT, c INT,
-//     PRIMARY KEY (k, l),
-//     INDEX idx (a,b),
-//   )
+//	CREATE TABLE table (
+//	  k INT, l INT, a INT, b INT, c INT,
+//	  PRIMARY KEY (k, l),
+//	  INDEX idx (a,b),
+//	)
 //
 // The generated query to check the `v_idx` will be:
 //
-//   SELECT pri.k  pri.l, pri.a, pri.b,
-//          sec.k, sec.l, sec.a, sec.b
-//   FROM
-//     (SELECT k, l, a, b FROM [tbl_id AS table_pri]@{FORCE_INDEX=[pri_idx_id]}) AS pri
-//   FULL OUTER JOIN
-//     (SELECT k, l, a, b FROM [tbl_id AS table_sec]@{FORCE_INDEX=[idx_id]} AS sec
-//   ON
-//     pri.k = sec.k AND
-//     pri.l = sec.l AND
-//     pri.a IS NOT DISTINCT FROM sec.a AND
-//     pri.b IS NOT DISTINCT FROM sec.b
-//   WHERE
-//     pri.k IS NULL OR sec.k IS NULL
+//	SELECT pri.k  pri.l, pri.a, pri.b,
+//	       sec.k, sec.l, sec.a, sec.b
+//	FROM
+//	  (SELECT k, l, a, b FROM [tbl_id AS table_pri]@{FORCE_INDEX=[pri_idx_id]}) AS pri
+//	FULL OUTER JOIN
+//	  (SELECT k, l, a, b FROM [tbl_id AS table_sec]@{FORCE_INDEX=[idx_id]} AS sec
+//	ON
+//	  pri.k = sec.k AND
+//	  pri.l = sec.l AND
+//	  pri.a IS NOT DISTINCT FROM sec.a AND
+//	  pri.b IS NOT DISTINCT FROM sec.b
+//	WHERE
+//	  pri.k IS NULL OR sec.k IS NULL
 //
 // Explanation:
-//   1) We scan both the primary index and the secondary index.
 //
-//   2) We join them on equality on the PK columns and "IS NOT DISTINCT FROM" on
-//      the other index columns. "IS NOT DISTINCT FROM" is like equality except
-//      that NULL equals NULL; it is not needed for the PK columns because those
-//      can't be NULL.
+//  1. We scan both the primary index and the secondary index.
 //
-//      Note: currently, only the PK columns will be used as join equality
-//      columns, but that is sufficient.
+//  2. We join them on equality on the PK columns and "IS NOT DISTINCT FROM" on
+//     the other index columns. "IS NOT DISTINCT FROM" is like equality except
+//     that NULL equals NULL; it is not needed for the PK columns because those
+//     can't be NULL.
 //
-//   3) We select the "outer" rows (those that had no match), effectively
-//      achieving a "double" anti-join. We use the PK columns which cannot be
-//      NULL except on these rows.
+//     Note: currently, only the PK columns will be used as join equality
+//     columns, but that is sufficient.
 //
-//   4) The results are as follows:
-//       - if a PK column on the left is NULL, that means that the right-hand
-//         side row from the secondary index had no match in the primary index.
-//       - if a PK column on the right is NULL, that means that the left-hand
-//         side row from the primary key had no match in the secondary index.
+//  3. We select the "outer" rows (those that had no match), effectively
+//     achieving a "double" anti-join. We use the PK columns which cannot be
+//     NULL except on these rows.
 //
+//  4. The results are as follows:
+//     - if a PK column on the left is NULL, that means that the right-hand
+//     side row from the secondary index had no match in the primary index.
+//     - if a PK column on the right is NULL, that means that the left-hand
+//     side row from the primary key had no match in the secondary index.
 func createIndexCheckQuery(
 	pkColumns []string,
 	otherColumns []string,
