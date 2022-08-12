@@ -10,6 +10,7 @@ go_library(
         "granter.go",
         "io_load_listener.go",
         "kv_slot_adjuster.go",
+        "sql_cpu_overload_indicator.go",
         "store_token_estimation.go",
         "work_queue.go",
     ],
