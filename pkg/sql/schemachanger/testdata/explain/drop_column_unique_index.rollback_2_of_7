@@ -16,7 +16,7 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
       │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
-      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 1}
+      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
       │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 5}
@@ -40,7 +40,7 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
-           │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 1}
+           │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
            └── 4 Mutation operations
                 ├── CreateGcJobForIndex {"IndexID":5,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":5,"TableID":106}
