@@ -56,7 +56,7 @@
 // provide a general framework, and specific implementations that are
 // initially quite simple in their heuristics but may become more
 // sophisticated over time. The concrete abstractions:
-// - Tokens and slots are the two ways admission is granted (see grantKind)
+// - Tokens and slots are the two ways admission is granted (see grantKind).
 // - Categorization of kinds of work (see WorkKind), and a priority ordering
 //   across WorkKinds that is used to reflect their shared need for underlying
 //   resources.

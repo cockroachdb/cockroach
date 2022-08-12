@@ -7,6 +7,7 @@ go_library(
         "disk_bandwidth.go",
         "doc.go",
         "granter.go",
+        "io_load_listener.go",
         "store_token_estimation.go",
         "work_queue.go",
     ],
