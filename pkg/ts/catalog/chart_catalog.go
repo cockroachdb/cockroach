@@ -570,6 +570,7 @@ var charts = []sectionDescription{
 				Title: "Paused Followers",
 				Metrics: []string{
 					"admission.raft.paused_replicas",
+					"admission.raft.paused_replicas_dropped_msgs",
 				},
 			},
 			{
