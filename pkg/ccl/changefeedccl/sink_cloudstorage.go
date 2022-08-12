@@ -37,6 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
+
+	// Placeholder for pgzip and zdstd.
+	_ "github.com/klauspost/compress/zstd"
+	_ "github.com/klauspost/pgzip"
 )
 
 func isCloudStorageSink(u *url.URL) bool {
@@ -318,6 +322,12 @@ type flushRequest struct {
 	dest  string
 	flush chan struct{}
 }
+
+func (s *cloudStorageSink) getConcreteType() sinkType {
+	return sinkTypeCloudstorage
+}
+
+const sinkCompressionGzip = "gzip"
 
 var cloudStorageSinkIDAtomic int64
 

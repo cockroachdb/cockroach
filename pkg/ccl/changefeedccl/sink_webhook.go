@@ -84,6 +84,10 @@ type webhookSink struct {
 	metrics     metricsRecorder
 }
 
+func (s *webhookSink) getConcreteType() sinkType {
+	return sinkTypeWebhook
+}
+
 type webhookSinkPayload struct {
 	Payload []json.RawMessage `json:"payload"`
 	Length  int               `json:"length"`

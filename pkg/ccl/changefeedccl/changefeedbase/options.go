@@ -879,6 +879,14 @@ func (s StatementOptions) ForceDiff() {
 	s.cache.EncodingOptions = EncodingOptions{}
 }
 
+// SetTopics stashes the list of topics in the options as a handy place
+// to serialize it.
+// TODO: Have a separate metadata map on the details proto for things
+// like this.
+func (s StatementOptions) SetTopics(topics []string) {
+	s.m[Topics] = strings.Join(topics, ",")
+}
+
 // ClearDiff clears diff option.
 func (s StatementOptions) ClearDiff() {
 	delete(s.m, OptDiff)
