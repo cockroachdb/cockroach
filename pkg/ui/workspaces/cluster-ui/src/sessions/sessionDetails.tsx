@@ -241,13 +241,8 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       return (
         <section className={cx("section")}>
           <h3>Unable to find session</h3>
-          There is no currently active session with the id{" "}
+          There is no session with the id{" "}
           {getMatchParamByName(this.props.match, sessionAttr)}.
-          <div>
-            <Link className={cx("back-link")} to={"/sessions"}>
-              Back to Sessions
-            </Link>
-          </div>
         </section>
       );
     }
