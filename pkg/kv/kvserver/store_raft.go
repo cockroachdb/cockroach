@@ -763,21 +763,21 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	}
 }
 
-var shouldLogStoreOverloadMap = log.Every(10 * time.Second)
-
 func (s *Store) updateIOThresholdMap() {
 	ioThresholdMap := map[roachpb.StoreID]*admissionpb.IOThreshold{}
 	for _, sd := range s.allocator.StorePool.GetStores() {
 		ioThreshold := sd.Capacity.IOThreshold // need a copy
 		ioThresholdMap[sd.StoreID] = &ioThreshold
 	}
-	old, cur := s.ioThresholds.Replace(ioThresholdMap)
+	threshold := pauseReplicationIOThreshold.Get(&s.cfg.Settings.SV)
+	old, cur := s.ioThresholds.Replace(ioThresholdMap, threshold)
 	// Log whenever the set of overloaded stores changes.
 	shouldLog := log.V(1) || old.seq != cur.seq
 	if shouldLog {
 		log.Infof(
-			s.AnnotateCtx(context.Background()), "IO overloaded stores [threshold %.2f]: %+v (before: %+v)",
-			pauseReplicationIOThreshold.Get(&s.cfg.Settings.SV), ioThresholdMap, old,
+			s.AnnotateCtx(context.Background()),
+			"IO overloaded stores [threshold %.2f]: %+v (before: %+v)",
+			threshold, ioThresholdMap, old,
 		)
 	}
 }
