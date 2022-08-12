@@ -13,17 +13,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │
         ├── • 4 elements transitioning toward ABSENT
         │   │
-        │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-        │   │     PUBLIC → ABSENT
-        │   │
         │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
         │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+        │   │     PUBLIC → ABSENT
         │   │
         │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT

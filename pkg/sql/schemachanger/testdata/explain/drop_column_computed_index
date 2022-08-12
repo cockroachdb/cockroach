@@ -15,8 +15,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
  │         │    └── PUBLIC → ABSENT        IndexName:{DescID: 104, Name: t_expr_idx, IndexID: 2}
  │         ├── 3 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
  │         ├── 1 element transitioning toward TRANSIENT_ABSENT
  │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
@@ -30,9 +30,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {"IndexID":2,"TableID":104}
  │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
  │              ├── MakeAddedIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── MakeAddedTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
- │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+ │              └── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 2 Mutation operations

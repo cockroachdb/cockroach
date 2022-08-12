@@ -26,6 +26,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │       │
 │       ├── • 7 elements transitioning toward PUBLIC
 │       │   │
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   │     ABSENT → BACKFILL_ONLY
+│       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
@@ -43,9 +46,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
-│       │   │
-│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
-│       │   │     ABSENT → BACKFILL_ONLY
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
 │       │   │   │ ABSENT → PUBLIC
@@ -109,6 +109,24 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │           │       TableID: 106
 │           │       TemporaryIndexID: 5
 │           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 4
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 4
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 4
+│           │     IndexID: 4
+│           │     Kind: 2
+│           │     Ordinal: 1
+│           │     TableID: 106
+│           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 6
@@ -128,27 +146,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │           │     Kind: 2
 │           │     TableID: 106
 │           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 4
-│           │     IndexID: 5
-│           │     Kind: 2
-│           │     Ordinal: 1
-│           │     TableID: 106
-│           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 1
-│           │     IndexID: 4
-│           │     TableID: 106
-│           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 2
-│           │     IndexID: 4
-│           │     Kind: 2
-│           │     TableID: 106
-│           │
 │           └── • AddColumnToIndex
 │                 ColumnID: 4
-│                 IndexID: 4
+│                 IndexID: 5
 │                 Kind: 2
 │                 Ordinal: 1
 │                 TableID: 106
