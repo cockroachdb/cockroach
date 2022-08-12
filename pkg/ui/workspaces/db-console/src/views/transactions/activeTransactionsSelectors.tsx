@@ -28,13 +28,15 @@ const transactionsColumnsLocalSetting = new LocalSetting<
   null,
 );
 
+const defaultActiveTxnFilters = { app: defaultFilters.app };
+
 const filtersLocalSetting = new LocalSetting<
   AdminUIState,
   ActiveTransactionFilters
 >(
   "filters/ActiveTransactionsPage",
   (state: AdminUIState) => state.localSettings,
-  { app: defaultFilters.app },
+  defaultActiveTxnFilters,
 );
 
 const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
