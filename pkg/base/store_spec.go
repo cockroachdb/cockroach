@@ -161,6 +161,86 @@ func (ss *SizeSpec) Set(value string) error {
 	return nil
 }
 
+// ProvisionedRateSpec is an optional part of the StoreSpec.
+//
+// TODO(sumeer): We should map the file path specified in the store spec to
+// the disk name. df can be used to map paths to names like /dev/nvme1n1 and
+// /dev/sdb (these examples are from AWS EBS and GCP PD respectively) and the
+// corresponding names produced by disk_counters.go are nvme1n1 and sdb
+// respectively. We need to find or write a platform independent library --
+// see the discussion on
+// https://github.com/cockroachdb/cockroach/pull/86063#pullrequestreview-1074487018.
+// With that change, the ProvisionedRateSpec would only be needed to override
+// the cluster setting when there are heterogenous bandwidth limits in a
+// cluster (there would be no more DiskName field).
+type ProvisionedRateSpec struct {
+	// DiskName is the name of the disk observed by the code in disk_counters.go
+	// when retrieving stats for this store.
+	DiskName string
+	// ProvisionedBandwidth is the bandwidth provisioned for this store in
+	// bytes/s.
+	ProvisionedBandwidth int64
+}
+
+func newStoreProvisionedRateSpec(
+	field redact.SafeString, value string,
+) (ProvisionedRateSpec, error) {
+	var spec ProvisionedRateSpec
+	used := make(map[string]struct{})
+	for _, split := range strings.Split(value, ":") {
+		if len(split) == 0 {
+			continue
+		}
+		subSplits := strings.Split(split, "=")
+		if len(subSplits) != 2 {
+			return ProvisionedRateSpec{}, errors.Errorf("%s field has invalid value %s", field, value)
+		}
+		subField := subSplits[0]
+		subValue := subSplits[1]
+		if _, ok := used[subField]; ok {
+			return ProvisionedRateSpec{}, errors.Errorf("%s field has duplicate sub-field %s",
+				field, subField)
+		}
+		used[subField] = struct{}{}
+		if len(subField) == 0 {
+			continue
+		}
+		if len(subValue) == 0 {
+			return ProvisionedRateSpec{},
+				errors.Errorf("%s field has no value specified for sub-field %s", field, subField)
+		}
+		switch subField {
+		case "disk-name":
+			spec.DiskName = subValue
+		case "bandwidth":
+			if len(subValue) <= 2 || subValue[len(subValue)-2:] != "/s" {
+				return ProvisionedRateSpec{},
+					errors.Errorf("%s field does not have bandwidth sub-field %s ending in /s",
+						field, subValue)
+			}
+			subValue = subValue[:len(subValue)-2]
+			var err error
+			spec.ProvisionedBandwidth, err = humanizeutil.ParseBytes(subValue)
+			if err != nil {
+				return ProvisionedRateSpec{},
+					errors.Wrapf(err, "could not parse bandwidth in field %s", field)
+			}
+			if spec.ProvisionedBandwidth == 0 {
+				return ProvisionedRateSpec{},
+					errors.Errorf("%s field is trying to set bandwidth to 0", field)
+			}
+		default:
+			return ProvisionedRateSpec{}, errors.Errorf("%s field has unknown sub-field %s",
+				field, subField)
+		}
+	}
+	if len(spec.DiskName) == 0 {
+		return ProvisionedRateSpec{},
+			errors.Errorf("%s field did not specify disk-name", field)
+	}
+	return spec, nil
+}
+
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
@@ -189,6 +269,8 @@ type StoreSpec struct {
 	// through to C CCL code to set up encryption-at-rest.  Must be set if and
 	// only if encryption is enabled, otherwise left empty.
 	EncryptionOptions []byte
+	// ProvisionedRateSpec is optional.
+	ProvisionedRateSpec ProvisionedRateSpec
 }
 
 // String returns a fully parsable version of the store spec.
@@ -231,6 +313,16 @@ func (ss StoreSpec) String() string {
 		fmt.Fprint(&buffer, optsStr)
 		fmt.Fprint(&buffer, ",")
 	}
+	if len(ss.ProvisionedRateSpec.DiskName) > 0 {
+		fmt.Fprintf(&buffer, "provisioned-rate=disk-name=%s",
+			ss.ProvisionedRateSpec.DiskName)
+		if ss.ProvisionedRateSpec.ProvisionedBandwidth > 0 {
+			fmt.Fprintf(&buffer, ":bandwidth=%s/s,",
+				humanizeutil.IBytes(ss.ProvisionedRateSpec.ProvisionedBandwidth))
+		} else {
+			fmt.Fprintf(&buffer, ",")
+		}
+	}
 	// Trim the extra comma from the end if it exists.
 	if l := buffer.Len(); l > 0 {
 		buffer.Truncate(l - 1)
@@ -259,7 +351,7 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 
 // NewStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
-// There are four possible fields that can be passed in, comma separated:
+// There are five possible fields that can be passed in, comma separated:
 // - path=xxx The directory in which to the rocks db instance should be
 //   located, required unless using a in memory storage.
 // - type=mem This specifies that the store is an in memory storage instead of
@@ -273,6 +365,10 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 //   - 20%             -> 20% of the available space
 //   - 0.2             -> 20% of the available space
 // - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
+// - provisioned-rate=disk-name=<disk-name>[:bandwidth=<bandwidth-bytes/s>] The
+//   provisioned-rate can be used for admission control for operations on the
+//   store. The bandwidth is optional, and if unspecified, a cluster setting
+//   (kv.store.admission.provisioned_bandwidth) will be used.
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {
 	const pathField = "path"
@@ -399,6 +495,13 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 				return StoreSpec{}, err
 			}
 			ss.PebbleOptions = buf.String()
+		case "provisioned-rate":
+			rateSpec, err := newStoreProvisionedRateSpec("provisioned-rate", value)
+			if err != nil {
+				return StoreSpec{}, err
+			}
+			ss.ProvisionedRateSpec = rateSpec
+
 		default:
 			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}

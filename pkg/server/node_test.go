@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -746,4 +748,126 @@ func TestGetTenantWeights(t *testing.T) {
 	}
 	checkSum(roachpb.SystemTenantID.ToUint64())
 	checkSum(otherTenantID)
+}
+
+func TestDiskStatsMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Specs for two stores, one of which overrides the cluster-level
+	// provisioned bandwidth.
+	specs := []base.StoreSpec{
+		{
+			ProvisionedRateSpec: base.ProvisionedRateSpec{
+				DiskName: "foo",
+				// ProvisionedBandwidth is 0 so the cluster setting will be used.
+				ProvisionedBandwidth: 0,
+			},
+		},
+		{
+			ProvisionedRateSpec: base.ProvisionedRateSpec{
+				DiskName:             "bar",
+				ProvisionedBandwidth: 200,
+			},
+		},
+	}
+	// Engines.
+	engines := []storage.Engine{
+		storage.NewDefaultInMemForTesting(),
+		storage.NewDefaultInMemForTesting(),
+	}
+	defer func() {
+		for i := range engines {
+			engines[i].Close()
+		}
+	}()
+	// "foo" has store-id 10, "bar" has store-id 5.
+	engineIDs := []roachpb.StoreID{10, 5}
+	for i := range engines {
+		ident := roachpb.StoreIdent{StoreID: engineIDs[i]}
+		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i], nil, keys.StoreIdentKey(),
+			hlc.Timestamp{}, hlc.ClockTimestamp{}, &ident, nil))
+	}
+	var dsm diskStatsMap
+	clusterProvisionedBW := int64(150)
+
+	// diskStatsMap contains nothing, so does not populate anything.
+	stats, err := dsm.tryPopulateAdmissionDiskStats(ctx, clusterProvisionedBW, nil)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(stats))
+
+	// diskStatsMap initialized with these two stores.
+	require.NoError(t, dsm.initDiskStatsMap(specs, engines))
+
+	// diskStatsFunc returns stats for these two stores, and an unknown store.
+	diskStatsFunc := func(context.Context) ([]status.DiskStats, error) {
+		return []status.DiskStats{
+			{
+				Name:       "baz",
+				ReadBytes:  100,
+				WriteBytes: 200,
+			},
+			{
+				Name:       "foo",
+				ReadBytes:  500,
+				WriteBytes: 1000,
+			},
+			{
+				Name:       "bar",
+				ReadBytes:  2000,
+				WriteBytes: 2500,
+			},
+		}, nil
+	}
+	stats, err = dsm.tryPopulateAdmissionDiskStats(ctx, clusterProvisionedBW, diskStatsFunc)
+	require.NoError(t, err)
+	// The stats for the two stores are as expected.
+	require.Equal(t, 2, len(stats))
+	for i := range engineIDs {
+		ds, ok := stats[engineIDs[i]]
+		require.True(t, ok)
+		var expectedDS admission.DiskStats
+		switch engineIDs[i] {
+		// "foo"
+		case 10:
+			expectedDS = admission.DiskStats{
+				BytesRead: 500, BytesWritten: 1000, ProvisionedBandwidth: clusterProvisionedBW}
+		// "bar"
+		case 5:
+			expectedDS = admission.DiskStats{
+				BytesRead: 2000, BytesWritten: 2500, ProvisionedBandwidth: 200}
+		}
+		require.Equal(t, expectedDS, ds)
+	}
+
+	// disk stats are only retrieved for "foo".
+	diskStatsFunc = func(context.Context) ([]status.DiskStats, error) {
+		return []status.DiskStats{
+			{
+				Name:       "foo",
+				ReadBytes:  3500,
+				WriteBytes: 4500,
+			},
+		}, nil
+	}
+	stats, err = dsm.tryPopulateAdmissionDiskStats(ctx, clusterProvisionedBW, diskStatsFunc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(stats))
+	for i := range engineIDs {
+		ds, ok := stats[engineIDs[i]]
+		require.True(t, ok)
+		var expectedDS admission.DiskStats
+		switch engineIDs[i] {
+		// "foo"
+		case 10:
+			expectedDS = admission.DiskStats{
+				BytesRead: 3500, BytesWritten: 4500, ProvisionedBandwidth: clusterProvisionedBW}
+		// "bar". The read and write bytes are 0.
+		case 5:
+			expectedDS = admission.DiskStats{
+				BytesRead: 0, BytesWritten: 0, ProvisionedBandwidth: 200}
+		}
+		require.Equal(t, expectedDS, ds)
+	}
 }
