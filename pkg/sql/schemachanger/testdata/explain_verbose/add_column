@@ -39,7 +39,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
@@ -54,10 +54,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │     rule: "column name and type to public after all index column to public"
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
-│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
 │       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
@@ -143,7 +143,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │
 │           ├── • MakeAddedIndexBackfilling
 │           │     Index:
-│           │       ConstraintID: 1
+│           │       ConstraintID: 2
 │           │       IndexID: 2
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -152,7 +152,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
-│           │       ConstraintID: 1
+│           │       ConstraintID: 3
 │           │       IndexID: 3
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -250,7 +250,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
@@ -273,7 +273,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │         BACKFILLED → DELETE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -293,7 +293,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │         DELETE_ONLY → MERGE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -313,7 +313,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │         MERGE_ONLY → MERGED
 │   │   │
 │   │   └── • 1 Backfill operation
@@ -327,7 +327,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │         MERGED → WRITE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -347,7 +347,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
-│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │         WRITE_ONLY → VALIDATED
 │       │
 │       └── • 1 Validation operation
@@ -382,10 +382,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │         rule: "adding column depends on primary index"
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
@@ -397,7 +397,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   └── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
     │   │       │ ABSENT → PUBLIC
     │   │       │
-    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │             rule: "index existence precedes index name and comment"
     │   │
     │   ├── • 1 element transitioning toward TRANSIENT_ABSENT

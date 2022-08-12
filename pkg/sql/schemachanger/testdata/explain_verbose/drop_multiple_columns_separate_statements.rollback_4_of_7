@@ -20,7 +20,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │   │ DELETE_ONLY → ABSENT
     │   │   │   │
     │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
