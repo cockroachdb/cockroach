@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
@@ -522,33 +521,6 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	//	 The changefeed is opted in to `OptKeyInValue` for any cloud
-	//   storage sink or webhook sink. Kafka etc have a key and value field in
-	//   each message but cloud storage sinks and webhook sinks don't have
-	//   anywhere to put the key. So if the key is not in the value, then for
-	//   DELETEs there is no way to recover which key was deleted. We could make
-	//   the user explicitly pass this option for every cloud storage sink/
-	//   webhook sink and error if they don't, but that seems user-hostile for
-	//   insufficient reason.
-	//   This is the same for the topic and webhook sink, which uses
-	//   `topic_in_value` to embed the topic in the value by default, since it
-	//   has no other avenue to express the topic.
-	//   If this results in an overall invalid encoding, we need to override
-	//   the default error to avoid claiming the user set an option they didn't
-	//   explicitly set. Fortunately we know the only way to cause this is to
-	//   set envelope.
-	if (isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink)) &&
-		encodingOpts.Envelope != changefeedbase.OptEnvelopeBare {
-		if err = opts.ForceKeyInValue(); err != nil {
-			return nil, errors.Errorf(`this sink is incompatible with envelope=%s`, encodingOpts.Envelope)
-		}
-	}
-	if isWebhookSink(parsedSink) {
-		if err = opts.ForceTopicInValue(); err != nil {
-			return nil, errors.Errorf(`this sink is incompatible with envelope=%s`, encodingOpts.Envelope)
-		}
-	}
-
 	if !unspecifiedSink && p.ExecCfg().ExternalIODirConfig.DisableOutbound {
 		return nil, errors.Errorf("Outbound IO is disabled by configuration, cannot create changefeed into %s", parsedSink.Scheme)
 	}
@@ -583,9 +555,8 @@ func createChangefeedJobRecord(
 		}
 	}
 
-	details.Opts = opts.AsMap()
-
 	if details.SinkURI == `` {
+		details.Opts = opts.AsMap()
 		// Jobs should not be created for sinkless changefeeds. However, note that
 		// we create and return a job record for sinkless changefeeds below. This is
 		// because we need the details field to create our sinkless changefeed.
@@ -618,6 +589,8 @@ func createChangefeedJobRecord(
 	// TODO: Ideally those option validations would happen in validateDetails()
 	// earlier, like the others.
 	err = validateSink(ctx, p, jobID, details, opts)
+
+	details.Opts = opts.AsMap()
 
 	jr := &jobs.Record{
 		Description: jobDescription,
@@ -807,6 +780,20 @@ func validateSink(
 	if err := canarySink.Close(); err != nil {
 		return err
 	}
+	// If there's no projection we may need to force some options to ensure messages
+	// have enough information.
+	if details.Select == `` {
+		if requiresKeyInValue(canarySink) {
+			if err = opts.ForceKeyInValue(); err != nil {
+				return err
+			}
+		}
+		if requiresTopicInValue(canarySink) {
+			if err = opts.ForceTopicInValue(); err != nil {
+				return err
+			}
+		}
+	}
 	if sink, ok := canarySink.(SinkWithTopics); ok {
 		if opts.IsSet(changefeedbase.OptResolvedTimestamps) &&
 			opts.IsSet(changefeedbase.OptSplitColumnFamilies) {
@@ -819,9 +806,22 @@ func validateSink(
 		for _, topic := range topics {
 			p.BufferClientNotice(ctx, pgnotice.Newf(`changefeed will emit to topic %s`, topic))
 		}
-		details.Opts[changefeedbase.Topics] = strings.Join(topics, ",")
+		opts.SetTopics(topics)
 	}
 	return nil
+}
+
+func requiresKeyInValue(s Sink) bool {
+	switch s.getConcreteType() {
+	case sinkTypeCloudstorage, sinkTypeWebhook:
+		return true
+	default:
+		return false
+	}
+}
+
+func requiresTopicInValue(s Sink) bool {
+	return s.getConcreteType() == sinkTypeWebhook
 }
 
 func changefeedJobDescription(
