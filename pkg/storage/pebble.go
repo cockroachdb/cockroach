@@ -295,6 +295,17 @@ var EngineComparer = &pebble.Comparer{
 		return append(dst, 0)
 	},
 
+	ImmediateSuccessor: func(dst, a []byte) []byte {
+		// The key `a` is guaranteed to be a bare prefix: It's a
+		// `engineKeyNoVersion` key without a version—just a trailing 0-byte to
+		// signify the length of the version. For example the user key "foo" is
+		// encoded as: "foo\0". We need to encode the immediate successor to
+		// "foo", which in the natural byte ordering is "foo\0".  Append a
+		// single additional zero, to encode the user key "foo\0" with a
+		// zero-length version.
+		return append(append(dst, a...), 0)
+	},
+
 	Split: func(k []byte) int {
 		key, ok := GetKeyPartFromEngineKey(k)
 		if !ok {
