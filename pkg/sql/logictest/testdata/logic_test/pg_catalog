@@ -4670,6 +4670,21 @@ query T
 SELECT proname FROM pg_catalog.pg_proc WHERE oid = 0
 ----
 
+let $cur_max_builtin_oid
+SELECT cur_max_builtin_oid FROM [SELECT max(oid) as cur_max_builtin_oid FROM pg_catalog.pg_proc]
+
+## If this test failed (proname is the same, but oid increased), it's likely that a
+## new builtin function is implemented and  it's somewhere in the middle of the
+## existing functions at init time. Though the changes to builtin function OID is
+## generally ok, it's still better if we could move the new implement to end of the
+## list at init time (see all_builtins.go)
+## TODO(chengxiong): consider to have a deterministic list of builtin function oids
+## so that new implementations can just be added to it.
+query TT
+SELECT proname, oid FROM pg_catalog.pg_proc WHERE oid = $cur_max_builtin_oid
+----
+to_regtype  2031
+
 ## Ensure that unnest works with oid wrapper arrays
 
 query O
