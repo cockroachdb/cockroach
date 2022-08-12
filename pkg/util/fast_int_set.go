@@ -243,7 +243,7 @@ func (s FastIntSet) Ordered() []int {
 func (s FastIntSet) Copy() FastIntSet {
 	var c FastIntSet
 	c.small = s.small
-	if s.large != nil {
+	if s.large != nil && !s.large.IsEmpty() {
 		c.large = new(intsets.Sparse)
 		c.large.Copy(s.large)
 	}
@@ -254,7 +254,7 @@ func (s FastIntSet) Copy() FastIntSet {
 // independently.
 func (s *FastIntSet) CopyFrom(other FastIntSet) {
 	s.small = other.small
-	if other.large != nil {
+	if other.large != nil && !other.large.IsEmpty() {
 		if s.large == nil {
 			s.large = new(intsets.Sparse)
 		}
