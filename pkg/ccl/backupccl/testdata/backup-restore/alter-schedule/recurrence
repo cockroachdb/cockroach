@@ -175,6 +175,13 @@ with schedules as (show schedules) select id, state, recurrence, owner, command 
 $fullID <nil> 0 0 1 * * root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true, "dependent_schedule_id": $incID, "unpause_on_success": $incID}
 $incID Waiting for initial backup to complete @weekly root {"backup_statement": "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached", "backup_type": 1, "chain_protected_timestamp_records": true, "dependent_schedule_id": $fullID}
 
+# Can't set incremental schedule to be slower than full.
+
+exec-sql expect-error-ignore
+alter backup schedule $fullID set recurring '@weekly', set full backup '@daily';
+----
+ignoring expected error
+
 # Remove incremental backup and change full cadence in the same command.
 
 exec-sql
@@ -198,15 +205,3 @@ query-sql
 with schedules as (show schedules) select id, state, recurrence, owner, command from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
 $fullID <nil> @daily root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true}
-
-# Can't use the same command twice.
-
-exec-sql expect-error-ignore
-alter backup schedule $incID set recurring '0 0 1 * *', set recurring '@weekly';
-----
-ignoring expected error
-
-exec-sql expect-error-ignore
-alter backup schedule $incID set full backup '0 0 1 * *', set recurring '0 0 1 * *', set full backup '@weekly';
-----
-ignoring expected error
