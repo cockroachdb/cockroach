@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -96,6 +99,65 @@ func TestInsightsIntegration(t *testing.T) {
 		require.Equal(t, "SELECT pg_sleep($1)", query)
 		require.Equal(t, "completed", status)
 		require.GreaterOrEqual(t, endInsights.Sub(startInsights).Seconds(), queryDelayInSeconds)
+
+		return nil
+	}, 1*time.Second)
+}
+
+// Testing that the index recommendation is included
+// in the insights table
+func TestInsightsIndexRecommendationIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable detection by setting a latencyThreshold > 0.
+	latencyThreshold := 1 * time.Nanosecond
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+
+	sqlConn := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
+
+	sqlConn.Exec(t, "CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)")
+	sqlConn.Exec(t, "CREATE TABLE t2 (k INT, i INT, s STRING)")
+
+	query := "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3"
+
+	// Execute enough times to have index recommendations generated.
+	// This will generate two recommendations.
+	for i := 0; i < 7; i++ {
+		sqlConn.Exec(t, query)
+	}
+
+	// Verify the table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		row := sqlConn.Query(t, "SELECT "+
+			"query, "+
+			"array_to_string(index_recommendations, ';') as cmb_index_recommendations "+
+			"FROM crdb_internal.node_execution_insights where array_to_string(index_recommendations, ';') != '' and "+
+			" query like 'SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k%' ")
+
+		var rowCount int
+		for row.Next() {
+			var query string
+			var idxRecommendation string
+			err := row.Scan(&query, &idxRecommendation)
+			require.NoError(t, err)
+
+			require.Equal(t, "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE (t1.i > _) AND (t2.i > _)", query)
+			require.NotEmpty(t, idxRecommendation)
+			require.True(t, strings.Contains(idxRecommendation, "CREATE INDEX"), idxRecommendation)
+			rowCount++
+		}
+
+		require.GreaterOrEqual(t, rowCount, 1)
 
 		return nil
 	}, 1*time.Second)
