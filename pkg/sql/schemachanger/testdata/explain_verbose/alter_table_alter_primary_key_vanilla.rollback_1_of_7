@@ -31,7 +31,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
         │   │         rule: "dependents removed before index"
         │   │
-        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}
+        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
@@ -46,7 +46,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
         │   │     PUBLIC → ABSENT
         │   │
-        │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
+        │   ├── • SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
@@ -60,7 +60,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
         │   │         rule: "dependents removed before index"
         │   │
-        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}
+        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
@@ -72,7 +72,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}
         │   │         rule: "secondary index in DELETE_ONLY before removing columns"
         │   │
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
@@ -81,7 +81,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}
         │   │         rule: "secondary index in DELETE_ONLY before removing columns"
         │   │
         │   └── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
@@ -163,7 +163,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             ├── • LogEvent
             │     Element:
             │       SecondaryIndex:
-            │         constraintId: 3
+            │         constraintId: 4
             │         indexId: 4
             │         isUnique: true
             │         sourceIndexId: 1

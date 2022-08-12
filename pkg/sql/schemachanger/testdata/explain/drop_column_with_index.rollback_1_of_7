@@ -11,7 +11,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
            ├── 4 elements transitioning toward ABSENT
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
            ├── 4 elements transitioning toward PUBLIC
            │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104, ColumnID: 2}

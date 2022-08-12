@@ -11,7 +11,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
@@ -77,7 +77,7 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
         statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 7 with 3 MutationType ops
   transitions:
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 3
@@ -146,7 +146,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -165,7 +165,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 3
@@ -188,7 +188,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
@@ -196,7 +196,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
@@ -204,7 +204,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
@@ -227,19 +227,19 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index name and comment
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
   rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   kind: Precedence
   rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   kind: Precedence
   rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill
@@ -253,7 +253,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
@@ -324,7 +324,7 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
         statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 7 with 3 MutationType ops
   transitions:
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 3
@@ -393,7 +393,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -412,7 +412,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 3
@@ -435,7 +435,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
@@ -443,7 +443,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
@@ -451,7 +451,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index-column added to index before index is backfilled
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
@@ -474,19 +474,19 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index name and comment
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
   rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   kind: Precedence
   rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   kind: Precedence
   rules: [temp index exists before columns, partitioning, and partial; index-column added to index after temp index exists]
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill

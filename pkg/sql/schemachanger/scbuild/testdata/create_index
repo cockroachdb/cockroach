@@ -15,7 +15,7 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
   {indexId: 2, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: id1, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
@@ -38,7 +38,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
   {indexId: 2, isConcurrently: true, isInverted: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: id2, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: id2, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, isConcurrently: true, isInverted: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
@@ -65,7 +65,7 @@ CREATE INDEX id3
   {indexId: 2, name: id3, tableId: 104}
 - [[IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, partitioning: {numColumns: 1}, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
@@ -96,7 +96,7 @@ CREATE INDEX id4
   {indexId: 2, sharding: {columnNames: [id, name], isSharded: true, name: crdb_internal_id_name_shard_8, shardBuckets: 8}, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: id4, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: id4, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, isUsingSecondaryEncoding: true, sharding: {columnNames: [id, name], isSharded: true, name: crdb_internal_id_name_shard_8, shardBuckets: 8}, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}

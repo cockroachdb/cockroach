@@ -29,7 +29,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 8 of 15;
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │     WRITE_ONLY → DELETE_ONLY
     │   │   │
-    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │         WRITE_ONLY → DELETE_ONLY
     │   │
     │   ├── • 6 elements transitioning toward PUBLIC
@@ -163,7 +163,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 8 of 15;
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
         │   │         rule: "dependents removed before index"
         │   │
-        │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+        │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │       │ DELETE_ONLY → ABSENT
         │       │
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
