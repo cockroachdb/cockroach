@@ -230,6 +230,8 @@ type Context struct {
 
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher RangeStatsFetcher
+
+	ChangefeedState ChangefeedState
 }
 
 // DescIDGenerator generates unique descriptor IDs.
