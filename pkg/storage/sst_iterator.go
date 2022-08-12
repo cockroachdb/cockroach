@@ -235,3 +235,8 @@ func (r *sstIterator) RangeBounds() roachpb.Span {
 func (r *sstIterator) RangeKeys() MVCCRangeKeyStack {
 	return MVCCRangeKeyStack{}
 }
+
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (i *sstIterator) RangeKeyChanged() bool {
+	return false
+}
