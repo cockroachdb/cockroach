@@ -308,6 +308,10 @@ type cloudStorageSink struct {
 	metrics           metricsRecorder
 }
 
+func (s *cloudStorageSink) getConcreteType() sinkType {
+	return sinkTypeCloudstorage
+}
+
 const sinkCompressionGzip = "gzip"
 
 var cloudStorageSinkIDAtomic int64
@@ -405,10 +409,6 @@ func makeCloudStorageSink(
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
-	}
-
-	if !encodingOpts.KeyInValue {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
 	if codec := encodingOpts.Compression; codec != "" {
