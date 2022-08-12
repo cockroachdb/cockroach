@@ -156,6 +156,16 @@ func Synchronization() {
 			intID(n) // this is OK
 		}()
 
+		go func() {
+			intID(n) // this is OK
+			defer wg1.Done()
+		}()
+
+		go func() {
+			wg1.Done()
+			intID(n) // want `loop variable 'n' captured by reference`
+		}()
+
 		chan1 := make(chan error)
 		chan2 := make(chan error)
 		go func() {
@@ -167,8 +177,25 @@ func Synchronization() {
 		}()
 
 		go func() {
+			chan1 <- nil
+
+			// this is not OK -- channel send happens before the loop
+			// variable reference
+			if len(collection) == 0 {
+				intID(n) // want `loop variable 'n' captured by reference`
+			}
+		}()
+
+		go func() {
 			defer close(chan2)
 			intID(n) // this is OK
+		}()
+
+		go func() {
+			close(chan2)
+			// this is not OK -- synchronization call happens before the
+			// loop variable reference
+			intID(n) // want `loop variable 'n' captured by reference`
 		}()
 
 		go func() {

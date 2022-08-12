@@ -571,68 +571,93 @@ func (v *Visitor) findLoopVarRefsInCall(
 	})
 }
 
+// positionedIdent is a wrapper around an *ast.Ident that annotates it
+// with a relative position (typically within a closure), and whether
+// the identifier was used in the context of a `defer` statement
+type positionedIdent struct {
+	pos     int
+	isDefer bool
+	ident   *ast.Ident
+}
+
 // visitFuncLit inspects a closure's body. This function returns:
 //
 // 1. A collection of references to loop variables present in the closure.
 // 2. A collection of objects that could be used to wait for the Go
 //    routine to finish (synchronization objects). These could be wait
 //    groups, channels, etc.
-func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]*ast.Ident, []*ast.Ident) {
-	var refs, syncObjs []*ast.Ident
+func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []positionedIdent) {
+	var refs, syncObjs []positionedIdent
 
-	ast.Inspect(funcLit.Body, func(n ast.Node) bool {
-		switch expr := n.(type) {
-		case *ast.Ident:
-			if expr.Obj == nil {
+	// define the inspector function so that we can call it recursively
+	var inspector func(int, bool) func(ast.Node) bool
+	inspector = func(pos int, isDefer bool) func(ast.Node) bool {
+		positioned := func(ident *ast.Ident, isDefer bool) positionedIdent {
+			return positionedIdent{pos: pos, isDefer: isDefer, ident: ident}
+		}
+
+		return func(n ast.Node) bool {
+			switch expr := n.(type) {
+			case *ast.DeferStmt:
+				ast.Inspect(expr.Call, inspector(pos, true))
+				return false
+
+			case *ast.Ident:
+				if expr.Obj == nil {
+					return true
+				}
+
+				if v.isLoopVar(expr) {
+					refs = append(refs, positioned(expr, isDefer))
+				}
+
+				// `Ident` is a child node; stopping the traversal here
+				// shouldn't matter
+				return false
+
+			case *ast.CallExpr:
+				// if this is a call to Done() on a variable of type WaitGroup,
+				// the variable should be considered a synchronization object
+				if ident := v.waitGroupCallee(expr, "Done"); ident != nil {
+					syncObjs = append(syncObjs, positioned(ident, isDefer))
+				}
+
+				// if we are calling the builtin `close`, the associated channel
+				// should be considered a synchronization object
+				if ident := v.closeChan(expr); ident != nil {
+					syncObjs = append(syncObjs, positioned(ident, isDefer))
+				}
+
+				// if we are calling a local closure that is known to capture a
+				// loop variable, mark that as a suspect reference
+				funcName, ok := expr.Fun.(*ast.Ident)
+				if ok && funcName.Obj != nil {
+					if _, ok := v.closures[funcName.Obj]; ok {
+						refs = append(refs, positioned(funcName, isDefer))
+					}
+				}
+
+				// keep traversing the AST, as there could be invalid references
+				// down the subtree
 				return true
-			}
 
-			if v.isLoopVar(expr) {
-				refs = append(refs, expr)
-			}
-
-			// `Ident` is a child node; stopping the traversal here
-			// shouldn't matter
-			return false
-
-		case *ast.CallExpr:
-			// if this is a call to Done() on a variable of type WaitGroup,
-			// the variable should be considered a synchronization object
-			if ident := v.waitGroupCallee(expr, "Done"); ident != nil {
-				syncObjs = append(syncObjs, ident)
-			}
-
-			// if we are calling the builtin `close`, the associated channel
-			// should be considered a synchronization object
-			if ident := v.closeChan(expr); ident != nil {
-				syncObjs = append(syncObjs, ident)
-			}
-
-			// if we are calling a local closure that is known to capture a
-			// loop variable, mark that as a suspect reference
-			funcName, ok := expr.Fun.(*ast.Ident)
-			if ok && funcName.Obj != nil {
-				if _, ok := v.closures[funcName.Obj]; ok {
-					refs = append(refs, funcName)
+			case *ast.SendStmt:
+				// if we are sending something to a channel, the channel should
+				// be considered a synchronization object
+				if ident, ok := expr.Chan.(*ast.Ident); ok {
+					syncObjs = append(syncObjs, positioned(ident, isDefer))
 				}
 			}
 
-			// keep traversing the AST, as there could be invalid references
-			// down the subtree
+			// when the node being visited is not an identifier or a function
+			// call, keep traversing the AST
 			return true
-
-		case *ast.SendStmt:
-			// if we are sending something to a channel, the channel should
-			// be considered a synchronization object
-			if ident, ok := expr.Chan.(*ast.Ident); ok {
-				syncObjs = append(syncObjs, ident)
-			}
 		}
+	}
 
-		// when the node being visited is not an identifier or a function
-		// call, keep traversing the AST
-		return true
-	})
+	for pos, stmt := range funcLit.Body.List {
+		ast.Inspect(stmt, inspector(pos, false))
+	}
 
 	return refs, syncObjs
 }
@@ -649,15 +674,23 @@ func (v *Visitor) funcLitSuspectRefs(
 	refs, syncObjs := v.visitFuncLit(funcLit)
 	suspects := make([]*suspectReference, 0, len(refs))
 	for _, ref := range refs {
-		syncObjs := syncObjs
-		if stmtType == deferCall {
-			// synchronization objects in defer statements should be
-			// ignored, as the semantics of `defer` calls is that the
-			// functions will be executed when the function returns,
-			// regardless of any synchronization
-			syncObjs = nil
+		var s []*ast.Ident
+		// synchronization objects in defer statements should be
+		// ignored, as the semantics of `defer` calls is that the
+		// functions will be executed when the function returns,
+		// regardless of any synchronization
+		if stmtType != deferCall {
+			for _, syncObj := range syncObjs {
+				// only add the synchronization object if the call happens
+				// *after* the loop variable reference, or if it is called in
+				// the context of `defer`
+				if syncObj.pos >= ref.pos || syncObj.isDefer {
+					s = append(s, syncObj.ident)
+				}
+			}
 		}
-		suspects = append(suspects, newSuspect(ref, syncObjs))
+
+		suspects = append(suspects, newSuspect(ref.ident, s))
 	}
 
 	return suspects
