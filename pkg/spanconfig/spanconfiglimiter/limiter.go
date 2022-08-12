@@ -15,7 +15,6 @@ package spanconfiglimiter
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -62,10 +61,6 @@ func New(
 
 // ShouldLimit is part of the spanconfig.Limiter interface.
 func (l *Limiter) ShouldLimit(ctx context.Context, txn *kv.Txn, delta int) (bool, error) {
-	if !l.settings.Version.IsActive(ctx, clusterversion.PreSeedSpanCountTable) {
-		return false, nil // nothing to do
-	}
-
 	if delta == 0 {
 		return false, nil
 	}

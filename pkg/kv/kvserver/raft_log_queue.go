@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -721,10 +720,7 @@ func (rlq *raftLogQueue) process(
 		Index:         decision.NewFirstIndex,
 		RangeID:       r.RangeID,
 	}
-	if rlq.store.ClusterSettings().Version.IsActive(
-		ctx, clusterversion.LooselyCoupledRaftLogTruncation) {
-		truncRequest.ExpectedFirstIndex = decision.Input.FirstIndex
-	}
+	truncRequest.ExpectedFirstIndex = decision.Input.FirstIndex
 	b.AddRawRequest(truncRequest)
 	if err := rlq.db.Run(ctx, b); err != nil {
 		return false, err
@@ -750,7 +746,5 @@ func (*raftLogQueue) updateChan() <-chan time.Time {
 func isLooselyCoupledRaftLogTruncationEnabled(
 	ctx context.Context, settings *cluster.Settings,
 ) bool {
-	return settings.Version.IsActive(
-		ctx, clusterversion.LooselyCoupledRaftLogTruncation) &&
-		looselyCoupledTruncationEnabled.Get(&settings.SV)
+	return looselyCoupledTruncationEnabled.Get(&settings.SV)
 }

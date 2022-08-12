@@ -1,0 +1,25 @@
+load("@npm_e2e_tests//eslint:index.bzl", "eslint_test")
+
+eslint_test(
+    name = "lint",
+    data = [
+        ".eslintrc.json",
+        "cypress",
+        "cypress.config.ts",
+        "//pkg/ui/workspaces/eslint-plugin-crdb",
+        "@npm_e2e_tests//@cockroachlabs/eslint-config",
+        "@npm_e2e_tests//@typescript-eslint/eslint-plugin",
+        "@npm_e2e_tests//@typescript-eslint/parser",
+        "@npm_e2e_tests//eslint-plugin-prettier",
+        "@npm_e2e_tests//eslint-plugin-react",
+        "@npm_e2e_tests//eslint-plugin-react-hooks",
+        "@npm_e2e_tests//prettier",
+    ],
+    templated_args = [
+        "--ext .ts",
+        "-c",
+        "$$(rlocation $(rootpath .eslintrc.json))",
+        "$$(rlocation $(rootpath cypress))",
+        "$$(rlocation $(rootpath cypress.config.ts))",
+    ],
+)

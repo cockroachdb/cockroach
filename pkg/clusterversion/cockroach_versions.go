@@ -180,35 +180,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// SCRAM authentication is available.
-	SCRAMAuthentication
-	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
-	// that correspond to range descriptor changes resulting from recovery
-	// procedures.
-	UnsafeLossOfQuorumRecoveryRangeLog
-	// AlterSystemProtectedTimestampAddColumn adds a target column to the
-	// system.protected_ts_records table that describes what is protected by the
-	// record.
-	AlterSystemProtectedTimestampAddColumn
-	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
-	// in secondary tenants.
-	EnableProtectedTimestampsForTenant
-	// DeleteCommentsWithDroppedIndexes cleans up left over comments that belong
-	// to dropped indexes.
-	DeleteCommentsWithDroppedIndexes
-	// RemoveIncompatibleDatabasePrivileges adds the migration which guarantees that
-	// databases do not have incompatible privileges
-	RemoveIncompatibleDatabasePrivileges
-	// AddRaftAppliedIndexTermMigration is a migration that causes each range
-	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
-	AddRaftAppliedIndexTermMigration
-	// PostAddRaftAppliedIndexTermMigration is used for asserting that
-	// RaftAppliedIndexTerm is populated.
-	PostAddRaftAppliedIndexTermMigration
-	// DontProposeWriteTimestampForLeaseTransfers stops setting the WriteTimestamp
-	// on lease transfer Raft proposals. New leaseholders now forward their clock
-	// directly to the new lease start time.
-	DontProposeWriteTimestampForLeaseTransfers
 	// EnablePebbleFormatVersionBlockProperties enables a new Pebble SSTable
 	// format version for block property collectors.
 	// NB: this cluster version is paired with PebbleFormatBlockPropertyCollector
@@ -219,24 +190,12 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-	// MVCCIndexBackfiller supports MVCC-compliant index
-	// backfillers via a new BACKFILLING index state, delete
-	// preserving temporary indexes, and a post-backfill merging
-	// processing.
-	MVCCIndexBackfiller
 	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
 	// during joint configuration, including to VOTER_INCOMING replicas.
 	EnableLeaseHolderRemoval
-	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
-	// for raft log truncation, by allowing each replica to treat a truncation
-	// proposal as an upper bound on what should be truncated.
-	LooselyCoupledRaftLogTruncation
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
-	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
-	// can be used to construct schema change plan node.
-	EnableDeclarativeSchemaChanger
 	// RowLevelTTL is the version where we allow row level TTL tables.
 	RowLevelTTL
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
@@ -254,15 +213,6 @@ const (
 	// such as end_time, initial_scan_only, and setting the value of initial_scan
 	// to 'yes|no|only'
 	EnableNewChangefeedOptions
-	// SpanCountTable adds system.span_count to track the number of committed
-	// tenant spans.
-	SpanCountTable
-	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
-	// accounting for incremental schema changes.
-	PreSeedSpanCountTable
-	// SeedSpanCountTable seeds system.span_count with the number of committed
-	// tenant spans.
-	SeedSpanCountTable
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -415,67 +365,16 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
 	},
 	{
-		Key:     SCRAMAuthentication,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 44},
-	},
-	{
-		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 46},
-	},
-	{
-		Key:     AlterSystemProtectedTimestampAddColumn,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 48},
-	},
-	{
-		Key:     EnableProtectedTimestampsForTenant,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
-	},
-	{
-		Key:     DeleteCommentsWithDroppedIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
-	},
-	{
-		Key:     RemoveIncompatibleDatabasePrivileges,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
-	},
-	{
-		Key:     AddRaftAppliedIndexTermMigration,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     PostAddRaftAppliedIndexTermMigration,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
-	},
-	{
-		Key:     DontProposeWriteTimestampForLeaseTransfers,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
-	},
-	{
 		Key:     EnablePebbleFormatVersionBlockProperties,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
-	},
-	{
-		Key:     MVCCIndexBackfiller,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
 	{
 		Key:     EnableLeaseHolderRemoval,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
-	// Internal: 72 was reverted (EnsurePebbleFormatVersionRangeKeys)
-	// Internal: 74 was reverted (EnablePebbleFormatVersionRangeKeys)
-	// Internal: 78 was reverted (ExperimentalMVCCRangeTombstones)
-	{
-		Key:     LooselyCoupledRaftLogTruncation,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
-	},
 	{
 		Key:     ChangefeedIdleness,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
-	},
-	{
-		Key:     EnableDeclarativeSchemaChanger,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
 	},
 	{
 		Key:     RowLevelTTL,
@@ -500,18 +399,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableNewChangefeedOptions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
-	},
-	{
-		Key:     SpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 108},
-	},
-	{
-		Key:     PreSeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 110},
-	},
-	{
-		Key:     SeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
 	},
 	{
 		Key:     V22_1,

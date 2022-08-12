@@ -12,11 +12,9 @@ package kvserver
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -84,30 +82,14 @@ type replicaCircuitBreaker struct {
 	r       replicaInCircuitBreaker
 	st      *cluster.Settings
 	wrapped *circuit.Breaker
-
-	versionIsActive int32 // atomic
 }
 
 func (br *replicaCircuitBreaker) HasMark(err error) bool {
 	return br.wrapped.HasMark(err)
 }
 
-func (br *replicaCircuitBreaker) canEnable() bool {
-	b := atomic.LoadInt32(&br.versionIsActive) == 1
-	if b {
-		return true // fast path
-	}
-	// IsActive is mildly expensive since it has to unmarshal
-	// a protobuf.
-	if br.st.Version.IsActive(context.Background(), clusterversion.ProbeRequest) {
-		atomic.StoreInt32(&br.versionIsActive, 1)
-		return true
-	}
-	return false // slow path
-}
-
 func (br *replicaCircuitBreaker) enabled() bool {
-	return replicaCircuitBreakerSlowReplicationThreshold.Get(&br.st.SV) > 0 && br.canEnable()
+	return replicaCircuitBreakerSlowReplicationThreshold.Get(&br.st.SV) > 0
 }
 
 func (br *replicaCircuitBreaker) TripAsync(err error) {

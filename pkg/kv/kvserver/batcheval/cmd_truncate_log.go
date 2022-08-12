@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -134,9 +133,6 @@ func TruncateLog(
 		TruncatedState: tState,
 	}
 	pd.Replicated.RaftLogDelta = ms.SysBytes
-	if cArgs.EvalCtx.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).IsActive(
-		clusterversion.LooselyCoupledRaftLogTruncation) {
-		pd.Replicated.RaftExpectedFirstIndex = firstIndex
-	}
+	pd.Replicated.RaftExpectedFirstIndex = firstIndex
 	return pd, nil
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
@@ -491,15 +490,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// UUID so that it can be released on job completion. The updated details
 		// are persisted in the job record further down.
 		{
-			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnableProtectedTimestampsForTenant) {
-				protectedtsID := uuid.MakeV4()
-				details.ProtectedTimestampRecord = &protectedtsID
-			} else if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
-				// Prior to clusterversion.EnableProtectedTimestampsForTenant only the
-				// system tenant can write a protected timestamp record.
-				protectedtsID := uuid.MakeV4()
-				details.ProtectedTimestampRecord = &protectedtsID
-			}
+			protectedtsID := uuid.MakeV4()
+			details.ProtectedTimestampRecord = &protectedtsID
 
 			if details.ProtectedTimestampRecord != nil {
 				if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

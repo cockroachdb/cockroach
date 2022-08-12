@@ -67,6 +67,12 @@ import (
 //   in the network address specified in the CIDR notation.
 //
 
+// chainOptions and requireClusterVersion will be used in an upcoming PR.
+// Referencing them temporarily to pass the "unused linter" warning.
+// See comment in https://github.com/cockroachdb/cockroach/pull/85777.
+var _ = chainOptions
+var _ = requireClusterVersion
+
 // serverHBAConfSetting is the name of the cluster setting that holds
 // the HBA configuration.
 const serverHBAConfSetting = "server.host_based_authentication.configuration"
