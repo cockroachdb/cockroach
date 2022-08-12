@@ -56,6 +56,9 @@ func TestMetadataSST(t *testing.T) {
 	// history.
 	sqlDB.Exec(t, `CREATE TABLE data.foo(k INT, v INT)`)
 	sqlDB.Exec(t, `CREATE INDEX idx ON data.bank (balance)`)
+	sqlDB.Exec(t, `CREATE DATABASE emptydb`)
+	sqlDB.Exec(t, `CREATE TABLE emptydb.bar(k INT, v INT)`)
+	sqlDB.Exec(t, `DROP DATABASE emptydb`)
 
 	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, userfile)
 	checkMetadata(ctx, t, tc, userfile)
