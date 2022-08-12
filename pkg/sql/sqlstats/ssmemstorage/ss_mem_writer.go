@@ -200,6 +200,7 @@ func (s *Container) RecordStatement(
 		RowsWritten:      value.RowsWritten,
 		Nodes:            value.Nodes,
 		Contention:       contention,
+		IndexRecommendation: value.IndexRecommendations,
 	})
 
 	return stats.ID, nil

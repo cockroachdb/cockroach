@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -194,6 +196,88 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 
 		if rowCount < 1 {
 			return fmt.Errorf("node_execution_insights did not return any rows")
+		}
+
+		return nil
+	}, 1*time.Second)
+}
+
+// Testing that the index recommendation is included
+// in the insights table
+func TestInsightsIndexRecommendationIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable detection by setting a latencyThreshold > 0.
+	latencyThreshold := 30 * time.Millisecond
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+
+	sqlConn := tc.ServerConn(0)
+
+	sqlConn.ExecContext(ctx, "CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)")
+	sqlConn.ExecContext(ctx, "CREATE TABLE t2 (k INT, i INT, s STRING)")
+
+	query := "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3"
+
+	// Execute enough times to have index recommendations generated.
+	// This will generate two recommendations.
+	for i := 0; i < 10; i++ {
+		tx, err := sqlConn.BeginTx(ctx, &gosql.TxOptions{})
+		require.NoError(t, err)
+		_, err = tx.ExecContext(ctx, "select pg_sleep(.05);")
+		require.NoError(t, err)
+		_, err = tx.ExecContext(ctx, query)
+		require.NoError(t, err)
+		err = tx.Commit()
+		require.NoError(t, err)
+	}
+
+	// Verify the table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		rows, err := sqlConn.QueryContext(ctx, "SELECT "+
+			"query, "+
+			"array_to_string(index_recommendations, ';') as cmb_index_recommendations "+
+			"FROM crdb_internal.cluster_execution_insights WHERE "+
+			"query like 'SELECT t1.k FROM%' ")
+
+		if err != nil {
+			return err
+		}
+
+		var rowCount int
+		for rows.Next() {
+			var query string
+			var idxRecommendation string
+			err := rows.Scan(&query, &idxRecommendation)
+			if err != nil {
+				return err
+			}
+
+			if query != "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE (t1.i > _) AND (t2.i > _)" {
+				return fmt.Errorf("'SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE (t1.i > _) AND (t2.i > _)' should be %s", query)
+			}
+
+			if idxRecommendation == "" {
+				return fmt.Errorf("index recommendation should not be empty '%s'", idxRecommendation)
+			}
+
+			if !strings.Contains(idxRecommendation, "CREATE INDEX") {
+				return fmt.Errorf("index recommendation should contain 'CREATE INDEX' actual:'%s'", idxRecommendation)
+			}
+
+			rowCount++
+		}
+
+		if rowCount < 1 {
+			return fmt.Errorf("no rows found with index recommendation")
 		}
 
 		return nil
