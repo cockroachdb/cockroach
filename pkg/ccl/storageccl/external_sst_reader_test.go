@@ -96,7 +96,6 @@ func TestSSTReaderCache(t *testing.T) {
 // t2      a50--------------a1000
 //
 // t1   a0----a100
-//
 func TestNewExternalSSTReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

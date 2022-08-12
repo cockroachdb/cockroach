@@ -43,18 +43,18 @@ import (
 // The logic is as follows, where "=>" means "implies" and an "atom" is any
 // expression that is not a logical conjunction or disjunction.
 //
-//   atom A => atom B iff:          B contains A
-//   atom A => AND-expr B iff:      A => each of B's children
-//   atom A => OR-expr B iff:       A => any of B's children
+//	atom A => atom B iff:          B contains A
+//	atom A => AND-expr B iff:      A => each of B's children
+//	atom A => OR-expr B iff:       A => any of B's children
 //
-//   AND-expr A => atom B iff:      any of A's children => B
-//   AND-expr A => AND-expr B iff:  A => each of B's children
-//   AND-expr A => OR-expr B iff:   A => any of B's children OR
-//                                    any of A's children => B
+//	AND-expr A => atom B iff:      any of A's children => B
+//	AND-expr A => AND-expr B iff:  A => each of B's children
+//	AND-expr A => OR-expr B iff:   A => any of B's children OR
+//	                                 any of A's children => B
 //
-//   OR-expr A => atom B iff:       each of A's children => B
-//   OR-expr A => AND-expr B iff:   A => each of B's children
-//   OR-expr A => OR-expr B iff:    each of A's children => any of B's children
+//	OR-expr A => atom B iff:       each of A's children => B
+//	OR-expr A => AND-expr B iff:   A => each of B's children
+//	OR-expr A => OR-expr B iff:    each of A's children => any of B's children
 //
 // II. Remaining Filters
 //
@@ -71,29 +71,29 @@ import (
 // We can safely remove an expression from the filters if all of the following
 // are true:
 //
-//   1. The expression exactly matches an expression in the predicate. This
-//   prevents returning empty remaining filters for the implication below. The
-//   original filters must be applied on top of a partial index scan with the
-//   a > 0 predicate to filter out rows where a is between 0 and 10.
+//  1. The expression exactly matches an expression in the predicate. This
+//     prevents returning empty remaining filters for the implication below. The
+//     original filters must be applied on top of a partial index scan with the
+//     a > 0 predicate to filter out rows where a is between 0 and 10.
 //
 //     a > 10
 //     =>
 //     a > 0
 //
-//   2. The expression does not reside within a disjunction in the predicate.
-//   This prevents the function from returning empty remaining filters for the
-//   implication below. The original filters must be applied on top of a partial
-//   index scan with the predicate to filter out rows where a > 0 but
-//   b != 'foo'.
+//  2. The expression does not reside within a disjunction in the predicate.
+//     This prevents the function from returning empty remaining filters for the
+//     implication below. The original filters must be applied on top of a partial
+//     index scan with the predicate to filter out rows where a > 0 but
+//     b != 'foo'.
 //
 //     b = 'foo'
 //     =>
 //     a > 0 OR b = 'foo'
 //
-//   3. The expression does not reside within a disjunction in the filters. This
-//   prevents the function from incorrectly reducing the filters for the
-//   implication below. The original filters must be applied in this case to
-//   filter out rows where a is false and c is true, but b is false.
+//  3. The expression does not reside within a disjunction in the filters. This
+//     prevents the function from incorrectly reducing the filters for the
+//     implication below. The original filters must be applied in this case to
+//     filter out rows where a is false and c is true, but b is false.
 //
 //     a OR (b AND c)
 //     =>
@@ -103,9 +103,9 @@ import (
 // the remaining filters in some cases in which it is theoretically possible to
 // simplify the filters. For example, consider the implication below.
 //
-//   a OR b
-//   =>
-//   b OR a
+//	a OR b
+//	=>
+//	b OR a
 //
 // In this case, the remaining filters could be empty, but they are not, because
 // of the asymmetry of the expressions. Individually a and b are exact matches
@@ -430,9 +430,9 @@ func (im *Implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr
 // pred. It is similar to atomImpliesPredicate, except that it handles a special
 // case where e is an IN expression and pred is an OR expression, such as:
 //
-//   a IN (1, 2)
-//   =>
-//   a = 1 OR a = 2
+//	a IN (1, 2)
+//	=>
+//	a = 1 OR a = 2
 //
 // Bespoke logic for IN filters and OR predicates in this form is required
 // because the OrExpr must be considered as a single atomic unit in order to
@@ -789,12 +789,11 @@ func (im *Implicator) simplifyScalarExpr(e opt.ScalarExpr, exactMatches exprSet)
 //
 // For example, the input:
 //
-//   a OR (b AND c) OR (d OR e)
+//	a OR (b AND c) OR (d OR e)
 //
 // Results in:
 //
-//  [a, (b AND c), d, e]
-//
+//	[a, (b AND c), d, e]
 func flattenOrExpr(or *memo.OrExpr) []opt.ScalarExpr {
 	ors := make([]opt.ScalarExpr, 0, 2)
 

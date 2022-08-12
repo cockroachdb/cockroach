@@ -118,13 +118,13 @@ func (p *workPool) getTestToRun(
 // selectTestForCluster selects a test to run on a cluster with a given spec.
 //
 // Among tests that match the spec, we do the following:
-// - If the cluster is already tagged, we only look at tests with the same tag.
-// - Otherwise, we'll choose in the following order of preference:
-// 1) tests that leave the cluster usable by anybody afterwards
-// 2) tests that leave the cluster usable by some other tests
-// 	2.1) within this OnlyTagged<foo> category, we'll prefer the tag with the
-// 			 fewest existing clusters.
-// 3) tests that leave the cluster unusable by anybody
+//   - If the cluster is already tagged, we only look at tests with the same tag.
+//   - Otherwise, we'll choose in the following order of preference:
+//     1) tests that leave the cluster usable by anybody afterwards
+//     2) tests that leave the cluster usable by some other tests
+//     2.1) within this OnlyTagged<foo> category, we'll prefer the tag with the
+//     fewest existing clusters.
+//     3) tests that leave the cluster unusable by anybody
 //
 // Within each of the categories, we'll give preference to tests with fewer
 // runs.
@@ -175,7 +175,6 @@ func (p *workPool) selectTestForCluster(
 // allocate.
 //
 // ensures:  !testToRunRes.noWork || error == nil
-//
 func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testToRunRes, error) {
 	var ttr testToRunRes
 	alloc, err := qp.AcquireFunc(ctx, func(ctx context.Context, pi quotapool.PoolInfo) (uint64, error) {

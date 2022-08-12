@@ -43,43 +43,42 @@ import (
 // database and a testing diagnostics reporting server. The test implements the
 // following data-driven commands:
 //
-//  - exec
+//   - exec
 //
-//    Executes SQL statements against the database. Outputs no results on
-//    success. In case of error, outputs the error message.
+//     Executes SQL statements against the database. Outputs no results on
+//     success. In case of error, outputs the error message.
 //
-//  - feature-allowlist
+//   - feature-allowlist
 //
-//    The input for this command is not SQL, but a list of regular expressions.
-//    Tests that follow (until the next feature-allowlist command) will only
-//    output counters that match a regexp in this allow list.
+//     The input for this command is not SQL, but a list of regular expressions.
+//     Tests that follow (until the next feature-allowlist command) will only
+//     output counters that match a regexp in this allow list.
 //
-//  - feature-usage, feature-counters
+//   - feature-usage, feature-counters
 //
-//    Executes SQL statements and then outputs the feature counters from the
-//    allowlist that have been reported to the diagnostic server. The first
-//    variant outputs only the names of the counters that changed; the second
-//    variant outputs the counts as well. It is necessary to use
-//    feature-allowlist before these commands to avoid test flakes (e.g. because
-//    of counters that are changed by looking up descriptors).
-//    TODO(yuzefovich): counters currently don't really work because they are
-//    reset before executing every statement by reporter.ReportDiagnostics.
+//     Executes SQL statements and then outputs the feature counters from the
+//     allowlist that have been reported to the diagnostic server. The first
+//     variant outputs only the names of the counters that changed; the second
+//     variant outputs the counts as well. It is necessary to use
+//     feature-allowlist before these commands to avoid test flakes (e.g. because
+//     of counters that are changed by looking up descriptors).
+//     TODO(yuzefovich): counters currently don't really work because they are
+//     reset before executing every statement by reporter.ReportDiagnostics.
 //
-//  - schema
+//   - schema
 //
-//    Outputs reported schema information.
+//     Outputs reported schema information.
 //
-//  - sql-stats
+//   - sql-stats
 //
-//    Executes SQL statements and then outputs information about reported sql
-//    statement statistics.
+//     Executes SQL statements and then outputs information about reported sql
+//     statement statistics.
 //
-//  - rewrite
+//   - rewrite
 //
-//    Installs a rule to rewrite all matches of the regexp in the first
-//    line to the string in the second line. This is useful to eliminate
-//    non-determinism in the output.
-//
+//     Installs a rule to rewrite all matches of the regexp in the first
+//     line to the string in the second line. This is useful to eliminate
+//     non-determinism in the output.
 func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bool) {
 	// Note: these tests cannot be run in parallel (with each other or with other
 	// tests) because telemetry counters are global.

@@ -56,18 +56,18 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 //
 // Concretely,
 //
-// - The timestamp cache is checked to determine if the command's affected keys
-//   were accessed with a timestamp exceeding that of the command; if so, the
-//   command's timestamp is incremented accordingly.
-// - A RaftCommand is constructed. If proposer-evaluated KV is active,
-//   the request is evaluated and the Result is placed in the
-//   RaftCommand. If not, the request itself is added to the command.
-// - The proposal is inserted into the Replica's in-flight proposals map,
-//   a lease index is assigned to it, and it is submitted to Raft, returning
-//   a channel.
-// - The result of the Raft proposal is read from the channel and the command
-//   registered with the timestamp cache, its latches are released, and
-//   its result (which could be an error) is returned to the client.
+//   - The timestamp cache is checked to determine if the command's affected keys
+//     were accessed with a timestamp exceeding that of the command; if so, the
+//     command's timestamp is incremented accordingly.
+//   - A RaftCommand is constructed. If proposer-evaluated KV is active,
+//     the request is evaluated and the Result is placed in the
+//     RaftCommand. If not, the request itself is added to the command.
+//   - The proposal is inserted into the Replica's in-flight proposals map,
+//     a lease index is assigned to it, and it is submitted to Raft, returning
+//     a channel.
+//   - The result of the Raft proposal is read from the channel and the command
+//     registered with the timestamp cache, its latches are released, and
+//     its result (which could be an error) is returned to the client.
 //
 // Returns either a response or an error, along with the provided concurrency
 // guard if it is passing ownership back to the caller of the function.
@@ -739,7 +739,8 @@ func (r *Replica) newBatchedEngine(
 // (2) the transaction's commit timestamp has been forwarded
 // (3) the transaction exceeded its deadline
 // (4) the transaction is not in its first epoch and the EndTxn request does
-//     not require one phase commit.
+//
+//	not require one phase commit.
 func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false

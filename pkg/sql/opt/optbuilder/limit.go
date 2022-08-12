@@ -19,7 +19,9 @@ import (
 //
 // parentScope is the scope for the LIMIT/OFFSET expressions; this is not the
 // same as inScope, because statements like:
-//   SELECT k FROM kv LIMIT k
+//
+//	SELECT k FROM kv LIMIT k
+//
 // are not valid.
 func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 	if limit.Offset != nil {

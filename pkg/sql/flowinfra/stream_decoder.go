@@ -24,22 +24,23 @@ import (
 // records.
 //
 // Sample usage:
-//   sd := StreamDecoder{}
-//   var row sqlbase.EncDatumRow
-//   for each message in stream {
-//       err := sd.AddMessage(msg)
-//       if err != nil { ... }
-//       for {
-//           row, meta, err := sd.GetRow(row)
-//           if err != nil { ... }
-//           if row == nil && meta.Empty() {
-//               // No more rows in this message.
-//               break
-//           }
-//           // Use <row>
-//           ...
-//       }
-//   }
+//
+//	sd := StreamDecoder{}
+//	var row sqlbase.EncDatumRow
+//	for each message in stream {
+//	    err := sd.AddMessage(msg)
+//	    if err != nil { ... }
+//	    for {
+//	        row, meta, err := sd.GetRow(row)
+//	        if err != nil { ... }
+//	        if row == nil && meta.Empty() {
+//	            // No more rows in this message.
+//	            break
+//	        }
+//	        // Use <row>
+//	        ...
+//	    }
+//	}
 //
 // AddMessage can be called multiple times before getting the rows, but this
 // will cause data to accumulate internally.

@@ -112,7 +112,8 @@ type memoryTestCase struct {
 // Note that not all tests will check for a spill, it is enough that some
 // deterministic tests do so for the simple cases.
 // TODO(asubiotto): We might want to also return a verify() function that will
-//  check for leftover files.
+//
+//	check for leftover files.
 func getDiskQueueCfgAndMemoryTestCases(
 	t *testing.T, rng *rand.Rand,
 ) (colcontainer.DiskQueueCfg, func(), []memoryTestCase) {

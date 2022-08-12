@@ -67,13 +67,13 @@ type ServerConfig struct {
 // The server attempts to constrain the total amount of memory it uses for
 // processing incoming queries. This is accomplished with a multi-pronged
 // strategy:
-// + The server has a worker memory limit, which is a quota for the amount of
-//   memory that can be used across all currently executing queries.
-// + The server also has a pre-set limit on the number of parallel workers that
-//   can be executing at one time. Each worker is given an even share of the
-//   server's total memory limit, which it should not exceed.
-// + Each worker breaks its task into chunks which it will process sequentially;
-//   the size of each chunk is calculated to avoid exceeding the memory limit.
+//   - The server has a worker memory limit, which is a quota for the amount of
+//     memory that can be used across all currently executing queries.
+//   - The server also has a pre-set limit on the number of parallel workers that
+//     can be executing at one time. Each worker is given an even share of the
+//     server's total memory limit, which it should not exceed.
+//   - Each worker breaks its task into chunks which it will process sequentially;
+//     the size of each chunk is calculated to avoid exceeding the memory limit.
 //
 // In addition to this strategy, the server uses a memory monitor to track the
 // amount of memory being used in reality by worker tasks. This is intended to

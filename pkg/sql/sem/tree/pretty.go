@@ -414,25 +414,24 @@ func (node *Exprs) doc(p *PrettyCfg) pretty.Doc {
 // peelBinaryOperand conditionally (p.Simplify) removes the
 // parentheses around an expression. The parentheses are always
 // removed in the following conditions:
-// - if the operand is a unary operator (these are always
-//   of higher precedence): "(-a) * b" -> "-a * b"
-// - if the operand is a binary operator and its precedence
-//   is guaranteed to be higher: "(a * b) + c" -> "a * b + c"
+//   - if the operand is a unary operator (these are always
+//     of higher precedence): "(-a) * b" -> "-a * b"
+//   - if the operand is a binary operator and its precedence
+//     is guaranteed to be higher: "(a * b) + c" -> "a * b + c"
 //
 // Additionally, iff sameLevel is set, then parentheses are removed
 // around any binary operator that has the same precedence level as
 // the parent.
 // sameLevel can be set:
 //
-// - for the left operand of all binary expressions, because
-//   (in pg SQL) all binary expressions are left-associative.
-//   This rewrites e.g. "(a + b) - c" -> "a + b - c"
-//   and "(a - b) + c" -> "a - b + c"
-// - for the right operand when the parent operator is known
-//   to be fully associative, e.g.
-//   "a + (b - c)" -> "a + b - c" because "+" is fully assoc,
-//   but "a - (b + c)" cannot be simplified because "-" is not fully associative.
-//
+//   - for the left operand of all binary expressions, because
+//     (in pg SQL) all binary expressions are left-associative.
+//     This rewrites e.g. "(a + b) - c" -> "a + b - c"
+//     and "(a - b) + c" -> "a - b + c"
+//   - for the right operand when the parent operator is known
+//     to be fully associative, e.g.
+//     "a + (b - c)" -> "a + b - c" because "+" is fully assoc,
+//     but "a - (b + c)" cannot be simplified because "-" is not fully associative.
 func (p *PrettyCfg) peelBinaryOperand(e Expr, sameLevel bool, parenPrio int) Expr {
 	if !p.Simplify {
 		return e

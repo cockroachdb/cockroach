@@ -1516,11 +1516,11 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 // Test that when a Raft group is not able to establish a quorum, its Raft log
 // does not grow without bound. It tests two different scenarios where this used
 // to be possible (see #27772):
-// 1. The leader proposes a command and cannot establish a quorum. The leader
-//    continually re-proposes the command.
-// 2. The follower proposes a command and forwards it to the leader, who cannot
-//    establish a quorum. The follower continually re-proposes and forwards the
-//    command to the leader.
+//  1. The leader proposes a command and cannot establish a quorum. The leader
+//     continually re-proposes the command.
+//  2. The follower proposes a command and forwards it to the leader, who cannot
+//     establish a quorum. The follower continually re-proposes and forwards the
+//     command to the leader.
 func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4948,25 +4948,25 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 //
 // Given this behavior there are 4 troubling cases with regards to splits.
 //
-//   *  In all cases we begin with s1 processing a presplit snapshot for
-//      r20. After the split the store should have r21/3.
+//   - In all cases we begin with s1 processing a presplit snapshot for
+//     r20. After the split the store should have r21/3.
 //
 // In the first two cases the following occurs:
 //
-//   *  s1 receives a message for r21/3 prior to acquiring the split lock
-//      in r21. This will create an uninitialized r21/3 which may write
-//      HardState.
+//   - s1 receives a message for r21/3 prior to acquiring the split lock
+//     in r21. This will create an uninitialized r21/3 which may write
+//     HardState.
 //
-//   *  Before the r20 processes the split r21 is removed and re-added to
-//      s1 as r21/4. s1 receives a raft message destined for r21/4 and proceeds
-//      to destroy its uninitialized r21/3, laying down a tombstone at 4 in the
-//      process.
+//   - Before the r20 processes the split r21 is removed and re-added to
+//     s1 as r21/4. s1 receives a raft message destined for r21/4 and proceeds
+//     to destroy its uninitialized r21/3, laying down a tombstone at 4 in the
+//     process.
 //
-//  (1) s1 processes the split and finds the RHS to be an uninitialized replica
-//      with a higher replica ID.
+//     (1) s1 processes the split and finds the RHS to be an uninitialized replica
+//     with a higher replica ID.
 //
-//  (2) s1 crashes before processing the split, forgetting the replica ID of the
-//      RHS but retaining its tombstone.
+//     (2) s1 crashes before processing the split, forgetting the replica ID of the
+//     RHS but retaining its tombstone.
 //
 // In both cases we know that the RHS could not have committed anything because
 // it cannot have gotten a snapshot but we want to be sure to not synthesize a
@@ -4975,28 +4975,27 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 //
 // In the third and fourth cases:
 //
-//   *  s1 never receives a message for r21/3.
+//   - s1 never receives a message for r21/3.
 //
-//   *  Before the r20 processes the split r21 is removed and re-added to
-//      s1 as r21/4. s1 receives a raft message destined for r21/4 and has never
-//      heard about r21/3.
+//   - Before the r20 processes the split r21 is removed and re-added to
+//     s1 as r21/4. s1 receives a raft message destined for r21/4 and has never
+//     heard about r21/3.
 //
-//  (3) s1 processes the split and finds the RHS to be an uninitialized replica
-//      with a higher replica ID (but without a tombstone). This case is very
-//      similar to (1)
+//     (3) s1 processes the split and finds the RHS to be an uninitialized replica
+//     with a higher replica ID (but without a tombstone). This case is very
+//     similar to (1)
 //
-//  (4) s1 crashes still before processing the split, forgetting that it had
-//      known about r21/4. When it reboots r21/4 is totally partitioned and
-//      r20 becomes unpartitioned.
+//     (4) s1 crashes still before processing the split, forgetting that it had
+//     known about r21/4. When it reboots r21/4 is totally partitioned and
+//     r20 becomes unpartitioned.
 //
-//   *  r20 processes the split successfully and initialized r21/3.
+//   - r20 processes the split successfully and initialized r21/3.
 //
 // In the 4th case we find that until we unpartition r21/4 (the RHS) and let it
 // learn about its removal with a ReplicaTooOldError that it will be initialized
 // with a CommitIndex at 10 as r21/3, the split's value. After r21/4 becomes
 // unpartitioned it will learn it is removed by either catching up on its
 // its log or receiving a ReplicaTooOldError which will lead to a tombstone.
-//
 func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
