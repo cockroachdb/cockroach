@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 )
@@ -510,17 +512,19 @@ type replicateQueue struct {
 	purgCh <-chan time.Time
 	// updateCh is signalled every time there is an update to the cluster's store
 	// descriptors.
-	updateCh          chan time.Time
-	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
+	updateCh               chan time.Time
+	lastLeaseTransfer      atomic.Value // read and written by scanner & queue goroutines
+	logTracesThresholdFunc queueProcessTimeoutFunc
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
 func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replicateQueue {
 	rq := &replicateQueue{
-		metrics:   makeReplicateQueueMetrics(),
-		allocator: allocator,
-		purgCh:    time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
-		updateCh:  make(chan time.Time, 1),
+		metrics:                makeReplicateQueueMetrics(),
+		allocator:              allocator,
+		purgCh:                 time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
+		updateCh:               make(chan time.Time, 1),
+		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(permittedRangeScanSlowdown/2, rebalanceSnapshotRate, recoverySnapshotRate),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -661,7 +665,7 @@ func (rq *replicateQueue) process(
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChange(
+		requeue, err := rq.processOneChangeWithTracing(
 			ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
 		)
 		if isSnapshotError(err) {
@@ -736,6 +740,40 @@ type decommissionPurgatoryError struct{ error }
 func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = decommissionPurgatoryError{}
+
+// processOneChangeWithTracing executes processOneChange within a recording
+// span, such that if we encounter an error or processing takes longer than
+// half the timeout threshold, the recorded traces from the operation will be
+// output to the logs, along with any associated errors.
+func (rq *replicateQueue) processOneChangeWithTracing(
+	ctx context.Context,
+	repl *Replica,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
+	scatter, dryRun bool,
+) (requeue bool, err error) {
+	tCtx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
+		tracing.WithRecording(tracingpb.RecordingVerbose))
+	processStart := timeutil.Now()
+	defer func() {
+		processDuration := timeutil.Since(processStart)
+		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
+		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
+		if err != nil {
+			rec := sp.FinishAndGetConfiguredRecording()
+			// TODO(sarkesian): Utilize Allocator log channel once available.
+			log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec)
+		} else if exceededDuration {
+			rec := sp.FinishAndGetConfiguredRecording()
+			// TODO(sarkesian): Utilize Allocator log channel once available.
+			log.Infof(ctx, "processing replica took %s, exceeding threshold of %s\ntrace:\n%s", processDuration, loggingThreshold, rec)
+		} else {
+			sp.Finish()
+		}
+	}()
+
+	requeue, err = rq.processOneChange(tCtx, repl, canTransferLeaseFrom, scatter, dryRun)
+	return requeue, err
+}
 
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
@@ -1179,10 +1217,10 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 func (rq *replicateQueue) findRemoveVoter(
 	ctx context.Context,
 	repl interface {
-		DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
-		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
-		RaftStatus() *raft.Status
-	},
+	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
+	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
+	RaftStatus() *raft.Status
+},
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicationTarget, string, error) {
 	_, zone := repl.DescAndSpanConfig()
