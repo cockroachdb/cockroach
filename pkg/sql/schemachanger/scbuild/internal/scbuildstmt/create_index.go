@@ -102,6 +102,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 		}
 	})
+
+	if n.Unique {
+		index.ConstraintID = b.NextTableConstraintID(index.TableID)
+	}
+
 	if index.TableID == catid.InvalidDescID || source == nil {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not an indexable table or a materialized view", n.Table.ObjectName))
