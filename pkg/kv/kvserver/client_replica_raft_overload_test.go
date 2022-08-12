@@ -84,6 +84,9 @@ func TestReplicaRaftOverload(t *testing.T) {
 		if n := s1.Metrics().RaftPausedFollowerCount.Value(); n == 0 {
 			return errors.New("no paused followers")
 		}
+		if n := s1.Metrics().RaftPausedFollowerDroppedMsgs.Count(); n == 0 {
+			return errors.New("no dropped messages to paused followers")
+		}
 		return nil
 	})
 
