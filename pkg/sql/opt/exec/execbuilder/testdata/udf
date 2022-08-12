@@ -59,3 +59,39 @@ Scan /Table/106/1/1/0
 Scan /Table/106/1/2/0
 Scan /Table/106/1/1/0
 Scan /Table/106/1/2/0
+
+statement ok
+CREATE FUNCTION fetch_a_of_1(i INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1
+$$
+
+statement ok
+CREATE FUNCTION fetch_a_of_1_strict(i INT) RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1
+$$
+
+statement ok
+CREATE FUNCTION fetch_a_of_2_strict(i INT, j INT) RETURNS INT STRICT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 2
+$$
+
+# When the function is CALLED ON NULL INPUT then it should be evaluated
+# regardless of whether or not any of its inputs are NULL. The trace proves that
+# the function is evaluated. It shows the scan performed by the statement in the
+# function body.
+query T kvtrace
+SELECT fetch_a_of_1(NULL::INT)
+----
+Scan /Table/106/1/1/0
+
+# When the function RETURNS NULL ON NULL INPUT or STRICT then it should not be
+# evaluated if any of its inputs are NULL. The empty traces prove that the
+# function is not evaluated. No scan is performed for the statement in the
+# function body.
+query T kvtrace
+SELECT fetch_a_of_1_strict(NULL::INT)
+----
+
+query T kvtrace
+SELECT fetch_a_of_2_strict(1, NULL::INT)
+----

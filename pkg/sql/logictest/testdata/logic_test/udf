@@ -310,73 +310,6 @@ ALTER FUNCTION f() SET SCHEMA test_sc
 statement error pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
 
-subtest execution
-
-statement ok
-INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1)
-
-statement ok
-CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 2-1';
-
-query I
-SELECT one()
-----
-1
-
-query I colnames
-SELECT * FROM one()
-----
-one
-1
-
-query III colnames
-SELECT *, one() FROM ab WHERE a = one()
-----
-a  b  one
-1  1  1
-
-query III colnames
-SELECT *, one() FROM ab WHERE b = one()
-----
-a  b  one
-1  1  1
-4  1  1
-5  1  1
-
-query II colnames
-SELECT * FROM ab WHERE b = one() + 1
-----
-a  b
-2  2
-
-statement ok
-CREATE FUNCTION max_in_values() RETURNS INT LANGUAGE SQL AS $$
-  SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
-$$
-
-query I
-SELECT max_in_values()
-----
-3
-
-statement ok
-CREATE FUNCTION fetch_one_then_two() RETURNS INT LANGUAGE SQL AS $$
-  SELECT b FROM ab WHERE a = 1;
-  SELECT b FROM ab WHERE a = 2;
-$$
-
-query II
-SELECT i, fetch_one_then_two()
-FROM (VALUES (1), (2), (3)) AS v(i)
-WHERE i = fetch_one_then_two()
-----
-2  2
-
-query I colnames
-SELECT * FROM fetch_one_then_two()
-----
-fetch_one_then_two
-2
 
 subtest udf_pg_proc
 
@@ -399,9 +332,9 @@ query TTTTTBBBTITTTTT
 SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
 ----
-100124  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
-100125  proc_f    4101115737  1546506610  14  true   true   true   i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
-100128  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+100121  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
+100122  proc_f    4101115737  1546506610  14  true   true   true   i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
+100125  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
 
 subtest create_function_statements
 
@@ -419,7 +352,7 @@ CREATE FUNCTION public.proc_f(IN INT8)
     LANGUAGE SQL
     AS $$
     SELECT 1;
-$$  104  test  105  public  124  proc_f
+$$  104  test  105  public  121  proc_f
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
     RETURNS SETOF STRING
     IMMUTABLE
@@ -428,7 +361,7 @@ CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  105  public  125  proc_f
+$$  104  test  105  public  122  proc_f
 CREATE FUNCTION sc.proc_f_2(IN STRING)
     RETURNS STRING
     VOLATILE
@@ -437,7 +370,7 @@ CREATE FUNCTION sc.proc_f_2(IN STRING)
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  127  sc  128  proc_f_2
+$$  104  test  124  sc  125  proc_f_2
 
 statement ok
 CREATE DATABASE test_cross_db;
@@ -459,7 +392,7 @@ CREATE FUNCTION public.proc_f(IN INT8)
     LANGUAGE SQL
     AS $$
     SELECT 1;
-$$  104  test  105  public  124  proc_f
+$$  104  test  105  public  121  proc_f
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
     RETURNS SETOF STRING
     IMMUTABLE
@@ -468,7 +401,7 @@ CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  105  public  125  proc_f
+$$  104  test  105  public  122  proc_f
 CREATE FUNCTION sc.proc_f_2(IN STRING)
     RETURNS STRING
     VOLATILE
@@ -477,7 +410,7 @@ CREATE FUNCTION sc.proc_f_2(IN STRING)
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  127  sc  128  proc_f_2
+$$  104  test  124  sc  125  proc_f_2
 CREATE FUNCTION public.f_cross_db()
     RETURNS INT8
     VOLATILE
@@ -486,7 +419,7 @@ CREATE FUNCTION public.f_cross_db()
     LANGUAGE SQL
     AS $$
     SELECT 1;
-$$  129  test_cross_db  130  public  131  f_cross_db
+$$  126  test_cross_db  127  public  128  f_cross_db
 
 subtest show_create_function
 
@@ -557,12 +490,12 @@ proc_implicit
 query I
 SELECT 'proc_implicit'::REGPROC::INT;
 ----
-100126
+100123
 
 query T
 SELECT '100126'::REGPROC;
 ----
-proc_implicit
+100126
 
 query T
 SELECT 'sc.proc_f_2'::REGPROC;
@@ -572,7 +505,7 @@ proc_f_2
 query I
 SELECT 'sc.proc_f_2'::REGPROC::INT;
 ----
-100128
+100125
 
 statement error pq: unknown function: no_such_func()
 SELECT 'no_such_func'::REGPROC;
@@ -583,7 +516,7 @@ SELECT 'proc_f'::REGPROC;
 query T
 SELECT 100126::regproc;
 ----
-proc_implicit
+100126
 
 query I
 SELECT 100117::regproc::INT;
@@ -845,3 +778,210 @@ CREATE FUNCTION public.test_vf_f()
     AS $$
     SELECT lower('hello');
 $$
+
+
+subtest execution
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1)
+
+statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 2-1';
+
+query I
+SELECT one()
+----
+1
+
+query I colnames
+SELECT * FROM one()
+----
+one
+1
+
+query III colnames
+SELECT *, one() FROM ab WHERE a = one()
+----
+a  b  one
+1  1  1
+
+query III colnames
+SELECT *, one() FROM ab WHERE b = one()
+----
+a  b  one
+1  1  1
+4  1  1
+5  1  1
+
+query II colnames
+SELECT * FROM ab WHERE b = one() + 1
+----
+a  b
+2  2
+
+statement ok
+CREATE FUNCTION max_in_values() RETURNS INT LANGUAGE SQL AS $$
+  SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
+$$
+
+query I
+SELECT max_in_values()
+----
+3
+
+statement ok
+CREATE FUNCTION fetch_one_then_two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT b FROM ab WHERE a = 1;
+  SELECT b FROM ab WHERE a = 2;
+$$
+
+query II
+SELECT i, fetch_one_then_two()
+FROM (VALUES (1), (2), (3)) AS v(i)
+WHERE i = fetch_one_then_two()
+----
+2  2
+
+query I colnames
+SELECT * FROM fetch_one_then_two()
+----
+fetch_one_then_two
+2
+
+statement ok
+CREATE TABLE empty (e INT);
+CREATE FUNCTION empty_result() RETURNS INT LANGUAGE SQL AS $$
+  SELECT e FROM empty
+$$
+
+query I
+SELECT empty_result()
+----
+NULL
+
+statement ok
+CREATE FUNCTION int_identity(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i';
+
+query I
+SELECT int_identity(1)
+----
+1
+
+query I
+SELECT int_identity(10 + int_identity(1))
+----
+11
+
+query II
+SELECT a+b, int_identity(a+b) FROM ab WHERE a = int_identity(a) AND b = int_identity(b)
+----
+2  2
+4  4
+6  6
+5  5
+6  6
+
+# Define some custom arithmetic functions that we can write interesting tests
+# with that use builtin operators as oracles.
+statement ok
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x+y';
+
+statement ok
+CREATE FUNCTION sub(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x-y';
+
+statement ok
+CREATE FUNCTION mult(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x*y';
+
+query II
+SELECT a + a + a + b + b + b, add(a, add(a, add(a, add(b, add(b, b))))) FROM ab
+----
+6   6
+12  12
+18  18
+15  15
+18  18
+
+query II
+SELECT (a * (a + b)) - b, sub(mult(a, add(a, b)), b) FROM ab
+----
+1   1
+6   6
+15  15
+19  19
+29  29
+
+query II
+SELECT a * (3 + b - a) + a * b * a, add(mult(a, add(3, sub(b, a))), mult(a, mult(b, a))) FROM ab
+----
+4   4
+14  14
+36  36
+16  16
+20  20
+
+statement ok
+CREATE FUNCTION fetch_b(arg_a INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b FROM ab WHERE a = arg_a
+$$
+
+query II
+SELECT b, fetch_b(a) FROM ab
+----
+1  1
+2  2
+3  3
+1  1
+1  1
+
+query II
+SELECT b + (a * 7) - (a * b), add(fetch_b(a), sub(mult(a, 7), mult(a, fetch_b(a)))) FROM ab
+----
+7   7
+12  12
+15  15
+25  25
+31  31
+
+query I
+SELECT fetch_b(99999999)
+----
+NULL
+
+subtest volatility
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3);
+CREATE FUNCTION get_l(i INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_i(i INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_s(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION get_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT v FROM kv WHERE k = i;
+$$;
+CREATE FUNCTION int_identity_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT i;
+$$;
+
+# Only the volatile functions should see the changes made by the UPDATE in the
+# CTE.
+query IIIIIIII colnames
+WITH u AS (
+    UPDATE kv SET v = v + 10 RETURNING k
+)
+SELECT
+  get_l(k) l1, get_l(int_identity_v(k)) l2,
+  get_i(k) i1, get_i(int_identity_v(k)) i2,
+  get_s(k) s1, get_s(int_identity_v(k)) s2,
+  get_v(k) v1, get_v(int_identity_v(k)) v2
+FROM u;
+----
+l1  l2  i1  i2  s1  s2  v1  v2
+1   1   1   1   1   1   11  11
+2   2   2   2   2   2   12  12
+3   3   3   3   3   3   13  13

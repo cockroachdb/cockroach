@@ -3,7 +3,8 @@ init
 
 print
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:1}
 
@@ -12,35 +13,37 @@ set-try-get-return-value v=true
 
 admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
 ----
-tryGet: returning true
-id 1: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:1 admissionEnabled:true}
+tryGet regular: returning true
+id 1: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:1 workClass:0 admissionEnabled:true}
 
 work-done id=1
 ----
-storeWriteDone: originalTokens 1, doneBytes(write 0,ingested 0) returning 0
+storeWriteDone regular: originalTokens 1, doneBytes(write 0,ingested 0) returning 0
 
 set-store-request-estimates write-tokens=100
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 1, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 admit id=2 tenant=55 priority=0 create-time-millis=1 bypass=false
 ----
-tryGet: returning true
-id 2: admit succeeded with handle {tenantID:{InternalValue:55} writeTokens:100 admissionEnabled:true}
+tryGet regular: returning true
+id 2: admit succeeded with handle {tenantID:{InternalValue:55} writeTokens:100 workClass:0 admissionEnabled:true}
 
 admit id=3 tenant=53 priority=0 create-time-millis=1 bypass=false
 ----
-tryGet: returning true
-id 3: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:100 admissionEnabled:true}
+tryGet regular: returning true
+id 3: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:100 workClass:0 admissionEnabled:true}
 
 print
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
@@ -49,85 +52,176 @@ set-try-get-return-value v=false
 
 admit id=4 tenant=57 priority=0 create-time-millis=1 bypass=false
 ----
-tryGet: returning false
+tryGet regular: returning false
 
 work-done id=2 additional-tokens=500
 ----
-storeWriteDone: originalTokens 100, doneBytes(write 0,ingested 0) returning 500
+storeWriteDone regular: originalTokens 100, doneBytes(write 0,ingested 0) returning 500
 
 print
 ----
-closed epoch: 0 tenantHeap len: 1 top tenant: 57
+regular workqueue: closed epoch: 0 tenantHeap len: 1 top tenant: 57
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 0]
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 granted
 ----
-continueGrantChain 0
-id 4: admit succeeded with handle {tenantID:{InternalValue:57} writeTokens:100 admissionEnabled:true}
-granted: returned 100
+continueGrantChain regular 0
+id 4: admit succeeded with handle {tenantID:{InternalValue:57} writeTokens:100 workClass:0 admissionEnabled:true}
+granted regular: returned 100
 
 print
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 work-done id=3 ingested-bytes=1000000 additional-tokens=50000
 ----
-storeWriteDone: originalTokens 100, doneBytes(write 0,ingested 1000000) returning 50000
+storeWriteDone regular: originalTokens 100, doneBytes(write 0,ingested 1000000) returning 50000
 
 print
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 set-store-request-estimates write-tokens=10000
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:10000}
 
 work-done id=4 write-bytes=2000 ingested-bytes=1000 additional-tokens=2000
 ----
-storeWriteDone: originalTokens 100, doneBytes(write 2000,ingested 1000) returning 2000
+storeWriteDone regular: originalTokens 100, doneBytes(write 2000,ingested 1000) returning 2000
 
 print
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:10000}
 
 bypassed-work-done work-count=10 write-bytes=1000 ingested-bytes=1000000
 ----
-closed epoch: 0 tenantHeap len: 0
+storeWriteDone regular: originalTokens 0, doneBytes(write 1000,ingested 1000000) returning 2000
+
+print
+----
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
 stats-to-ignore ingested-bytes=12000 ingested-into-L0-bytes=9000
 ----
-closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+estimates:{writeTokens:10000}
+
+# Elastic work.
+admit id=5 tenant=53 priority=-30 create-time-millis=1 bypass=false
+----
+tryGet elastic: returning false
+
+# Noop since the only waiting work is elastic and this is granting to regular.
+# work.
+granted
+----
+granted regular: returned 0
+
+granted elastic=true
+----
+continueGrantChain elastic 0
+id 5: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:10000 workClass:1 admissionEnabled:true}
+granted elastic: returned 10000
+
+print
+----
+regular workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 10000, w: 1, fifo: -128
+stats:{admittedCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+estimates:{writeTokens:10000}
+
+set-try-get-return-value v=true elastic=true
+----
+
+admit id=6 tenant=54 priority=-40 create-time-millis=3 bypass=false
+----
+tryGet elastic: returning true
+id 6: admit succeeded with handle {tenantID:{InternalValue:54} writeTokens:10000 workClass:1 admissionEnabled:true}
+
+print
+----
+regular workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 10000, w: 1, fifo: -128
+ tenant-id: 54 used: 10000, w: 1, fifo: -128
+stats:{admittedCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+estimates:{writeTokens:10000}
+
+work-done id=5 write-bytes=1000 additional-tokens=200
+----
+storeWriteDone elastic: originalTokens 10000, doneBytes(write 1000,ingested 0) returning 200
+
+print
+----
+regular workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 10200, w: 1, fifo: -128
+ tenant-id: 54 used: 10000, w: 1, fifo: -128
+stats:{admittedCount:15 writeAccountedBytes:4000 ingestedAccountedBytes:2001000 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
+estimates:{writeTokens:10000}
+
+work-done id=6 ingested-bytes=500 additional-tokens=500
+----
+storeWriteDone elastic: originalTokens 10000, doneBytes(write 0,ingested 500) returning 500
+
+print
+----
+regular workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 50101, w: 1, fifo: -128
+ tenant-id: 55 used: 600, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+elastic workqueue: closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 10200, w: 1, fifo: -128
+ tenant-id: 54 used: 10500, w: 1, fifo: -128
+stats:{admittedCount:16 writeAccountedBytes:4000 ingestedAccountedBytes:2001500 statsToIgnore:{IngestOperationStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000}} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
