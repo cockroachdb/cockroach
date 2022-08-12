@@ -115,7 +115,7 @@ type SchemaChanger struct {
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
-	ieFactory            sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory            sqlutil.InternalExecutorFactory
 
 	// mvccCompliantAddIndex is set to true early in exec if we
 	// find that the schema change was created under the
@@ -145,11 +145,7 @@ func NewSchemaChangerForTesting(
 		execCfg:       execCfg,
 		// Note that this doesn't end up actually being session-bound but that's
 		// good enough for testing.
-		ieFactory: func(
-			ctx context.Context, sd *sessiondata.SessionData,
-		) sqlutil.InternalExecutor {
-			return execCfg.InternalExecutor
-		},
+		ieFactory:      execCfg.InternalExecutorFactory,
 		metrics:        NewSchemaChangerMetrics(),
 		clock:          db.Clock(),
 		distSQLPlanner: execCfg.DistSQLPlanner,
@@ -2451,8 +2447,21 @@ func (sc *SchemaChanger) txn(
 			return err
 		}
 	}
-
 	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
+}
+
+// txnWithExecutor is to run internal executor within a txn.
+func (sc *SchemaChanger) txnWithExecutor(
+	ctx context.Context,
+	sd *sessiondata.SessionData,
+	f func(context.Context, *kv.Txn, *descs.Collection, sqlutil.InternalExecutor) error,
+) error {
+	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
+		if err := fn(sc.job.ID()); err != nil {
+			return err
+		}
+	}
+	return sc.execCfg.CollectionFactory.TxnWithExecutor(ctx, sc.db, sd, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
@@ -2463,11 +2472,12 @@ func (sc *SchemaChanger) txn(
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context, execCfg *ExecutorConfig, ts hlc.Timestamp, descriptors *descs.Collection,
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	sd *sessiondata.SessionData,
+	ts hlc.Timestamp,
+	descriptors *descs.Collection,
 ) extendedEvalContext {
-
-	sd := NewFakeSessionData(execCfg.SV())
-
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
@@ -2573,10 +2583,8 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
-			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
-			},
-			metrics: p.ExecCfg().SchemaChangerMetrics,
+			ieFactory:            r.job.GetInternalExecutorFactory(),
+			metrics:              p.ExecCfg().SchemaChangerMetrics,
 		}
 		opts := retry.Options{
 			InitialBackoff: 20 * time.Millisecond,
@@ -2763,9 +2771,7 @@ func (r schemaChangeResumer) OnFailOrCancel(
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
-		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-			return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
-		},
+		ieFactory:            r.job.GetInternalExecutorFactory(),
 	}
 
 	if r.job.Payload().FinalResumeError == nil {

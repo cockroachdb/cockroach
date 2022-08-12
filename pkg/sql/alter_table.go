@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -558,10 +560,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-				if err := validateCheckInTxn(
-					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutorFactory,
-					params.SessionData(), n.tableDesc, params.p.Txn(), ck.Expr,
-				); err != nil {
+				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+					return validateCheckInTxn(ctx, &params.p.semaCtx, params.p.SessionData(), n.tableDesc, txn, ie, ck.Expr)
+				}); err != nil {
 					return err
 				}
 				ck.Validity = descpb.ConstraintValidity_Validated
@@ -581,19 +582,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-				if err := validateFkInTxn(
-					params.ctx,
-					params.ExecCfg().InternalExecutorFactory,
-					params.p.SessionData(),
-					n.tableDesc,
-					params.p.Txn(),
-					params.p.Descriptors(),
-					name,
-				); err != nil {
+				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+					return validateFkInTxn(ctx, n.tableDesc, txn, ie, params.p.descCollection, name)
+				}); err != nil {
 					return err
 				}
 				foundFk.Validity = descpb.ConstraintValidity_Validated
-
 			case descpb.ConstraintTypeUnique:
 				if constraint.Index == nil {
 					var foundUnique *descpb.UniqueWithoutIndexConstraint
@@ -610,11 +604,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
-					if err := validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx, params.ExecCfg().InternalExecutorFactory(
-							params.ctx, params.SessionData(),
-						), n.tableDesc, params.p.Txn(), params.p.User(), name,
-					); err != nil {
+					if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+						return validateUniqueWithoutIndexConstraintInTxn(
+							params.ctx,
+							n.tableDesc,
+							txn,
+							ie,
+							params.p.User(),
+							name,
+						)
+					}); err != nil {
 						return err
 					}
 					foundUnique.Validity = descpb.ConstraintValidity_Validated
