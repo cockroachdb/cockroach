@@ -178,18 +178,16 @@ func TestProvisional(t *testing.T) {
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.linux-amd64.tgz " +
 					"CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
-				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.linux-amd64 CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary v0.0.1-alpha release' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crosslinuxbase",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz " +
-					"CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.linux-amd64.tgz CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
-				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64 CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary v0.0.1-alpha release' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosbase",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip " +
-					"CONTENTS <binary stuff>",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip." +
-					"sha256sum CONTENTS <sha256sum>",
-				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.windows-6.2-amd64.exe " +
-					"CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql" +
-					" '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary v0.0.1-alpha release' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crosswindowsbase",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.windows-6.2-amd64.zip CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
 			},
 		},
 		{

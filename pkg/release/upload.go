@@ -35,8 +35,8 @@ type PutReleaseOptions struct {
 	VersionStr string
 
 	// Files are all the files to be included in the archive.
-	Files      []ArchiveFile
-	ExtraFiles []ArchiveFile
+	Files         []ArchiveFile
+	ArchivePrefix string
 }
 
 // PutNonReleaseOptions are options to pass into PutNonRelease.
@@ -50,7 +50,7 @@ type PutNonReleaseOptions struct {
 // PutRelease uploads a compressed archive containing the release
 // files and a checksum file of the archive.
 func PutRelease(svc ObjectPutGetter, o PutReleaseOptions) {
-	keys := makeArchiveKeys(o.Platform, o.VersionStr, "cockroach")
+	keys := makeArchiveKeys(o.Platform, o.VersionStr, o.ArchivePrefix)
 	var body bytes.Buffer
 
 	if strings.HasSuffix(keys.archive, ".zip") {
@@ -88,29 +88,6 @@ func PutRelease(svc ObjectPutGetter, o PutReleaseOptions) {
 	}
 	if err := svc.PutObject(&putObjectInputChecksum); err != nil {
 		log.Fatalf("failed uploading %s: %s", targetChecksum, err)
-	}
-	for _, f := range o.ExtraFiles {
-		keyBase, hasExe := TrimDotExe(f.ArchiveFilePath)
-		targetKeys := makeArchiveKeys(o.Platform, o.VersionStr, keyBase)
-		targetKey := targetKeys.base
-		if hasExe {
-			targetKey += ".exe"
-		}
-		log.Printf("Uploading to %s", svc.URL(targetKey))
-		handle, err := os.Open(f.LocalAbsolutePath)
-		if err != nil {
-			log.Fatalf("failed to open %s: %s", f.LocalAbsolutePath, err)
-		}
-		putObjectInput := PutObjectInput{
-			Key:  &targetKey,
-			Body: handle,
-		}
-		if o.NoCache {
-			putObjectInput.CacheControl = &NoCache
-		}
-		if err := svc.PutObject(&putObjectInput); err != nil {
-			log.Fatalf("failed uploading %s: %s", targetKey, err)
-		}
 	}
 }
 
@@ -241,14 +218,14 @@ type archiveKeys struct {
 
 // makeArchiveKeys extracts the target archive base and archive
 // name for the given parameters.
-func makeArchiveKeys(platform Platform, versionStr string, binaryPrefix string) archiveKeys {
+func makeArchiveKeys(platform Platform, versionStr string, archivePrefix string) archiveKeys {
 	suffix := SuffixFromPlatform(platform)
 	targetSuffix, hasExe := TrimDotExe(suffix)
 	if platform == PlatformLinux {
 		targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
 		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 	}
-	archiveBase := fmt.Sprintf("%s-%s", binaryPrefix, versionStr)
+	archiveBase := fmt.Sprintf("%s-%s", archivePrefix, versionStr)
 	targetArchiveBase := archiveBase + targetSuffix
 	keys := archiveKeys{
 		base: targetArchiveBase,
