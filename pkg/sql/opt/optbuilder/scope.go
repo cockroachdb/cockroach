@@ -411,8 +411,9 @@ func (s *scope) makePresentationWithHiddenCols() physical.Presentation {
 }
 
 // walkExprTree walks the given expression and performs name resolution,
-// replaces unresolved column names with columnProps, and replaces subqueries
-// with typed subquery structs.
+// replaces unresolved column names with columnProps, replaces subqueries with
+// typed subquery structs, and replaces placeholders with scope columns when
+// they are references to function arguments.
 func (s *scope) walkExprTree(expr tree.Expr) tree.Expr {
 	// TODO(peter): The caller should specify the desired number of columns. This
 	// is needed when a subquery is used by an UPDATE statement.
@@ -628,6 +629,22 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 		s.builder.trackReferencedColumnForViews(col)
 	}
 	return col
+}
+
+// findFuncArgCol returns the column that represents a function argument and has
+// an ordinal matching the given placeholder index. If such a column is not
+// found in the current scope, ancestor scopes are successively searched. If no
+// matching function argument column is found, nil is returned.
+func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			if col.funcArgReferencedBy(idx) {
+				return col
+			}
+		}
+	}
+	return nil
 }
 
 // startAggFunc is called when the builder starts building an aggregate
@@ -1013,6 +1030,17 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			panic(resolveErr)
 		}
 		return false, colI.(*scopeColumn)
+
+	case *tree.Placeholder:
+		// Replace placeholders that are references to function arguments with
+		// scope columns that represent those arguments.
+		//
+		// NOTE: This likely won't work if we want to allow PREPARE statements
+		// within user-defined function bodies. We'll need to avoid replacing
+		// placeholders that are prepared statement parameters.
+		if col := s.findFuncArgCol(t.Idx); col != nil {
+			return false, col
+		}
 
 	case *tree.FuncExpr:
 		semaCtx := s.builder.semaCtx

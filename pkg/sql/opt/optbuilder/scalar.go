@@ -625,12 +625,8 @@ func (b *Builder) buildUDF(
 	// arguments, we add them as columns to the scope so that references to them
 	// can be resolved.
 	//
-	// TODO(mgartner): Support anonymous arguments and placeholder-like syntax
-	// for referencing arguments, e.g., $1.
-	//
 	// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent
 	// CTEs that mutate and are not at the top-level.
-	//
 	bodyScope := b.allocScope()
 	var argCols opt.ColList
 	if o.Types.Length() > 0 {
@@ -643,13 +639,10 @@ func (b *Builder) buildUDF(
 		argCols = make(opt.ColList, len(args))
 		for i := range args {
 			arg := &args[i]
-			id := b.factory.Metadata().AddColumn(arg.Name, arg.Typ)
-			argCols[i] = id
-			bodyScope.appendColumn(&scopeColumn{
-				name: scopeColName(tree.Name(arg.Name)),
-				typ:  arg.Typ,
-				id:   id,
-			})
+			argColName := funcArgColName(tree.Name(arg.Name), i)
+			col := b.synthesizeColumn(bodyScope, argColName, arg.Typ, nil /* expr */, nil /* scalar */)
+			col.setArgOrd(i)
+			argCols[i] = col.id
 		}
 	}
 
