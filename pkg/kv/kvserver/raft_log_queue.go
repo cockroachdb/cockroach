@@ -99,15 +99,17 @@ import (
 // cycle of everyone running with the default value of true. It only exists as
 // a safety switch in case the new behavior causes unanticipated issues.
 // Current plan:
-// - v22.1: Has the setting. Expectation is that no one changes to false.
-// - v22.2: The code behavior is hard-coded to true, in that the setting has
-//   no effect (we can also delete a bunch of legacy code).
+//   - v22.1: Has the setting. Expectation is that no one changes to false.
+//   - v22.2: The code behavior is hard-coded to true, in that the setting has
+//     no effect (we can also delete a bunch of legacy code).
+//
 // Mixed version clusters:
-// - v21.2 and v22.1: Will behave as strongly coupled since the cluster
-//   version serves as an additional gate.
-// - v22.1 and v22.2: If the setting has been changed to false the v22.1 nodes
-//   will do strongly coupled truncation and the v22.2 will do loosely
-//   coupled. This co-existence is correct.
+//   - v21.2 and v22.1: Will behave as strongly coupled since the cluster
+//     version serves as an additional gate.
+//   - v22.1 and v22.2: If the setting has been changed to false the v22.1 nodes
+//     will do strongly coupled truncation and the v22.2 will do loosely
+//     coupled. This co-existence is correct.
+//
 // NB: The above comment is incorrect about the default value being true. Due
 // to https://github.com/cockroachdb/cockroach/issues/78412 we have changed
 // the default to false for v22.1.
@@ -218,15 +220,15 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 //
 // Unfortunately, the size tracking is not very robust as it suffers from two
 // limitations at the time of writing:
-// 1. it may undercount as it is in-memory and incremented only as proposals
-//    are handled; that is, a freshly started node will believe its Raft log to be
-//    zero-sized independent of its actual size, and
-// 2. the addition and corresponding subtraction happen in very different places
-//    and are difficult to keep bug-free, meaning that there is low confidence that
-//    we maintain the delta in a completely accurate manner over time. One example
-//    of potential errors are sideloaded proposals, for which the subtraction needs
-//    to load the size of the file on-disk (i.e. supplied by the fs), whereas
-//    the addition uses the in-memory representation of the file.
+//  1. it may undercount as it is in-memory and incremented only as proposals
+//     are handled; that is, a freshly started node will believe its Raft log to be
+//     zero-sized independent of its actual size, and
+//  2. the addition and corresponding subtraction happen in very different places
+//     and are difficult to keep bug-free, meaning that there is low confidence that
+//     we maintain the delta in a completely accurate manner over time. One example
+//     of potential errors are sideloaded proposals, for which the subtraction needs
+//     to load the size of the file on-disk (i.e. supplied by the fs), whereas
+//     the addition uses the in-memory representation of the file.
 //
 // Ideally, a Raft log that grows large for whichever reason (for instance the
 // queue being stuck on another replica) wouldn't be more than a nuisance on
@@ -351,15 +353,15 @@ const (
 
 // No assumption should be made about the relationship between
 // RaftStatus.Commit, FirstIndex, LastIndex. This is because:
-// - In some cases they are not updated or read atomically.
-// - FirstIndex is a potentially future first index, after the pending
-//   truncations have been applied. Currently, pending truncations are being
-//   proposed through raft, so one can be sure that these pending truncations
-//   do not refer to entries that are not already in the log. However, this
-//   situation may change in the future. In general, we should not make an
-//   assumption on what is in the local raft log based solely on FirstIndex,
-//   and should be based on whether [FirstIndex,LastIndex] is a non-empty
-//   interval.
+//   - In some cases they are not updated or read atomically.
+//   - FirstIndex is a potentially future first index, after the pending
+//     truncations have been applied. Currently, pending truncations are being
+//     proposed through raft, so one can be sure that these pending truncations
+//     do not refer to entries that are not already in the log. However, this
+//     situation may change in the future. In general, we should not make an
+//     assumption on what is in the local raft log based solely on FirstIndex,
+//     and should be based on whether [FirstIndex,LastIndex] is a non-empty
+//     interval.
 type truncateDecisionInput struct {
 	RaftStatus            raft.Status
 	LogSize, MaxLogSize   int64

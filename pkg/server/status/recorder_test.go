@@ -12,7 +12,7 @@ package status
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"os"
 	"reflect"
 	"sort"
@@ -399,7 +399,7 @@ func TestMetricsRecorder(t *testing.T) {
 			if _, err := recorder.MarshalJSON(); err != nil {
 				t.Error(err)
 			}
-			_ = recorder.PrintAsText(ioutil.Discard)
+			_ = recorder.PrintAsText(io.Discard)
 			_ = recorder.GetTimeSeriesData()
 			wg.Done()
 		}()

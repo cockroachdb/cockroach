@@ -16,13 +16,13 @@
 //
 // There are two separate schemes for encoding values:
 //
-//  - version 1 (legacy): the original encoding, which supported at most one SQL
-//    value (column) per roachpb.Value. It is still used for old table
-//    descriptors that went through many upgrades, and for some system tables.
-//    Primitives related to this version contain the name `Legacy`.
+//   - version 1 (legacy): the original encoding, which supported at most one SQL
+//     value (column) per roachpb.Value. It is still used for old table
+//     descriptors that went through many upgrades, and for some system tables.
+//     Primitives related to this version contain the name `Legacy`.
 //
-//  - version 2 (column families): the current encoding which supports multiple
-//    SQL values (columns) per roachpb.Value.
+//   - version 2 (column families): the current encoding which supports multiple
+//     SQL values (columns) per roachpb.Value.
 //
 // See also: docs/tech-notes/encoding.md.
 package valueside

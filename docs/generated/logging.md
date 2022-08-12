@@ -44,25 +44,25 @@ See [Configure logs](configure-logs.html#dev-channel).
 The `OPS` channel is used to report "point" operational events,
 initiated by user operators or automation:
 
-- Operator or system actions on server processes: process starts,
-  stops, shutdowns, crashes (if they can be logged),
-  including each time: command-line parameters, current version being run
-- Actions that impact the topology of a cluster: node additions,
-  removals, decommissions, etc.
-- Job-related initiation or termination
-- [Cluster setting](cluster-settings.html) changes
-- [Zone configuration](configure-replication-zones.html) changes
+  - Operator or system actions on server processes: process starts,
+    stops, shutdowns, crashes (if they can be logged),
+    including each time: command-line parameters, current version being run
+  - Actions that impact the topology of a cluster: node additions,
+    removals, decommissions, etc.
+  - Job-related initiation or termination
+  - [Cluster setting](cluster-settings.html) changes
+  - [Zone configuration](configure-replication-zones.html) changes
 
 ### `HEALTH`
 
 The `HEALTH` channel is used to report "background" operational
 events, initiated by CockroachDB or reporting on automatic processes:
 
-- Current resource usage, including critical resource usage
-- Node-node connection events, including connection errors and
-  gossip details
-- Range and table leasing events
-- Up- and down-replication, range unavailability
+  - Current resource usage, including critical resource usage
+  - Node-node connection events, including connection errors and
+    gossip details
+  - Range and table leasing events
+  - Up- and down-replication, range unavailability
 
 ### `STORAGE`
 
@@ -75,9 +75,9 @@ The `SESSIONS` channel is used to report client network activity when enabled vi
 the `server.auth_log.sql_connections.enabled` and/or
 `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
 
-- Connections opened/closed
-- Authentication events: logins, failed attempts
-- Session and query cancellation
+  - Connections opened/closed
+  - Authentication events: logins, failed attempts
+  - Session and query cancellation
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
@@ -91,9 +91,9 @@ zone configuration changes (which go to the `OPS` channel).
 
 This includes:
 
-- Database/schema/table/sequence/view/type creation
-- Adding/removing/changing table columns
-- Changing sequence parameters
+  - Database/schema/table/sequence/view/type creation
+  - Adding/removing/changing table columns
+  - Changing sequence parameters
 
 `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 functional behavior of client apps using stored objects.
@@ -103,10 +103,10 @@ functional behavior of client apps using stored objects.
 The `USER_ADMIN` channel is used to report changes
 in users and roles, including:
 
-- Users added/dropped
-- Changes to authentication credentials (e.g., passwords, validity, etc.)
-- Role grants/revocations
-- Role option grants/revocations
+  - Users added/dropped
+  - Changes to authentication credentials (e.g., passwords, validity, etc.)
+  - Role grants/revocations
+  - Role option grants/revocations
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
@@ -116,8 +116,8 @@ numbering and synchronous writes.
 The `PRIVILEGES` channel is used to report data
 authorization changes, including:
 
-- Privilege grants/revocations on database, objects, etc.
-- Object ownership changes
+  - Privilege grants/revocations on database, objects, etc.
+  - Object ownership changes
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
@@ -127,10 +127,10 @@ numbering and synchronous writes.
 The `SENSITIVE_ACCESS` channel is used to report SQL
 data access to sensitive data:
 
-- Data access audit events (when table audit is enabled via
-  [EXPERIMENTAL_AUDIT](experimental-audit.html))
-- SQL statements executed by users with the admin role
-- Operations that write to system tables
+  - Data access audit events (when table audit is enabled via
+    [EXPERIMENTAL_AUDIT](experimental-audit.html))
+  - SQL statements executed by users with the admin role
+  - Operations that write to system tables
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
@@ -140,9 +140,9 @@ numbering and synchronous writes.
 The `SQL_EXEC` channel is used to report SQL execution on
 behalf of client connections:
 
-- Logical SQL statement executions (when enabled via the
-  `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-- uncaught Go panic errors during the execution of a SQL statement.
+  - Logical SQL statement executions (when enabled via the
+    `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+  - uncaught Go panic errors during the execution of a SQL statement.
 
 ### `SQL_PERF`
 

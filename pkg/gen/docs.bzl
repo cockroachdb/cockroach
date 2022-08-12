@@ -284,7 +284,6 @@ DOCS_SRCS = [
   "//docs/generated/sql:functions.md",
   "//docs/generated/sql:operators.md",
   "//docs/generated/sql:window_functions.md",
-  "//docs/generated/swagger:spec.json",
   "//docs/generated:eventlog.md",
   "//docs/generated:logformats.md",
   "//docs/generated:logging.md",

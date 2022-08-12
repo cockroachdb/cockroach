@@ -47,8 +47,9 @@ type toDelete struct {
 
 // DropTable drops a table.
 // Privileges: DROP on table.
-//   Notes: postgres allows only the table owner to DROP a table.
-//          mysql requires the DROP privilege on the table.
+//
+//	Notes: postgres allows only the table owner to DROP a table.
+//	       mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,

@@ -13,7 +13,7 @@ package clisqlexec
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -87,7 +87,7 @@ func TestRenderHTML(t *testing.T) {
 		name := fmt.Sprintf("escape=%v/rowStats=%v", tc.reporter.escape, tc.reporter.rowStats)
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			err := render(&tc.reporter, &buf, ioutil.Discard,
+			err := render(&tc.reporter, &buf, io.Discard,
 				cols, NewRowSliceIter(rows, align),
 				nil /* completedHook */, nil /* noRowsHook */)
 			if err != nil {

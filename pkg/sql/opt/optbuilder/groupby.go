@@ -108,12 +108,11 @@ type groupby struct {
 // expression in the SELECT list must be a GROUP BY expression or be composed
 // of GROUP BY expressions. For example, this query is legal:
 //
-//   SELECT COUNT(*), k + v FROM kv GROUP by k, v
+//	SELECT COUNT(*), k + v FROM kv GROUP by k, v
 //
 // but this query is not:
 //
-//   SELECT COUNT(*), k + v FROM kv GROUP BY k - v
-//
+//	SELECT COUNT(*), k + v FROM kv GROUP BY k - v
 type groupByStrSet map[string]*scopeColumn
 
 // hasNonCommutativeAggregates checks whether any of the aggregates are
@@ -485,9 +484,11 @@ func (b *Builder) buildHaving(having tree.TypedExpr, fromScope *scope) opt.Scala
 //
 // groupBy   The given GROUP BY expressions.
 // selects   The select expressions are needed in case one of the GROUP BY
-//           expressions is an index into to the select list. For example,
-//               SELECT count(*), k FROM t GROUP BY 2
-//           indicates that the grouping is on the second select expression, k.
+//
+//	expressions is an index into to the select list. For example,
+//	    SELECT count(*), k FROM t GROUP BY 2
+//	indicates that the grouping is on the second select expression, k.
+//
 // fromScope The scope for the input to the aggregation (the FROM clause).
 func (b *Builder) buildGroupingList(
 	groupBy tree.GroupBy, selects tree.SelectExprs, projectionsScope *scope, fromScope *scope,
@@ -517,16 +518,22 @@ func (b *Builder) buildGroupingList(
 // expression. The expression (or expressions, if we have a star) is added to
 // groupStrs and to the aggInScope.
 //
-//
 // groupBy          The given GROUP BY expression.
 // selects          The select expressions are needed in case the GROUP BY
-//                  expression is an index into to the select list.
+//
+//	expression is an index into to the select list.
+//
 // projectionsScope The scope that contains the columns for the SELECT targets
-//                  (used when GROUP BY refers to a target by alias).
+//
+//	(used when GROUP BY refers to a target by alias).
+//
 // fromScope        The scope for the input to the aggregation (the FROM
-//                  clause).
+//
+//	clause).
+//
 // aggInScope       The scope that will contain the grouping expressions as well
-//                  as the aggregate function arguments.
+//
+//	as the aggregate function arguments.
 func (b *Builder) buildGrouping(
 	groupBy tree.Expr, selects tree.SelectExprs, projectionsScope, fromScope, aggInScope *scope,
 ) {
@@ -674,10 +681,10 @@ func translateAggName(name string) string {
 // aggregate function are extracted and added to aggInScope. The aggregate
 // function expression itself is added to aggOutScope. For example:
 //
-//   SELECT SUM(x+1) FROM xy
-//   =>
-//   aggInScope : x+1 AS column1
-//   aggOutScope: SUM(column1)
+//	SELECT SUM(x+1) FROM xy
+//	=>
+//	aggInScope : x+1 AS column1
+//	aggOutScope: SUM(column1)
 //
 // buildAggregateFunction returns a pointer to the aggregateInfo containing
 // the function definition, fully built arguments, and the aggregate output

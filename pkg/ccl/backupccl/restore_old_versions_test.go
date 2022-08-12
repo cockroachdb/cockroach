@@ -49,18 +49,17 @@ import (
 //
 // The SSTs were created via the following commands:
 //
-//  VERSION=...
-//  roachprod wipe local
-//  roachprod stage local release ${VERSION}
-//  roachprod start local
-//  # If the version is v1.0.7 then you need to enable enterprise with the
-//  # enterprise.enabled cluster setting.
-//  roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/create.sql)"
-//  # Create an S3 bucket to store the backup.
-//  roachprod sql local:1 -- -e "BACKUP DATABASE test TO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
-//  # Then download the backup from s3 and plop the files into the appropriate
-//  # testdata directory.
-//
+//	VERSION=...
+//	roachprod wipe local
+//	roachprod stage local release ${VERSION}
+//	roachprod start local
+//	# If the version is v1.0.7 then you need to enable enterprise with the
+//	# enterprise.enabled cluster setting.
+//	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/create.sql)"
+//	# Create an S3 bucket to store the backup.
+//	roachprod sql local:1 -- -e "BACKUP DATABASE test TO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
+//	# Then download the backup from s3 and plop the files into the appropriate
+//	# testdata directory.
 func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
