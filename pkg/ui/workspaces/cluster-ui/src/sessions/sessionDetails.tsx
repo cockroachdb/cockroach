@@ -41,10 +41,7 @@ import { Button } from "../button";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Text, TextTypes } from "../text";
 import { SqlBox } from "src/sql/box";
-import {
-  NodeLink,
-  StatementLinkTarget,
-} from "src/statementsTable/statementsTableContent";
+import { NodeLink } from "src/statementsTable/statementsTableContent";
 
 import {
   ICancelQueryRequest,

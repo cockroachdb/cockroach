@@ -104,7 +104,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
@@ -124,7 +124,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │         BACKFILLED → DELETE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -144,7 +144,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │         DELETE_ONLY → MERGE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -164,7 +164,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │         MERGE_ONLY → MERGED
 │   │   │
 │   │   └── • 1 Backfill operation
@@ -178,7 +178,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │         MERGED → WRITE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -198,7 +198,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
-│       │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+│       │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │       │         WRITE_ONLY → VALIDATED
 │       │
 │       └── • 1 Validation operation
@@ -287,7 +287,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │
     │   ├── • 2 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
@@ -299,7 +299,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
     │   │       │ ABSENT → PUBLIC
     │   │       │
-    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │             rule: "index existence precedes index name and comment"
     │   │
     │   ├── • 1 element transitioning toward TRANSIENT_ABSENT

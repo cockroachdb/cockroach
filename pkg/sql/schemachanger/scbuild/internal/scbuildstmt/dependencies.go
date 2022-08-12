@@ -196,6 +196,10 @@ type TableHelpers interface {
 	// to this materialized view.
 	NextViewIndexID(view *scpb.View) catid.IndexID
 
+	// NextTableConstraintID returns the ID that should be used for any new constraint
+	// added to this table.
+	NextTableConstraintID(table *scpb.Table) catid.ConstraintID
+
 	// IndexPartitioningDescriptor creates a new partitioning descriptor
 	// for the secondary index element, or panics.
 	IndexPartitioningDescriptor(

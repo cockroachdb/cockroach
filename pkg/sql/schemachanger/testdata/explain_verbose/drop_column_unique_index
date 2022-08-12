@@ -29,22 +29,22 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
 │       │   │
-│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │   │     ABSENT → BACKFILL_ONLY
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
@@ -102,7 +102,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │           │
 │           ├── • MakeAddedIndexBackfilling
 │           │     Index:
-│           │       ConstraintID: 1
+│           │       ConstraintID: 5
 │           │       IndexID: 4
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -111,7 +111,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
-│           │       ConstraintID: 1
+│           │       ConstraintID: 6
 │           │       IndexID: 5
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
@@ -210,7 +210,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
@@ -236,7 +236,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         BACKFILLED → DELETE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -256,7 +256,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         DELETE_ONLY → MERGE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -276,7 +276,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         MERGE_ONLY → MERGED
 │   │   │
 │   │   └── • 1 Backfill operation
@@ -290,7 +290,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │   │   │         MERGED → WRITE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -310,7 +310,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
-│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
 │       │         WRITE_ONLY → VALIDATED
 │       │
 │       └── • 1 Validation operation
@@ -363,7 +363,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
     │   │
     │   ├── • 2 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
@@ -375,7 +375,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
     │   │   └── • IndexName:{DescID: 106, Name: test_pkey, IndexID: 4}
     │   │       │ ABSENT → PUBLIC
     │   │       │
-    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 1, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
     │   │             rule: "index existence precedes index name and comment"
     │   │
     │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
