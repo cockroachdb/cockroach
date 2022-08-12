@@ -472,6 +472,85 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	}
 }
 
+// TestFullRangeDeleteHeuristic verifies that deleting all data with range
+// tombstone will lower time threshold needed to enable GC of data.
+func TestFullRangeDeleteHeuristic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	rng, _ := randutil.NewTestRand()
+
+	var keys []roachpb.Key
+	fillDataForStats := func(rw storage.ReadWriter, keyCount, valCount int) (enginepb.MVCCStats, hlc.Timestamp) {
+		for i := 0; i < keyCount; i++ {
+			stringKey := randutil.RandString(rng, 20, randutil.PrintableKeyAlphabet)
+			keys = append(keys, roachpb.Key(stringKey))
+		}
+		var ms enginepb.MVCCStats
+		for i := 1; i < valCount; i++ {
+			key := keys[rng.Intn(keyCount)]
+			var value roachpb.Value
+			if rng.Float32() > 0.5 {
+				value.SetBytes(make([]byte, 20))
+			}
+			require.NoError(t, storage.MVCCPut(ctx, rw, &ms, key,
+				hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(i)}, hlc.ClockTimestamp{},
+				value, nil))
+		}
+		return ms, hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(valCount)}
+	}
+
+	deleteWithTobmstone := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
+		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, ms,
+			[]byte{0}, []byte{0xff},
+			delTime, hlc.ClockTimestamp{},
+			nil, nil, 1, nil))
+	}
+	_ = deleteWithTobmstone
+	deleteWithPoints := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
+		for _, key := range keys {
+			require.NoError(t, storage.MVCCPut(ctx, rw, ms, key, delTime, hlc.ClockTimestamp{}, roachpb.Value{}, nil))
+		}
+	}
+
+	ms, deletionTime := fillDataForStats(eng, 100, 10000)
+
+	shouldQueueAfter := func(ms enginepb.MVCCStats, delay time.Duration, gcTTL time.Duration) bool {
+		now := deletionTime.Add(delay.Nanoseconds(), 0)
+		r := makeMVCCGCQueueScoreImpl(ctx, 0 /* seed */, now, ms, gcTTL, hlc.Timestamp{}, true,
+			time.Hour)
+		return r.ShouldQueue
+	}
+
+	rangeMs := ms
+	pointMs := ms
+	deleteWithTobmstone(eng.NewBatch(), deletionTime, &rangeMs)
+	deleteWithPoints(eng.NewBatch(), deletionTime, &pointMs)
+
+	gcTTL := time.Minute * 30
+	for _, d := range []struct {
+		delayMin           int
+		pointDel, rangeDel bool
+	}{
+		{delayMin: 20, pointDel: false, rangeDel: false},
+		{delayMin: 30, pointDel: false, rangeDel: true},
+		{delayMin: 61, pointDel: true, rangeDel: true},
+	} {
+		t.Run(fmt.Sprintf("delay=%d", d.delayMin), func(t *testing.T) {
+			delay := time.Minute * time.Duration(d.delayMin)
+			dr := shouldQueueAfter(rangeMs, delay, gcTTL)
+			dp := shouldQueueAfter(pointMs, delay, gcTTL)
+			fmt.Printf("Delay min: %f, Queue del points: %t Queue del range: %t\n", delay.Minutes(), dp,
+				dr)
+			require.Equal(t, d.pointDel, dp, "expect enqueue metric for point deletion")
+			require.Equal(t, d.rangeDel, dr, "expect enqueue metric for range deletion")
+		})
+	}
+}
+
 // TestMVCCGCQueueProcess creates test data in the range over various time
 // scales and verifies that scan queue process properly GCs test data.
 func TestMVCCGCQueueProcess(t *testing.T) {
