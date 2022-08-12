@@ -65,44 +65,44 @@ func (s *spanConfigStore) TestingSplitKeys(tb testing.TB, start, end roachpb.RKe
 // TestDataDriven runs datadriven tests against the Store interface.
 // The syntax is as follows:
 //
-// 		apply
-// 		delete [a,c)
-// 		set [c,h):X
-// 		set {entire-keyspace}:X
-// 		set {source=1,target=1}:Y
-// 		----
-// 		deleted [b,d)
-// 		deleted [e,g)
-// 		added [c,h):X
-// 		added {entire-keyspace}:X
-// 		added {source=1,target=1}:Y
+//	apply
+//	delete [a,c)
+//	set [c,h):X
+//	set {entire-keyspace}:X
+//	set {source=1,target=1}:Y
+//	----
+//	deleted [b,d)
+//	deleted [e,g)
+//	added [c,h):X
+//	added {entire-keyspace}:X
+//	added {source=1,target=1}:Y
 //
-// 		get key=b
-// 		----
-// 		conf=A # or conf=FALLBACK if the key is not present
+//	get key=b
+//	----
+//	conf=A # or conf=FALLBACK if the key is not present
 //
-// 		needs-split span=[b,h)
-// 		----
-// 		true
+//	needs-split span=[b,h)
+//	----
+//	true
 //
-// 		compute-split span=[b,h)
-// 		----
-// 		key=c
+//	compute-split span=[b,h)
+//	----
+//	key=c
 //
-// 		split-keys span=[b,h)
-// 		----
-// 		key=c
+//	split-keys span=[b,h)
+//	----
+//	key=c
 //
-// 		overlapping span=[b,h)
-// 		----
-// 		[b,d):A
-// 		[d,f):B
-// 		[f,h):A
+//	overlapping span=[b,h)
+//	----
+//	[b,d):A
+//	[d,f):B
+//	[f,h):A
 //
-// 		interned
-// 		----
-// 		A (refs = 2)
-// 		B (refs = 1)
+//	interned
+//	----
+//	A (refs = 2)
+//	B (refs = 1)
 //
 // Text of the form [a,b), {entire-keyspace}, {source=1,target=20}, and [a,b):C
 // correspond to targets {spans, system targets} and span config records; see

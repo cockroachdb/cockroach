@@ -109,11 +109,10 @@ type testRelation []testRow
 
 // String prints out the test relation in the following format:
 //
-//   1     2     3
-//   -------------
-//   NULL  1     2
-//   3     NULL  4
-//
+//	1     2     3
+//	-------------
+//	NULL  1     2
+//	3     NULL  4
 func (tr testRelation) String() string {
 	if len(tr) == 0 {
 		return "  <empty>\n"
@@ -249,9 +248,9 @@ func (tr testRelation) notNullCols(numCols int) opt.ColSet {
 
 // joinTestRelations creates a possible result of joining two testRelations,
 // specifically:
-//  - an inner join if both leftOuter and rightOuter are false;
-//  - a left/right outer join if one of them is true;
-//  - a full outer join if both are true.
+//   - an inner join if both leftOuter and rightOuter are false;
+//   - a left/right outer join if one of them is true;
+//   - a full outer join if both are true.
 func joinTestRelations(
 	numLeftCols int,
 	left testRelation,
@@ -720,14 +719,14 @@ func (ts *testState) format(b *strings.Builder) {
 
 // String describes the chain of operations and corresponding FDs.
 // For example:
-//   initial numCols=3 valRange=3
-//    => MakeNotNull(2)
-//       FDs:
-//    => AddConstants(1,3) values {NULL,1}
-//       FDs: ()-->(1,3)
-//    => AddLaxKey(3)
-//       FDs: ()-->(1-3)
 //
+//	initial numCols=3 valRange=3
+//	 => MakeNotNull(2)
+//	    FDs:
+//	 => AddConstants(1,3) values {NULL,1}
+//	    FDs: ()-->(1,3)
+//	 => AddLaxKey(3)
+//	    FDs: ()-->(1-3)
 func (ts *testState) String() string {
 	var b strings.Builder
 	ts.format(&b)
@@ -781,7 +780,6 @@ func (ts *testState) child(t *testing.T, op testOp) *testState {
 // To reuse work, instead of generating one chain of operations at a time, we
 // generate a tree of operations; each path from root to a leaf is a chain that
 // is getting tested.
-//
 func TestFuncDepOpsRandom(t *testing.T) {
 	type testParams struct {
 		testConfig

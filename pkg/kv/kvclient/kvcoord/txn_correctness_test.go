@@ -877,7 +877,8 @@ func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T
 // reader must not see intermediate results from the reader/writer.
 //
 // Read skew would typically fail with a history such as:
-//    R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
+//
+//	R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
 func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -909,11 +910,13 @@ func TestTxnDBReadSkewAnomaly(t *testing.T) {
 // depending on priority.
 //
 // Lost update would typically fail with a history such as:
-//   R1(A) R2(A) I1(A) I2(A) C1 C2
+//
+//	R1(A) R2(A) I1(A) I2(A) C1 C2
 //
 // However, the following variant will cause a lost update in
 // READ_COMMITTED and in practice requires REPEATABLE_READ to avoid.
-//   R1(A) R2(A) I1(A) C1 I2(A) C2
+//
+//	R1(A) R2(A) I1(A) C1 I2(A) C2
 func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -942,7 +945,8 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 // even on keys which have no values written.
 //
 // Lost delete would typically fail with a history such as:
-//   D2(A) R1(A) D2(B) C2 W1(B,A) C1
+//
+//	D2(A) R1(A) D2(B) C2 W1(B,A) C1
 func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -978,7 +982,8 @@ func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 // test is retained for good measure.
 //
 // Lost delete range would typically fail with a history such as:
-//   D2(A) DR2(B-C) R1(A) C2 W1(B,A) C1
+//
+//	D2(A) DR2(B-C) R1(A) C2 W1(B,A) C1
 func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1010,7 +1015,8 @@ func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 // ranges when settling concurrency issues.
 //
 // Phantom reads would typically fail with a history such as:
-//   R2(B) SC1(A-C) I2(B) C2 SC1(A-C) C1
+//
+//	R2(B) SC1(A-C) I2(B) C2 SC1(A-C) C1
 func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1034,7 +1040,8 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 // functionality causes read/write conflicts.
 //
 // Phantom deletes would typically fail with a history such as:
-//   R2(B) DR1(A-C) I2(B) C2 SC1(A-C) W1(D,A+B) C1
+//
+//	R2(B) DR1(A-C) I2(B) C2 SC1(A-C) W1(D,A+B) C1
 func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1063,7 +1070,8 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 // "skew".
 //
 // Write skew would typically fail with a history such as:
-//   SC1(A-C) SC2(A-C) W1(A,A+B+1) C1 W2(B,A+B+1) C2
+//
+//	SC1(A-C) SC2(A-C) W1(A,A+B+1) C1 W2(B,A+B+1) C2
 //
 // In the test below, each txn reads A and B and increments one by 1.
 // The read values and increment are then summed and written either to

@@ -15,22 +15,22 @@
 // API for querying information about CockroachDB health, nodes, ranges,
 // sessions, and other meta entities.
 //
-//     Schemes: http, https
-//     Host: localhost
-//     BasePath: /api/v2/
-//     Version: 2.0.0
-//     License: Business Source License
+//	Schemes: http, https
+//	Host: localhost
+//	BasePath: /api/v2/
+//	Version: 2.0.0
+//	License: Business Source License
 //
-//     Produces:
-//     - application/json
+//	Produces:
+//	- application/json
 //
-//     SecurityDefinitions:
-//       api_session:
-//          type: apiKey
-//          name: X-Cockroach-API-Session
-//          description: Handle to logged-in REST session. Use `/login/` to
-//            log in and get a session.
-//          in: header
+//	SecurityDefinitions:
+//	  api_session:
+//	     type: apiKey
+//	     name: X-Cockroach-API-Session
+//	     description: Handle to logged-in REST session. Use `/login/` to
+//	       log in and get a session.
+//	     in: header
 //
 // swagger:meta
 package server
@@ -214,7 +214,7 @@ type listSessionsResponse struct {
 
 // swagger:operation GET /sessions/ listSessions
 //
-// List sessions
+// # List sessions
 //
 // List all sessions on this cluster. If a username is provided, only
 // sessions from that user are returned.
@@ -223,37 +223,39 @@ type listSessionsResponse struct {
 //
 // ---
 // parameters:
-// - name: username
-//   type: string
-//   in: query
-//   description: Username of user to return sessions for; if unspecified,
+//   - name: username
+//     type: string
+//     in: query
+//     description: Username of user to return sessions for; if unspecified,
 //     sessions from all users are returned.
-//   required: false
-// - name: exclude_closed_sessions
-//   type: bool
-//   in: query
-//   description: Boolean to exclude closed sessions; if unspecified, defaults
+//     required: false
+//   - name: exclude_closed_sessions
+//     type: bool
+//     in: query
+//     description: Boolean to exclude closed sessions; if unspecified, defaults
 //     to false and closed sessions are included in the response.
-//   required: false
-// - name: limit
-//   type: integer
-//   in: query
-//   description: Maximum number of results to return in this call.
-//   required: false
-// - name: start
-//   type: string
-//   in: query
-//   description: Continuation token for results after a past limited run.
-//   required: false
+//     required: false
+//   - name: limit
+//     type: integer
+//     in: query
+//     description: Maximum number of results to return in this call.
+//     required: false
+//   - name: start
+//     type: string
+//     in: query
+//     description: Continuation token for results after a past limited run.
+//     required: false
+//
 // produces:
 // - application/json
 // security:
 // - api_session: []
 // responses:
-//   "200":
-//     description: List sessions response.
-//     schema:
-//       "$ref": "#/definitions/listSessionsResp"
+//
+//	"200":
+//	  description: List sessions response.
+//	  schema:
+//	    "$ref": "#/definitions/listSessionsResp"
 func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, start := getRPCPaginationValues(r)
@@ -281,7 +283,7 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 
 // swagger:operation GET /health/ health
 //
-// Check node health
+// # Check node health
 //
 // Helper endpoint to check for node health. If `ready` is true, it also checks
 // if this node is fully operational and ready to accept SQL connections.
@@ -290,20 +292,22 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 //
 // ---
 // parameters:
-// - name: ready
-//   type: boolean
-//   in: query
-//   description: If true, check whether this node is ready to accept SQL
+//   - name: ready
+//     type: boolean
+//     in: query
+//     description: If true, check whether this node is ready to accept SQL
 //     connections. If false, this endpoint always returns success, unless
 //     the API server itself is down.
-//   required: false
+//     required: false
+//
 // produces:
 // - application/json
 // responses:
-//   "200":
-//     description: Indicates healthy node.
-//   "500":
-//     description: Indicates unhealthy node.
+//
+//	"200":
+//	  description: Indicates healthy node.
+//	"500":
+//	  description: Indicates unhealthy node.
 func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	ready := false
 	readyStr := r.URL.Query().Get("ready")
@@ -333,7 +337,7 @@ func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 
 // swagger:operation GET /rules/ rules
 //
-// Get metric recording and alerting rule templates
+// # Get metric recording and alerting rule templates
 //
 // Endpoint to export recommended metric recording and alerting rules.
 // These rules are intended to be used as a guideline for aggregating
@@ -346,10 +350,11 @@ func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 // produces:
 // - text/plain
 // responses:
-//   "200":
-//     description: Recording and Alert Rules
-//     schema:
-//       "$ref": "#/definitions/PrometheusRuleGroup"
+//
+//	"200":
+//	  description: Recording and Alert Rules
+//	  schema:
+//	    "$ref": "#/definitions/PrometheusRuleGroup"
 func (a *apiV2Server) listRules(w http.ResponseWriter, r *http.Request) {
 	a.promRuleExporter.ScrapeRegistry(r.Context())
 	response, err := a.promRuleExporter.PrintAsYAML()

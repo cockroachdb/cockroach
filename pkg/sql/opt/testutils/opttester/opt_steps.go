@@ -19,37 +19,37 @@ import (
 // command. See the OptTester.OptSteps comment for more details on the command.
 //
 // The algorithm works as follows:
-//   1. The first time optSteps.next() is called, optSteps returns the starting
-//      expression tree, with no transformations applied to it.
 //
-//   2. Each optSteps.next() call after that will perform N+1 transformations,
-//      where N is the number of steps performed during the previous call
-//      (starting at 0 with the first call).
+//  1. The first time optSteps.next() is called, optSteps returns the starting
+//     expression tree, with no transformations applied to it.
 //
-//   3. Each optSteps.next() call will build the expression tree from scratch
-//      and re-run all transformations that were run in the previous call, plus
-//      one additional transformation (N+1). Therefore, the output expression
-//      tree from each call will differ from the previous call only by the last
-//      transformation's changes.
+//  2. Each optSteps.next() call after that will perform N+1 transformations,
+//     where N is the number of steps performed during the previous call
+//     (starting at 0 with the first call).
 //
-//   4. optSteps hooks the optimizer's MatchedRule event in order to limit the
-//      number of transformations that can be applied, as well as to record the
-//      name of the last rule that was applied, for later output.
+//  3. Each optSteps.next() call will build the expression tree from scratch
+//     and re-run all transformations that were run in the previous call, plus
+//     one additional transformation (N+1). Therefore, the output expression
+//     tree from each call will differ from the previous call only by the last
+//     transformation's changes.
 //
-//   5. While this works well for normalization rules, exploration rules are
-//      more difficult. This is because exploration rules are not guaranteed to
-//      produce a lower cost tree. Unless extra measures are taken, the returned
-//      Expr would not include the changed portion of the Memo, since Expr only
-//      shows the lowest cost path through the Memo.
+//  4. optSteps hooks the optimizer's MatchedRule event in order to limit the
+//     number of transformations that can be applied, as well as to record the
+//     name of the last rule that was applied, for later output.
 //
-//   6. To address this issue, optSteps hooks the optimizer's AppliedRule event
-//      and records the expression(s) that the last transformation has affected.
-//      It then re-runs the optimizer, but this time using a special Coster
-//      implementation that fools the optimizer into thinking that the new
-//      expression(s) have the lowest cost. The coster does this by assigning an
-//      infinite cost to all other expressions in the same group as the new
-//      expression(s), as well as in all ancestor groups.
+//  5. While this works well for normalization rules, exploration rules are
+//     more difficult. This is because exploration rules are not guaranteed to
+//     produce a lower cost tree. Unless extra measures are taken, the returned
+//     Expr would not include the changed portion of the Memo, since Expr only
+//     shows the lowest cost path through the Memo.
 //
+//  6. To address this issue, optSteps hooks the optimizer's AppliedRule event
+//     and records the expression(s) that the last transformation has affected.
+//     It then re-runs the optimizer, but this time using a special Coster
+//     implementation that fools the optimizer into thinking that the new
+//     expression(s) have the lowest cost. The coster does this by assigning an
+//     infinite cost to all other expressions in the same group as the new
+//     expression(s), as well as in all ancestor groups.
 type optSteps struct {
 	tester *OptTester
 

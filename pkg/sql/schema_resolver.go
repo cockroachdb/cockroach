@@ -329,9 +329,11 @@ func (sr *schemaResolver) canResolveDescUnderSchema(
 //
 // var someVar T
 // var err error
-// p.runWithOptions(resolveFlags{skipCache: true}, func() {
-//    someVar, err = ResolveExistingTableObject(ctx, p, ...)
-// })
+//
+//	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+//	   someVar, err = ResolveExistingTableObject(ctx, p, ...)
+//	})
+//
 // if err != nil { ... }
 // use(someVar)
 func (sr *schemaResolver) runWithOptions(flags resolveFlags, fn func()) {

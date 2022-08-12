@@ -45,7 +45,8 @@ type Column struct {
 
 // Ordinal returns the position of the column in its table. The following always
 // holds:
-//   tab.Column(i).Ordinal() == i
+//
+//	tab.Column(i).Ordinal() == i
 func (c *Column) Ordinal() int {
 	return c.ordinal
 }

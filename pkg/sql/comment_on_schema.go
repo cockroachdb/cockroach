@@ -32,7 +32,8 @@ type commentOnSchemaNode struct {
 
 // CommentOnSchema add comment on a schema.
 // Privileges: CREATE on scheme.
-//   notes: postgres requires CREATE on the scheme.
+//
+//	notes: postgres requires CREATE on the scheme.
 func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,

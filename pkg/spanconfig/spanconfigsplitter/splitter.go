@@ -47,7 +47,7 @@ func New(codec keys.SQLCodec, knobs *spanconfig.TestingKnobs) *Splitter {
 // split points for the given table descriptor. It's able to do this without
 // decoding partition keys. Consider our table hierarchy:
 //
-// 		table -> index -> partition -> partition -> (...)
+//	table -> index -> partition -> partition -> (...)
 //
 // Where each partition is either a PARTITION BY LIST kind (where it can then be
 // further partitioned), or a PARTITION BY RANGE kind (no further partitioning
@@ -56,43 +56,42 @@ func New(codec keys.SQLCodec, knobs *spanconfig.TestingKnobs) *Splitter {
 // (a) Contiguous      {index, list partition} -> range partition
 // (b) Non-contiguous  table -> index, {index, list partition} -> list partition
 //
-// - Contiguous links are the sort where each child span is contiguous with
-//   another, and that the set of all child spans encompass the parent's span.
-//   For an index that's partitioned by range:
+//   - Contiguous links are the sort where each child span is contiguous with
+//     another, and that the set of all child spans encompass the parent's span.
+//     For an index that's partitioned by range:
 //
-// 		CREATE TABLE db.range(i INT PRIMARY KEY, j INT) PARTITION BY RANGE (i) (
-// 			PARTITION less_than_five       VALUES FROM (minvalue) to (5),
-//			PARTITION between_five_and_ten VALUES FROM (5) to (10),
-//			PARTITION greater_than_ten     VALUES FROM (10) to (maxvalue)
-//		);
+//     CREATE TABLE db.range(i INT PRIMARY KEY, j INT) PARTITION BY RANGE (i) (
+//     PARTITION less_than_five       VALUES FROM (minvalue) to (5),
+//     PARTITION between_five_and_ten VALUES FROM (5) to (10),
+//     PARTITION greater_than_ten     VALUES FROM (10) to (maxvalue)
+//     );
 //
-//   With table ID as 106, the parent index span is /Table/106/{1-2}. The child
-//   spans are /Table/106/1{-/5}, /Table/106/1/{5-10} and /Table/106/{1/10-2}.
-//   They're contiguous; put together they wholly encompass the parent span.
+//     With table ID as 106, the parent index span is /Table/106/{1-2}. The child
+//     spans are /Table/106/1{-/5}, /Table/106/1/{5-10} and /Table/106/{1/10-2}.
+//     They're contiguous; put together they wholly encompass the parent span.
 //
-// - Non-contiguous links, by contrast, are when child spans are neither
-//   contiguous with respect to one another, nor do they start and end at
-//   the parent span's boundaries. For a table with a secondary index:
+//   - Non-contiguous links, by contrast, are when child spans are neither
+//     contiguous with respect to one another, nor do they start and end at
+//     the parent span's boundaries. For a table with a secondary index:
 //
-//		CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
-//		CREATE INDEX idx ON db.t (j);
-//		DROP INDEX db.t@idx;
-//		CREATE INDEX idx ON db.t (j);
+//     CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
+//     CREATE INDEX idx ON db.t (j);
+//     DROP INDEX db.t@idx;
+//     CREATE INDEX idx ON db.t (j);
 //
-//   With table ID as 106, the parent table span is /Table/10{6-7}. The child
-//   spans are /Table/106/{1-2} and /Table/106/{3-4}. Compared to the parent
-//   span, we're missing /Table/106{-/1}, /Table/106/{2-3}, /Table/10{6/4-7}.
+//     With table ID as 106, the parent table span is /Table/10{6-7}. The child
+//     spans are /Table/106/{1-2} and /Table/106/{3-4}. Compared to the parent
+//     span, we're missing /Table/106{-/1}, /Table/106/{2-3}, /Table/10{6/4-7}.
 //
 // For N children:
-// - For a contiguous link, the number of splits equals the number of child
-//   elements (i.e. N).
-// - For a non-contiguous link, the number of splits equals N + 1 + N. For N
-//   children, there are N - 1 gaps. There are also 2 gaps at the start and end
-//   of the parent span. Summing that with the N children span themselves, we
-//   get to the formula above. This assumes that the N child elements aren't
-//   further subdivided, if they are (we can compute it recursively), the
-//   formula becomes N + 1 + Σ(grand child spans).
-//
+//   - For a contiguous link, the number of splits equals the number of child
+//     elements (i.e. N).
+//   - For a non-contiguous link, the number of splits equals N + 1 + N. For N
+//     children, there are N - 1 gaps. There are also 2 gaps at the start and end
+//     of the parent span. Summing that with the N children span themselves, we
+//     get to the formula above. This assumes that the N child elements aren't
+//     further subdivided, if they are (we can compute it recursively), the
+//     formula becomes N + 1 + Σ(grand child spans).
 //
 // It's possible to compute split points more precisely if we did decode keys.
 // We could, for example, recognize that partition-by-list values are adjacent,
@@ -104,8 +103,9 @@ func New(codec keys.SQLCodec, knobs *spanconfig.TestingKnobs) *Splitter {
 // more than fine for our current usages.
 //
 // [1]: Today it's possible to GC type descriptors before GC-ing table
-//      descriptors that refer to them. This interface is used near by this GC
-//      activity, so type information is not always available.
+//
+//	descriptors that refer to them. This interface is used near by this GC
+//	activity, so type information is not always available.
 func (s *Splitter) Splits(ctx context.Context, table catalog.TableDescriptor) (int, error) {
 	if isNil(table) {
 		return 0, nil // nothing to do

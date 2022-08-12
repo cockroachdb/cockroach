@@ -44,7 +44,7 @@ more difficult. Example usage:
 	}
 	api.Call(ctx, "done")
 
-Problems with errgroup
+# Problems with errgroup
 
 The bugs this package attempts to prevent are: misuse of shadowed
 ctx variables after errgroup closure and confusion in the face of
@@ -116,7 +116,6 @@ Now the final api.Call is correct. But the other api.Call is incorrect
 and the ctx.Done receive is incorrect because they are using the wrong
 context and thus won't correctly exit early if the errgroup needs to
 exit early.
-
 */
 package ctxgroup
 
