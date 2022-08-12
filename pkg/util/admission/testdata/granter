@@ -378,89 +378,213 @@ sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: us
 init-store-grant-coordinator
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280912930
+(chain: id: 0 active: false index: 5) io-avail: 153722867280912930, elastic-disk-bw-tokens-avail: 153722867280912930
+
+# Set tokens to a large value that permits all request sizes in this file.
+set-io-tokens tokens=100000
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 100000, elastic-disk-bw-tokens-avail: 153722867280912930
+
+# Set elastic tokens to a large value that permits all request sizes in this
+# file.
+set-elastic-disk-bw-tokens tokens=100000
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 100000, elastic-disk-bw-tokens-avail: 100000
 
 # Initial tokens are effectively unlimited.
 try-get work=kv v=10000
 ----
-kv: tryGet(10000) returned true
+kv-regular: tryGet(10000) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280902930
+(chain: id: 0 active: false index: 5) io-avail: 90000, elastic-disk-bw-tokens-avail: 100000
 
 # Set the io tokens to a smaller value.
 set-io-tokens tokens=500
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 500
+(chain: id: 0 active: false index: 5) io-avail: 500, elastic-disk-bw-tokens-avail: 100000
 
-# Subtract 100 tokens.
-took-without-permission work=kv v=100
+# Subtract 100 tokens for elastic work. Note that elastic-disk-bw-tokens-avail also decreases by 100.
+took-without-permission work=kv-elastic v=100
 ----
-kv: tookWithoutPermission(100)
+kv-elastic: tookWithoutPermission(100)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 400
+(chain: id: 0 active: false index: 5) io-avail: 400, elastic-disk-bw-tokens-avail: 99900
 
 # Add 200 tokens.
 return-grant work=kv v=200
 ----
-kv: returnGrant(200)
+kv-regular: returnGrant(200)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 600
+(chain: id: 0 active: false index: 5) io-avail: 600, elastic-disk-bw-tokens-avail: 99900
 
 # Setup waiting requests that want 400 tokens each.
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 600
+(chain: id: 0 active: false index: 5) io-avail: 600, elastic-disk-bw-tokens-avail: 99900
 
 set-return-value-from-granted work=kv v=400
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 600
+(chain: id: 0 active: false index: 5) io-avail: 600, elastic-disk-bw-tokens-avail: 99900
 
 # Returning tokens triggers granting and 2 requests will be granted until the
 # tokens become <= 0.
 return-grant work=kv v=100
 ----
-kv: returnGrant(100)
-kv: granted in chain 0, and returning 400
-kv: granted in chain 0, and returning 400
+kv-regular: returnGrant(100)
+kv-regular: granted in chain 0, and returning 400
+kv-regular: granted in chain 0, and returning 400
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -100
+(chain: id: 0 active: false index: 5) io-avail: -100, elastic-disk-bw-tokens-avail: 99900
 
 set-return-value-from-granted work=kv v=100
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -100
+(chain: id: 0 active: false index: 5) io-avail: -100, elastic-disk-bw-tokens-avail: 99900
 
 # No tokens to give.
 try-get work=kv
 ----
-kv: tryGet(1) returned false
+kv-regular: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -100
+(chain: id: 0 active: false index: 5) io-avail: -100, elastic-disk-bw-tokens-avail: 99900
 
 # Increment by 50 tokens.
 set-io-tokens tokens=50
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -50
+(chain: id: 0 active: false index: 5) io-avail: -50, elastic-disk-bw-tokens-avail: 99900
 
 # Return another 50 tokens. Since the number of tokens is 0, there is no
 # grant.
 return-grant work=kv v=50
 ----
-kv: returnGrant(50)
+kv-regular: returnGrant(50)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 0
+(chain: id: 0 active: false index: 5) io-avail: 0, elastic-disk-bw-tokens-avail: 99900
 
 # As soon as the tokens > 0, it will grant.
 return-grant work=kv v=1
 ----
-kv: returnGrant(1)
-kv: granted in chain 0, and returning 100
+kv-regular: returnGrant(1)
+kv-regular: granted in chain 0, and returning 100
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99
+(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: 99900
+
+# Have waiting requests for kv-elastic too.
+set-has-waiting-requests work=kv-elastic v=true
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: 99900
+
+# The kv-elastic waiting requests need 200 tokens each.
+set-return-value-from-granted work=kv-elastic v=200
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: 99900
+
+# Since there are regular requests waiting, those are granted first.
+return-grant work=kv-elastic v=400
+----
+kv-elastic: returnGrant(400)
+kv-regular: granted in chain 0, and returning 100
+kv-regular: granted in chain 0, and returning 100
+kv-regular: granted in chain 0, and returning 100
+kv-regular: granted in chain 0, and returning 100
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: 100300
+
+# No more regular requests waiting.
+set-has-waiting-requests work=kv v=false
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: 100300
+
+# kv-elastic is granted.
+set-io-tokens tokens=100
+----
+kv-elastic: granted in chain 0, and returning 200
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -199, elastic-disk-bw-tokens-avail: 100100
+
+set-elastic-disk-bw-tokens tokens=50
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -199, elastic-disk-bw-tokens-avail: 50
+
+# Both kinds of tokens are decremented and become negative.
+set-io-tokens tokens=200
+----
+kv-elastic: granted in chain 0, and returning 200
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -199, elastic-disk-bw-tokens-avail: -150
+
+# IO tokens become positive. But no grant to elastic work since
+# elastic-disk-bw tokens are negative.
+set-io-tokens tokens=300
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 101, elastic-disk-bw-tokens-avail: -150
+
+# Regular kv work can get tokens.
+try-get work=kv v=10
+----
+kv-regular: tryGet(10) returned true
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 91, elastic-disk-bw-tokens-avail: -150
+
+# Elastic kv work cannot get tokens.
+try-get work=kv-elastic v=10
+----
+kv-elastic: tryGet(10) returned false
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 91, elastic-disk-bw-tokens-avail: -150
+
+# Still negative.
+set-elastic-disk-bw-tokens tokens=50
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 91, elastic-disk-bw-tokens-avail: -100
+
+# Even more IO tokens.
+set-io-tokens tokens=400
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 400, elastic-disk-bw-tokens-avail: -100
+
+# Finally both tokens are positive and we grant until the elastic-disk-bw
+# tokens become negative.
+set-elastic-disk-bw-tokens tokens=120
+----
+kv-elastic: granted in chain 0, and returning 200
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 200, elastic-disk-bw-tokens-avail: -180
+
+# Note that TestGranterBasic hard-codes the models to be 0.5x+50, so
+# 0.5*40+50=70. So 70-10=60 additional tokens are needed based on the write
+# model. We also apply the ingest model so 0.5*0+50=50, which means a total of
+# 60+50 additional tokens are needed, hence the decrease by 110 of both
+# io-avail and elastic-disk-bw-tokens-avail.
+store-write-done work=kv-elastic orig-tokens=10 write-bytes=40
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 90, elastic-disk-bw-tokens-avail: -290
+
+store-write-done work=kv orig-tokens=400 write-bytes=40
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 370, elastic-disk-bw-tokens-avail: -290
+
+# Both tokens become positive, since 280 tokens are returned, so one work is granted.
+store-write-done work=kv-elastic orig-tokens=400 write-bytes=40
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 650, elastic-disk-bw-tokens-avail: -10
+
 
 #####################################################################
 # Test soft slots

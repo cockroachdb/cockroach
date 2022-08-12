@@ -1219,15 +1219,44 @@ define NthValue {
 # function body, and a pointer to its type.
 [Scalar]
 define UDF {
+    # Input contains the scalar expressions given as input to the UDF.
+    Input ScalarListExpr
     _ UDFPrivate
 }
 
 [Private]
 define UDFPrivate {
+    # Name is the name of the function.
     Name string
+
+    # Body contains a relational expression for each statement in the function
+    # body.
     Body RelListExpr
+
+    # ArgCols is a list of columns that are references to arguments of the
+    # function. The i-th column in the list corresponds to the i-th argument of
+    # the function. During execution of the UDF, these columns are replaced with
+    # the constant value inputs to the function.
+    ArgCols ColList
+
+    # Typ is the return type of the function.
     Typ Type
+
+    # Volatility is the user-provided volatility of the function given during
+    # CREATE FUNCTION.
+    #
+    # Volatility affects the visibility of mutations made by the statement
+    # calling the function. A volatile function will see these mutations. Also,
+    # statements within a volatile function's body will see changes made by
+    # previous statements in the function body. In contrast, a stable,
+    # immutable, or leakproof function will see a snapshot of the data as of the
+    # start of the statement calling the function.
     Volatility Volatility
+
+    # CalledOnNullInput is true if the function should be called when any of its
+    # inputs are NULL. If false, the function will not be evaluated in the
+    # presence of NULL inputs, and will instead evaluate directly to NULL.
+    CalledOnNullInput bool
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values

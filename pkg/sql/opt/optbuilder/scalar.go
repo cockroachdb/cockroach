@@ -536,7 +536,7 @@ func (b *Builder) buildFunction(
 	}
 
 	if f.ResolvedOverload().Body != "" {
-		return b.buildUDF(f, def, inScope, outScope, outCol)
+		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
 
 	if f.ResolvedOverload().Class == tree.AggregateClass {
@@ -595,39 +595,89 @@ func (b *Builder) buildFunction(
 
 // buildUDF builds a set of memo groups that represents a user-defined function
 // invocation.
-// TODO(mgartner): Support UDFs with arguments.
 func (b *Builder) buildUDF(
 	f *tree.FuncExpr,
 	def *tree.ResolvedFunctionDefinition,
 	inScope, outScope *scope,
 	outCol *scopeColumn,
+	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+
+	// Build the input expressions.
+	var input memo.ScalarListExpr
+	if len(f.Exprs) > 0 {
+		input = make(memo.ScalarListExpr, len(f.Exprs))
+		for i, pexpr := range f.Exprs {
+			input[i] = b.buildScalar(
+				pexpr.(tree.TypedExpr),
+				inScope,
+				nil, /* outScope */
+				nil, /* outCol */
+				colRefs,
+			)
+		}
+	}
+
+	// Create a new scope for building the statements in the function body. We
+	// start with an empty scope because a statement in the function body cannot
+	// refer to anything from the outer expression. If there are function
+	// arguments, we add them as columns to the scope so that references to them
+	// can be resolved.
+	//
+	// TODO(mgartner): Support anonymous arguments and placeholder-like syntax
+	// for referencing arguments, e.g., $1.
+	//
+	// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent
+	// CTEs that mutate and are not at the top-level.
+	//
+	bodyScope := b.allocScope()
+	var argCols opt.ColList
+	if o.Types.Length() > 0 {
+		args, ok := o.Types.(tree.ArgTypes)
+		if !ok {
+			// TODO(mgartner): Create an issue for this and link it here.
+			panic(unimplemented.New("user-defined functions",
+				"variadiac user-defined functions are not yet supported"))
+		}
+		argCols = make(opt.ColList, len(args))
+		for i := range args {
+			arg := &args[i]
+			id := b.factory.Metadata().AddColumn(arg.Name, arg.Typ)
+			argCols[i] = id
+			bodyScope.appendColumn(&scopeColumn{
+				name: scopeColName(tree.Name(arg.Name)),
+				typ:  arg.Typ,
+				id:   id,
+			})
+		}
+	}
+
+	// Parse the function body.
 	stmts, err := parser.Parse(o.Body)
 	if err != nil {
 		panic(err)
 	}
 
+	// Build an expression for each statement in the function body.
 	rels := make(memo.RelListExpr, len(stmts))
 	for i := range stmts {
-		// A statement inside a UDF body cannot refer to anything from the outer
-		// expression calling the function, so we use an empty scope.
-		// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent
-		// CTEs that mutate and are not at the top-level.
-		bodyScope := b.allocScope()
-		bodyScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 		rels[i] = memo.RelRequiredPropsExpr{
-			RelExpr:   bodyScope.expr,
-			PhysProps: bodyScope.makePhysicalProps(),
+			RelExpr:   stmtScope.expr,
+			PhysProps: stmtScope.makePhysicalProps(),
 		}
 	}
 
 	out = b.factory.ConstructUDF(
+		input,
 		&memo.UDFPrivate{
-			Name:       def.Name,
-			Body:       rels,
-			Typ:        f.ResolvedType(),
-			Volatility: o.Volatility,
+			Name:              def.Name,
+			ArgCols:           argCols,
+			Body:              rels,
+			Typ:               f.ResolvedType(),
+			Volatility:        o.Volatility,
+			CalledOnNullInput: o.CalledOnNullInput,
 		},
 	)
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
