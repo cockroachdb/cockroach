@@ -18,12 +18,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -77,6 +79,7 @@ type sqlDBKey struct {
 type datadrivenTestState struct {
 	servers           map[string]serverutils.TestServerInterface
 	dataDirs          map[string]string
+	serverUpgradeChan map[string]chan struct{}
 	sqlDBs            map[sqlDBKey]*gosql.DB
 	jobTags           map[string]jobspb.JobID
 	clusterTimestamps map[string]string
@@ -89,6 +92,7 @@ func newDatadrivenTestState() datadrivenTestState {
 	return datadrivenTestState{
 		servers:           make(map[string]serverutils.TestServerInterface),
 		dataDirs:          make(map[string]string),
+		serverUpgradeChan: make(map[string]chan struct{}),
 		sqlDBs:            make(map[sqlDBKey]*gosql.DB),
 		jobTags:           make(map[string]jobspb.JobID),
 		clusterTimestamps: make(map[string]string),
@@ -110,12 +114,13 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 type serverCfg struct {
-	name       string
-	iodir      string
-	nodes      int
-	splits     int
-	ioConf     base.ExternalIODirConfig
-	localities string
+	name          string
+	iodir         string
+	nodes         int
+	splits        int
+	ioConf        base.ExternalIODirConfig
+	localities    string
+	beforeVersion int
 }
 
 func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
@@ -128,6 +133,21 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	}
 
 	settings := cluster.MakeTestingClusterSettings()
+
+	if cfg.beforeVersion != 0 {
+		disableUpgradeCh := make(chan struct{})
+		beforeKey := clusterversion.Key(cfg.beforeVersion - 1)
+		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
+			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
+			DisableAutomaticVersionUpgrade: disableUpgradeCh}
+		d.serverUpgradeChan[cfg.name] = disableUpgradeCh
+		settings = cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.TestingBinaryVersion,
+			clusterversion.ByKey(beforeKey),
+			false,
+		)
+	}
+
 	closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
@@ -339,7 +359,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "new-server":
 				var name, shareDirWith, iodir, localities string
-				var splits int
+				var splits, beforeVersion int
 				nodes := singleNode
 				var io base.ExternalIODirConfig
 				d.ScanArgs(t, "name", &name)
@@ -364,15 +384,19 @@ func TestDataDriven(t *testing.T) {
 				if d.HasArg("splits") {
 					d.ScanArgs(t, "splits", &splits)
 				}
+				if d.HasArg("beforeVersion") {
+					d.ScanArgs(t, "beforeVersion", &beforeVersion)
+				}
 
 				lastCreatedServer = name
 				cfg := serverCfg{
-					name:       name,
-					iodir:      iodir,
-					nodes:      nodes,
-					splits:     splits,
-					ioConf:     io,
-					localities: localities,
+					name:          name,
+					iodir:         iodir,
+					nodes:         nodes,
+					splits:        splits,
+					ioConf:        io,
+					localities:    localities,
+					beforeVersion: beforeVersion,
 				}
 				err := ds.addServer(t, cfg)
 				if err != nil {
@@ -384,6 +408,25 @@ func TestDataDriven(t *testing.T) {
 				var name string
 				d.ScanArgs(t, "name", &name)
 				lastCreatedServer = name
+				return ""
+
+			case "upgrade-server":
+				server := lastCreatedServer
+				user := "root"
+
+				upgradeChan, ok := ds.serverUpgradeChan[server]
+				if !ok {
+					t.Fatalf("server %s cannot be upgraded", server)
+				}
+				defer close(upgradeChan)
+
+				var version int
+				if d.HasArg("version") {
+					d.ScanArgs(t, "version", &version)
+				}
+				clusterVersion := clusterversion.ByKey(clusterversion.Key(version))
+				_, err := ds.getSQLDB(t, server, user).Exec("SET CLUSTER SETTING version = $1", clusterVersion.String())
+				require.NoError(t, err)
 				return ""
 
 			case "exec-sql":
