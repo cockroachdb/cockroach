@@ -19,19 +19,21 @@ import (
 	"github.com/lufia/iostat"
 )
 
-func getDiskCounters(context.Context) ([]diskStats, error) {
+// GetDiskCounters returns DiskStats for all disks.
+func GetDiskCounters(context.Context) ([]DiskStats, error) {
 	driveStats, err := iostat.ReadDriveStats()
 	if err != nil {
 		return nil, err
 	}
 
-	output := make([]diskStats, len(driveStats))
+	output := make([]DiskStats, len(driveStats))
 	for i, counters := range driveStats {
-		output[i] = diskStats{
-			readBytes:      counters.BytesRead,
+		output[i] = DiskStats{
+			Name:           counters.Name,
+			ReadBytes:      counters.BytesRead,
 			readCount:      counters.NumRead,
 			readTime:       counters.TotalReadTime,
-			writeBytes:     counters.BytesWritten,
+			WriteBytes:     counters.BytesWritten,
 			writeCount:     counters.NumWrite,
 			writeTime:      counters.TotalWriteTime,
 			ioTime:         0, // Not reported by this library.
