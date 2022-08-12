@@ -1,0 +1,32 @@
+# Tests that RESTORE with schema_only cannot get run in a mixed version cluster
+
+new-server name=s1 beforeVersion=Start22_2
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foo VALUES (1, 'x'),(2,'y');
+----
+
+exec-sql
+BACKUP Database d INTO 'nodelocal://1/full_database_backup/';
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
+----
+pq: cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2
+
+upgrade-server version=Start22_2
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
+----
+
+# There should be no data in the user tables.
+query-sql
+SELECT * FROM d2.foo;
+----
