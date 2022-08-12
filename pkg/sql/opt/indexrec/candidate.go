@@ -23,13 +23,13 @@ import (
 // referenced in a query. The index candidates are constructed based on the
 // following rules:
 //
-// 	1. Add a single index on all columns in a Group By or Order By expression if
-//	   the columns are from the same table. Otherwise, group expressions into
-//	   indexes by table. For Order By, the index column ordering and column
+//  1. Add a single index on all columns in a Group By or Order By expression if
+//     the columns are from the same table. Otherwise, group expressions into
+//     indexes by table. For Order By, the index column ordering and column
 //     directions are the same as how it is in the Order By.
 //  2. Add a single-column index on any Range expression, comparison
 //     expression (=, <, >, <=, >=), and IS expression.
-// 	3. Add a single-column index on any column that appears in a JOIN predicate.
+//  3. Add a single-column index on any column that appears in a JOIN predicate.
 //  4. If there exist multiple columns from the same table in a JOIN predicate,
 //     create a single index on all such columns.
 //  5. Construct three groups for each table: EQ, R, and J.
@@ -46,6 +46,7 @@ import (
 //  7. For JSON and array columns, we create single column inverted indexes. We
 //     also create the following multi-column combination candidates for each
 //     inverted column: eq + 'inverted column', EQ + 'inverted column'.
+//
 // TODO(nehageorge): Add a rule for columns that are referenced in the statement
 // but do not fall into one of these categories. In order to account for this,
 // *memo.VariableExpr would be the final case in the switch statement, hit only

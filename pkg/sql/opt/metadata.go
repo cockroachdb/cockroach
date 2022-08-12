@@ -49,21 +49,21 @@ type privilegeBitmap uint32
 //
 // For example, consider the query:
 //
-//   SELECT x FROM a WHERE y > 0
+//	SELECT x FROM a WHERE y > 0
 //
 // There are 2 columns in the above query: x and y. During name resolution, the
 // above query becomes:
 //
-//   SELECT [0] FROM a WHERE [1] > 0
-//   -- [0] -> x
-//   -- [1] -> y
+//	SELECT [0] FROM a WHERE [1] > 0
+//	-- [0] -> x
+//	-- [1] -> y
 //
 // An operator is allowed to reuse some or all of the column ids of an input if:
 //
-// 1. For every output row, there exists at least one input row having identical
-//    values for those columns.
-// 2. OR if no such input row exists, there is at least one output row having
-//    NULL values for all those columns (e.g. when outer join NULL-extends).
+//  1. For every output row, there exists at least one input row having identical
+//     values for those columns.
+//  2. OR if no such input row exists, there is at least one output row having
+//     NULL values for all those columns (e.g. when outer join NULL-extends).
 //
 // For example, is it safe for a Select to use its input's column ids because it
 // only filters rows. Likewise, pass-through column ids of a Project can be
@@ -71,7 +71,7 @@ type privilegeBitmap uint32
 //
 // For an example where columns cannot be reused, consider the query:
 //
-//   SELECT * FROM a AS l JOIN a AS r ON (l.x = r.y)
+//	SELECT * FROM a AS l JOIN a AS r ON (l.x = r.y)
 //
 // In this query, `l.x` is not equivalent to `r.x` and `l.y` is not equivalent
 // to `r.y`. Therefore, we need to give these columns different ids.
@@ -562,14 +562,13 @@ func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 // QualifiedAlias returns the column alias, possibly qualified with the table,
 // schema, or database name:
 //
-//   1. If fullyQualify is true, then the returned alias is prefixed by the
-//      original, fully qualified name of the table: tab.Name().FQString().
+//  1. If fullyQualify is true, then the returned alias is prefixed by the
+//     original, fully qualified name of the table: tab.Name().FQString().
 //
-//   2. If there's another column in the metadata with the same column alias but
-//      a different table name, then prefix the column alias with the table
-//      name: "tabName.columnAlias". If alwaysQualify is true, then the column
-//      alias is always prefixed with the table alias.
-//
+//  2. If there's another column in the metadata with the same column alias but
+//     a different table name, then prefix the column alias with the table
+//     name: "tabName.columnAlias". If alwaysQualify is true, then the column
+//     alias is always prefixed with the table alias.
 func (md *Metadata) QualifiedAlias(
 	colID ColumnID, fullyQualify, alwaysQualify bool, catalog cat.Catalog,
 ) string {

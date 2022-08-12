@@ -172,33 +172,33 @@ func getJoinLeftMultiplicityVal(left, right RelExpr, filters FiltersExpr) props.
 //
 // Why is condition #2 sufficient to ensure that no left rows are matched more
 // than once?
-// * It implies that left columns are being equated with a lax key from the
-//   right input.
-// * A lax key means that the right rows being equated are unique apart from
-//   nulls.
-// * Equalities are null-rejecting and the right rows are otherwise unique, so
-//   no left row can be equal to more than one right row on the filters.
-// * Therefore, no left row will be matched more than once.
+//   - It implies that left columns are being equated with a lax key from the
+//     right input.
+//   - A lax key means that the right rows being equated are unique apart from
+//     nulls.
+//   - Equalities are null-rejecting and the right rows are otherwise unique, so
+//     no left row can be equal to more than one right row on the filters.
+//   - Therefore, no left row will be matched more than once.
 //
 // As an example:
 //
-//   CREATE TABLE x_tab (x INT);
-//   CREATE TABLE a_tab (a INT UNIQUE);
+//	CREATE TABLE x_tab (x INT);
+//	CREATE TABLE a_tab (a INT UNIQUE);
 //
-//   x     a
-//   ----  ----
-//   NULL  NULL
-//   1     1
-//   1     2
-//   2     3
+//	x     a
+//	----  ----
+//	NULL  NULL
+//	1     1
+//	1     2
+//	2     3
 //
-//   SELECT * FROM x_tab INNER JOIN a_tab ON x = a;
-//   =>
-//   x a
-//   ---
-//   1 1
-//   1 1
-//   2 2
+//	SELECT * FROM x_tab INNER JOIN a_tab ON x = a;
+//	=>
+//	x a
+//	---
+//	1 1
+//	1 1
+//	2 2
 //
 // In this example, no rows from x are duplicated, while the '1' row from a is
 // duplicated.
@@ -219,30 +219,30 @@ func filtersMatchLeftRowsAtMostOnce(left, right RelExpr, filters FiltersExpr) bo
 // according to the join filters. This is true when the following conditions are
 // satisfied:
 //
-// 1. If this is a cross join (there are no filters), then either:
-//   a. The minimum cardinality of the right input is greater than zero. There
-//      must be at least one right row for the left rows to be preserved.
-//   b. There is a not-null foreign key column in the left input that references
-//      an unfiltered column from the right input.
+//  1. If this is a cross join (there are no filters), then either:
+//     a. The minimum cardinality of the right input is greater than zero. There
+//     must be at least one right row for the left rows to be preserved.
+//     b. There is a not-null foreign key column in the left input that references
+//     an unfiltered column from the right input.
 //
-// 2. If this is not a cross join, every filter is an equality that falls under
-//    one of these two cases:
-//   a. The self-join case: all equalities are between ColumnIDs that come from
-//      the same column on the same base table.
-//   b. The foreign-key case: all equalities are between a foreign key column on
-//      the left and the column it references from the right. All left columns
-//      must come from the same foreign key.
+//  2. If this is not a cross join, every filter is an equality that falls under
+//     one of these two cases:
+//     a. The self-join case: all equalities are between ColumnIDs that come from
+//     the same column on the same base table.
+//     b. The foreign-key case: all equalities are between a foreign key column on
+//     the left and the column it references from the right. All left columns
+//     must come from the same foreign key.
 //
 // In both the self-join and the foreign key cases that are not cross-joins
 // (cases 2a and 2b):
 //
 //   - The left columns must be not-null, and
 //   - One of the following must be true:
-//     - The right columns are unfiltered, or
-//     - The left and right side of the join must be Select expressions where
-//       the left side filters imply the right side filters, and the right
-//       columns - are unfiltered in the right Select's input (see condition
-//       #3b in the comment for verifyFilterAreValidEqualities).
+//   - The right columns are unfiltered, or
+//   - The left and right side of the join must be Select expressions where
+//     the left side filters imply the right side filters, and the right
+//     columns - are unfiltered in the right Select's input (see condition
+//     #3b in the comment for verifyFilterAreValidEqualities).
 //
 // Why do the left columns have to be non-null, and the right columns unfiltered
 // or filtered identically as their corresponding left column? In both the
@@ -297,17 +297,17 @@ func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
 // verifyFiltersAreValidEqualities returns the set of equality columns in the
 // right relation and true when all the following conditions are satisfied:
 //
-//   1. All filters are equalities.
-//   2. All equalities directly compare two columns.
-//   3. All equalities x=y (or y=x) have x as a left non-null column and y as a
-//      right column, and either:
-//      a. y is an unfiltered column in the right expression, or
-//      b. both the left and right expressions are Selects; the left side
-//         filters imply the right side filters when replacing x with y; and y
-//         is an unfiltered column in the right Select's input.
-//   4. All equality columns come from a base table.
-//   5. All left columns come from a single table, and all right columns come
-//      from a single table.
+//  1. All filters are equalities.
+//  2. All equalities directly compare two columns.
+//  3. All equalities x=y (or y=x) have x as a left non-null column and y as a
+//     right column, and either:
+//     a. y is an unfiltered column in the right expression, or
+//     b. both the left and right expressions are Selects; the left side
+//     filters imply the right side filters when replacing x with y; and y
+//     is an unfiltered column in the right Select's input.
+//  4. All equality columns come from a base table.
+//  5. All left columns come from a single table, and all right columns come
+//     from a single table.
 //
 // Returns ok=false if any of these conditions are unsatisfied.
 func verifyFiltersAreValidEqualities(
@@ -380,11 +380,11 @@ func verifyFiltersAreValidEqualities(
 
 // rightHasSingleFilterThatMatchesLeft returns true if:
 //
-//   1. Both left and right are Select expressions.
-//   2. rightCol is unfiltered in right's input.
-//   3. The left Select has a filter in the form leftCol=const.
-//   4. The right Select has a single filter in the form rightCol=const where
-//      the const value is the same as the const value in (2).
+//  1. Both left and right are Select expressions.
+//  2. rightCol is unfiltered in right's input.
+//  3. The left Select has a filter in the form leftCol=const.
+//  4. The right Select has a single filter in the form rightCol=const where
+//     the const value is the same as the const value in (2).
 //
 // This function is used by verifyFiltersAreValidEqualities to try to prove that
 // every row in the left input of a join will have a match in the right input

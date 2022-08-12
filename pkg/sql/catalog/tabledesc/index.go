@@ -395,10 +395,9 @@ func (w index) UseDeletePreservingEncoding() bool {
 // ForcePut returns true if writes to the index should only use Put (rather than
 // CPut or InitPut). This is used by:
 //
-//  * indexes currently being built by the MVCC-compliant index backfiller, and
-//  * the temporary indexes that support that process, and
-//  * old primary indexes which are being dropped.
-//
+//   - indexes currently being built by the MVCC-compliant index backfiller, and
+//   - the temporary indexes that support that process, and
+//   - old primary indexes which are being dropped.
 func (w index) ForcePut() bool {
 	return w.Merging() || w.desc.UseDeletePreservingEncoding ||
 		w.Dropped() && w.IsUnique() && w.GetEncodingType() == descpb.PrimaryIndexEncoding

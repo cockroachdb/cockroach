@@ -2211,10 +2211,11 @@ func makeColList(table cat.Table, cols exec.TableColumnOrdinalSet) []catalog.Col
 
 // makePublicToReturnColumnIndexMapping returns a map from the ordinals
 // of the table's public columns to ordinals in the returnColDescs slice.
-//  More precisely, for 0 <= i < len(tableDesc.PublicColumns()):
-//   result[i] = j such that returnColDescs[j].ID is the ID of
-//                   the i'th public column, or
-//              -1 if the i'th public column is not found in returnColDescs.
+//
+//	More precisely, for 0 <= i < len(tableDesc.PublicColumns()):
+//	 result[i] = j such that returnColDescs[j].ID is the ID of
+//	                 the i'th public column, or
+//	            -1 if the i'th public column is not found in returnColDescs.
 func makePublicToReturnColumnIndexMapping(
 	tableDesc catalog.TableDescriptor, returnCols []catalog.Column,
 ) []int {

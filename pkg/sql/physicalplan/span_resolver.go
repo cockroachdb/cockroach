@@ -30,36 +30,36 @@ import (
 // Sample usage for resolving a bunch of spans:
 //
 // func resolveSpans(
-//   ctx context.Context,
-//   it *execinfra.SpanResolverIterator,
-//   spans ...spanWithDir,
-// ) ([][]kv.ReplicaInfo, error) {
-//   lr := execinfra.NewSpanResolver(
-//     distSender, nodeDescs, nodeDescriptor,
-//     execinfra.BinPackingLeaseHolderChoice)
-//   it := lr.NewSpanResolverIterator(nil)
-//   res := make([][]kv.ReplicaInfo, 0)
-//   for _, span := range spans {
-//     repls := make([]kv.ReplicaInfo, 0)
-//     for it.Seek(ctx, span.Span, span.dir); ; it.Next(ctx) {
-//       if !it.Valid() {
-//         return nil, it.Error()
-//       }
-//       repl, err := it.ReplicaInfo(ctx)
-//       if err != nil {
-//         return nil, err
-//       }
-//       repls = append(repls, repl)
-//       if !it.NeedAnother() {
-//         break
-//       }
-//     }
-//     res = append(res, repls)
-//   }
-//   return res, nil
-// }
 //
+//	ctx context.Context,
+//	it *execinfra.SpanResolverIterator,
+//	spans ...spanWithDir,
 //
+//	) ([][]kv.ReplicaInfo, error) {
+//	  lr := execinfra.NewSpanResolver(
+//	    distSender, nodeDescs, nodeDescriptor,
+//	    execinfra.BinPackingLeaseHolderChoice)
+//	  it := lr.NewSpanResolverIterator(nil)
+//	  res := make([][]kv.ReplicaInfo, 0)
+//	  for _, span := range spans {
+//	    repls := make([]kv.ReplicaInfo, 0)
+//	    for it.Seek(ctx, span.Span, span.dir); ; it.Next(ctx) {
+//	      if !it.Valid() {
+//	        return nil, it.Error()
+//	      }
+//	      repl, err := it.ReplicaInfo(ctx)
+//	      if err != nil {
+//	        return nil, err
+//	      }
+//	      repls = append(repls, repl)
+//	      if !it.NeedAnother() {
+//	        break
+//	      }
+//	    }
+//	    res = append(res, repls)
+//	  }
+//	  return res, nil
+//	}
 type SpanResolver interface {
 	// NewSpanResolverIterator creates a new SpanResolverIterator.
 	// Txn is used for testing and for determining if follower reads are possible.

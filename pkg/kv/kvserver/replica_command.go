@@ -890,52 +890,52 @@ func waitForReplicasInit(
 //
 // In general, ChangeReplicas will carry out the following steps.
 //
-// 1. Run a distributed transaction that adds all new replicas as learner replicas.
-//    Learner replicas receive the log, but do not have voting rights. They are
-//    used to catch up these new replicas before turning them into voters, which
-//    is important for the continued availability of the range throughout the
-//    replication change. Learners are added (and removed) one by one due to a
-//    technicality (see https://github.com/cockroachdb/cockroach/pull/40268).
+//  1. Run a distributed transaction that adds all new replicas as learner replicas.
+//     Learner replicas receive the log, but do not have voting rights. They are
+//     used to catch up these new replicas before turning them into voters, which
+//     is important for the continued availability of the range throughout the
+//     replication change. Learners are added (and removed) one by one due to a
+//     technicality (see https://github.com/cockroachdb/cockroach/pull/40268).
 //
-//    The distributed transaction updates both copies of the range descriptor
-//    (the one on the range and that in the meta ranges) to that effect, and
-//    commits with a special trigger instructing Raft (via ProposeConfChange) to
-//    tie a corresponding replication configuration change which goes into
-//    effect (on each replica) when the transaction commit is applied to the
-//    state. Applying the command also updates each replica's local view of
-//    the state to reflect the new descriptor.
+//     The distributed transaction updates both copies of the range descriptor
+//     (the one on the range and that in the meta ranges) to that effect, and
+//     commits with a special trigger instructing Raft (via ProposeConfChange) to
+//     tie a corresponding replication configuration change which goes into
+//     effect (on each replica) when the transaction commit is applied to the
+//     state. Applying the command also updates each replica's local view of
+//     the state to reflect the new descriptor.
 //
-//    If no replicas are being added, this first step is elided. If non-voting
-//    replicas (which are also learners in etcd/raft) are being added, then this
-//    step is all we need. The rest of the steps only apply if voter replicas
-//    are being added.
+//     If no replicas are being added, this first step is elided. If non-voting
+//     replicas (which are also learners in etcd/raft) are being added, then this
+//     step is all we need. The rest of the steps only apply if voter replicas
+//     are being added.
 //
-// 2. Send Raft snapshots to all learner replicas. This would happen
-//    automatically by the existing recovery mechanisms (raft snapshot queue), but
-//    it is done explicitly as a convenient way to ensure learners are caught up
-//    before the next step is entered. (We ensure that work is not duplicated
-//    between the snapshot queue and the explicit snapshot via the
-//    snapshotLogTruncationConstraints map). Snapshots are subject to both
-//    bandwidth rate limiting and throttling.
+//  2. Send Raft snapshots to all learner replicas. This would happen
+//     automatically by the existing recovery mechanisms (raft snapshot queue), but
+//     it is done explicitly as a convenient way to ensure learners are caught up
+//     before the next step is entered. (We ensure that work is not duplicated
+//     between the snapshot queue and the explicit snapshot via the
+//     snapshotLogTruncationConstraints map). Snapshots are subject to both
+//     bandwidth rate limiting and throttling.
 //
-//    If no replicas are being added, this step is similarly elided.
+//     If no replicas are being added, this step is similarly elided.
 //
-// 3. Carry out a distributed transaction similar to that which added the
-//    learner replicas, except this time it (atomically) changes all learners to
-//    voters and removes any replicas for which this was requested; voters are
-//    demoted before actually being removed to avoid bug in etcd/raft:
-//    See https://github.com/cockroachdb/cockroach/pull/40268.
+//  3. Carry out a distributed transaction similar to that which added the
+//     learner replicas, except this time it (atomically) changes all learners to
+//     voters and removes any replicas for which this was requested; voters are
+//     demoted before actually being removed to avoid bug in etcd/raft:
+//     See https://github.com/cockroachdb/cockroach/pull/40268.
 //
-//    If only one replica is being added, raft can chose the simple
-//    configuration change protocol; otherwise it has to use joint consensus. In
-//    this latter mechanism, a first configuration change is made which results
-//    in a configuration ("joint configuration") in which a quorum of both the
-//    old replicas and the new replica sets is required for decision making.
-//    Transitioning into this joint configuration, the RangeDescriptor (which is
-//    the source of truth of the replication configuration) is updated with
-//    corresponding replicas of type VOTER_INCOMING and VOTER_DEMOTING.
-//    Immediately after committing this change, a second transition updates the
-//    descriptor with and activates the final configuration.
+//     If only one replica is being added, raft can chose the simple
+//     configuration change protocol; otherwise it has to use joint consensus. In
+//     this latter mechanism, a first configuration change is made which results
+//     in a configuration ("joint configuration") in which a quorum of both the
+//     old replicas and the new replica sets is required for decision making.
+//     Transitioning into this joint configuration, the RangeDescriptor (which is
+//     the source of truth of the replication configuration) is updated with
+//     corresponding replicas of type VOTER_INCOMING and VOTER_DEMOTING.
+//     Immediately after committing this change, a second transition updates the
+//     descriptor with and activates the final configuration.
 //
 // Concretely, if the initial members of the range are s1/1, s2/2, and s3/3, and
 // an atomic membership change were to add s4/4 and s5/5 while removing s1/1 and
@@ -1860,9 +1860,9 @@ func (r *Replica) lockLearnerSnapshot(
 // The atomic membership change is carried out chiefly via the construction of a
 // suitable ChangeReplicasTrigger, see prepareChangeReplicasTrigger for details.
 //
-//  When adding/removing only a single voter, joint consensus is not used.
-//  Notably, demotions must always use joint consensus, even if only a single
-//  voter is being demoted, due to a (liftable) limitation in etcd/raft.
+//	When adding/removing only a single voter, joint consensus is not used.
+//	Notably, demotions must always use joint consensus, even if only a single
+//	voter is being demoted, due to a (liftable) limitation in etcd/raft.
 //
 // [raft-bug]: https://github.com/etcd-io/etcd/issues/11284
 func (r *Replica) execReplicationChangesForVoters(
@@ -3084,12 +3084,12 @@ func (r *Replica) AdminRelocateRange(
 // the desired state. In an "atomic replication changes" world, this is
 // conceptually easy: change from the old set of replicas to the new one. But
 // there are two reasons that complicate this:
-// 1. we can't remove the leaseholder, so if we ultimately want to do that
-//    the lease has to be moved first. If we start out with *only* the
-//    leaseholder, we will have to add a replica first.
-// 2. this code is rewritten late in the cycle and it is both safer and
-//    closer to its previous incarnation to never issue atomic changes
-//    other than simple swaps.
+//  1. we can't remove the leaseholder, so if we ultimately want to do that
+//     the lease has to be moved first. If we start out with *only* the
+//     leaseholder, we will have to add a replica first.
+//  2. this code is rewritten late in the cycle and it is both safer and
+//     closer to its previous incarnation to never issue atomic changes
+//     other than simple swaps.
 //
 // The loop below repeatedly calls relocateOne, which gives us either
 // one or two ops that move the range towards the desired replication state. If

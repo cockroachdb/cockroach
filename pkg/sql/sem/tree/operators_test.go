@@ -33,9 +33,11 @@ import (
 //
 // Dump command below:
 // COPY (
-//   SELECT o.oprname, o.oprleft, o.oprright, o.oprresult, p.provolatile, p.proleakproof
-//   FROM pg_operator AS o JOIN pg_proc AS p ON (o.oprcode = p.oid)
-//   ORDER BY o.oprname, o.oprleft, o.oprright, o.oprresult
+//
+//	SELECT o.oprname, o.oprleft, o.oprright, o.oprresult, p.provolatile, p.proleakproof
+//	FROM pg_operator AS o JOIN pg_proc AS p ON (o.oprcode = p.oid)
+//	ORDER BY o.oprname, o.oprleft, o.oprright, o.oprresult
+//
 // ) TO STDOUT WITH CSV DELIMITER '|' HEADER;
 func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()

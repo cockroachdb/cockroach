@@ -11,6 +11,7 @@ go_library(
 go_test(
     name = "compare_test",
     srcs = ["compare_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":compare"],
     gotags = ["compose"],
     tags = ["integration"],

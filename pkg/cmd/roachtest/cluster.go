@@ -1349,7 +1349,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 }
 
 // FailOnReplicaDivergence fails the test if
-// crdb_internal.check_consistency(true, '', '') indicates that any ranges'
+// crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other. It uses the first node that
 // is up to run the query.
 func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) {

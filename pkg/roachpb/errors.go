@@ -230,6 +230,7 @@ type ErrorDetailType int
 // This lists all ErrorDetail types. The numeric values in this list are used to
 // identify corresponding timeseries. The values correspond to the proto oneof
 // values.
+//
 //go:generate stringer -type=ErrorDetailType
 const (
 	NotLeaseHolderErrType                   ErrorDetailType = 1

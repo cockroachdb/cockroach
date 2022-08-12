@@ -20,13 +20,13 @@ import (
 // indicate that the local execution behavior operates in batches.
 // The word "complement" here contrasts with "specializes" as follows:
 //
-// - batchedPlanNode specializes planNode for the purpose of logical
-//   planning: a node implementing batchedPlanNode behaves in all
-//   respects like a planNode from the perspective of the various
-//   logical planning transforms.
+//   - batchedPlanNode specializes planNode for the purpose of logical
+//     planning: a node implementing batchedPlanNode behaves in all
+//     respects like a planNode from the perspective of the various
+//     logical planning transforms.
 //
-// - batchedPlanNode *replaces* planNode for the purpose of local
-//   execution.
+//   - batchedPlanNode *replaces* planNode for the purpose of local
+//     execution.
 type batchedPlanNode interface {
 	// batchedPlanNode specializes planNode for the purpose of the recursions
 	// on planNode trees performed during logical planning, so it should "inherit"

@@ -216,7 +216,8 @@ func (mf *memoFormatter) populateStates() {
 }
 
 // formatGroup prints out (to mf.buf) all members of the group); e.g:
-//    (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev))
+//
+//	(limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev))
 func (mf *memoFormatter) formatGroup(first memo.RelExpr) {
 	for member := first; member != nil; member = member.NextExpr() {
 		if member != first {
@@ -227,7 +228,8 @@ func (mf *memoFormatter) formatGroup(first memo.RelExpr) {
 }
 
 // formatExpr prints out (to mf.buf) a single expression; e.g:
-//    (filters G6 G7)
+//
+//	(filters G6 G7)
 func (mf *memoFormatter) formatExpr(e opt.Expr) {
 	fmt.Fprintf(mf.buf, "(%s", e.Op())
 	for i := 0; i < e.ChildCount(); i++ {

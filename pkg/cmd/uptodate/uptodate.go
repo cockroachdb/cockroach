@@ -14,7 +14,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 
@@ -40,7 +40,7 @@ func main() {
 		os.Exit(1)
 	}
 	if !*debug {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	}
 	output, inputs := pflag.Arg(0), pflag.Args()[1:]
 

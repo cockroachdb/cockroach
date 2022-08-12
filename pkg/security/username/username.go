@@ -49,16 +49,15 @@ import (
 // considered pre-normalized and can be used directly for comparisons,
 // lookup etc.
 //
-// - The constructor MakeSQLUsernameFromUserInput() creates
-//   a username from "external input".
+//   - The constructor MakeSQLUsernameFromUserInput() creates
+//     a username from "external input".
 //
-// - The constructor MakeSQLUsernameFromPreNormalizedString()
-//   creates a username when the caller can guarantee that
-//   the input is already pre-normalized.
+//   - The constructor MakeSQLUsernameFromPreNormalizedString()
+//     creates a username when the caller can guarantee that
+//     the input is already pre-normalized.
 //
 // For convenience, the SQLIdentifier() method also represents a
 // username in the form suitable for input back by the SQL parser.
-//
 type SQLUsername struct {
 	u string
 }

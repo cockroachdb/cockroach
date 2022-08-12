@@ -554,13 +554,17 @@ func (n *alterRoleSetNode) getRoleName(
 // returns a newSettings list with any occurrence of varName removed.
 //
 // E.g. Suppose there is an existing row in `system.database_role_settings`:
-//   (24, max, {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s})
+//
+//	(24, max, {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s})
+//
 // and
-//   n.varName = 'use_declarative_schema_changer',
+//
+//	n.varName = 'use_declarative_schema_changer',
+//
 // then the return of this function will be
-//   1. oldSettings = {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s}
-//   2. newSettings = {timezone=America/New_York, statement_timeout=10s}
-//   3. err = nil
+//  1. oldSettings = {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s}
+//  2. newSettings = {timezone=America/New_York, statement_timeout=10s}
+//  3. err = nil
 func (n *alterRoleSetNode) makeNewSettings(
 	params runParams, opName string, roleName username.SQLUsername,
 ) (oldSettings []string, newSettings []string, err error) {
