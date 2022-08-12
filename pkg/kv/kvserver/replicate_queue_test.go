@@ -592,6 +592,88 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	})
 }
 
+// TestReplicateQueueTracingOnError tests that an error or slowdown in
+// processing a replica results in traces being logged.
+func TestReplicateQueueTracingOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// NB: This test injects a fake failure during replica rebalancing, and we use
+	// this `rejectSnapshots` variable as a flag to activate or deactivate that
+	// injected failure.
+	var rejectSnapshots int64
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(
+		t, 4, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+					if atomic.LoadInt64(&rejectSnapshots) == 1 {
+						return errors.Newf("boom")
+					}
+					return nil
+				},
+			}}},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// Add a replica to the second and third nodes, and then decommission the
+	// second node. Since there are only 4 nodes in the cluster, the
+	// decommissioning replica must be rebalanced to the fourth node.
+	const decomNodeIdx = 1
+	const decomNodeID = 2
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
+	adminSrv := tc.Server(decomNodeIdx)
+	conn, err := adminSrv.RPCContext().GRPCDialNode(
+		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err)
+	adminClient := serverpb.NewAdminClient(conn)
+	_, err = adminClient.Decommission(
+		ctx, &serverpb.DecommissionRequest{
+			NodeIDs:          []roachpb.NodeID{decomNodeID},
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+		},
+	)
+	require.NoError(t, err)
+
+	// Activate the above testing knob to start rejecting future rebalances and
+	// then attempt to rebalance the decommissioning replica away. We expect a
+	// purgatory error to be returned here.
+	atomic.StoreInt64(&rejectSnapshots, 1)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+	require.NoError(t, err)
+	recording, processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
+		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	require.NoError(t, enqueueErr)
+	require.Error(t, processErr, "expected processing error")
+	processRecSpan, foundSpan := recording.FindSpan("process replica")
+	require.True(t, foundSpan)
+	foundParent := false
+	foundErr := false
+	foundTrace := false
+	for _, recSpan := range recording {
+		if recSpan.SpanID == processRecSpan.ParentSpanID {
+			foundParent = true
+			for _, logMsg := range recSpan.Logs {
+				if matched, matchErr := regexp.MatchString(`error processing replica:.*boom`, logMsg.Msg().StripMarkers()); matchErr == nil && matched {
+					foundErr = true
+				}
+				if matched, matchErr := regexp.MatchString(`trace:.*`, logMsg.Msg().StripMarkers()); matchErr == nil && matched {
+					foundTrace = true
+				}
+			}
+			break
+		}
+	}
+	require.True(t, foundParent && foundErr && foundTrace)
+}
+
 // TestReplicateQueueDecommissionPurgatoryError tests that failure to move a
 // decommissioning replica puts it in the replicate queue purgatory.
 func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {

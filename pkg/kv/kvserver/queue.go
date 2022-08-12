@@ -78,8 +78,29 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 //
 // The parameter controls which rate(s) to use.
 func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queueProcessTimeoutFunc {
+	return makeRateLimitedTimeoutFuncBySlowdownMultiplier(permittedRangeScanSlowdown, nil, queueGuaranteedProcessingTimeBudget, rateSettings...)
+}
+
+// makeRateLimitedTimeoutFuncBySlowdownMultiplier is a helper function that
+// provides the internal implementation of makeRateLimitedTimeoutFunc, allowing
+// an explicit slowdownMultiplier to be specified via a constant value or a
+// setting, as well as a minimum timeout setting if applicable (i.e. non-zero).
+// A multiplier set by slowdownMultiplierSetting will take precedence if
+// provided, otherwise nil can be passed in.
+func makeRateLimitedTimeoutFuncBySlowdownMultiplier(
+	slowdownMultiplier int64,
+	slowdownMultiplierSetting *settings.IntSetting,
+	minimumTimeoutSetting *settings.DurationSetting,
+	rateSettings ...*settings.ByteSizeSetting,
+) queueProcessTimeoutFunc {
 	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
-		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
+		minimumTimeout := time.Duration(0)
+		if minimumTimeoutSetting != nil {
+			minimumTimeout = minimumTimeoutSetting.Get(&cs.SV)
+		}
+		if slowdownMultiplierSetting != nil {
+			slowdownMultiplier = slowdownMultiplierSetting.Get(&cs.SV)
+		}
 		// NB: In production code this will type assertion will always succeed.
 		// Some tests set up a fake implementation of replicaInQueue in which
 		// case we fall back to the configured minimum timeout.
@@ -95,7 +116,7 @@ func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queue
 			}
 		}
 		estimatedDuration := time.Duration(repl.GetMVCCStats().Total()/minSnapshotRate) * time.Second
-		timeout := estimatedDuration * permittedRangeScanSlowdown
+		timeout := estimatedDuration * time.Duration(slowdownMultiplier)
 		if timeout < minimumTimeout {
 			timeout = minimumTimeout
 		}
