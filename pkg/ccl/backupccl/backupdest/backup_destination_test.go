@@ -83,7 +83,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				parsedURI.Path = backuputils.JoinURLPath(parsedURI.Path, locality)
 			}
 			q := parsedURI.Query()
-			q.Add(backupdest.LocalityURLParam, locality)
+			q.Add(cloud.LocalityURLParam, locality)
 			parsedURI.RawQuery = q.Encode()
 			localizedURIs[i] = parsedURI.String()
 		}
