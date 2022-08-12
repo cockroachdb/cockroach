@@ -2988,6 +2988,7 @@ func (s *adminServer) enqueueRangeLocal(
 		queueName = "mvccGC"
 	}
 
+	ctx = context.WithValue(ctx, kvserver.ManuallyEnqueuedKey{}, struct{}{})
 	traceSpans, processErr, err := store.Enqueue(
 		ctx, queueName, repl, req.SkipShouldQueue, false, /* async */
 	)
