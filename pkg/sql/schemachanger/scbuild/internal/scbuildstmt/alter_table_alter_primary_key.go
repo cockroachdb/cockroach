@@ -66,55 +66,48 @@ func alterTableAlterPrimaryKey(
 		// should be returned, so, here we panic with an programming error.
 		panic(errors.AssertionFailedf("programming error: new primary index has already existed."))
 	}
-	newPrimaryIndexElem = createNewPrimaryIndex(b, tbl, oldPrimaryIndexElem, func(
-		b BuildCtx, newPrimaryIndex *scpb.PrimaryIndex, _ []*scpb.IndexColumn,
-	) (newColumns []*scpb.IndexColumn) {
+
+	out := makePrimaryIndexSpec(b, oldPrimaryIndexElem)
+	inColumns := make([]indexColumnSpec, 0, len(out.columns))
+	{
 		allColumns := getSortedAllColumnIDsInTable(b, tbl.TableID)
 
 		// Get all KEY columns from t.Columns
 		allColumnsNameToIDMapping := getAllColumnsNameToIDMapping(b, tbl.TableID)
 		allKeyColumnIDs := make(map[catid.ColumnID]bool)
-		for i, col := range t.Columns {
-			if colID, exist := allColumnsNameToIDMapping[string(col.Column)]; !exist {
+		for _, col := range t.Columns {
+			colID, exist := allColumnsNameToIDMapping[string(col.Column)]
+			if !exist {
 				panic(fmt.Sprintf("table %v does not have a column named %v", tn.String(), col.Column))
-			} else {
-				ic := &scpb.IndexColumn{
-					TableID:       tbl.TableID,
-					IndexID:       newPrimaryIndex.IndexID,
-					ColumnID:      colID,
-					OrdinalInKind: uint32(i),
-					Kind:          scpb.IndexColumn_KEY,
-					Direction:     indexColumnDirection(col.Direction),
-				}
-				b.Add(ic)
-				newColumns = append(newColumns, ic)
-				allKeyColumnIDs[colID] = true
 			}
+			inColumns = append(inColumns, indexColumnSpec{
+				columnID:  colID,
+				kind:      scpb.IndexColumn_KEY,
+				direction: indexColumnDirection(col.Direction),
+			})
+			allKeyColumnIDs[colID] = true
 		}
 
 		// What's left are STORED columns, excluding virtual columns and system columns
-		i := 0
 		for _, colID := range allColumns {
 			if _, isKeyCol := allKeyColumnIDs[colID]; isKeyCol ||
 				mustRetrieveColumnTypeElem(b, tbl.TableID, colID).IsVirtual ||
 				colinfo.IsColIDSystemColumn(colID) {
 				continue
 			}
-			ic := &scpb.IndexColumn{
-				TableID:       tbl.TableID,
-				IndexID:       newPrimaryIndex.IndexID,
-				ColumnID:      colID,
-				OrdinalInKind: uint32(i),
-				Kind:          scpb.IndexColumn_STORED,
-			}
-			b.Add(ic)
-			newColumns = append(newColumns, ic)
-			i++
+			inColumns = append(inColumns, indexColumnSpec{
+				columnID: colID,
+				kind:     scpb.IndexColumn_STORED,
+			})
 		}
-
-		return newColumns
-	})
-	newPrimaryIndexElem.Sharding = makeShardedDescriptor(b, t)
+	}
+	out.apply(b.Drop)
+	sharding := makeShardedDescriptor(b, t)
+	in, tempIn := makeSwapPrimaryIndexSpec(b, out, inColumns)
+	in.idx.Sharding = sharding
+	in.apply(b.Add)
+	tempIn.setTargets(b)
+	newPrimaryIndexElem = in.idx
 
 	// Construct and add elements for a unique secondary index created on
 	// the old primary key columns.
@@ -270,7 +263,7 @@ func fallBackIfRequestToBeSharded(t *tree.AlterTableAlterPrimaryKey) {
 func fallBackIfSecondaryIndexExists(b BuildCtx, tableID catid.DescID) {
 	_, _, sie := scpb.FindSecondaryIndex(b.QueryByID(tableID))
 	if sie != nil {
-		panic(scerrors.NotImplementedErrorf(nil, "ALTER PRIMARY KEY on a table with secondary index"+
+		panic(scerrors.NotImplementedErrorf(nil, "ALTER PRIMARY KEY on a table with secondary index "+
 			"is not yet supported because they might need to be rewritten."))
 	}
 }
@@ -469,8 +462,9 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 	t *tree.AlterTableAlterPrimaryKey,
 	oldPrimaryIndex, newPrimaryIndex *scpb.PrimaryIndex,
 ) {
-	if shouldCreateUniqueIndexOnOldPrimaryKeyColumns(b, tn, tbl, t,
-		oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID) {
+	if shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
+		b, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID,
+	) {
 		newUniqueSecondaryIndex, tempIndex := addNewUniqueSecondaryIndexAndTempIndex(b, tn, tbl, oldPrimaryIndex)
 		addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(b, tn, tbl, t,
 			oldPrimaryIndex.IndexID, newUniqueSecondaryIndex.IndexID, tempIndex.IndexID)
@@ -604,12 +598,7 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 // * There is no partitioning change.
 // * There is no existing secondary index on the old primary key columns.
 func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
-	b BuildCtx,
-	tn *tree.TableName,
-	tbl *scpb.Table,
-	t *tree.AlterTableAlterPrimaryKey,
-	oldPrimaryIndexID catid.IndexID,
-	newPrimaryIndexID catid.IndexID,
+	b BuildCtx, tbl *scpb.Table, oldPrimaryIndexID catid.IndexID, newPrimaryIndexID catid.IndexID,
 ) bool {
 	// A function that retrieves all KEY columns of this index.
 	// If excludeShardedCol, sharded column is excluded, if any.
@@ -649,6 +638,11 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		return true
 	}
 
+	// If the primary key doesn't really change, don't create any unique indexes.
+	if keyColumnIDsAndDirsMatch(b, tbl.TableID, oldPrimaryIndexID, newPrimaryIndexID, true /* excludeShardedCol */) {
+		return false
+	}
+
 	// A function that checks whether there exists a secondary index
 	// that is "identical" to the old primary index.
 	// It is used to avoid creating duplicate secondary index during
@@ -673,16 +667,15 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		return found
 	}
 
-	return !isPrimaryIndexDefaultRowID(b, tbl.TableID, oldPrimaryIndexID) &&
-		!keyColumnIDsAndDirsMatch(b, tbl.TableID, oldPrimaryIndexID, newPrimaryIndexID, true /* excludeShardedCol */) &&
-		!alreadyHasSecondaryIndexOnPKColumns(b, tbl.TableID, oldPrimaryIndexID)
+	// If there already exist suitable unique indexes, then don't create any.
+	return !alreadyHasSecondaryIndexOnPKColumns(b, tbl.TableID, oldPrimaryIndexID)
 }
 
-// isPrimaryIndexDefaultRowID checks whether the index is on the
-// implicitly created, hidden column 'rowid'.
-func isPrimaryIndexDefaultRowID(
+// getPrimaryIndexDefaultRowIDColumn checks whether the primary key is on the
+// implicitly created, hidden column 'rowid' and returns it if that's the case.
+func getPrimaryIndexDefaultRowIDColumn(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
-) (res bool) {
+) (column *scpb.Column) {
 	// Sanity check: input `indexID` should really be the index of
 	// a primary index.
 	var primaryIndex *scpb.PrimaryIndex
@@ -700,27 +693,27 @@ func isPrimaryIndexDefaultRowID(
 	// This primary index should have only one column.
 	indexColumns := mustRetrieveKeyIndexColumns(b, tableID, indexID)
 	if len(indexColumns) != 1 {
-		return false
+		return nil
 	}
 
 	columnID := indexColumns[0].ColumnID
 
 	// That one column should be hidden.
-	column := mustRetrieveColumnElem(b, tableID, columnID)
+	column = mustRetrieveColumnElem(b, tableID, columnID)
 	if !column.IsHidden {
-		return false
+		return nil
 	}
 
 	// That one column's name should be 'rowid' or prefixed by 'rowid'.
 	columnName := mustRetrieveColumnNameElem(b, tableID, columnID)
 	if !strings.HasPrefix(columnName.Name, "rowid") {
-		return false
+		return nil
 	}
 
 	// That column should be of type INT.
 	columnType := mustRetrieveColumnTypeElem(b, tableID, columnID)
 	if !columnType.Type.Equal(types.Int) {
-		return false
+		return nil
 	}
 
 	// That column should have default expression that is equal to "unique_rowid()".
@@ -733,11 +726,11 @@ func isPrimaryIndexDefaultRowID(
 		}
 	})
 	if columnDefaultExpression == nil || columnDefaultExpression.Expr != "unique_rowid()" {
-		return false
+		return nil
 	}
 
 	// All checks are satisfied, return true!
-	return true
+	return column
 }
 
 // getAllColumnsNameToIDMapping constructs a name to ID mapping
@@ -756,9 +749,7 @@ func getAllColumnsNameToIDMapping(
 
 // getSortedAllColumnIDsInTable returns sorted IDs of all columns in table.
 func getSortedAllColumnIDsInTable(b BuildCtx, tableID catid.DescID) (res []catid.ColumnID) {
-	scpb.ForEachColumn(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.Column,
-	) {
+	scpb.ForEachColumn(b.QueryByID(tableID), func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.Column) {
 		res = append(res, e.ColumnID)
 	})
 	sort.Slice(res, func(i, j int) bool {

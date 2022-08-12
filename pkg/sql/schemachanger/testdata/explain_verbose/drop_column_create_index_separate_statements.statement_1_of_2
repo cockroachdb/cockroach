@@ -41,6 +41,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │       │
 │       ├── • 5 elements transitioning toward PUBLIC
 │       │   │
+│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│       │   │     ABSENT → BACKFILL_ONLY
+│       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
@@ -52,9 +55,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
-│       │   │
-│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│       │   │     ABSENT → BACKFILL_ONLY
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
 │       │   │   │ ABSENT → PUBLIC
@@ -146,6 +146,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │           │       TableID: 104
 │           │       TemporaryIndexID: 4
 │           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 3
+│           │     TableID: 104
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 3
+│           │     IndexID: 3
+│           │     Kind: 2
+│           │     TableID: 104
+│           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
@@ -159,20 +170,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │           │     IndexID: 4
 │           │     TableID: 104
 │           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 3
-│           │     IndexID: 4
-│           │     Kind: 2
-│           │     TableID: 104
-│           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 1
-│           │     IndexID: 3
-│           │     TableID: 104
-│           │
 │           └── • AddColumnToIndex
 │                 ColumnID: 3
-│                 IndexID: 3
+│                 IndexID: 4
 │                 Kind: 2
 │                 TableID: 104
 │
