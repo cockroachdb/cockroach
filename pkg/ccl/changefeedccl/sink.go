@@ -38,6 +38,18 @@ type Sink interface {
 	ResolvedTimestampSink
 }
 
+type sinkType int
+
+const (
+	sinkTypeSinklessBuffer sinkType = iota
+	sinkTypeNull
+	sinkTypeKafka
+	sinkTypeWebhook
+	sinkTypePubsub
+	sinkTypeCloudstorage
+	sinkTypeSQL
+)
+
 // externalResource is the interface common to both EventSink and
 // ResolvedTimestampSink.
 type externalResource interface {
@@ -48,6 +60,10 @@ type externalResource interface {
 	// It releases resources and may surface diagnostic information
 	// in logs or the returned error.
 	Close() error
+
+	// getConcreteType returns the underlying sink type of a sink that may
+	// be wrapped by middleware.
+	getConcreteType() sinkType
 }
 
 // EventSink is the interface used when emitting changefeed events
@@ -307,6 +323,10 @@ type errorWrapperSink struct {
 	wrapped externalResource
 }
 
+func (s *errorWrapperSink) getConcreteType() sinkType {
+	return s.wrapped.getConcreteType()
+}
+
 // EmitRow implements Sink interface.
 func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
@@ -393,6 +413,10 @@ type bufferSink struct {
 	metrics metricsRecorder
 }
 
+func (s *bufferSink) getConcreteType() sinkType {
+	return sinkTypeSinklessBuffer
+}
+
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
 	ctx context.Context,
@@ -472,6 +496,10 @@ func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
 type nullSink struct {
 	ticker  *time.Ticker
 	metrics metricsRecorder
+}
+
+func (s *nullSink) getConcreteType() sinkType {
+	return sinkTypeNull
 }
 
 var _ Sink = (*nullSink)(nil)

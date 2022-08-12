@@ -64,6 +64,10 @@ type sqlSink struct {
 	metrics metricsRecorder
 }
 
+func (s *sqlSink) getConcreteType() sinkType {
+	return sinkTypeSQL
+}
+
 // TODO(dan): Make tableName configurable or based on the job ID or
 // something.
 const sqlSinkTableName = `sqlsink`

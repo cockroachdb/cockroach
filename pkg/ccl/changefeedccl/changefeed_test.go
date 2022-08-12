@@ -7086,7 +7086,15 @@ func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 	return mm
 }
 
+type testSink struct{}
+
+// getConcreteType implements the Sink interfaces.
+func (s testSink) getConcreteType() sinkType {
+	return sinkTypeNull
+}
+
 type memoryHoggingSink struct {
+	testSink
 	allEmitted chan struct{}
 	mu         struct {
 		syncutil.Mutex

@@ -129,6 +129,7 @@ func (m *mockClock) Now() time.Time {
 }
 
 type benchSink struct {
+	testSink
 	syncutil.Mutex
 	cond      *sync.Cond
 	emits     int

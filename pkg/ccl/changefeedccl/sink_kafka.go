@@ -134,6 +134,10 @@ type kafkaSink struct {
 	disableInternalRetry bool
 }
 
+func (s *kafkaSink) getConcreteType() sinkType {
+	return sinkTypeKafka
+}
+
 var saramaCompressionCodecOptions = map[string]sarama.CompressionCodec{
 	"NONE":   sarama.CompressionNone,
 	"GZIP":   sarama.CompressionGZIP,
