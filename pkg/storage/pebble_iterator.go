@@ -688,6 +688,11 @@ func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 	return stack
 }
 
+// RangeKeyChanged implements the MVCCIterator interface.
+func (p *pebbleIterator) RangeKeyChanged() bool {
+	return p.iter.RangeKeyChanged()
+}
+
 // EngineRangeKeys implements the EngineIterator interface.
 func (p *pebbleIterator) EngineRangeKeys() []EngineRangeKeyValue {
 	rangeKeys := p.iter.RangeKeys()

@@ -1437,7 +1437,7 @@ func cmdIterNew(e *evalCtx) error {
 	if e.hasArg("pointSynthesis") {
 		e.iter = newPointSynthesizingIter(e.mvccIter(), e.hasArg("emitOnSeekGE"))
 	}
-
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1495,6 +1495,7 @@ func cmdIterNewIncremental(e *evalCtx) error {
 
 	r, closer := metamorphicReader(e)
 	e.iter = &iterWithCloser{NewMVCCIncrementalIterator(r, opts), closer}
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1518,6 +1519,7 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 	r, closer := metamorphicReader(e)
 	iter := &iterWithCloser{r.NewMVCCIterator(MVCCKeyIterKind, opts), closer}
 	e.iter = NewReadAsOfIterator(iter, asOf)
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1579,6 +1581,25 @@ func cmdIterPrev(e *evalCtx) error {
 
 func cmdIterScan(e *evalCtx) error {
 	reverse := e.hasArg("reverse")
+	// printIter will automatically check RangeKeyChanged() by comparing the
+	// previous e.iterRangeKeys to the current. However, iter_scan is special in
+	// that it also prints the current iterator position before stepping, so we
+	// adjust e.iterRangeKeys to comply with the previous positioning operation.
+	// The previous position already passed this check, so it doesn't matter that
+	// we're fudging e.rangeKeys.
+	if _, ok := e.bareIter().(*MVCCIncrementalIterator); !ok {
+		if e.iter.RangeKeyChanged() {
+			if e.iterRangeKeys.IsEmpty() {
+				e.iterRangeKeys = MVCCRangeKeyStack{
+					Bounds:   roachpb.Span{Key: keys.MinKey.Next(), EndKey: keys.MaxKey},
+					Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
+				}
+			} else {
+				e.iterRangeKeys.Clear()
+			}
+		}
+	}
+
 	for {
 		printIter(e)
 		if ok, err := e.iter.Valid(); err != nil {
@@ -1657,6 +1678,7 @@ func cmdSSTIterNew(e *evalCtx) error {
 		return err
 	}
 	e.iter = iter
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1671,6 +1693,7 @@ func printIter(e *evalCtx) {
 	}
 	if !ok {
 		e.results.buf.Print(" .")
+		e.iterRangeKeys.Clear()
 		return
 	}
 	hasPoint, hasRange := e.iter.HasPointAndRange()
@@ -1693,6 +1716,7 @@ func printIter(e *evalCtx) {
 			e.results.buf.Printf(" %s=%s", e.iter.UnsafeKey(), value)
 		}
 	}
+
 	if hasRange {
 		rangeKeys := e.iter.RangeKeys()
 		e.results.buf.Printf(" %s/[", rangeKeys.Bounds)
@@ -1708,6 +1732,25 @@ func printIter(e *evalCtx) {
 		}
 		e.results.buf.Printf("]")
 	}
+
+	if checkAndUpdateRangeKeyChanged(e) {
+		e.results.buf.Printf(" !")
+	}
+}
+
+func checkAndUpdateRangeKeyChanged(e *evalCtx) bool {
+	// MVCCIncrementalIterator does not yet support RangeKeyChanged().
+	if _, ok := e.bareIter().(*MVCCIncrementalIterator); ok {
+		return false
+	}
+	rangeKeyChanged := e.iter.RangeKeyChanged()
+	rangeKeys := e.iter.RangeKeys()
+	if rangeKeyChanged != !rangeKeys.Equal(e.iterRangeKeys) {
+		e.t.Fatalf("incorrect RangeKeyChanged=%t (was:%s is:%s) at %s\n",
+			rangeKeyChanged, e.iterRangeKeys, rangeKeys, e.td.Pos)
+	}
+	rangeKeys.CloneInto(&e.iterRangeKeys)
+	return rangeKeyChanged
 }
 
 // formatStats formats MVCC stats.
@@ -1767,19 +1810,20 @@ type evalCtx struct {
 		txn               *roachpb.Transaction
 		traceIntentWrites bool
 	}
-	ctx        context.Context
-	st         *cluster.Settings
-	engine     Engine
-	iter       SimpleMVCCIterator
-	t          *testing.T
-	td         *datadriven.TestData
-	txns       map[string]*roachpb.Transaction
-	txnCounter uint128.Uint128
-	locks      map[string]*roachpb.Transaction
-	ms         *enginepb.MVCCStats
-	sstWriter  *SSTWriter
-	sstFile    *MemFile
-	ssts       [][]byte
+	ctx           context.Context
+	st            *cluster.Settings
+	engine        Engine
+	iter          SimpleMVCCIterator
+	iterRangeKeys MVCCRangeKeyStack
+	t             *testing.T
+	td            *datadriven.TestData
+	txns          map[string]*roachpb.Transaction
+	txnCounter    uint128.Uint128
+	locks         map[string]*roachpb.Transaction
+	ms            *enginepb.MVCCStats
+	sstWriter     *SSTWriter
+	sstFile       *MemFile
+	ssts          [][]byte
 }
 
 func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {

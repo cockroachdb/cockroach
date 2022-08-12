@@ -541,6 +541,14 @@ func (s MVCCRangeKeyStack) CanMergeRight(r MVCCRangeKeyStack) bool {
 	return true
 }
 
+// Clear clears the stack but retains the byte slices. It is useful to
+// empty out a stack being used as a CloneInto() target.
+func (s *MVCCRangeKeyStack) Clear() {
+	s.Bounds.Key = s.Bounds.Key[:0]
+	s.Bounds.EndKey = s.Bounds.EndKey[:0]
+	s.Versions.Clear()
+}
+
 // Clone clones the stack.
 func (s MVCCRangeKeyStack) Clone() MVCCRangeKeyStack {
 	s.Bounds = s.Bounds.Clone()
@@ -568,6 +576,11 @@ func (s MVCCRangeKeyStack) Covers(k MVCCKey) bool {
 // CoversTimestamp returns true if any range key in the stack covers the given timestamp.
 func (s MVCCRangeKeyStack) CoversTimestamp(ts hlc.Timestamp) bool {
 	return s.Versions.Covers(ts)
+}
+
+// Equal returns true if the range key stacks are equal.
+func (s MVCCRangeKeyStack) Equal(o MVCCRangeKeyStack) bool {
+	return s.Bounds.Equal(o.Bounds) && s.Versions.Equal(o.Versions)
 }
 
 // Excise removes the versions in the given [from, to] span (inclusive, in
@@ -629,6 +642,11 @@ func (s MVCCRangeKeyStack) Timestamps() []hlc.Timestamp {
 // in place. Returns true if any versions were removed.
 func (s *MVCCRangeKeyStack) Trim(from, to hlc.Timestamp) bool {
 	return s.Versions.Trim(from, to)
+}
+
+// Clear clears out the version stack, but retains any byte slices.
+func (v *MVCCRangeKeyVersions) Clear() {
+	*v = (*v)[:0]
 }
 
 // Clone clones the versions.

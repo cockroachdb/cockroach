@@ -30,8 +30,8 @@ iter_new types=pointsAndRanges
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: {b-d}/[5.000000000,0=/<empty>]
-iter_scan: {b-d}/[5.000000000,0=/<empty>]
+iter_seek_ge: {b-d}/[5.000000000,0=/<empty>] !
+iter_scan: {b-d}/[5.000000000,0=/<empty>] !
 iter_scan: err=iter ahead of provisional value for intent "c" (at "e"/0,0)
 error: (*withstack.withStack:) iter ahead of provisional value for intent "c" (at "e"/0,0)
 
@@ -40,8 +40,8 @@ iter_new types=pointsAndRanges
 iter_seek_lt k=z
 iter_scan reverse
 ----
-iter_seek_lt: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
-iter_scan: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
+iter_seek_lt: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>] !
+iter_scan: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>] !
 iter_scan: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
 iter_scan: err=intentIter should not be after iter
 error: (*withstack.withStack:) intentIter should not be after iter
@@ -63,7 +63,7 @@ iter_new types=pointsAndRanges
 iter_seek_ge k=e
 iter_next
 ----
-iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_next: err=intentIter at intent, but iter not at provisional value
 error: (*withstack.withStack:) intentIter at intent, but iter not at provisional value
 
@@ -79,13 +79,13 @@ error: (*withstack.withStack:) iter not on provisional value for intent "e"
 
 # Reverse seek at f will land on intent at e, even though there was no
 # provisional value. This is fine, as long as we emit the correct range keys.
-# It eventually errors because 
+# It eventually errors because it violates positioning invariants.
 run error
 iter_new types=pointsAndRanges
 iter_seek_lt k=f
 iter_prev
 ----
-iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_prev: err=intentIter should not be after iter
 error: (*withstack.withStack:) intentIter should not be after iter
 
@@ -97,7 +97,7 @@ iter_seek_lt k=d
 iter_prev
 iter_prev
 ----
-iter_seek_lt: "c"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {b-d}/[5.000000000,0=/<empty>]
+iter_seek_lt: "c"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {b-d}/[5.000000000,0=/<empty>] !
 iter_prev: {b-d}/[5.000000000,0=/<empty>]
 iter_prev: .
 
@@ -108,7 +108,7 @@ iter_new types=pointsAndRanges
 iter_seek_ge k=e
 iter_prev
 ----
-iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_prev: err=iter not at provisional value, cmp: -1
 error: (*withstack.withStack:) iter not at provisional value, cmp: -1
 
@@ -119,7 +119,7 @@ iter_next
 iter_prev
 iter_next
 ----
-iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_next: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
 iter_prev: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
 iter_next: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
