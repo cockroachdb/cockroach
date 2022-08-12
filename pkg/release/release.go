@@ -480,14 +480,14 @@ type PutReleaseOptions struct {
 	VersionStr string
 
 	// Files are all the files to be included in the archive.
-	Files      []ArchiveFile
-	ExtraFiles []ArchiveFile
+	Files         []ArchiveFile
+	ArchivePrefix string
 }
 
 // PutRelease uploads a compressed archive containing the release
 // files and a checksum file of the archive to S3.
 func PutRelease(svc S3Putter, o PutReleaseOptions) {
-	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr, "cockroach")
+	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr, o.ArchivePrefix)
 	var body bytes.Buffer
 
 	if strings.HasSuffix(targetArchive, ".zip") {
@@ -588,29 +588,6 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 	}
 	if _, err := svc.PutObject(&putObjectInputChecksum); err != nil {
 		log.Fatalf("s3 upload %s: %s", targetChecksum, err)
-	}
-	for _, f := range o.ExtraFiles {
-		keyBase, hasExe := TrimDotExe(f.ArchiveFilePath)
-		targetKey, _ := S3KeyRelease(o.Platform, o.VersionStr, keyBase)
-		if hasExe {
-			targetKey += ".exe"
-		}
-		log.Printf("Uploading to s3://%s/%s", o.BucketName, targetKey)
-		handle, err := os.Open(f.LocalAbsolutePath)
-		if err != nil {
-			log.Fatalf("failed to open %s: %s", f.LocalAbsolutePath, err)
-		}
-		putObjectInput := s3.PutObjectInput{
-			Bucket: &o.BucketName,
-			Key:    &targetKey,
-			Body:   handle,
-		}
-		if o.NoCache {
-			putObjectInput.CacheControl = &NoCache
-		}
-		if _, err := svc.PutObject(&putObjectInput); err != nil {
-			log.Fatalf("s3 upload %s: %s", targetKey, err)
-		}
 	}
 }
 
