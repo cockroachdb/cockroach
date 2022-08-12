@@ -186,15 +186,16 @@ func TestIndexBackfillerColumns(t *testing.T) {
 			expNeeded:   colIDs{1},
 		},
 		{
-			name: "dropped columns are excluded",
+			name: "dropped columns are excluded if not needed",
 			cols: cols{
 				{id: 1, public: true},
 				{id: 2, writeAndDeleteOnly: true},
 				{id: 3, public: true, virtual: true, computed: true},
 			},
 			src: index{
-				primary: true,
-				keyCols: colIDs{1, 3},
+				primary:          true,
+				keyCols:          colIDs{2},
+				primaryValueCols: colIDs{1, 3},
 			},
 			toEncode: indexes{
 				{
@@ -205,6 +206,29 @@ func TestIndexBackfillerColumns(t *testing.T) {
 			expCols:     colIDs{1, 3},
 			expComputed: colIDs{3},
 			expNeeded:   colIDs{1},
+		},
+		{
+			name: "dropped columns are included if needed",
+			cols: cols{
+				{id: 1, public: true},
+				{id: 2, writeAndDeleteOnly: true},
+				{id: 3, public: true, virtual: true, computed: true},
+			},
+			src: index{
+				primary:          true,
+				keyCols:          colIDs{2},
+				primaryValueCols: colIDs{1, 3},
+			},
+			toEncode: indexes{
+				{
+					primary:          true,
+					keyCols:          colIDs{1, 3},
+					primaryValueCols: colIDs{2},
+				},
+			},
+			expCols:     colIDs{1, 2, 3},
+			expComputed: colIDs{3},
+			expNeeded:   colIDs{1, 2},
 		},
 		{
 			// This is the case where we're building a new primary index as part
@@ -351,6 +375,7 @@ type fakeColumn struct {
 
 func (fc fakeColumn) Public() bool             { return fc.public }
 func (fc fakeColumn) Adding() bool             { return fc.adding }
+func (fc fakeColumn) Dropped() bool            { return fc.writeAndDeleteOnly }
 func (fc fakeColumn) WriteAndDeleteOnly() bool { return fc.writeAndDeleteOnly }
 func (fc fakeColumn) IsComputed() bool         { return fc.computed }
 func (fc fakeColumn) IsVirtual() bool          { return fc.virtual }
