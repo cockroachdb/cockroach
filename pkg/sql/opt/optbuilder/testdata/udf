@@ -420,3 +420,301 @@ project
                                └── eq
                                     ├── variable: b:3
                                     └── variable: abc.a:2
+
+exec-ddl
+CREATE FUNCTION add_num_args(x INT, y INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT $1+$2;
+$$;
+----
+
+build format=show-scalars
+SELECT add_num_args(1, 2)
+----
+project
+ ├── columns: add_num_args:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: add_num_args [as=add_num_args:4]
+           ├── args: x:1 y:2
+           ├── input
+           │    ├── const: 1
+           │    └── const: 2
+           └── body
+                └── project
+                     ├── columns: "?column?":3
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":3]
+                               ├── variable: x:1
+                               └── variable: y:2
+
+build format=show-scalars
+SELECT add_num_args(add_num_args(1, 2), 3)
+----
+project
+ ├── columns: add_num_args:7
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: add_num_args [as=add_num_args:7]
+           ├── args: x:4 y:5
+           ├── input
+           │    ├── udf: add_num_args
+           │    │    ├── args: x:1 y:2
+           │    │    ├── input
+           │    │    │    ├── const: 1
+           │    │    │    └── const: 2
+           │    │    └── body
+           │    │         └── project
+           │    │              ├── columns: "?column?":3
+           │    │              ├── values
+           │    │              │    └── tuple
+           │    │              └── projections
+           │    │                   └── plus [as="?column?":3]
+           │    │                        ├── variable: x:1
+           │    │                        └── variable: y:2
+           │    └── const: 3
+           └── body
+                └── project
+                     ├── columns: "?column?":6
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":6]
+                               ├── variable: x:4
+                               └── variable: y:5
+
+build format=show-scalars
+SELECT * FROM abc WHERE a = add_num_args(add_num_args(b, c), 3)
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── variable: a:1
+                └── udf: add_num_args
+                     ├── args: x:9 y:10
+                     ├── input
+                     │    ├── udf: add_num_args
+                     │    │    ├── args: x:6 y:7
+                     │    │    ├── input
+                     │    │    │    ├── variable: b:2
+                     │    │    │    └── variable: c:3
+                     │    │    └── body
+                     │    │         └── project
+                     │    │              ├── columns: "?column?":8
+                     │    │              ├── values
+                     │    │              │    └── tuple
+                     │    │              └── projections
+                     │    │                   └── plus [as="?column?":8]
+                     │    │                        ├── variable: x:6
+                     │    │                        └── variable: y:7
+                     │    └── const: 3
+                     └── body
+                          └── project
+                               ├── columns: "?column?":11
+                               ├── values
+                               │    └── tuple
+                               └── projections
+                                    └── plus [as="?column?":11]
+                                         ├── variable: x:9
+                                         └── variable: y:10
+
+assign-placeholders-build query-args=(33) format=show-scalars
+SELECT add_num_args(1, $1) FROM abc WHERE a = add_num_args($1, 2)
+----
+project
+ ├── columns: add_num_args:12
+ ├── select
+ │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── scan abc
+ │    │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    └── filters
+ │         └── eq
+ │              ├── variable: a:1
+ │              └── udf: add_num_args
+ │                   ├── args: x:6 y:7
+ │                   ├── input
+ │                   │    ├── const: 33
+ │                   │    └── const: 2
+ │                   └── body
+ │                        └── project
+ │                             ├── columns: "?column?":8
+ │                             ├── values
+ │                             │    └── tuple
+ │                             └── projections
+ │                                  └── plus [as="?column?":8]
+ │                                       ├── variable: x:6
+ │                                       └── variable: y:7
+ └── projections
+      └── udf: add_num_args [as=add_num_args:12]
+           ├── args: x:9 y:10
+           ├── input
+           │    ├── const: 1
+           │    └── const: 33
+           └── body
+                └── project
+                     ├── columns: "?column?":11
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":11]
+                               ├── variable: x:9
+                               └── variable: y:10
+
+# --------------------------------------------------
+# UDFs with anonymous arguments.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION add_anon(INT, INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT $1+$2;
+$$;
+----
+
+build format=show-scalars
+SELECT add_anon(1, 2)
+----
+project
+ ├── columns: add_anon:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: add_anon [as=add_anon:4]
+           ├── args: arg1:1 arg2:2
+           ├── input
+           │    ├── const: 1
+           │    └── const: 2
+           └── body
+                └── project
+                     ├── columns: "?column?":3
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":3]
+                               ├── variable: arg1:1
+                               └── variable: arg2:2
+
+build format=show-scalars
+SELECT add_anon(add_anon(1, 2), 3)
+----
+project
+ ├── columns: add_anon:7
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: add_anon [as=add_anon:7]
+           ├── args: arg1:4 arg2:5
+           ├── input
+           │    ├── udf: add_anon
+           │    │    ├── args: arg1:1 arg2:2
+           │    │    ├── input
+           │    │    │    ├── const: 1
+           │    │    │    └── const: 2
+           │    │    └── body
+           │    │         └── project
+           │    │              ├── columns: "?column?":3
+           │    │              ├── values
+           │    │              │    └── tuple
+           │    │              └── projections
+           │    │                   └── plus [as="?column?":3]
+           │    │                        ├── variable: arg1:1
+           │    │                        └── variable: arg2:2
+           │    └── const: 3
+           └── body
+                └── project
+                     ├── columns: "?column?":6
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":6]
+                               ├── variable: arg1:4
+                               └── variable: arg2:5
+
+build format=show-scalars
+SELECT * FROM abc WHERE a = add_anon(add_anon(b, c), 3)
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ └── select
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── filters
+           └── eq
+                ├── variable: a:1
+                └── udf: add_anon
+                     ├── args: arg1:9 arg2:10
+                     ├── input
+                     │    ├── udf: add_anon
+                     │    │    ├── args: arg1:6 arg2:7
+                     │    │    ├── input
+                     │    │    │    ├── variable: b:2
+                     │    │    │    └── variable: c:3
+                     │    │    └── body
+                     │    │         └── project
+                     │    │              ├── columns: "?column?":8
+                     │    │              ├── values
+                     │    │              │    └── tuple
+                     │    │              └── projections
+                     │    │                   └── plus [as="?column?":8]
+                     │    │                        ├── variable: arg1:6
+                     │    │                        └── variable: arg2:7
+                     │    └── const: 3
+                     └── body
+                          └── project
+                               ├── columns: "?column?":11
+                               ├── values
+                               │    └── tuple
+                               └── projections
+                                    └── plus [as="?column?":11]
+                                         ├── variable: arg1:9
+                                         └── variable: arg2:10
+
+assign-placeholders-build query-args=(33) format=show-scalars
+SELECT add_anon(1, $1) FROM abc WHERE a = add_anon($1, 2)
+----
+project
+ ├── columns: add_anon:12
+ ├── select
+ │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── scan abc
+ │    │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    └── filters
+ │         └── eq
+ │              ├── variable: a:1
+ │              └── udf: add_anon
+ │                   ├── args: arg1:6 arg2:7
+ │                   ├── input
+ │                   │    ├── const: 33
+ │                   │    └── const: 2
+ │                   └── body
+ │                        └── project
+ │                             ├── columns: "?column?":8
+ │                             ├── values
+ │                             │    └── tuple
+ │                             └── projections
+ │                                  └── plus [as="?column?":8]
+ │                                       ├── variable: arg1:6
+ │                                       └── variable: arg2:7
+ └── projections
+      └── udf: add_anon [as=add_anon:12]
+           ├── args: arg1:9 arg2:10
+           ├── input
+           │    ├── const: 1
+           │    └── const: 33
+           └── body
+                └── project
+                     ├── columns: "?column?":11
+                     ├── values
+                     │    └── tuple
+                     └── projections
+                          └── plus [as="?column?":11]
+                               ├── variable: arg1:9
+                               └── variable: arg2:10
