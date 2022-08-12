@@ -29,7 +29,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
         │   │         rule: "dependents removed before index"
         │   │
-        │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+        │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │       │ DELETE_ONLY → ABSENT
         │       │
         │       └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
