@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc/codes"
@@ -71,6 +73,13 @@ type connector struct {
 	//
 	// NOTE: This field is optional.
 	TLSConfig *tls.Config
+
+	// DialTenantLatency tracks how long it takes to retrieve the address for
+	// a tenant and set up a tcp connection to the address.
+	DialTenantLatency *metric.Histogram
+
+	// DialTenantRetries counts how often dialing a tenant is retried.
+	DialTenantRetries *metric.Counter
 
 	// Testing knobs for internal connector calls. If specified, these will
 	// be called instead of the actual logic.
@@ -166,6 +175,11 @@ func (c *connector) dialTenantCluster(
 		return c.testingKnobs.dialTenantCluster(ctx, requester)
 	}
 
+	if c.DialTenantLatency != nil {
+		start := timeutil.Now()
+		defer func() { c.DialTenantLatency.RecordValue(timeutil.Since(start).Nanoseconds()) }()
+	}
+
 	// Repeatedly try to make a connection until context is canceled, or until
 	// we get a non-retriable error. This is preferable to terminating client
 	// connections, because in most cases those connections will simply be
@@ -183,7 +197,14 @@ func (c *connector) dialTenantCluster(
 	var serverAddr string
 	var err error
 
+	isRetry := false
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		// Track the number of dial retries.
+		if isRetry && c.DialTenantRetries != nil {
+			c.DialTenantRetries.Inc(1)
+		}
+		isRetry = true
+
 		// Retrieve a SQL pod address to connect to.
 		serverAddr, err = c.lookupAddr(ctx)
 		if err != nil {
@@ -341,10 +362,22 @@ func (c *connector) dialSQLServer(
 		return nil, err
 	}
 
-	return &onConnectionClose{
+	// Add a connection wrapper that annotates errors as belonging to the sql
+	// server.
+	conn = &errorSourceConn{
+		Conn:           conn,
+		readErrMarker:  errServerRead,
+		writeErrMarker: errServerWrite,
+	}
+
+	// Add a connection wrapper that lets the balancer know the connection is
+	// closed.
+	conn = &onConnectionClose{
 		Conn:     conn,
 		closerFn: serverAssignment.Close,
-	}, nil
+	}
+
+	return conn, nil
 }
 
 // onConnectionClose is a net.Conn wrapper to ensure that our custom closerFn

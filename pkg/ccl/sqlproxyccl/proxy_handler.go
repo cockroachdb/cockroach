@@ -289,7 +289,9 @@ func newProxyHandler(
 
 // handle is called by the proxy server to handle a single incoming client
 // connection.
-func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn) error {
+func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) error {
+	connRecievedTime := timeutil.Now()
+
 	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
 	defer func() { _ = fe.Conn.Close() }()
 	if fe.Err != nil {
@@ -357,11 +359,13 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 
 	connector := &connector{
-		ClusterName:    clusterName,
-		TenantID:       tenID,
-		DirectoryCache: handler.directoryCache,
-		Balancer:       handler.balancer,
-		StartupMsg:     backendStartupMsg,
+		ClusterName:       clusterName,
+		TenantID:          tenID,
+		DirectoryCache:    handler.directoryCache,
+		Balancer:          handler.balancer,
+		StartupMsg:        backendStartupMsg,
+		DialTenantLatency: handler.metrics.DialTenantLatency,
+		DialTenantRetries: handler.metrics.DialTenantRetries,
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.
@@ -399,6 +403,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 	defer func() { _ = crdbConn.Close() }()
 
+	// Record the connection success and how long it took.
+	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connRecievedTime).Nanoseconds())
 	handler.metrics.SuccessfulConnCount.Inc(1)
 
 	log.Infof(ctx, "new connection")
@@ -407,8 +413,18 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
+	// Wrap the client connection with an error annotater. WARNING: The TLS
+	// wrapper must be inside the errorSourceConn and not the other way around.
+	// The TLS connection attempts to cast errors to a net.Err and will behave
+	// incorrectly if handed a marked error.
+	clientConn := &errorSourceConn{
+		Conn:           fe.Conn,
+		readErrMarker:  errClientRead,
+		writeErrMarker: errClientWrite,
+	}
+
 	// Pass ownership of conn and crdbConn to the forwarder.
-	if err := f.run(fe.Conn, crdbConn); err != nil {
+	if err := f.run(clientConn, crdbConn); err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
 		return errors.Wrap(err, "running forwarder")

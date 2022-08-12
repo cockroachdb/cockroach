@@ -24,8 +24,12 @@ type metrics struct {
 	RoutingErrCount        *metric.Counter
 	RefusedConnCount       *metric.Counter
 	SuccessfulConnCount    *metric.Counter
+	ConnectionLatency      *metric.Histogram
 	AuthFailedCount        *metric.Counter
 	ExpiredClientConnCount *metric.Counter
+
+	DialTenantLatency *metric.Histogram
+	DialTenantRetries *metric.Counter
 
 	ConnMigrationSuccessCount                *metric.Counter
 	ConnMigrationErrorFatalCount             *metric.Counter
@@ -56,6 +60,12 @@ var (
 		Help:        "Number of connections being proxied",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaConnectionLatency = metric.Metadata{
+		Name:        "proxy.sql.connection_latency",
+		Unit:        metric.Unit_NANOSECONDS,
+		Help:        "Latency histogram for connecting and authenticating to a tenant cluster.",
+		Measurement: "Latency",
 	}
 	metaRoutingErrCount = metric.Metadata{
 		Name:        "proxy.err.routing",
@@ -111,6 +121,18 @@ var (
 		Measurement: "Expired Client Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDialTenantLatency = metric.Metadata{
+		Name:        "proxy.dial_tenant.latency",
+		Unit:        metric.Unit_NANOSECONDS,
+		Help:        "Latency histogram for establishing a tcp connection to a tenant cluster.",
+		Measurement: "Latency",
+	}
+	metaDialTenantRetries = metric.Metadata{
+		Name:        "proxy.dial_tenant.retries",
+		Unit:        metric.Unit_COUNT,
+		Help:        "Number of retries dialing a tenant cluster.",
+		Measurement: "Retries",
+	}
 	// Connection migration metrics.
 	//
 	// attempted = success + error_fatal + error_recoverable
@@ -156,6 +178,7 @@ var (
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.
 func makeProxyMetrics() metrics {
+
 	return metrics{
 		BackendDisconnectCount: metric.NewCounter(metaBackendDisconnectCount),
 		IdleDisconnectCount:    metric.NewCounter(metaIdleDisconnectCount),
@@ -165,8 +188,18 @@ func makeProxyMetrics() metrics {
 		RoutingErrCount:        metric.NewCounter(metaRoutingErrCount),
 		RefusedConnCount:       metric.NewCounter(metaRefusedConnCount),
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
+		ConnectionLatency: metric.NewLatency(
+			metaConnMigrationAttemptedCount,
+			base.DefaultHistogramWindowInterval(),
+		),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
+		// Connector metrics.
+		DialTenantLatency: metric.NewLatency(
+			metaDialTenantLatency,
+			base.DefaultHistogramWindowInterval(),
+		),
+		DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		// Connection migration metrics.
 		ConnMigrationSuccessCount:          metric.NewCounter(metaConnMigrationSuccessCount),
 		ConnMigrationErrorFatalCount:       metric.NewCounter(metaConnMigrationErrorFatalCount),
@@ -196,9 +229,9 @@ func (metrics *metrics) updateForError(err error) {
 		switch codeErr.code {
 		case codeExpiredClientConnection:
 			metrics.ExpiredClientConnCount.Inc(1)
-		case codeBackendDisconnected:
+		case codeBackendDisconnected, codeBackendReadFailed, codeBackendWriteFailed:
 			metrics.BackendDisconnectCount.Inc(1)
-		case codeClientDisconnected:
+		case codeClientDisconnected, codeClientWriteFailed, codeClientReadFailed:
 			metrics.ClientDisconnectCount.Inc(1)
 		case codeProxyRefusedConnection:
 			metrics.RefusedConnCount.Inc(1)
