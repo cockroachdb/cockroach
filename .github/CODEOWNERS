@@ -352,6 +352,8 @@
 /pkg/util/addr/              @cockroachdb/cli-prs @cockroachdb/obs-inf-prs
 /pkg/util/metric/            @cockroachdb/obs-inf-prs
 /pkg/util/stop/              @cockroachdb/kv-prs
+/pkg/util/grunning/          @cockroachdb/kv-prs
+/pkg/util/admission/         @cockroachdb/kv-prs
 /pkg/util/tracing            @cockroachdb/obs-inf-prs
 /pkg/workload/               @cockroachdb/sql-experience-noreview
 /pkg/obsservice/             @cockroachdb/obs-inf-prs
