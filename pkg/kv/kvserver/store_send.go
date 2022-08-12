@@ -177,13 +177,13 @@ func (s *Store) Send(
 			// If we have an uninitialized copy of the range, then we are
 			// probably a valid member of the range, we're just in the
 			// process of getting our snapshot. If we returned
-			// RangeNotFoundError, the client would invalidate its cache,
-			// but we can be smarter: the replica that caused our
-			// uninitialized replica to be created is most likely the
-			// leader.
-			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
-				RangeID:     ba.RangeID,
-				LeaseHolder: repl.creatingReplica,
+			// RangeNotFoundError, the client would invalidate its cache. Instead,
+			// we return a NLHE error to indicate to the client that it should move
+			// on and try the next replica. Very likely, the next replica the client
+			// tries will be initialized and will have useful leaseholder information
+			// for the client.
+			return nil, nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
+				RangeID: ba.RangeID,
 				// The replica doesn't have a range descriptor yet, so we have to build
 				// a ReplicaDescriptor manually.
 				Replica: roachpb.ReplicaDescriptor{
@@ -393,16 +393,16 @@ func (s *Store) maybeThrottleBatch(
 // perform its negotiation phase and execution phase in a single RPC.
 //
 // The server-side negotiation fast-path provides two benefits:
-// 1. it avoids two network hops in the common-case where a bounded staleness
-//    read is targeting a single range. This in an important performance
-//    optimization for single-row point lookups.
-// 2. it provides stronger guarantees around minimizing staleness during bounded
-//    staleness reads. Bounded staleness reads that hit the server-side
-//    fast-path use their target replica's most up-to-date resolved timestamp,
-//    so they are as fresh as possible. Bounded staleness reads that miss the
-//    fast-path and perform explicit negotiation (see below) consult a cache, so
-//    they may use an out-of-date, suboptimal resolved timestamp, as long as it
-//    is fresh enough to satisfy the staleness bound of the request.
+//  1. it avoids two network hops in the common-case where a bounded staleness
+//     read is targeting a single range. This in an important performance
+//     optimization for single-row point lookups.
+//  2. it provides stronger guarantees around minimizing staleness during bounded
+//     staleness reads. Bounded staleness reads that hit the server-side
+//     fast-path use their target replica's most up-to-date resolved timestamp,
+//     so they are as fresh as possible. Bounded staleness reads that miss the
+//     fast-path and perform explicit negotiation (see below) consult a cache, so
+//     they may use an out-of-date, suboptimal resolved timestamp, as long as it
+//     is fresh enough to satisfy the staleness bound of the request.
 //
 // The method should be called for requests that have their MinTimestampBound
 // field set, which indicates that the request wants a dynamic timestamp equal

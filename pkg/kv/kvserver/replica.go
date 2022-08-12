@@ -246,10 +246,6 @@ type Replica struct {
 	// [1]: https://github.com/cockroachdb/cockroach/pull/16664
 	writeStats *replicaStats
 
-	// creatingReplica is set when a replica is created as uninitialized
-	// via a raft message.
-	creatingReplica *roachpb.ReplicaDescriptor
-
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
 	// RWMutex.

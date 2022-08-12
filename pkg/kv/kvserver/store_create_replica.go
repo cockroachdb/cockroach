@@ -154,7 +154,6 @@ func (s *Store) tryGetOrCreateReplica(
 		// snapshot.
 	}
 	repl := newUnloadedReplica(ctx, uninitializedDesc, s, replicaID)
-	repl.creatingReplica = creatingReplica
 	repl.raftMu.Lock() // not unlocked
 
 	// Take out read-only lock. Not strictly necessary here, but follows the
