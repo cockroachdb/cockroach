@@ -24,8 +24,8 @@ import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvi
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import {
   AxisUnits,
-  TimeScale,
   TimeScaleDropdown,
+  TimeScale,
 } from "@cockroachlabs/cluster-ui";
 import {
   PageConfig,
@@ -41,9 +41,12 @@ import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
 import { queryByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
-import { TimeWindow, setMetricsFixedWindow } from "src/redux/timeScale";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
+import {
+  TimeWindow,
+  setMetricsFixedWindow,
+  selectTimeScale,
+  setTimeScale,
+} from "src/redux/timeScale";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -324,14 +327,14 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodesSummary: nodesSummarySelector(state),
   nodesQueryValid: state.cachedData.nodes.valid,
   metricsMetadata: metricsMetadataSelector(state),
-  timeScale: globalTimeScaleLocalSetting.selector(state),
+  timeScale: selectTimeScale(state),
 });
 
 const mapDispatchToProps = {
   refreshNodes,
   refreshMetricMetadata,
   setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale: setTimeScale,
 };
 
 export default withRouter(

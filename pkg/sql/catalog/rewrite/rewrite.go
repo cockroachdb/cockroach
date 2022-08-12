@@ -556,6 +556,7 @@ func rewriteSchemaChangerState(
 		// TODO(ajwerner): Remember to rewrite views when the time comes. Currently
 		// views are not handled by the declarative schema changer.
 	}
+	d.SetDeclarativeSchemaChangerState(state)
 	return nil
 }
 

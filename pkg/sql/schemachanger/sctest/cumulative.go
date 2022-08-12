@@ -326,12 +326,10 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 	)
 	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement) {
 		postCommit, nonRevertible := countStages(t, setup, stmts)
-		if nonRevertible > 0 {
-			postCommit++
-		}
-		n := postCommit
+		n := postCommit + nonRevertible
+
 		t.Logf("test case has %d revertible post-commit stages", n)
-		for i := 1; i <= n; i++ {
+		for i := postCommit; i <= n; i++ {
 			if !t.Run(
 				fmt.Sprintf("backup/restore stage %d of %d", i, n),
 				func(t *testing.T) { testBackupRestoreCase(t, setup, stmts, i) },
@@ -407,6 +405,7 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 		var backups []backup
 		var done bool
 		var rollbackStage int
+		completedStages := make(map[int]struct{})
 		for i := 0; !done; i++ {
 			// We want to let the stages up to ord continue unscathed. Then, we'll
 			// start taking backups at ord. If ord corresponds to a revertible
@@ -422,6 +421,12 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 			// stage and confirm that restoring them and letting the jobs run
 			// leaves the database in the right state.
 			s := <-stageChan
+			// Move the index backwards if we see the same stage repeat due to a txn
+			// retry error for example.
+			if _, ok := completedStages[s.stageIdx]; ok {
+				i--
+			}
+			completedStages[s.stageIdx] = struct{}{}
 			shouldFail := ord == i &&
 				s.p.Stages[s.stageIdx].Phase != scop.PostCommitNonRevertiblePhase &&
 				!s.p.InRollback
