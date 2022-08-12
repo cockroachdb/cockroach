@@ -141,24 +141,23 @@ type topologySpec struct {
 // runFollowerReadsTest is a basic litmus test that follower reads work.
 // The test does the following:
 //
-//  * Creates a multi-region database and table.
-//  * Configures the database's survival goals.
-//  * Configures the table's locality setting.
-//  * Installs a number of rows into that table.
-//  * Queries the data initially with a recent timestamp and expecting an
-//    error because the table does not exist in the past immediately following
-//    creation.
-//  * If using a REGIONAL table, waits until the required duration has elapsed
-//    such that the installed data can be read with a follower read issued using
-//    `follower_read_timestamp()`.
-//  * Performs a few select query against a single row on all of the nodes and
-//    then observes the counter metric for store-level follower reads ensuring
-//    that they occurred on at least two of the nodes. If using a REGIONAL table,
-//    these reads are stale through the use of `follower_read_timestamp()`.
-//  * Performs reads against the written data on all of the nodes at a steady
-//    rate for 20 seconds, ensure that the 90-%ile SQL latencies during that
-//    time are under 10ms which implies that no WAN RPCs occurred.
-//
+//   - Creates a multi-region database and table.
+//   - Configures the database's survival goals.
+//   - Configures the table's locality setting.
+//   - Installs a number of rows into that table.
+//   - Queries the data initially with a recent timestamp and expecting an
+//     error because the table does not exist in the past immediately following
+//     creation.
+//   - If using a REGIONAL table, waits until the required duration has elapsed
+//     such that the installed data can be read with a follower read issued using
+//     `follower_read_timestamp()`.
+//   - Performs a few select query against a single row on all of the nodes and
+//     then observes the counter metric for store-level follower reads ensuring
+//     that they occurred on at least two of the nodes. If using a REGIONAL table,
+//     these reads are stale through the use of `follower_read_timestamp()`.
+//   - Performs reads against the written data on all of the nodes at a steady
+//     rate for 20 seconds, ensure that the 90-%ile SQL latencies during that
+//     time are under 10ms which implies that no WAN RPCs occurred.
 func runFollowerReadsTest(
 	ctx context.Context,
 	t test.Test,

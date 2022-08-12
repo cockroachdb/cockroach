@@ -331,18 +331,17 @@ func (b *Builder) buildSingleRowSubquery(
 //
 // We use the following transformations:
 //
-//   <var> IN (<subquery>)
-//     ==> ConstructAny(<subquery>, <var>, EqOp)
+//	<var> IN (<subquery>)
+//	  ==> ConstructAny(<subquery>, <var>, EqOp)
 //
-//   <var> NOT IN (<subquery>)
-//    ==> ConstructNot(ConstructAny(<subquery>, <var>, EqOp))
+//	<var> NOT IN (<subquery>)
+//	 ==> ConstructNot(ConstructAny(<subquery>, <var>, EqOp))
 //
-//   <var> <comp> {SOME|ANY}(<subquery>)
-//     ==> ConstructAny(<subquery>, <var>, <comp>)
+//	<var> <comp> {SOME|ANY}(<subquery>)
+//	  ==> ConstructAny(<subquery>, <var>, <comp>)
 //
-//   <var> <comp> ALL(<subquery>)
-//     ==> ConstructNot(ConstructAny(<subquery>, <var>, Negate(<comp>)))
-//
+//	<var> <comp> ALL(<subquery>)
+//	  ==> ConstructNot(ConstructAny(<subquery>, <var>, Negate(<comp>)))
 func (b *Builder) buildMultiRowSubquery(
 	c *tree.ComparisonExpr, inScope *scope, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr, outScope *scope) {

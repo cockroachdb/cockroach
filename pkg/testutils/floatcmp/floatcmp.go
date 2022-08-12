@@ -52,15 +52,15 @@ const (
 // fraction is used to calculate the tolerance as a relative fraction of the
 // smaller of expected and actual:
 //
-//   tolerance_frac = (fraction * min(|expected|, |actual|))
+//	tolerance_frac = (fraction * min(|expected|, |actual|))
 //
 // margin specifies the tolerance as an absolute value:
 //
-//   tolerance_marg = margin
+//	tolerance_marg = margin
 //
 // The tolerance used to determine approximate equality is:
 //
-//   tolerance = max(tolerance_frac, tolerance_marg)
+//	tolerance = max(tolerance_frac, tolerance_marg)
 //
 // To use only one of fraction or margin, set the other to 0.
 //
@@ -68,7 +68,7 @@ const (
 // should be set to the smallest relative fraction to tolerate. The margin
 // should be set to a much smaller value so that it is only used when:
 //
-//   (fraction * min(|expected|, |actual|)) < margin
+//	(fraction * min(|expected|, |actual|)) < margin
 //
 // which allows expected and actual to be approximately equal within margin when
 // either is 0.

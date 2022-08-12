@@ -426,10 +426,11 @@ func (a *Allocator) Used() int64 {
 // this allocator by delta bytes (which can be both positive or negative).
 //
 // If:
-// - afterAllocation is true,
-// - the allocator was created via NewLimitedAllocator with a non-nil unlimited
-//   memory account,
-// - the positive delta allocation is denied by the limited memory account,
+//   - afterAllocation is true,
+//   - the allocator was created via NewLimitedAllocator with a non-nil unlimited
+//     memory account,
+//   - the positive delta allocation is denied by the limited memory account,
+//
 // then the unlimited account is grown by delta. The memory error is still
 // thrown.
 func (a *Allocator) adjustMemoryUsage(delta int64, afterAllocation bool) {
@@ -604,16 +605,16 @@ func GetFixedSizeTypeSize(t *types.T) (size int64) {
 // reallocating batches with ResetMaybeReallocate() function.
 //
 // The heuristic is as follows:
-// - the first time a batch exceeds the memory limit, its capacity is memorized,
-//   and from now on that capacity will determine the upper bound on the
-//   capacities of the batches allocated through the helper;
-// - if at any point in time a batch exceeds the memory limit by at least a
-//   factor of two, then that batch is discarded, and the capacity will never
-//   exceed half of the capacity of the discarded batch;
-// - if the memory limit is not reached, then the behavior of the dynamic growth
-//   of the capacity provided by Allocator.resetMaybeReallocate is still
-//   applicable (i.e. the capacities will grow exponentially until
-//   coldata.BatchSize()).
+//   - the first time a batch exceeds the memory limit, its capacity is memorized,
+//     and from now on that capacity will determine the upper bound on the
+//     capacities of the batches allocated through the helper;
+//   - if at any point in time a batch exceeds the memory limit by at least a
+//     factor of two, then that batch is discarded, and the capacity will never
+//     exceed half of the capacity of the discarded batch;
+//   - if the memory limit is not reached, then the behavior of the dynamic growth
+//     of the capacity provided by Allocator.resetMaybeReallocate is still
+//     applicable (i.e. the capacities will grow exponentially until
+//     coldata.BatchSize()).
 //
 // NOTE: it works under the assumption that only a single coldata.Batch is being
 // used.

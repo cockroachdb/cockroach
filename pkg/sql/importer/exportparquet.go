@@ -659,9 +659,12 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 
 // newParquetSchema creates the schema for the parquet file,
 // see example schema:
-//     https://github.com/fraugster/parquet-go/issues/18#issuecomment-946013210
+//
+//	https://github.com/fraugster/parquet-go/issues/18#issuecomment-946013210
+//
 // see docs here:
-//     https://pkg.go.dev/github.com/fraugster/parquet-go/parquetschema#SchemaDefinition
+//
+//	https://pkg.go.dev/github.com/fraugster/parquet-go/parquetschema#SchemaDefinition
 func newParquetSchema(parquetFields []ParquetColumn) *parquetschema.SchemaDefinition {
 	schemaDefinition := new(parquetschema.SchemaDefinition)
 	schemaDefinition.RootColumn = new(parquetschema.ColumnDefinition)

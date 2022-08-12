@@ -676,9 +676,9 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 // See the comment in shouldFollowerQuiesceOnNotify for details on how these two
 // functions combine to provide the guarantee that:
 //
-//   If a quorum of replica in a Raft group is alive and at least
-//   one of these replicas is up-to-date, the Raft group will catch
-//   up any of the live, lagging replicas.
+//	If a quorum of replica in a Raft group is alive and at least
+//	one of these replicas is up-to-date, the Raft group will catch
+//	up any of the live, lagging replicas.
 //
 // Note that this mechanism can race with concurrent invocations of processTick,
 // which may have a copy of the previous livenessMap where the now-live node is

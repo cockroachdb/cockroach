@@ -311,3 +311,4 @@ func (b *deleteQueryBuilder) run(
 	)
 	return int64(rowCount), err
 }
+

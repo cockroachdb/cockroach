@@ -17,9 +17,9 @@ import (
 
 // CanInlineWith returns whether or not it's valid to inline binding in expr.
 // This is the case when materialize is explicitly set to false, or when:
-// 1. binding has no volatile expressions (because once it's inlined, there's no
-//    guarantee it will be executed fully), and
-// 2. binding is referenced at most once in expr.
+//  1. binding has no volatile expressions (because once it's inlined, there's no
+//     guarantee it will be executed fully), and
+//  2. binding is referenced at most once in expr.
 func (c *CustomFuncs) CanInlineWith(binding, expr memo.RelExpr, private *memo.WithPrivate) bool {
 	// If materialization is set, ignore the checks below.
 	if private.Mtr.Set {
