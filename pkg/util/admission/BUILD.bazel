@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "disk_bandwidth.go",
         "doc.go",
+        "grant_coordinator.go",
         "granter.go",
         "io_load_listener.go",
         "store_token_estimation.go",
