@@ -12,6 +12,7 @@ go_library(
         "kv_slot_adjuster.go",
         "sql_cpu_overload_indicator.go",
         "store_token_estimation.go",
+        "tokens_linear_model.go",
         "work_queue.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission",
