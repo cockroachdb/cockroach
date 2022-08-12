@@ -552,6 +552,9 @@ func (ec *Context) SetStmtTimestamp(ts time.Time) {
 
 // GetLocation returns the session timezone.
 func (ec *Context) GetLocation() *time.Location {
+	if ec == nil {
+		return time.UTC
+	}
 	return ec.SessionData().GetLocation()
 }
 

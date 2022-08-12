@@ -18,10 +18,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -581,7 +579,6 @@ func TestForecastColumnStatistics(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 
@@ -593,7 +590,7 @@ func TestForecastColumnStatistics(t *testing.T) {
 			expected := tc.forecast.toTableStatistic(jobspb.ForecastStatsName, i)
 			at := testStatTime(tc.at)
 
-			forecast, err := forecastColumnStatistics(ctx, evalCtx, observed, at, 1)
+			forecast, err := forecastColumnStatistics(ctx, observed, at, 1)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("test case %d unexpected forecastColumnStatistics err: %v", i, err)

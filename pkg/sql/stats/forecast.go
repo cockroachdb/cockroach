@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,12 +58,7 @@ const maxForecastDistance = time.Hour * 24 * 7
 //
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
-//
-// TODO(michae2): Use nil *eval.Context or custom tree.CompareContext instead of
-// taking an evalCtx.
-func ForecastTableStatistics(
-	ctx context.Context, evalCtx tree.CompareContext, observed []*TableStatistic,
-) []*TableStatistic {
+func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []*TableStatistic {
 	// Early sanity check. We'll check this again in forecastColumnStatistics.
 	if len(observed) < minObservationsForForecast {
 		return nil
@@ -102,9 +98,7 @@ func ForecastTableStatistics(
 
 	forecasts := make([]*TableStatistic, 0, len(forecastCols))
 	for _, colKey := range forecastCols {
-		forecast, err := forecastColumnStatistics(
-			ctx, evalCtx, observedByCols[colKey], at, minGoodnessOfFit,
-		)
+		forecast, err := forecastColumnStatistics(ctx, observedByCols[colKey], at, minGoodnessOfFit)
 		if err != nil {
 			log.VEventf(
 				ctx, 2, "could not forecast statistics for table %v columns %s: %v",
@@ -135,11 +129,7 @@ func ForecastTableStatistics(
 // forecastColumnStatistics is deterministic: given the same observations and
 // forecast time, it will return the same forecast.
 func forecastColumnStatistics(
-	ctx context.Context,
-	evalCtx tree.CompareContext,
-	observed []*TableStatistic,
-	at time.Time,
-	minRequiredFit float64,
+	ctx context.Context, observed []*TableStatistic, at time.Time, minRequiredFit float64,
 ) (forecast *TableStatistic, err error) {
 	if len(observed) < minObservationsForForecast {
 		return nil, errors.New("not enough observations to forecast statistics")
@@ -263,6 +253,8 @@ func forecastColumnStatistics(
 	// histogram. NOTE: If any of the observed histograms were for inverted
 	// indexes this will produce an incorrect histogram.
 	if observed[0].HistogramData != nil {
+		var evalCtx *eval.Context
+
 		hist, err := predictHistogram(
 			ctx, evalCtx, observed, forecastAt, minRequiredFit, nonNullRowCount,
 		)
