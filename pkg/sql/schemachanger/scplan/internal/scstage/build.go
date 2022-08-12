@@ -101,12 +101,13 @@ func buildStages(bc buildContext) (stages []Stage) {
 	bs := buildState{
 		incumbent: make([]scpb.Status, len(bc.startingStatuses)),
 		phase:     bc.startingPhase,
-		fulfilled: make(map[*screl.Node]struct{}, bc.g.Order()),
+		fulfilled: make(map[*screl.Node]fulfillEpoch, bc.g.Order()),
 	}
 	for i, n := range bc.nodes(bc.startingStatuses) {
 		bs.incumbent[i] = n.CurrentStatus
-		bs.fulfilled[n] = struct{}{}
+		bs.fulfilled[n] = 0
 	}
+	bs.fulfillEpoch++
 	// Build stages until reaching the terminal state.
 	for !bc.isStateTerminal(bs.incumbent) {
 		// Generate a stage builder which can make progress.
@@ -146,8 +147,9 @@ func buildStages(bc buildContext) (stages []Stage) {
 		stages = append(stages, stage)
 		// Update the build state with this stage's progress.
 		for n := range sb.fulfilling {
-			bs.fulfilled[n] = struct{}{}
+			bs.fulfilled[n] = bs.fulfillEpoch
 		}
+		bs.fulfillEpoch++
 		bs.incumbent = stage.After
 		switch bs.phase {
 		case scop.StatementPhase, scop.PreCommitPhase:
@@ -162,9 +164,10 @@ func buildStages(bc buildContext) (stages []Stage) {
 // buildState contains the global build state for building the stages.
 // Only the buildStages function mutates it, it's read-only everywhere else.
 type buildState struct {
-	incumbent []scpb.Status
-	phase     scop.Phase
-	fulfilled map[*screl.Node]struct{}
+	incumbent    []scpb.Status
+	phase        scop.Phase
+	fulfilled    map[*screl.Node]fulfillEpoch
+	fulfillEpoch fulfillEpoch
 }
 
 // isStateTerminal returns true iff the state is terminal, according to the
@@ -205,9 +208,9 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 		bs:         bs,
 		opType:     opType,
 		current:    make([]currentTargetState, numTargets),
-		fulfilling: map[*screl.Node]struct{}{},
+		fulfilling: map[*screl.Node]fulfillEpoch{},
 		lut:        make(map[*scpb.Target]*currentTargetState, numTargets),
-		visited:    make(map[*screl.Node]uint64, numTargets),
+		visited:    make(map[*screl.Node]visitEpoch, numTargets),
 	}
 	{
 		nodes := bc.nodes(bs.incumbent)
@@ -247,7 +250,7 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 				continue
 			}
 			sb.opEdges = append(sb.opEdges, t.e)
-			sb.fulfilling[t.e.To()] = struct{}{}
+			sb.fulfilling[t.e.To()] = sb.bs.fulfillEpoch
 			sb.current[i] = sb.nextTargetState(t)
 			isDone = false
 		}
@@ -261,7 +264,7 @@ type stageBuilder struct {
 	bs         buildState
 	opType     scop.Type
 	current    []currentTargetState
-	fulfilling map[*screl.Node]struct{}
+	fulfilling map[*screl.Node]fulfillEpoch
 	opEdges    []*scgraph.OpEdge
 
 	// anyRemainingOpsCanFail indicates whether there are any backfill or
@@ -274,9 +277,12 @@ type stageBuilder struct {
 	// Helper data structures used to improve performance.
 
 	lut        map[*scpb.Target]*currentTargetState
-	visited    map[*screl.Node]uint64
-	visitEpoch uint64
+	visited    map[*screl.Node]visitEpoch
+	visitEpoch visitEpoch
 }
+
+type fulfillEpoch uint64
+type visitEpoch uint64
 
 type currentTargetState struct {
 	n *screl.Node
@@ -376,7 +382,7 @@ func (sb stageBuilder) hasUnmetInboundDeps(n *screl.Node) (ret bool) {
 }
 
 func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
-	_, fromIsFulfilled := sb.bs.fulfilled[de.From()]
+	epoch, fromIsFulfilled := sb.bs.fulfilled[de.From()]
 	_, fromIsCandidate := sb.fulfilling[de.From()]
 	switch de.Kind() {
 	case scgraph.PreviousStagePrecedence:
@@ -389,15 +395,16 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 		return !fromIsFulfilled && !fromIsCandidate
 
 	case scgraph.SameStagePrecedence:
-		if fromIsFulfilled {
+		if fromIsFulfilled && epoch > 0 {
 			// The dependency requires the source node to be fulfilled in the same
 			// stage as the destination, which is impossible at this point because
 			// it has already been fulfilled in an earlier stage.
+			//
 			// This should never happen.
 			break
 		}
 		// True iff the source node has not been fulfilled in an earlier stage and
-		// and also iff it's not (yet?) scheduled to be fulfilled in this stage.
+		// also iff it's not (yet?) scheduled to be fulfilled in this stage.
 		return !fromIsCandidate
 
 	default:
@@ -435,7 +442,12 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 	// Mark this node as having been visited in this traversal.
 	sb.visited[n] = sb.visitEpoch
 	// Do some sanity checks.
-	if _, isFulfilling := sb.bs.fulfilled[n]; isFulfilling {
+	if fulfilledEpoch, isFulfilling := sb.bs.fulfilled[n]; isFulfilling {
+		// If the node was fulfilled before we ever did anything, then it is not
+		// considered to have unmeetable outbound deps.
+		if fulfilledEpoch == 0 {
+			return false
+		}
 		// This should never happen.
 		panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
 			screl.NodeString(n)))
