@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,7 +40,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 		types.Float4,
 	}
 	colTypes = append(colTypes, types.Scalar...)
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var evalCtx *eval.Context
 	rng, seed := randutil.NewTestRand()
 	for _, colType := range colTypes {
 		if canMakeQuantile(histVersion, colType) {
@@ -566,7 +565,7 @@ func TestQuantileToHistogram(t *testing.T) {
 			err:  true,
 		},
 	}
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var evalCtx *eval.Context
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			hist, err := tc.qfun.toHistogram(evalCtx, types.Float, tc.rows)
@@ -843,7 +842,7 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 			err: true,
 		},
 	}
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var evalCtx *eval.Context
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			val, err := toQuantileValue(tc.dat)
@@ -1120,7 +1119,7 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 			res: quantileMaxTimestampSec,
 		},
 	}
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var evalCtx *eval.Context
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			d, err := fromQuantileValue(tc.typ, tc.val)
