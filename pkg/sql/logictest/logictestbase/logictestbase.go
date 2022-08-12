@@ -244,7 +244,9 @@ var multiregion15node5region3azsLocalities = map[int]roachpb.Locality{
 
 // LogicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
-//   # LogicTest: default distsql
+//
+//	# LogicTest: default distsql
+//
 // The test is run once on each configuration (in different subtests).
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
@@ -580,7 +582,8 @@ func (l stdlogger) Logf(format string, args ...interface{}) {
 // configurations.
 //
 // Example:
-//   # LogicTest: default distsql
+//
+//	# LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
 func ReadTestFileConfigs(

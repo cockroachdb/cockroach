@@ -58,8 +58,8 @@ func CanExtractConstDatum(e opt.Expr) bool {
 
 // ExtractConstDatum returns the Datum that represents the value of an
 // expression with a constant value. An expression with a constant value is:
-//  - one that has a ConstValue tag, or
-//  - a tuple or array where all children are constant values.
+//   - one that has a ConstValue tag, or
+//   - a tuple or array where all children are constant values.
 func ExtractConstDatum(e opt.Expr) tree.Datum {
 	switch t := e.(type) {
 	case *NullExpr:

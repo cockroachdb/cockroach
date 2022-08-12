@@ -21,6 +21,7 @@ import (
 
 // sqlMigrations embeds all the .sql file containing migrations to be run by
 // Goose.
+//
 //go:embed sqlmigrations/*.sql
 var sqlMigrations embed.FS
 

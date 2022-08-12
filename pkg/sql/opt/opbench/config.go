@@ -91,7 +91,7 @@ func (it *ConfigIterator) Next() (Configuration, bool) {
 // value for each "slot". So if the first option has 2 choices and the second
 // has 3, the increment process goes like:
 //
-//   [0 0] => [1 0] => [0 1] => [1 1] => [0 2] => [1 2] => done.
+//	[0 0] => [1 0] => [0 1] => [1 1] => [0 2] => [1 2] => done.
 func (it *ConfigIterator) increment() {
 	i := 0
 	for i < len(it.options) {

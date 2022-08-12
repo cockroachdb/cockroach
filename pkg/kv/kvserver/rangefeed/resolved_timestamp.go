@@ -275,10 +275,11 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS h
 // that may at some point in the future result in a RangeFeedValue publication.
 // Based on this definition, there are three possible states that an extent
 // intent can be in while fitting the requirement to be an "unresolved intent":
-// 1. part of a PENDING transaction
-// 2. part of a STAGING transaction that has not been explicitly committed yet
-// 3. part of a COMMITTED transaction but not yet resolved due to the asynchronous
-//    nature of intent resolution
+//  1. part of a PENDING transaction
+//  2. part of a STAGING transaction that has not been explicitly committed yet
+//  3. part of a COMMITTED transaction but not yet resolved due to the asynchronous
+//     nature of intent resolution
+//
 // Notably, this means that an intent that exists but that is known to be part
 // of an ABORTED transaction is not considered "unresolved", even if it has yet
 // to be cleaned up. In the context of rangefeeds, the intent's fate is resolved
@@ -287,11 +288,11 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS h
 // Defining unresolved intents in this way presents two paths for an unresolved
 // intent to become resolved (and thus decrement the unresolvedTxn's ref count).
 // An unresolved intent can become resolved if:
-// 1. it is COMMITTED or ABORTED through the traditional intent resolution
-//    process.
-// 2. it's transaction is observed to be ABORTED, meaning that it is by
-//    definition resolved even if it has yet to be cleaned up by the intent
-//    resolution process.
+//  1. it is COMMITTED or ABORTED through the traditional intent resolution
+//     process.
+//  2. it's transaction is observed to be ABORTED, meaning that it is by
+//     definition resolved even if it has yet to be cleaned up by the intent
+//     resolution process.
 //
 // An unresolvedTxn is a transaction that has one or more unresolved intents on
 // a given range. The structure itself maintains metadata about the transaction

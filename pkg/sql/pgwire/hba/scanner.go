@@ -50,10 +50,11 @@ type lex struct {
 // rules describes the scanning rules.
 //
 // As per pg's source, file src/backend/libpq/hba.c:
-//   Tokens are strings of non-blank
-//   characters bounded by blank characters, commas, beginning of line, and
-//   end of line. Blank means space or tab. Tokens can be delimited by
-//   double quotes (this allows the inclusion of blanks, but not newlines).
+//
+//	Tokens are strings of non-blank
+//	characters bounded by blank characters, commas, beginning of line, and
+//	end of line. Blank means space or tab. Tokens can be delimited by
+//	double quotes (this allows the inclusion of blanks, but not newlines).
 //
 // The scanner implemented here is slightly more strict than the one
 // used by PostgreSQL. For example, PostgreSQL supports tokens written
@@ -74,9 +75,9 @@ type lex struct {
 //
 // Meanwhile, the scanner does implements some other oddities of
 // PostgreSQL. For example:
-//    a, b       (space after comma) counts as a single comma-delimited field.
-//    a ,b       (space before comma) counts as two fields.
 //
+//	a, b       (space after comma) counts as a single comma-delimited field.
+//	a ,b       (space before comma) counts as two fields.
 var rules = []struct {
 	r  rule
 	rg *regexp.Regexp

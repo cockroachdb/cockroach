@@ -45,17 +45,18 @@ var mvccIncrementalIteratorMetamorphicTBI = util.ConstantWithMetamorphicTestBool
 // CockroachDB uses that as a sentinel for key metadata anyway.
 //
 // Expected usage:
-//    iter := NewMVCCIncrementalIterator(e, IterOptions{
-//        StartTime:  startTime,
-//        EndTime:    endTime,
-//        UpperBound: endKey,
-//    })
-//    defer iter.Close()
-//    for iter.SeekGE(startKey); ; iter.Next() {
-//        ok, err := iter.Valid()
-//        if !ok { ... }
-//        [code using iter.Key() and iter.Value()]
-//    }
+//
+//	iter := NewMVCCIncrementalIterator(e, IterOptions{
+//	    StartTime:  startTime,
+//	    EndTime:    endTime,
+//	    UpperBound: endKey,
+//	})
+//	defer iter.Close()
+//	for iter.SeekGE(startKey); ; iter.Next() {
+//	    ok, err := iter.Valid()
+//	    if !ok { ... }
+//	    [code using iter.Key() and iter.Value()]
+//	}
 //
 // Note regarding the correctness of the time-bound iterator optimization:
 //

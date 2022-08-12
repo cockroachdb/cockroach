@@ -988,14 +988,14 @@ type loggerOps struct{}
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 var Ops loggerOps
 
 // Ops and loggerOps implement ChannelLogger.
@@ -1012,14 +1012,14 @@ var _ ChannelLogger = Ops
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1036,14 +1036,14 @@ func (loggerOps) Infof(ctx context.Context, format string, args ...interface{}) 
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1060,14 +1060,14 @@ func (loggerOps) VInfof(ctx context.Context, level Level, format string, args ..
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1083,14 +1083,14 @@ func (loggerOps) Info(ctx context.Context, msg string) {
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1105,14 +1105,14 @@ func (loggerOps) InfofDepth(ctx context.Context, depth int, format string, args 
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1129,14 +1129,14 @@ func (loggerOps) Warningf(ctx context.Context, format string, args ...interface{
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1153,14 +1153,14 @@ func (loggerOps) VWarningf(ctx context.Context, level Level, format string, args
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1176,14 +1176,14 @@ func (loggerOps) Warning(ctx context.Context, msg string) {
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1198,14 +1198,14 @@ func (loggerOps) WarningfDepth(ctx context.Context, depth int, format string, ar
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1223,14 +1223,14 @@ func (loggerOps) Errorf(ctx context.Context, format string, args ...interface{})
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1248,14 +1248,14 @@ func (loggerOps) VErrorf(ctx context.Context, level Level, format string, args .
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1272,14 +1272,14 @@ func (loggerOps) Error(ctx context.Context, msg string) {
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1295,14 +1295,14 @@ func (loggerOps) ErrorfDepth(ctx context.Context, depth int, format string, args
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1320,14 +1320,14 @@ func (loggerOps) Fatalf(ctx context.Context, format string, args ...interface{})
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1345,14 +1345,14 @@ func (loggerOps) VFatalf(ctx context.Context, level Level, format string, args .
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1369,14 +1369,14 @@ func (loggerOps) Fatal(ctx context.Context, msg string) {
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1391,14 +1391,14 @@ func (loggerOps) FatalfDepth(ctx context.Context, depth int, format string, args
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 func (loggerOps) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.OPS, msg)
 }
@@ -1410,14 +1410,14 @@ func (loggerOps) Shout(ctx context.Context, sev Severity, msg string) {
 // The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - Operator or system actions on server processes: process starts,
-//   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run
-// - Actions that impact the topology of a cluster: node additions,
-//   removals, decommissions, etc.
-// - Job-related initiation or termination
-// - [Cluster setting](cluster-settings.html) changes
-// - [Zone configuration](configure-replication-zones.html) changes
+//   - Operator or system actions on server processes: process starts,
+//     stops, shutdowns, crashes (if they can be logged),
+//     including each time: command-line parameters, current version being run
+//   - Actions that impact the topology of a cluster: node additions,
+//     removals, decommissions, etc.
+//   - Job-related initiation or termination
+//   - [Cluster setting](cluster-settings.html) changes
+//   - [Zone configuration](configure-replication-zones.html) changes
 func (loggerOps) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.OPS, format, args...)
 }
@@ -1430,11 +1430,11 @@ type loggerHealth struct{}
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 var Health loggerHealth
 
 // Health and loggerHealth implement ChannelLogger.
@@ -1451,11 +1451,11 @@ var _ ChannelLogger = Health
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1472,11 +1472,11 @@ func (loggerHealth) Infof(ctx context.Context, format string, args ...interface{
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1493,11 +1493,11 @@ func (loggerHealth) VInfof(ctx context.Context, level Level, format string, args
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1513,11 +1513,11 @@ func (loggerHealth) Info(ctx context.Context, msg string) {
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -1532,11 +1532,11 @@ func (loggerHealth) InfofDepth(ctx context.Context, depth int, format string, ar
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1553,11 +1553,11 @@ func (loggerHealth) Warningf(ctx context.Context, format string, args ...interfa
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1574,11 +1574,11 @@ func (loggerHealth) VWarningf(ctx context.Context, level Level, format string, a
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1594,11 +1594,11 @@ func (loggerHealth) Warning(ctx context.Context, msg string) {
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -1613,11 +1613,11 @@ func (loggerHealth) WarningfDepth(ctx context.Context, depth int, format string,
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1635,11 +1635,11 @@ func (loggerHealth) Errorf(ctx context.Context, format string, args ...interface
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1657,11 +1657,11 @@ func (loggerHealth) VErrorf(ctx context.Context, level Level, format string, arg
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1678,11 +1678,11 @@ func (loggerHealth) Error(ctx context.Context, msg string) {
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -1698,11 +1698,11 @@ func (loggerHealth) ErrorfDepth(ctx context.Context, depth int, format string, a
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1720,11 +1720,11 @@ func (loggerHealth) Fatalf(ctx context.Context, format string, args ...interface
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1742,11 +1742,11 @@ func (loggerHealth) VFatalf(ctx context.Context, level Level, format string, arg
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1763,11 +1763,11 @@ func (loggerHealth) Fatal(ctx context.Context, msg string) {
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -1782,11 +1782,11 @@ func (loggerHealth) FatalfDepth(ctx context.Context, depth int, format string, a
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 func (loggerHealth) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.HEALTH, msg)
 }
@@ -1798,11 +1798,11 @@ func (loggerHealth) Shout(ctx context.Context, sev Severity, msg string) {
 // The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - Current resource usage, including critical resource usage
-// - Node-node connection events, including connection errors and
-//   gossip details
-// - Range and table leasing events
-// - Up- and down-replication, range unavailability
+//   - Current resource usage, including critical resource usage
+//   - Node-node connection events, including connection errors and
+//     gossip details
+//   - Range and table leasing events
+//   - Up- and down-replication, range unavailability
 func (loggerHealth) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.HEALTH, format, args...)
 }
@@ -3797,10 +3797,10 @@ type loggerSensitiveAccess struct{}
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3820,10 +3820,10 @@ var _ ChannelLogger = SensitiveAccess
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3843,10 +3843,10 @@ func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...i
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3866,10 +3866,10 @@ func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format str
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3888,10 +3888,10 @@ func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3909,10 +3909,10 @@ func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format s
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3932,10 +3932,10 @@ func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args .
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3955,10 +3955,10 @@ func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format 
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3977,10 +3977,10 @@ func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3998,10 +3998,10 @@ func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, forma
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4022,10 +4022,10 @@ func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4046,10 +4046,10 @@ func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format st
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4069,10 +4069,10 @@ func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4091,10 +4091,10 @@ func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format 
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4115,10 +4115,10 @@ func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4139,10 +4139,10 @@ func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format st
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4162,10 +4162,10 @@ func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4183,10 +4183,10 @@ func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format 
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4201,10 +4201,10 @@ func (loggerSensitiveAccess) Shout(ctx context.Context, sev Severity, msg string
 // The `SENSITIVE_ACCESS` channel is used to report SQL
 // data access to sensitive data:
 //
-// - Data access audit events (when table audit is enabled via
-//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
-// - SQL statements executed by users with the admin role
-// - Operations that write to system tables
+//   - Data access audit events (when table audit is enabled via
+//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//   - SQL statements executed by users with the admin role
+//   - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4220,9 +4220,9 @@ type loggerSqlExec struct{}
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 var SqlExec loggerSqlExec
 
 // SqlExec and loggerSqlExec implement ChannelLogger.
@@ -4239,9 +4239,9 @@ var _ ChannelLogger = SqlExec
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4258,9 +4258,9 @@ func (loggerSqlExec) Infof(ctx context.Context, format string, args ...interface
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4277,9 +4277,9 @@ func (loggerSqlExec) VInfof(ctx context.Context, level Level, format string, arg
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4295,9 +4295,9 @@ func (loggerSqlExec) Info(ctx context.Context, msg string) {
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4312,9 +4312,9 @@ func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, a
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4331,9 +4331,9 @@ func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interf
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4350,9 +4350,9 @@ func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, 
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4368,9 +4368,9 @@ func (loggerSqlExec) Warning(ctx context.Context, msg string) {
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4385,9 +4385,9 @@ func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4405,9 +4405,9 @@ func (loggerSqlExec) Errorf(ctx context.Context, format string, args ...interfac
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4425,9 +4425,9 @@ func (loggerSqlExec) VErrorf(ctx context.Context, level Level, format string, ar
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4444,9 +4444,9 @@ func (loggerSqlExec) Error(ctx context.Context, msg string) {
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4462,9 +4462,9 @@ func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, 
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4482,9 +4482,9 @@ func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interfac
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4502,9 +4502,9 @@ func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, ar
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4521,9 +4521,9 @@ func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4538,9 +4538,9 @@ func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, 
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, msg)
 }
@@ -4552,9 +4552,9 @@ func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 // The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - Logical SQL statement executions (when enabled via the
-//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - uncaught Go panic errors during the execution of a SQL statement.
+//   - Logical SQL statement executions (when enabled via the
+//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, format, args...)
 }

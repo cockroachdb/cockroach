@@ -688,12 +688,17 @@ func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
 //
 // Args:
 // args: The initial session parameters. They are validated by SetupConn
-//   and an error is returned if this validation fails.
+//
+//	and an error is returned if this validation fails.
+//
 // stmtBuf: The incoming statement for the new connExecutor.
 // clientComm: The interface through which the new connExecutor is going to
-//   produce results for the client.
+//
+//	produce results for the client.
+//
 // memMetrics: The metrics that statements executed on this connection will
-//   contribute to.
+//
+//	contribute to.
 func (s *Server) SetupConn(
 	ctx context.Context,
 	args SessionArgs,
@@ -1723,7 +1728,8 @@ func (ex *connExecutor) sessionData() *sessiondata.SessionData {
 // Args:
 // parentMon: The root monitor.
 // reserved: Memory reserved for the connection. The connExecutor takes
-//   ownership of this memory.
+//
+//	ownership of this memory.
 func (ex *connExecutor) activate(
 	ctx context.Context, parentMon *mon.BytesMonitor, reserved *mon.BoundAccount,
 ) {

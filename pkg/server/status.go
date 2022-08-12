@@ -1103,10 +1103,11 @@ func checkFilePattern(pattern string) error {
 // the log configuration. For example, consider the following config:
 //
 // file-groups:
-//    groupA:
-//      dir: dir1
-//    groupB:
-//      dir: dir2
+//
+//	groupA:
+//	  dir: dir1
+//	groupB:
+//	  dir: dir2
 //
 // The result of ListLogFiles on this config will return the list
 // {cockroach-groupA.XXX.log, cockroach-groupB.XXX.log}, without
@@ -1223,14 +1224,15 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 // Logs returns the log entries parsed from the log files stored on
 // the server. Log entries are returned in reverse chronological order. The
 // following options are available:
-// * "starttime" query parameter filters the log entries to only ones that
-//   occurred on or after the "starttime". Defaults to a day ago.
-// * "endtime" query parameter filters the log entries to only ones that
-//   occurred before on on the "endtime". Defaults to the current time.
-// * "pattern" query parameter filters the log entries by the provided regexp
-//   pattern if it exists. Defaults to nil.
-// * "max" query parameter is the hard limit of the number of returned log
-//   entries. Defaults to defaultMaxLogEntries.
+//   - "starttime" query parameter filters the log entries to only ones that
+//     occurred on or after the "starttime". Defaults to a day ago.
+//   - "endtime" query parameter filters the log entries to only ones that
+//     occurred before on on the "endtime". Defaults to the current time.
+//   - "pattern" query parameter filters the log entries by the provided regexp
+//     pattern if it exists. Defaults to nil.
+//   - "max" query parameter is the hard limit of the number of returned log
+//     entries. Defaults to defaultMaxLogEntries.
+//
 // To filter the log messages to only retrieve messages from a given level,
 // use a pattern that excludes all messages at the undesired levels.
 // (e.g. "^[^IW]" to only get errors, fatals and panics). An exclusive

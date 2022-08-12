@@ -55,8 +55,9 @@ func (c *CompiledExpr) LookupMatchingDefines(name string) DefineSetExpr {
 // LookupMatchingRules returns the set of rules that match the given opname at
 // the top-level, or nil if none do. For example, "InnerJoin" would match this
 // rule:
-//   [CommuteJoin]
-//   (InnerJoin $r:* $s:*) => (InnerJoin $s $r)
+//
+//	[CommuteJoin]
+//	(InnerJoin $r:* $s:*) => (InnerJoin $s $r)
 func (c *CompiledExpr) LookupMatchingRules(name string) RuleSetExpr {
 	return c.matchIndex[name]
 }
@@ -748,10 +749,11 @@ func (c *ruleContentCompiler) compileOpName(fn *FuncExpr) (_ Expr, ok bool) {
 
 // addDisallowedErr creates an error prefixed by one of the following strings,
 // depending on the context:
-//   match pattern
-//   replace pattern
-//   custom match function
-//   custom replace function
+//
+//	match pattern
+//	replace pattern
+//	custom match function
+//	custom replace function
 func (c *ruleContentCompiler) addDisallowedErr(loc Expr, disallowed string) {
 	if c.matchPattern {
 		if c.customFunc {

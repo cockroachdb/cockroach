@@ -274,8 +274,8 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 // PopulateTableWithRandData populates the provided table by executing exactly
 // `numInserts` statements. numRowsInserted <= numInserts because inserting into
 // an arbitrary table can fail for reasons which include:
-//  - UNIQUE or CHECK constraint violation. RandDatum is naive to these constraints.
-//  - Out of range error for a computed INT2 or INT4 column.
+//   - UNIQUE or CHECK constraint violation. RandDatum is naive to these constraints.
+//   - Out of range error for a computed INT2 or INT4 column.
 //
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
@@ -687,9 +687,9 @@ func nonComputedColumnTableDefs(cols []*tree.ColumnTableDef) []*tree.ColumnTable
 //
 // The value types must match the primary key columns (or a prefix of them);
 // supported types are: - Datum
-//  - bool (converts to DBool)
-//  - int (converts to DInt)
-//  - string (converts to DString)
+//   - bool (converts to DBool)
+//   - int (converts to DInt)
+//   - string (converts to DString)
 func TestingMakePrimaryIndexKey(
 	desc catalog.TableDescriptor, vals ...interface{},
 ) (roachpb.Key, error) {
@@ -751,9 +751,9 @@ func TestingMakePrimaryIndexKeyForTenant(
 //
 // The value types must match the secondary key columns,
 // supported types are: - Datum
-//  - bool (converts to DBool)
-//  - int (converts to DInt)
-//  - string (converts to DString)
+//   - bool (converts to DBool)
+//   - int (converts to DInt)
+//   - string (converts to DString)
 func TestingMakeSecondaryIndexKey(
 	desc catalog.TableDescriptor, index catalog.Index, codec keys.SQLCodec, vals ...interface{},
 ) (roachpb.Key, error) {

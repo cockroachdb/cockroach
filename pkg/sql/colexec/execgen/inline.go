@@ -270,8 +270,10 @@ func extractInlineFuncDecls(f *dst.File) map[string]funcInfo {
 // statement per return value of the input FuncDecl. For example, for
 // a FuncDecl that returns two boolean arguments, lastVal and lastValNull,
 // two statements will be returned:
+//
 //	var __retval_lastVal bool
 //	var __retval_lastValNull bool
+//
 // The second return is a slice of the names of each of the mangled return
 // declarations, in this example, __retval_lastVal and __retval_lastValNull.
 func extractReturnValues(decl *dst.FuncDecl) (retValDeclStmt dst.Stmt, retValNames []string) {
@@ -318,8 +320,10 @@ func extractReturnValues(decl *dst.FuncDecl) (retValDeclStmt dst.Stmt, retValNam
 // we'll return the statement:
 //
 // var (
-//   a int = x
-//   b string = y
+//
+//	a int = x
+//	b string = y
+//
 // )
 //
 // In the case where the formal parameter name is the same as the input

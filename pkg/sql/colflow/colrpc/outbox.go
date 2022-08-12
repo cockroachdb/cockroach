@@ -80,8 +80,8 @@ type Outbox struct {
 }
 
 // NewOutbox creates a new Outbox.
-// - getStats, when non-nil, returns all of the execution statistics of the
-//   operators that are in the same tree as this Outbox.
+//   - getStats, when non-nil, returns all of the execution statistics of the
+//     operators that are in the same tree as this Outbox.
 func NewOutbox(
 	unlimitedAllocator *colmem.Allocator,
 	input colexecargs.OpWithMetaInfo,
@@ -135,15 +135,15 @@ func (o *Outbox) close(ctx context.Context) {
 // If an error is encountered that cannot be sent over the stream, the error
 // will be logged but not returned.
 // There are several ways the bidirectional FlowStream RPC may terminate.
-// 1) Execution is finished. In this case, the upstream operator signals
-//    termination by returning a zero-length batch. The Outbox will drain its
-//    metadata sources, send the metadata, and then call CloseSend on the
-//    stream. The Outbox will wait until its Recv goroutine receives a non-nil
-//    error to not leak resources.
-// 2) A cancellation happened. This can come from the provided context or the
-//    remote reader. Refer to tests for expected behavior.
-// 3) A drain signal was received from the server (consumer). In this case, the
-//    Outbox goes through the same steps as 1).
+//  1. Execution is finished. In this case, the upstream operator signals
+//     termination by returning a zero-length batch. The Outbox will drain its
+//     metadata sources, send the metadata, and then call CloseSend on the
+//     stream. The Outbox will wait until its Recv goroutine receives a non-nil
+//     error to not leak resources.
+//  2. A cancellation happened. This can come from the provided context or the
+//     remote reader. Refer to tests for expected behavior.
+//  3. A drain signal was received from the server (consumer). In this case, the
+//     Outbox goes through the same steps as 1).
 func (o *Outbox) Run(
 	ctx context.Context,
 	dialer execinfra.Dialer,
@@ -254,20 +254,20 @@ func (o *Outbox) moveToDraining(ctx context.Context, reason redact.RedactableStr
 // drain signal) as well as an error which is non-nil if an error was
 // encountered AND the error should be sent over the stream as metadata. The for
 // loop continues iterating until one of the following conditions becomes true:
-// 1) A zero-length batch is received from the input. This indicates graceful
-//    termination. true, nil is returned.
-// 2) Outbox.draining is observed to be true. This is also considered graceful
-//    termination. true, nil is returned.
-// 3) An error unrelated to the stream occurs (e.g. while deserializing a
-//    coldata.Batch). false, err is returned. This err should be sent over the
-//    stream as metadata.
-// 4) An error related to the stream occurs. In this case, the error is logged
-//    but not returned, as there is no way to propagate this error anywhere
-//    meaningful. false, nil is returned.
-//    NOTE: if non-io.EOF error is encountered (indicating ungraceful shutdown
-//    of the stream), flowCtxCancel will be called. If an io.EOF is encountered
-//    (indicating a graceful shutdown initiated by the remote Inbox),
-//    outboxCtxCancel will be called.
+//  1. A zero-length batch is received from the input. This indicates graceful
+//     termination. true, nil is returned.
+//  2. Outbox.draining is observed to be true. This is also considered graceful
+//     termination. true, nil is returned.
+//  3. An error unrelated to the stream occurs (e.g. while deserializing a
+//     coldata.Batch). false, err is returned. This err should be sent over the
+//     stream as metadata.
+//  4. An error related to the stream occurs. In this case, the error is logged
+//     but not returned, as there is no way to propagate this error anywhere
+//     meaningful. false, nil is returned.
+//     NOTE: if non-io.EOF error is encountered (indicating ungraceful shutdown
+//     of the stream), flowCtxCancel will be called. If an io.EOF is encountered
+//     (indicating a graceful shutdown initiated by the remote Inbox),
+//     outboxCtxCancel will be called.
 func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) (terminatedGracefully bool, errToSend error) {

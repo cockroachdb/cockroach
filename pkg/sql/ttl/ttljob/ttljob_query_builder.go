@@ -318,8 +318,9 @@ func (b *deleteQueryBuilder) run(
 
 // makeColumnNamesSQL converts columns into an escape string
 // for an order by clause, e.g.:
-//   {"a", "b"} => a, b
-//   {"escape-me", "b"} => "escape-me", b
+//
+//	{"a", "b"} => a, b
+//	{"escape-me", "b"} => "escape-me", b
 func makeColumnNamesSQL(columns []string) string {
 	var b bytes.Buffer
 	for i, pkColumn := range columns {

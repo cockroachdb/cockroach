@@ -839,15 +839,15 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 }
 
 // TestReplicaRangeMismatchRedirect tests two behaviors that should occur.
-// - Following a Range split, the client may send BatchRequests based on stale
-//   cache data targeting the wrong range. Internally this triggers a
-//   RangeKeyMismatchError, but in the cases where the RHS of the range is still
-//   present on the local store, we opportunistically retry server-side by
-//   re-routing the request to the right range. No error is bubbled up to the
-//   client.
-// - This test also ensures that after a successful server-side retry attempt we
-//   bubble up the most up-to-date RangeInfos for the client to update its range
-//   cache.
+//   - Following a Range split, the client may send BatchRequests based on stale
+//     cache data targeting the wrong range. Internally this triggers a
+//     RangeKeyMismatchError, but in the cases where the RHS of the range is still
+//     present on the local store, we opportunistically retry server-side by
+//     re-routing the request to the right range. No error is bubbled up to the
+//     client.
+//   - This test also ensures that after a successful server-side retry attempt we
+//     bubble up the most up-to-date RangeInfos for the client to update its range
+//     cache.
 func TestReplicaRangeMismatchRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -8699,13 +8699,12 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 // The test contains a subtest for each of the combinations of the following
 // boolean options:
 //
-// - followerRead: configures whether the read should be served from the
+//   - followerRead: configures whether the read should be served from the
 //     leaseholder replica or from a follower replica.
 //
-// - thresholdFirst: configures whether the GC operation should be split into
+//   - thresholdFirst: configures whether the GC operation should be split into
 //     two requests, with the first bumping the GC threshold and the second
 //     GCing the expired version. This is how the real MVCC GC queue works.
-//
 func TestGCThresholdRacesWithRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -13315,14 +13314,14 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 //
 // The test does the following things:
 //
-//  * Propose cmd at an initial MaxLeaseIndex.
-//  * Refresh that cmd immediately.
-//  * Fail the initial command with an injected error which will lead to a
-//    reproposal at a higher MaxLeaseIndex.
-//  * Simultaneously update the lease sequence number on the replica so all
-//    future commands will fail with NotLeaseHolderError.
-//  * Enable unconditional refreshes of commands after a raft ready so that
-//    higher MaxLeaseIndex commands are refreshed.
+//   - Propose cmd at an initial MaxLeaseIndex.
+//   - Refresh that cmd immediately.
+//   - Fail the initial command with an injected error which will lead to a
+//     reproposal at a higher MaxLeaseIndex.
+//   - Simultaneously update the lease sequence number on the replica so all
+//     future commands will fail with NotLeaseHolderError.
+//   - Enable unconditional refreshes of commands after a raft ready so that
+//     higher MaxLeaseIndex commands are refreshed.
 //
 // This order of events ensures that there will be a committed command which
 // experiences the lease mismatch error but does not carry the highest

@@ -36,26 +36,26 @@ import (
 // nullable and non-nullable types. It is up to the caller to store that
 // information separately if it is needed. Here are some example types:
 //
-//   INT4                     - any 32-bit integer
-//   DECIMAL(10, 3)           - any base-10 value with at most 10 digits, with
-//                              up to 3 to right of decimal point
-//   FLOAT[]                  - array of 64-bit IEEE 754 floating-point values
-//   TUPLE[TIME, VARCHAR(20)] - any pair of values where first value is a time
-//                              of day and the second value is a string having
-//                              up to 20 characters
+//	INT4                     - any 32-bit integer
+//	DECIMAL(10, 3)           - any base-10 value with at most 10 digits, with
+//	                           up to 3 to right of decimal point
+//	FLOAT[]                  - array of 64-bit IEEE 754 floating-point values
+//	TUPLE[TIME, VARCHAR(20)] - any pair of values where first value is a time
+//	                           of day and the second value is a string having
+//	                           up to 20 characters
 //
 // Fundamentally, a type consists of the following attributes, each of which has
 // a corresponding accessor method. Some of these attributes are only defined
 // for a subset of types. See the method comments for more details.
 //
-//   Family        - equivalence group of the type (enumeration)
-//   Oid           - Postgres Object ID that describes the type (enumeration)
-//   Precision     - maximum accuracy of the type (numeric)
-//   Width         - maximum size or scale of the type (numeric)
-//   Locale        - location which governs sorting, formatting, etc. (string)
-//   ArrayContents - array element type (T)
-//   TupleContents - slice of types of each tuple field ([]*T)
-//   TupleLabels   - slice of labels of each tuple field ([]string)
+//	Family        - equivalence group of the type (enumeration)
+//	Oid           - Postgres Object ID that describes the type (enumeration)
+//	Precision     - maximum accuracy of the type (numeric)
+//	Width         - maximum size or scale of the type (numeric)
+//	Locale        - location which governs sorting, formatting, etc. (string)
+//	ArrayContents - array element type (T)
+//	TupleContents - slice of types of each tuple field ([]*T)
+//	TupleLabels   - slice of labels of each tuple field ([]string)
 //
 // Some types are not currently allowed as the type of a column (e.g. nested
 // arrays). Other usages of the types package may have similar restrictions.
@@ -878,9 +878,8 @@ func oidCanBeCollatedString(o oid.Oid) bool {
 // that is collated according to the given locale. The new type is based upon
 // the given string type, having the same oid and width values. For example:
 //
-//   STRING      => STRING COLLATE EN
-//   VARCHAR(20) => VARCHAR(20) COLLATE EN
-//
+//	STRING      => STRING COLLATE EN
+//	VARCHAR(20) => VARCHAR(20) COLLATE EN
 func MakeCollatedString(strType *T, locale string) *T {
 	if oidCanBeCollatedString(strType.Oid()) {
 		return &T{InternalType: InternalType{
@@ -1202,12 +1201,12 @@ func (t *T) Locale() string {
 
 // Width is the size or scale of the type, such as number of bits or characters.
 //
-//   INT           : # of bits (64, 32, 16)
-//   FLOAT         : # of bits (64, 32)
-//   DECIMAL       : max # of digits after decimal point (must be <= Precision)
-//   STRING        : max # of characters
-//   COLLATEDSTRING: max # of characters
-//   BIT           : max # of bits
+//	INT           : # of bits (64, 32, 16)
+//	FLOAT         : # of bits (64, 32)
+//	DECIMAL       : max # of digits after decimal point (must be <= Precision)
+//	STRING        : max # of characters
+//	COLLATEDSTRING: max # of characters
+//	BIT           : max # of bits
 //
 // Width is always 0 for other types.
 func (t *T) Width() int32 {
@@ -1216,12 +1215,12 @@ func (t *T) Width() int32 {
 
 // Precision is the accuracy of the data type.
 //
-//   DECIMAL    : max # digits (must be >= Width/Scale)
-//   INTERVAL   : max # fractional second digits
-//   TIME       : max # fractional second digits
-//   TIMETZ     : max # fractional second digits
-//   TIMESTAMP  : max # fractional second digits
-//   TIMESTAMPTZ: max # fractional second digits
+//	DECIMAL    : max # digits (must be >= Width/Scale)
+//	INTERVAL   : max # fractional second digits
+//	TIME       : max # fractional second digits
+//	TIMETZ     : max # fractional second digits
+//	TIMESTAMP  : max # fractional second digits
+//	TIMESTAMPTZ: max # fractional second digits
 //
 // Precision for time-related families has special rules for 0 -- see
 // `precision_is_set` on the `InternalType` proto.
@@ -1517,13 +1516,12 @@ func (t *T) Name() string {
 // than the native CRDB name for it (i.e. the Name function). It is used when
 // compatibility with PG is important. Examples of differences:
 //
-//   Name()       PGName()
-//   --------------------------
-//   char         bpchar
-//   "char"       char
-//   bytes        bytea
-//   int4[]       _int4
-//
+//	Name()       PGName()
+//	--------------------------
+//	char         bpchar
+//	"char"       char
+//	bytes        bytea
+//	int4[]       _int4
 func (t *T) PGName() string {
 	name, ok := oidext.TypeName(t.Oid())
 	if ok {
@@ -1547,8 +1545,7 @@ func (t *T) PGName() string {
 // standard (or by Postgres for any non-standard types). This can be looked up
 // for any type in Postgres using a query similar to this:
 //
-//   SELECT format_type(pg_typeof(1::int)::regtype, NULL)
-//
+//	SELECT format_type(pg_typeof(1::int)::regtype, NULL)
 func (t *T) SQLStandardName() string {
 	return t.SQLStandardNameWithTypmod(false, 0)
 }
@@ -1564,7 +1561,7 @@ func (t *T) TelemetryName() string {
 // typmod argument, and a boolean which indicates whether or not a typmod was
 // even specified. The expected results of this function should be, in Postgres:
 //
-//   SELECT format_type('thetype'::regype, typmod)
+//	SELECT format_type('thetype'::regype, typmod)
 //
 // Generally, what this does with a non-0 typmod is append the scale, precision
 // or length of a datatype to the name of the datatype. For example, a
@@ -2093,8 +2090,8 @@ func (t *InternalType) Identical(other *InternalType) bool {
 // protobuf serialization rules. It is backwards-compatible with formats used
 // by older versions of CRDB.
 //
-//   var t T
-//   err := protoutil.Unmarshal(data, &t)
+//	var t T
+//	err := protoutil.Unmarshal(data, &t)
 //
 // Unmarshal is part of the protoutil.Message interface.
 func (t *T) Unmarshal(data []byte) error {
@@ -2307,8 +2304,7 @@ func (t *T) upgradeType() error {
 // version of CRDB so that clusters can run in mixed version mode during
 // upgrade.
 //
-//   bytes, err := protoutil.Marshal(&typ)
-//
+//	bytes, err := protoutil.Marshal(&typ)
 func (t *T) Marshal() (data []byte, err error) {
 	// First downgrade to a struct that will be serialized in a backwards-
 	// compatible bytes format.
@@ -2647,9 +2643,8 @@ func IsWildcardTupleType(t *T) bool {
 // or []COLLATEDSTRING type. This is tricky in the case of an array of collated
 // string, since brackets must precede the COLLATE identifier:
 //
-//   STRING COLLATE EN
-//   VARCHAR(20)[] COLLATE DE
-//
+//	STRING COLLATE EN
+//	VARCHAR(20)[] COLLATE DE
 func (t *T) collatedStringTypeSQL(isArray bool) string {
 	var buf bytes.Buffer
 	buf.WriteString(t.stringTypeSQL())
@@ -2721,9 +2716,9 @@ func init() {
 // TypeForNonKeywordTypeName returns the column type for the string name of a
 // type, if one exists. The third return value indicates:
 //
-//   0 if no error or the type is not known in postgres.
-//   -1 if the type is known in postgres.
-//  >0 for a github issue number.
+//	 0 if no error or the type is not known in postgres.
+//	 -1 if the type is known in postgres.
+//	>0 for a github issue number.
 func TypeForNonKeywordTypeName(name string) (*T, bool, int) {
 	t, ok := typNameLiterals[name]
 	if ok {
