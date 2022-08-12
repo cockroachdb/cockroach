@@ -454,7 +454,7 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 5
+  +      constraintId: 4
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -480,7 +480,7 @@ upsert descriptor #104
      name: t
      nextColumnId: 5
   -  nextConstraintId: 4
-  +  nextConstraintId: 6
+  +  nextConstraintId: 5
      nextFamilyId: 1
   -  nextIndexId: 5
   +  nextIndexId: 7
@@ -703,10 +703,10 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-  -      constraintId: 4
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
+         constraintId: 4
+  ...
+         foreignKey: {}
+         geoConfig: {}
   -      id: 5
   -      interleave: {}
   -      keyColumnDirections:
@@ -727,8 +727,12 @@ upsert descriptor #104
   -    state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
   -    index:
-         constraintId: 5
-         createdExplicitly: true
+  -      constraintId: 4
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+         id: 6
+         interleave: {}
   ...
          version: 4
        mutationId: 1
@@ -889,7 +893,7 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 5
+  -      constraintId: 4
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}
