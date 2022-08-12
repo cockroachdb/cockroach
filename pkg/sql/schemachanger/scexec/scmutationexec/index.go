@@ -62,6 +62,9 @@ func addNewIndexMutation(
 	if opIndex.IndexID >= tbl.NextIndexID {
 		tbl.NextIndexID = opIndex.IndexID + 1
 	}
+	if opIndex.ConstraintID >= tbl.NextConstraintID {
+		tbl.NextConstraintID = opIndex.ConstraintID + 1
+	}
 
 	// Set up the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD
@@ -84,14 +87,13 @@ func addNewIndexMutation(
 		Type:                        indexType,
 		CreatedExplicitly:           true,
 		EncodingType:                encodingType,
-		ConstraintID:                tbl.GetNextConstraintID(),
+		ConstraintID:                opIndex.ConstraintID,
 		UseDeletePreservingEncoding: isDeletePreserving,
 		StoreColumnNames:            []string{},
 	}
 	if opIndex.Sharding != nil {
 		idx.Sharded = *opIndex.Sharding
 	}
-	tbl.NextConstraintID++
 	return enqueueAddIndexMutation(tbl, idx, state)
 }
 
