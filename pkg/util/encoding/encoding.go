@@ -674,28 +674,24 @@ func decodeBytesInternal(
 		b = b[1:]
 	}
 
+	var i int
 	for {
-		i := bytes.IndexByte(b, e.escape)
+		i = bytes.IndexByte(b, e.escape)
 		if i == -1 {
 			return nil, nil, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
 		}
 		if i+1 >= len(b) {
 			return nil, nil, errors.Errorf("malformed escape in buffer %#x", b)
 		}
-		v := b[i+1]
-		if v == e.escapedTerm {
+		if b[i+1] == e.escapedTerm {
 			if r == nil && !deepCopy {
-				r = b[:i]
-			} else {
-				r = append(r, b[:i]...)
+				return b[i+2:], b[:i], nil
 			}
-			return b[i+2:], r, nil
+			return b[i+2:], append(r, b[:i]...), nil
 		}
-
-		if v != e.escaped00 {
-			return nil, nil, errors.Errorf("unknown escape sequence: %#x %#x", e.escape, v)
+		if b[i+1] != e.escaped00 {
+			return nil, nil, errors.Errorf("unknown escape sequence: %#x %#x", e.escape, b[i+1])
 		}
-
 		r = append(r, b[:i]...)
 		r = append(r, e.escapedFF)
 		b = b[i+2:]
@@ -706,8 +702,9 @@ func decodeBytesInternal(
 func getBytesLength(b []byte, e escapes) (int, error) {
 	// Skip the tag.
 	skipped := 1
+	var i int
 	for {
-		i := bytes.IndexByte(b[skipped:], e.escape)
+		i = bytes.IndexByte(b[skipped:], e.escape)
 		if i == -1 {
 			return 0, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
 		}
@@ -724,11 +721,14 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 // prettyPrintInvertedIndexKey returns a string representation of the path part of a JSON inverted
 // index.
 func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
-	outBytes := ""
-	// We're skipping the first byte because it's the JSON tag.
-	tempB := b[1:]
+	var (
+		outBytes string
+		// We're skipping the first byte because it's the JSON tag.
+		tempB = b[1:]
+		i     int
+	)
 	for {
-		i := bytes.IndexByte(tempB, escape)
+		i = bytes.IndexByte(tempB, escape)
 
 		if i == -1 {
 			return "", nil, errors.Errorf("did not find terminator %#x in buffer %#x", escape, b)
@@ -742,8 +742,7 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 			if len(tempB[:i]) > 0 {
 				outBytes = outBytes + strconv.Quote(unsafeString(tempB[:i]))
 			} else {
-				lenOut := len(outBytes)
-				if lenOut > 1 && outBytes[lenOut-1] == '/' {
+				if lenOut := len(outBytes); lenOut > 1 && outBytes[lenOut-1] == '/' {
 					outBytes = outBytes[:lenOut-1]
 				}
 			}
