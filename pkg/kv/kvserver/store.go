@@ -3430,6 +3430,10 @@ func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracingpb.R
 	return collectAndFinish(), nil
 }
 
+// ManuallyEnqueuedKey represents a context key that, when set, indicates that
+// the Enqueue call was initiated manually.
+type ManuallyEnqueuedKey struct{}
+
 // Enqueue runs the given replica through the requested queue. If `async` is
 // specified, the replica is enqueued into the requested queue for asynchronous
 // processing and this method returns nothing. Otherwise, it returns all trace
