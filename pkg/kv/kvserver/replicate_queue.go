@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 )
@@ -512,6 +514,9 @@ type replicateQueue struct {
 	// descriptors.
 	updateCh          chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
+	// logTracesThresholdFunc returns the threshold for logging traces from
+	// processing a replica.
+	logTracesThresholdFunc queueProcessTimeoutFunc
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
@@ -521,6 +526,9 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		allocator: allocator,
 		purgCh:    time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
 		updateCh:  make(chan time.Time, 1),
+		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
+			permittedRangeScanSlowdown/2, rebalanceSnapshotRate, recoverySnapshotRate,
+		),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -657,11 +665,18 @@ func (rq *replicateQueue) process(
 		MaxRetries:     5,
 	}
 
+	processOneChange := rq.processOneChangeWithTracing
+	// If processing a manually enqueued replica, it is unnecessary to collect
+	// traces as they will be collected and rendered by the caller.
+	if ctx.Value(ManuallyEnqueuedKey{}) != nil {
+		processOneChange = rq.processOneChangeWithoutTracing
+	}
+
 	// Use a retry loop in order to backoff in the case of snapshot errors,
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChange(
+		requeue, err := processOneChange(
 			ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
 		)
 		if isSnapshotError(err) {
@@ -736,6 +751,72 @@ type decommissionPurgatoryError struct{ error }
 func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = decommissionPurgatoryError{}
+
+// processOneChangeWithoutTracing executes processOneChange within a child
+// tracing span, but does not log the resulting traces.
+func (rq *replicateQueue) processOneChangeWithoutTracing(
+	ctx context.Context,
+	repl *Replica,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
+	scatter, dryRun bool,
+) (requeue bool, _ error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica")
+	defer sp.Finish()
+
+	return rq.processOneChange(ctx, repl, canTransferLeaseFrom, scatter, dryRun)
+}
+
+// processOneChangeWithTracing executes processOneChangeAndGetTraces, logging
+// the resulting traces to the DEV channel in the case of errors or when the
+// configured log traces threshold is exceeded.
+func (rq *replicateQueue) processOneChangeWithTracing(
+	ctx context.Context,
+	repl *Replica,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
+	scatter, dryRun bool,
+) (requeue bool, _ error) {
+	processStart := timeutil.Now()
+	requeue, rec, err := rq.processOneChangeAndGetTraces(ctx, repl, canTransferLeaseFrom, scatter, dryRun)
+	processDuration := timeutil.Since(processStart)
+	loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
+	exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
+	if err != nil {
+		// TODO(sarkesian): Utilize Allocator log channel once available.
+		log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec)
+	} else if exceededDuration {
+		// TODO(sarkesian): Utilize Allocator log channel once available.
+		log.Infof(ctx, "processing replica took %s, exceeding threshold of %s\ntrace:\n%s",
+			processDuration, loggingThreshold, rec)
+	}
+
+	return requeue, err
+}
+
+// processOneChangeAndGetTraces executes processOneChange within a recording
+// span, rendering and returning the recorded traces from the operation along
+// with any associated errors. In the case this replica is being processed as
+// a result of being manually enqueued, we do not render the traces as they
+// will be ultimately rendered by the initial caller.
+func (rq *replicateQueue) processOneChangeAndGetTraces(
+	ctx context.Context,
+	repl *Replica,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
+	scatter, dryRun bool,
+) (requeue bool, _ tracingpb.Recording, _ error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
+		tracing.WithRecording(tracingpb.RecordingVerbose))
+	defer sp.Finish()
+
+	requeue, err := rq.processOneChange(ctx, repl, canTransferLeaseFrom, scatter, dryRun)
+
+	// If processing a manually enqueued replica, it is unnecessary to collect
+	// traces as they will be collected and rendered by the caller.
+	if ctx.Value(ManuallyEnqueuedKey{}) != nil {
+		return requeue, nil, err
+	}
+
+	return requeue, sp.GetConfiguredRecording(), err
+}
 
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
