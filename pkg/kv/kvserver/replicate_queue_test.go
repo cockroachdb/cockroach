@@ -44,6 +44,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -615,6 +618,128 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 			"expected decommissioning replica removal successes to increase by at least 2",
 		)
 	})
+}
+
+// TestReplicateQueueTracingOnError tests that an error or slowdown in
+// processing a replica results in traces being logged.
+func TestReplicateQueueTracingOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// NB: This test injects a fake failure during replica rebalancing, and we use
+	// this `rejectSnapshots` variable as a flag to activate or deactivate that
+	// injected failure.
+	var rejectSnapshots int64
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(
+		t, 4, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+					if atomic.LoadInt64(&rejectSnapshots) == 1 {
+						return errors.Newf("boom")
+					}
+					return nil
+				},
+			}}},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// Add a replica to the second and third nodes, and then decommission the
+	// second node. Since there are only 4 nodes in the cluster, the
+	// decommissioning replica must be rebalanced to the fourth node.
+	const decomNodeIdx = 1
+	const decomNodeID = 2
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
+	adminSrv := tc.Server(decomNodeIdx)
+	conn, err := adminSrv.RPCContext().GRPCDialNode(
+		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err)
+	adminClient := serverpb.NewAdminClient(conn)
+	_, err = adminClient.Decommission(
+		ctx, &serverpb.DecommissionRequest{
+			NodeIDs:          []roachpb.NodeID{decomNodeID},
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+		},
+	)
+	require.NoError(t, err)
+
+	// Activate the above testing knob to start rejecting future rebalances and
+	// then attempt to rebalance the decommissioning replica away. We expect a
+	// purgatory error to be returned here.
+	atomic.StoreInt64(&rejectSnapshots, 1)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+	require.NoError(t, err)
+
+	testStartTs := timeutil.Now()
+	recording, processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
+		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	require.NoError(t, enqueueErr)
+	require.Error(t, processErr, "expected processing error")
+
+	// Flush logs and get log messages from replicate_queue.go since just
+	// before calling store.Enqueue(..).
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opName := "process replica"
+	errRegexp, err := regexp.Compile(`error processing replica:.*boom`)
+	require.NoError(t, err)
+	traceRegexp, err := regexp.Compile(`trace:.*`)
+	require.NoError(t, err)
+	opRegexp, err := regexp.Compile(fmt.Sprintf(`operation:%s`, opName))
+	require.NoError(t, err)
+
+	// Validate that the error is logged, so that we can use the log entry to
+	// validate the trace output.
+	foundEntry := false
+	var entry logpb.Entry
+	for _, entry = range entries {
+		if errRegexp.MatchString(entry.Message) {
+			foundEntry = true
+			break
+		}
+	}
+	require.True(t, foundEntry)
+
+	// Validate that the trace is included in the log message.
+	require.Regexp(t, traceRegexp, entry.Message)
+	require.Regexp(t, opRegexp, entry.Message)
+
+	// Validate that the trace was logged with the correct tags for the replica.
+	require.Regexp(t, fmt.Sprintf("n%d", repl.NodeID()), entry.Tags)
+	require.Regexp(t, fmt.Sprintf("s%d", repl.StoreID()), entry.Tags)
+	require.Regexp(t, fmt.Sprintf("r%d/%d", repl.GetRangeID(), repl.ReplicaID()), entry.Tags)
+	require.Regexp(t, `replicate`, entry.Tags)
+
+	// Validate that the returned tracing span includes the operation, but also
+	// that the stringified trace was not logged to the span or its parent.
+	processRecSpan, foundSpan := recording.FindSpan(opName)
+	require.True(t, foundSpan)
+
+	foundParent := false
+	var parentRecSpan tracingpb.RecordedSpan
+	for _, parentRecSpan = range recording {
+		if parentRecSpan.SpanID == processRecSpan.ParentSpanID {
+			foundParent = true
+			break
+		}
+	}
+	require.True(t, foundParent)
+	spans := tracingpb.Recording{parentRecSpan, processRecSpan}
+	stringifiedSpans := spans.String()
+	require.NotRegexp(t, errRegexp, stringifiedSpans)
+	require.NotRegexp(t, traceRegexp, stringifiedSpans)
 }
 
 // TestReplicateQueueDecommissionPurgatoryError tests that failure to move a

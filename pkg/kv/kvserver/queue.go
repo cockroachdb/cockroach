@@ -78,6 +78,20 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 //
 // The parameter controls which rate(s) to use.
 func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queueProcessTimeoutFunc {
+	return makeRateLimitedTimeoutFuncByPermittedSlowdown(permittedRangeScanSlowdown, rateSettings...)
+}
+
+// permittedRangeScanSlowdown is the factor of the above the estimated duration
+// for a range scan given the configured rate which we use to configure
+// the operations's timeout.
+const permittedRangeScanSlowdown = 10
+
+// makeRateLimitedTimeoutFuncByPermittedSlowdown creates a timeout function based on a permitted
+// slowdown factor on the estimated queue processing duration based on the given rate settings.
+// See makeRateLimitedTimeoutFunc for more information.
+func makeRateLimitedTimeoutFuncByPermittedSlowdown(
+	permittedSlowdown int, rateSettings ...*settings.ByteSizeSetting,
+) queueProcessTimeoutFunc {
 	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
 		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
 		// NB: In production code this will type assertion will always succeed.
@@ -95,18 +109,13 @@ func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queue
 			}
 		}
 		estimatedDuration := time.Duration(repl.GetMVCCStats().Total()/minSnapshotRate) * time.Second
-		timeout := estimatedDuration * permittedRangeScanSlowdown
+		timeout := estimatedDuration * time.Duration(permittedSlowdown)
 		if timeout < minimumTimeout {
 			timeout = minimumTimeout
 		}
 		return timeout
 	}
 }
-
-// permittedRangeScanSlowdown is the factor of the above the estimated duration
-// for a range scan given the configured rate which we use to configure
-// the operations's timeout.
-const permittedRangeScanSlowdown = 10
 
 // PurgatoryError indicates a replica processing failure which indicates the
 // replica can be placed into purgatory for faster retries than the replica
