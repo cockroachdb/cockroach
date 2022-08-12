@@ -146,11 +146,6 @@ SELECT * FROM defaultdb.schema.foo
 5
 6
 
-exec-sql
-DROP DATABASE d CASCADE
-----
-pq: database "d" does not exist
-
 subtest end
 
 subtest incremental-location-backup-restore-nodelocal
@@ -213,80 +208,5 @@ public schema full
 public schema incremental
 schema schema full
 schema schema incremental
-
-subtest end
-
-subtest backup-restore-privileges
-
-exec-sql
-CREATE USER testuser;
-----
-
-exec-sql
-CREATE EXTERNAL CONNECTION root AS 'nodelocal://1/root'
-----
-
-exec-sql user=testuser
-CREATE EXTERNAL CONNECTION fails AS 'nodelocal://1/noprivs'
-----
-pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
-
-exec-sql
-GRANT SYSTEM EXTERNALCONNECTION TO testuser;
-----
-
-exec-sql user=testuser
-CREATE EXTERNAL CONNECTION fails AS 'nodelocal://1/privs'
-----
-
-exec-sql
-CREATE TABLE foo (id INT);
-----
-
-exec-sql
-GRANT SELECT ON TABLE foo TO testuser
-----
-
-exec-sql user=testuser
-BACKUP TABLE foo INTO 'external://fails'
-----
-pq: user testuser does not have USAGE privilege on external_connection fails
-
-exec-sql
-GRANT USAGE ON EXTERNAL CONNECTION fails TO testuser;
-----
-
-exec-sql user=testuser
-BACKUP TABLE foo INTO 'external://fails'
-----
-
-# Sanity check that the user can't write to any other external connection.
-exec-sql user=testuser
-BACKUP TABLE foo INTO 'external://root'
-----
-pq: user testuser does not have USAGE privilege on external_connection root
-
-# Revoke the USAGE privilege to test that restore also requires it.
-exec-sql
-REVOKE USAGE ON EXTERNAL CONNECTION fails FROM testuser;
-----
-
-exec-sql user=testuser
-RESTORE TABLE foo FROM LATEST IN 'external://fails'
-----
-pq: user testuser does not have USAGE privilege on external_connection fails
-
-exec-sql
-GRANT USAGE ON EXTERNAL CONNECTION fails TO testuser;
-----
-
-exec-sql
-CREATE DATABASE failsdb;
-GRANT CREATE ON DATABASE failsdb TO testuser;
-----
-
-exec-sql user=testuser
-RESTORE TABLE foo FROM LATEST IN 'external://fails' WITH into_db=failsdb;
-----
 
 subtest end

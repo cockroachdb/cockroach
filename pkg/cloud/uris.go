@@ -29,6 +29,9 @@ const (
 	// AuthParamSpecified is the query parameter for the specified authentication
 	// mode in a URI.
 	AuthParamSpecified = cloudpb.ExternalStorageAuthSpecified
+	// LocalityURLParam is the parameter name used when specifying a locality tag
+	// in a locality aware backup/restore.
+	LocalityURLParam = "COCKROACH_LOCALITY"
 )
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-
@@ -121,6 +124,16 @@ func (u *ConsumeURL) RemainingQueryParams() (res []string) {
 		u.q = u.Query()
 	}
 	for p := range u.q {
+		// The `COCKROACH_LOCALITY` parameter is supported for all External Storage
+		// implementations and is not used when creating the External Storage, but
+		// instead during backup/restore resolution. So, this parameter is not
+		// "consumed" by the individual External Storage implementations in their
+		// parse functions and so it will always show up in this method. We should
+		// consider this param invisible when validating that all the passed in
+		// query parameters are supported for an External Storage URI.
+		if p == LocalityURLParam {
+			continue
+		}
 		res = append(res, p)
 	}
 	return
