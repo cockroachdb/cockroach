@@ -550,6 +550,11 @@ func (i *MVCCIncrementalIterator) RangeKeys() MVCCRangeKeyStack {
 	return rangeKeys
 }
 
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (i *MVCCIncrementalIterator) RangeKeyChanged() bool {
+	panic("not implemented")
+}
+
 // UnsafeValue implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	if !i.hasPoint {

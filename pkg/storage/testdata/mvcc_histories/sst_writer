@@ -65,8 +65,8 @@ sst_iter_new
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "a"/1.000000000,0=/BYTES/again {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
 iter_scan: .
 
@@ -82,9 +82,9 @@ sst_iter_new
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: {f-h}/[3.000000000,0=/<empty>]
-iter_scan: {f-h}/[3.000000000,0=/<empty>]
-iter_scan: {h-j}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {f-h}/[3.000000000,0=/<empty>] !
+iter_scan: {f-h}/[3.000000000,0=/<empty>] !
+iter_scan: {h-j}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: .
 >> at end:
 <no data>
@@ -124,8 +124,8 @@ sst_iter_new
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: {a-f}/[3.000000000,0=/<empty>]
-iter_scan: {a-f}/[3.000000000,0=/<empty>]
+iter_seek_ge: {a-f}/[3.000000000,0=/<empty>] !
+iter_scan: {a-f}/[3.000000000,0=/<empty>] !
 iter_scan: "b"/1.000000000,0=/BYTES/b1 {a-f}/[3.000000000,0=/<empty>]
 iter_scan: "c"/2.000000000,0=/BYTES/c2 {a-f}/[3.000000000,0=/<empty>]
 iter_scan: "d"/1.000000000,0=/BYTES/d1 {a-f}/[3.000000000,0=/<empty>]
@@ -156,9 +156,9 @@ sst_iter_new
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: {a-c}/[3.000000000,0=/<empty>]
-iter_scan: {a-c}/[3.000000000,0=/<empty>]
+iter_seek_ge: {a-c}/[3.000000000,0=/<empty>] !
+iter_scan: {a-c}/[3.000000000,0=/<empty>] !
 iter_scan: "b"/1.000000000,0=/BYTES/b1 {a-c}/[3.000000000,0=/<empty>]
-iter_scan: {e-f}/[3.000000000,0=/<empty>]
+iter_scan: {e-f}/[3.000000000,0=/<empty>] !
 iter_scan: "e"/1.000000000,0=/BYTES/e1 {e-f}/[3.000000000,0=/<empty>]
 iter_scan: .
