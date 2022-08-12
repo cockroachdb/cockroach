@@ -76,7 +76,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		if err != nil {
 			panic(err)
 		}
-		argTypes.SetAt(i, arg.Name.String(), typ)
+		argTypes.SetAt(i, string(arg.Name), typ)
 	}
 
 	// Resolve the return type.
