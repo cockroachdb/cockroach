@@ -36,37 +36,36 @@ import (
 // types that we do not support, and we ignore geospatial types because they are
 // an extension of Postgres and have no official OIDs.
 //
-//   \copy (
-//     WITH ignored_types AS (
-//       SELECT t::regtype::oid t
-//       FROM (VALUES
-//         ('geography'),
-//         ('geometry'),
-//         ('box2d'),
-//         ('box3d'),
-//         ('tstzmultirange'),
-//         ('int4multirange'),
-//         ('int8multirange'),
-//         ('tstzmultirange'),
-//         ('tsmultirange'),
-//         ('datemultirange'),
-//         ('nummultirange')
-//       ) AS types(t)
-//     )
-//     SELECT
-//       c.castsource,
-//       c.casttarget,
-//       p.provolatile,
-//       p.proleakproof,
-//       c.castcontext,
-//       substring(version(), 'PostgreSQL (\d+\.\d+)') pg_version
-//     FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
-//     WHERE
-//       c.castsource NOT IN (SELECT t FROM ignored_types)
-//       AND c.casttarget NOT IN (SELECT t FROM ignored_types)
-//     ORDER BY 1, 2
-//   ) TO pg_cast_dump.csv WITH CSV DELIMITER '|' HEADER;
-//
+//	\copy (
+//	  WITH ignored_types AS (
+//	    SELECT t::regtype::oid t
+//	    FROM (VALUES
+//	      ('geography'),
+//	      ('geometry'),
+//	      ('box2d'),
+//	      ('box3d'),
+//	      ('tstzmultirange'),
+//	      ('int4multirange'),
+//	      ('int8multirange'),
+//	      ('tstzmultirange'),
+//	      ('tsmultirange'),
+//	      ('datemultirange'),
+//	      ('nummultirange')
+//	    ) AS types(t)
+//	  )
+//	  SELECT
+//	    c.castsource,
+//	    c.casttarget,
+//	    p.provolatile,
+//	    p.proleakproof,
+//	    c.castcontext,
+//	    substring(version(), 'PostgreSQL (\d+\.\d+)') pg_version
+//	  FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
+//	  WHERE
+//	    c.castsource NOT IN (SELECT t FROM ignored_types)
+//	    AND c.casttarget NOT IN (SELECT t FROM ignored_types)
+//	  ORDER BY 1, 2
+//	) TO pg_cast_dump.csv WITH CSV DELIMITER '|' HEADER;
 func TestCastsMatchPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

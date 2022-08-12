@@ -248,12 +248,12 @@ var spanReusePercent = util.ConstantWithMetamorphicTestRange(
 
 // Tracer implements tracing requests. It supports:
 //
-//  - forwarding events to x/net/trace instances
+//   - forwarding events to x/net/trace instances
 //
-//  - recording traces. Recorded events can be retrieved at any time.
+//   - recording traces. Recorded events can be retrieved at any time.
 //
-//  - OpenTelemetry tracing. This is implemented by maintaining a "shadow"
-//    OpenTelemetry Span inside each of our spans.
+//   - OpenTelemetry tracing. This is implemented by maintaining a "shadow"
+//     OpenTelemetry Span inside each of our spans.
 //
 // Even when tracing is disabled, we still use this Tracer (with x/net/trace and
 // lightstep disabled) because of its recording capability (verbose tracing needs
@@ -950,7 +950,7 @@ type spanAllocHelper struct {
 
 // newSpan allocates a span using the Tracer's sync.Pool. A span that was
 // previously Finish()ed be returned if the Tracer is configured for Span reuse.
-//+(...) must be called on the returned span before further use.
+// +(...) must be called on the returned span before further use.
 func (t *Tracer) newSpan(
 	traceID tracingpb.TraceID,
 	spanID tracingpb.SpanID,
@@ -1488,7 +1488,8 @@ func (t *Tracer) TestingGetStatsAndReset() (int, int) {
 //
 // [1]: Looking towards the provided context to see if one exists.
 // [2]: Unless configured differently by tests, see
-//      TestingRecordAsyncSpans.
+//
+//	TestingRecordAsyncSpans.
 func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {

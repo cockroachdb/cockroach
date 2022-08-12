@@ -714,9 +714,13 @@ func init() {
 
 // PrettyPrintRange pretty prints a compact representation of a key range. The
 // output is of the form:
-//    commonPrefix{remainingStart-remainingEnd}
+//
+//	commonPrefix{remainingStart-remainingEnd}
+//
 // If the end key is empty, the output is of the form:
-//    start
+//
+//	start
+//
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.
 func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {

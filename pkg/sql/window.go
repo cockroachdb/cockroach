@@ -22,17 +22,18 @@ import (
 //
 // windowRender will contain renders that will output the desired result
 // columns (so len(windowRender) == len(columns)).
-// 1. If ith render from the source node does not have any window functions,
-//    then that column will be simply passed through and windowRender[i] is
-//    nil. Notably, windowNode will rearrange renders in the source node so
-//    that all such passed through columns are contiguous and in the beginning.
-//    (This happens during extractWindowFunctions call.)
-// 2. If ith render from the source node has any window functions, then the
-//    render is stored in windowRender[i]. During
-//    constructWindowFunctionsDefinitions all variables used in OVER clauses
-//    of all window functions are being rendered, and during
-//    setupWindowFunctions all arguments to all window functions are being
-//    rendered (renders are reused if possible).
+//  1. If ith render from the source node does not have any window functions,
+//     then that column will be simply passed through and windowRender[i] is
+//     nil. Notably, windowNode will rearrange renders in the source node so
+//     that all such passed through columns are contiguous and in the beginning.
+//     (This happens during extractWindowFunctions call.)
+//  2. If ith render from the source node has any window functions, then the
+//     render is stored in windowRender[i]. During
+//     constructWindowFunctionsDefinitions all variables used in OVER clauses
+//     of all window functions are being rendered, and during
+//     setupWindowFunctions all arguments to all window functions are being
+//     rendered (renders are reused if possible).
+//
 // Therefore, the schema of the source node will be changed to look as follows:
 // pass through column | OVER clauses columns | arguments to window functions.
 type windowNode struct {

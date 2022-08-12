@@ -217,10 +217,7 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 									start int = op.bufferingState.unprocessedIdx
 									end   int = op.bufferingState.pendingBatch.Length() - 1
 								)
-								_ = sel[start]
-								_ = sel[end]
 								for i := start; i <= end; i++ {
-									//gcassert:bce
 									idx := sel[i]
 									if op.distinctOutput[idx] {
 										{
@@ -252,7 +249,6 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 								_ = op.distinctOutput[start]
 								_ = op.distinctOutput[end]
 								for i := start; i <= end; i++ {
-									//gcassert:bce
 									if op.distinctOutput[i] {
 										{
 											__retval_0 = true
@@ -351,8 +347,6 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 								start int = toBuffer - 1
 								end   int = lowerBound
 							)
-							_ = sel[start]
-							_ = sel[end]
 							for i := start; i >= end; i-- {
 								//gcassert:bce
 								idx := sel[i]

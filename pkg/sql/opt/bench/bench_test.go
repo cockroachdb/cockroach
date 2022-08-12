@@ -55,10 +55,10 @@ import (
 // normalization rules turned on) and the resulting memo is saved and reused. On
 // each execution, placeholders are assigned before exploration. Only these
 // phases are valid with the prepare protocol:
-//  - AssignPlaceholdersNoNorm
-//  - AssignPlaceholdersNorm
-//  - Explore
-//  - ExecBuild
+//   - AssignPlaceholdersNoNorm
+//   - AssignPlaceholdersNorm
+//   - Explore
+//   - ExecBuild
 type Phase int
 
 const (
@@ -863,12 +863,11 @@ func queriesToTest(b *testing.B) []benchQuery {
 //
 // For example, a 5-chain looks like:
 //
-//   SELECT * FROM a, b, c, d, e
-//   WHERE a.x = b.y
-//     AND b.x = c.y
-//     AND c.x = d.y
-//     AND d.x = e.y
-//
+//	SELECT * FROM a, b, c, d, e
+//	WHERE a.x = b.y
+//	  AND b.x = c.y
+//	  AND c.x = d.y
+//	  AND d.x = e.y
 func BenchmarkChain(b *testing.B) {
 	for i := 1; i < 20; i++ {
 		q := makeChain(i)

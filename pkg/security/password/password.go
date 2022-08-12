@@ -559,14 +559,14 @@ func isMD5Hash(hashedPassword []byte) bool {
 // password is already hashed, and if already hashed, verifies whether
 // the hash is recognized as a valid hash.
 // Return values:
-// - isPreHashed indicates whether the password is already hashed.
-// - supportedScheme indicates whether the scheme is currently supported
-//   for authentication. If false, issueNum indicates which github
-//   issue to report in the error message.
-// - schemeName is the name of the hashing scheme, for inclusion
-//   in error messages (no guarantee is made of stability of this string).
-// - hashedPassword is a translated version from the input,
-//   suitable for storage in the password database.
+//   - isPreHashed indicates whether the password is already hashed.
+//   - supportedScheme indicates whether the scheme is currently supported
+//     for authentication. If false, issueNum indicates which github
+//     issue to report in the error message.
+//   - schemeName is the name of the hashing scheme, for inclusion
+//     in error messages (no guarantee is made of stability of this string).
+//   - hashedPassword is a translated version from the input,
+//     suitable for storage in the password database.
 func CheckPasswordHashValidity(
 	ctx context.Context, inputPassword []byte,
 ) (
@@ -604,16 +604,16 @@ func CheckPasswordHashValidity(
 // the mapping gives SCRAM authn latency of ~60ms too.
 //
 // The actual values were computed as follows:
-// 1. measure the bcrypt authentication cost for costs 1-19.
-// 2. assuming the bcrypt latency is a_bcrypt*2^c + b_bcrypt, where c
-//    is the bcrypt cost, use statistical regression to derive
-//    a_bcrypt and b_bcrypt. (we found b_bcrypt to be negligible.)
-// 3. measure the SCRAM authn cost for iter counts 4096-1000000,
-//    *on the same hardware*.
-// 4. assuming the SCRAM latency is a_scram*c + b_scram,
-//    where c is the SCRAM iter count, use stat regression
-//    to derive a_scram and b_scram. (we found b_scram to be negligible).
-// 5. for each bcrypt cost, compute scram iter count = a_bcrypt * 2^cost_bcrypt / a_scram.
+//  1. measure the bcrypt authentication cost for costs 1-19.
+//  2. assuming the bcrypt latency is a_bcrypt*2^c + b_bcrypt, where c
+//     is the bcrypt cost, use statistical regression to derive
+//     a_bcrypt and b_bcrypt. (we found b_bcrypt to be negligible.)
+//  3. measure the SCRAM authn cost for iter counts 4096-1000000,
+//     *on the same hardware*.
+//  4. assuming the SCRAM latency is a_scram*c + b_scram,
+//     where c is the SCRAM iter count, use stat regression
+//     to derive a_scram and b_scram. (we found b_scram to be negligible).
+//  5. for each bcrypt cost, compute scram iter count = a_bcrypt * 2^cost_bcrypt / a_scram.
 //
 // The speed of the CPU used for the measurements is equally
 // represented in a_bcrypt and a_scram, so the formula eliminates any

@@ -260,18 +260,21 @@ func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) 
 // statement.
 //
 // NOTE: The following descriptions of the inScope parameter and outScope
-//       return value apply for all buildXXX() functions in this directory.
-//       Note that some buildXXX() functions pass outScope as a parameter
-//       rather than a return value so its scopeColumns can be built up
-//       incrementally across several function calls.
+//
+//	return value apply for all buildXXX() functions in this directory.
+//	Note that some buildXXX() functions pass outScope as a parameter
+//	rather than a return value so its scopeColumns can be built up
+//	incrementally across several function calls.
 //
 // inScope   This parameter contains the name bindings that are visible for this
-//           statement/expression (e.g., passed in from an enclosing statement).
+//
+//	statement/expression (e.g., passed in from an enclosing statement).
 //
 // outScope  This return value contains the newly bound variables that will be
-//           visible to enclosing statements, as well as a pointer to any
-//           "parent" scope that is still visible. The top-level memo expression
-//           for the built statement/expression is returned in outScope.expr.
+//
+//	visible to enclosing statements, as well as a pointer to any
+//	"parent" scope that is still visible. The top-level memo expression
+//	for the built statement/expression is returned in outScope.expr.
 func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
