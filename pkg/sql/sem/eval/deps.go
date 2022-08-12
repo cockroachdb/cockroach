@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -500,6 +501,17 @@ type SequenceOperators interface {
 	// `newVal + seqOpts.Increment`.
 	// Takes in a sequence ID rather than a name, unlike SetSequenceValue.
 	SetSequenceValueByID(ctx context.Context, seqID uint32, newVal int64, isCalled bool) error
+}
+
+// ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
+// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang and return data
+// over the SQL connection, this state belongs in the EvalCtx.
+type ChangefeedState interface {
+	// SetHighwater sets the frontier timestamp for the changefeed.
+	SetHighwater(frontier *hlc.Timestamp)
+
+	// SetCheckpoint sets the checkpoint for the changefeed.
+	SetCheckpoint(spans []roachpb.Span, timestamp hlc.Timestamp)
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL

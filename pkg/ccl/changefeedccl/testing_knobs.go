@@ -45,6 +45,8 @@ type TestingKnobs struct {
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
 	// ShouldReplan is used to see if a replan for a changefeed should be triggered
 	ShouldReplan func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool
+	// RaiseRetryableError is a knob used to possibly return an error.
+	RaiseRetryableError func() error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
