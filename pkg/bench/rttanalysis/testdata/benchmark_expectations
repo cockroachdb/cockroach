@@ -67,11 +67,11 @@ exp,benchmark
 2,ORMQueries/has_table_privilege_1
 4,ORMQueries/has_table_privilege_3
 6,ORMQueries/has_table_privilege_5
-15,ORMQueries/information_schema._pg_index_position
+3,ORMQueries/information_schema._pg_index_position
 2,ORMQueries/pg_attribute
 2,ORMQueries/pg_class
 11,ORMQueries/pg_is_other_temp_schema
-23,ORMQueries/pg_is_other_temp_schema_multiple_times
+18,ORMQueries/pg_is_other_temp_schema_multiple_times
 4,ORMQueries/pg_my_temp_schema
 4,ORMQueries/pg_my_temp_schema_multiple_times
 4,ORMQueries/pg_namespace

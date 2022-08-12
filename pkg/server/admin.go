@@ -1779,21 +1779,28 @@ func (s *adminServer) SetUIData(
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
-		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
-		rowsAffected, err := s.server.sqlServer.internalExecutor.ExecEx(
-			ctx, "admin-set-ui-data", nil, /* txn */
-			sessiondata.InternalExecutorOverride{
-				User: username.RootUserName(),
-			},
-			query, makeUIKey(userName, key), val)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		if rowsAffected != 1 {
-			return nil, serverErrorf(ctx, "rows affected %d != expected %d", rowsAffected, 1)
+
+		if err := s.server.sqlServer.internalExecutorFactory.RunWithoutTxn(ctx, func(
+			ctx context.Context, ie sqlutil.InternalExecutor,
+		) error {
+			query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
+			rowsAffected, err := ie.ExecEx(
+				ctx, "admin-set-ui-data", nil, /* txn */
+				sessiondata.InternalExecutorOverride{
+					User: username.RootUserName(),
+				},
+				query, makeUIKey(userName, key), val)
+			if err != nil {
+				return serverError(ctx, err)
+			}
+			if rowsAffected != 1 {
+				return serverErrorf(ctx, "rows affected %d != expected %d", rowsAffected, 1)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
 		}
 	}
-
 	return &serverpb.SetUIDataResponse{}, nil
 }
 
