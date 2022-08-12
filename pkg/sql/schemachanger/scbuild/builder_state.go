@@ -230,10 +230,10 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 }
 
 // NextTableConstraintID implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) NextTableConstraintID(table *scpb.Table) (ret catid.ConstraintID) {
+func (b *builderState) NextTableConstraintID(id catid.DescID) (ret catid.ConstraintID) {
 	{
-		b.ensureDescriptor(table.TableID)
-		desc := b.descCache[table.TableID].desc
+		b.ensureDescriptor(id)
+		desc := b.descCache[id].desc
 		tbl, ok := desc.(catalog.TableDescriptor)
 		if !ok {
 			panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
@@ -245,7 +245,7 @@ func (b *builderState) NextTableConstraintID(table *scpb.Table) (ret catid.Const
 		}
 	}
 
-	b.QueryByID(table.TableID).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(id).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		v, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		if id, ok := v.(catid.ConstraintID); ok && id >= ret {
 			ret = id + 1
