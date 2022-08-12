@@ -7,6 +7,7 @@ set -euo pipefail
   yarn --cwd workspaces/db-console/src/js install
   yarn --cwd workspaces/cluster-ui install
   yarn --cwd workspaces/db-console install
+  yarn --cwd workspaces/e2e-tests install
 )
 
 cat << "EOF"
