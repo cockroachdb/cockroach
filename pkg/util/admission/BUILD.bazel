@@ -9,6 +9,7 @@ go_library(
         "grant_coordinator.go",
         "granter.go",
         "io_load_listener.go",
+        "kv_slot_adjuster.go",
         "store_token_estimation.go",
         "work_queue.go",
     ],
