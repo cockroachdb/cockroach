@@ -58,8 +58,9 @@ const (
 
 	// Thresholds used to decide whether to queue for MVCC GC based on keys and
 	// intents.
-	mvccGCKeyScoreThreshold    = 2
-	mvccGCIntentScoreThreshold = 1
+	mvccGCKeyScoreThreshold          = 2
+	mvccGCIntentScoreThreshold       = 1
+	mvccGCDropRangeKeyScoreThreshold = 1
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
@@ -421,7 +422,24 @@ func makeMVCCGCQueueScoreImpl(
 		r.FinalScore++
 	}
 
+	// If range was deleted, lower score threshold to allow faster cleanup as
+	// most of the garbage is concentrated at the ttl threshold.
+	if !r.ShouldQueue && suspectedFullRangeDeletion(ms) {
+		r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > mvccGCDropRangeKeyScoreThreshold
+	}
+
 	return r
+}
+
+// suspectedFullRangeDeletion checks for ranges where there's no live data and
+// range tombstones are present. This is an indication that range is likely
+// removed by bulk operations and its garbage collection should be done faster
+// than if it has to wait for double ttl.
+func suspectedFullRangeDeletion(ms enginepb.MVCCStats) bool {
+	if ms.LiveCount > 0 || ms.IntentCount > 0 {
+		return false
+	}
+	return ms.RangeKeyCount > 0
 }
 
 type replicaGCer struct {
