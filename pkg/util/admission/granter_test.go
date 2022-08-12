@@ -207,7 +207,7 @@ func TestGranterBasic(t *testing.T) {
 
 		case "init-store-grant-coordinator":
 			clearRequesterAndCoord()
-			metrics := makeGranterMetrics()
+			metrics := makeGrantCoordinatorMetrics()
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
