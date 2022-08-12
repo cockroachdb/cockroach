@@ -653,14 +653,18 @@ func (ds *DistSender) initAndVerifyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
 	// Attach the local node ID to each request.
-	if ba.Header.GatewayNodeID == 0 {
-		ba.Header.GatewayNodeID = ds.getNodeID()
+	if ba.GatewayNodeID == 0 {
+		ba.GatewayNodeID = ds.getNodeID()
 	}
+
+	// Attach a clock reading from the local node to help stabilize HLCs across
+	// the cluster. This is NOT required for correctness.
+	ba.Now = ds.clock.NowAsClockTimestamp()
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp.IsEmpty() {
-		ba.Timestamp = ds.clock.Now()
+		ba.Timestamp = ba.Now.ToTimestamp()
 	}
 
 	if len(ba.Requests) < 1 {

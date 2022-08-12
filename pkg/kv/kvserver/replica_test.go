@@ -231,9 +231,7 @@ func (tc *testContext) Sender() kv.Sender {
 				tc.Fatal(err)
 			}
 		}
-		if baClockTS, ok := ba.Timestamp.TryToClockTimestamp(); ok {
-			tc.Clock().Update(baClockTS)
-		}
+		tc.Clock().Update(ba.Now)
 		return ba
 	})
 }
@@ -5996,10 +5994,6 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 		if reply.PusheeTxn.Status != roachpb.PENDING {
 			t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
 		}
-
-		// Sanity check clock update, or lack thereof.
-		after := tc.Clock().Now()
-		require.Equal(t, synthetic, after.Less(expTS))
 	})
 }
 
@@ -8677,7 +8671,7 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 			t.Run(fmt.Sprintf("gcThreshold=%s", testCase.gc), func(t *testing.T) {
 				if !testCase.gc.IsEmpty() {
 					gcr := roachpb.GCRequest{Threshold: testCase.gc}
-					_, pErr := tc.SendWrapped(&gcr)
+					_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: testCase.gc}, &gcr)
 					require.Nil(t, pErr)
 				}
 
@@ -8883,12 +8877,11 @@ func BenchmarkMVCCGCWithForegroundTraffic(b *testing.B) {
 	tc.Start(ctx, b, stopper)
 
 	key := roachpb.Key("test")
-	now := func() hlc.Timestamp { return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()} }
 
 	// send sends the Request with a present-time batch timestamp.
 	send := func(args roachpb.Request) *roachpb.BatchResponse {
 		var header roachpb.Header
-		header.Timestamp = now()
+		header.Timestamp = tc.Clock().Now()
 		ba := roachpb.BatchRequest{}
 		ba.Header = header
 		ba.Add(args)
@@ -8928,7 +8921,7 @@ func BenchmarkMVCCGCWithForegroundTraffic(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			for {
-				gc(key, now()) // NB: These are no-op GC requests.
+				gc(key, tc.Clock().Now()) // NB: These are no-op GC requests.
 				time.Sleep(10 * time.Microsecond)
 
 				select {
