@@ -179,7 +179,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					observed[i], observed[j] = observed[j], observed[i]
 				}
 
-				forecasts := stats.ForecastTableStatistics(ctx, p.EvalContext(), observed)
+				forecasts := stats.ForecastTableStatistics(ctx, observed)
 
 				// Iterate in reverse order to match the ORDER BY "columnIDs".
 				for i := len(forecasts) - 1; i >= 0; i-- {

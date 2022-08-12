@@ -616,6 +616,8 @@ func (s *sampleAggregator) generateHistogram(
 			prevCapacity, sr.Cap(),
 		)
 	}
+	// TODO(michae2): Instead of using the flowCtx's evalCtx, investigate
+	// whether this can use a nil *eval.Context.
 	h, _, err := stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
 	return h, err
 }

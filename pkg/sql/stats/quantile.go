@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -237,9 +238,7 @@ func makeQuantile(hist histogram, rowCount float64) (quantile, error) {
 // toHistogram converts a quantile into a histogram, using the provided type and
 // row count. It returns an error if the conversion fails. The quantile must be
 // well-formed before calling toHistogram.
-func (q quantile) toHistogram(
-	compareCtx tree.CompareContext, colType *types.T, rowCount float64,
-) (histogram, error) {
+func (q quantile) toHistogram(colType *types.T, rowCount float64) (histogram, error) {
 	if len(q) < 2 || q[0].p != 0 || q[len(q)-1].p != 1 {
 		return histogram{}, errors.AssertionFailedf("invalid quantile: %v", q)
 	}
@@ -248,6 +247,10 @@ func (q quantile) toHistogram(
 	if rowCount < 1 {
 		return histogram{buckets: make([]cat.HistogramBucket, 0)}, nil
 	}
+
+	// We don't use any session data for conversions or operations on upper
+	// bounds, so a nil *eval.Context works as our tree.CompareContext.
+	var compareCtx *eval.Context
 
 	hist := histogram{buckets: make([]cat.HistogramBucket, 0, len(q)-1)}
 
