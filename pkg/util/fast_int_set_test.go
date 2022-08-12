@@ -313,6 +313,10 @@ func TestFastIntSetString(t *testing.T) {
 			vals: []int{0, 1, 3, 4, 5},
 			exp:  "(0,1,3-5)",
 		},
+		{
+			vals: []int{-1, 0, 1, 127, 128, 255, 256, 257, 512},
+			exp:  "(-1,0,1,127,128,255-257,512)",
+		},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
