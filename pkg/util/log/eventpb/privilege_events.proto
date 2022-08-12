@@ -83,6 +83,14 @@ message ChangeTypePrivilege {
   string type_name = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+message ChangeFunctionPrivilege {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLPrivilegeEventDetails privs = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected function.
+  string func_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 
 // AlterDatabaseOwner is recorded when a database's owner is changed.
 message AlterDatabaseOwner {

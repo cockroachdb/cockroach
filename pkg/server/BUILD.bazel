@@ -80,6 +80,7 @@ go_library(
         "//pkg/build",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",

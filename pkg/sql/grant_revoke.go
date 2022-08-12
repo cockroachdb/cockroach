@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -227,10 +228,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 	// First, update the descriptors. We want to catch all errors before
 	// we update them in KV below.
 	b := p.txn.NewBatch()
-	for _, descriptorWithTypes := range descriptorsWithTypes {
+	for _, descriptorWithType := range descriptorsWithTypes {
 		// Disallow privilege changes on system objects. For more context, see #43842.
-		descriptor := descriptorWithTypes.descriptor
-		objType := descriptorWithTypes.objectType
+		descriptor := descriptorWithType.descriptor
+		objType := descriptorWithType.objectType
 
 		if catalog.IsSystemDescriptor(descriptor) {
 
@@ -396,6 +397,21 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 						SchemaName:                     d.Name, // FIXME
 					}})
 			}
+		case *funcdesc.Mutable:
+			if err := p.writeFuncSchemaChange(ctx, d); err != nil {
+				return err
+			}
+			for _, grantee := range n.grantees {
+				privs := eventDetails // copy the granted/revoked privilege list.
+				privs.Grantee = grantee.Normalized()
+				events = append(events, eventLogEntry{
+					targetID: int32(d.ID),
+					event: &eventpb.ChangeFunctionPrivilege{
+						CommonSQLPrivilegeEventDetails: privs,
+						FuncName:                       d.Name, // FIXME
+					}})
+			}
+			// TODO(chengxiong): add eventlog for function privilege changes.
 		}
 	}
 
@@ -440,12 +456,18 @@ func (p *planner) getGrantOnObject(
 	case targets.AllTablesInSchema:
 		incIAMFunc(sqltelemetry.OnAllTablesInSchema)
 		return privilege.Table, nil
+	case targets.AllFunctionsInSchema:
+		incIAMFunc(sqltelemetry.OnAllFunctionsInSchema)
+		return privilege.Function, nil
 	case targets.Schemas != nil:
 		incIAMFunc(sqltelemetry.OnSchema)
 		return privilege.Schema, nil
 	case targets.Types != nil:
 		incIAMFunc(sqltelemetry.OnType)
 		return privilege.Type, nil
+	case targets.Functions != nil:
+		incIAMFunc(sqltelemetry.OnFunction)
+		return privilege.Function, nil
 	case targets.System:
 		incIAMFunc(sqltelemetry.OnSystem)
 		return privilege.Global, nil

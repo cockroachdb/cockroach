@@ -125,7 +125,7 @@ func EvalAddSSTable(
 
 	var span *tracing.Span
 	var err error
-	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", start.Key, end.Key))
+	ctx, span = tracing.ChildSpan(ctx, "AddSSTable")
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 

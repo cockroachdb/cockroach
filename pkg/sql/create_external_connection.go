@@ -101,7 +101,7 @@ func (p *planner) createExternalConnection(
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve External Connection endpoint")
 	}
-	exConn, err := externalconn.ExternalConnectionFromURI(params.ctx, as)
+	exConn, err := externalconn.ExternalConnectionFromURI(params.ctx, params.ExecCfg(), p.User(), as)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
 	}
