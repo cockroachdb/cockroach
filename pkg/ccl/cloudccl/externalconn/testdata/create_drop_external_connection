@@ -233,4 +233,39 @@ inspect-system-table
 ----
 foo-kafka STORAGE {"provider": "kafka", "simpleUri": {"uri": "kafka://broker.address.com:9092?topic_prefix=bar_&tls_enabled=true&ca_cert=Zm9vCg==&sasl_enabled=true&sasl_user={sasl user}&sasl_password={url-encoded password}&sasl_mechanism=SCRAM-SHA-256"}}
 
+exec-sql
+DROP EXTERNAL CONNECTION "foo-kafka"
+----
+
+subtest end
+
+subtest basic-userfile
+
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-userfile" AS 'userfile:///foo/bar';
+----
+
+inspect-system-table
+----
+foo-userfile STORAGE {"provider": "userfile", "simpleUri": {"uri": "userfile:///foo/bar"}}
+
+# Reject invalid userfile URIs.
+exec-sql
+CREATE EXTERNAL CONNECTION "path-clean-userfile" AS 'userfile:///foo/..';
+----
+pq: failed to construct External Connection details: failed to create userfile external connection: path /foo/.. changes after normalization to /. userfile upload does not permit such path constructs
+
+exec-sql
+CREATE EXTERNAL CONNECTION "invalid-param-userfile" AS 'userfile:///foo?INVALIDPARAM=param';
+----
+pq: failed to construct External Connection details: failed to create userfile external connection: unknown userfile query parameters: INVALIDPARAM
+
+inspect-system-table
+----
+foo-userfile STORAGE {"provider": "userfile", "simpleUri": {"uri": "userfile:///foo/bar"}}
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-userfile";
+----
+
 subtest end
