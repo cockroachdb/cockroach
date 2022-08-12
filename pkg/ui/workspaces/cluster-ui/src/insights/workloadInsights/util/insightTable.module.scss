@@ -1,0 +1,47 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "src/core/index.module";
+
+.insight-type {
+  display: flex;
+  font-weight: $font-weight--bold;
+  border-bottom: 1px dashed $colors--neutral-5;
+  &--warning {
+    color: $colors--functional-orange-4;
+  }
+  &--info {
+    color: $colors--info-4;
+  }
+}
+
+.insight-table {
+  display:flex;
+}
+
+.action {
+  color: $colors--link;
+  display: flex;
+  line-height: $line-height--medium;
+  &:hover {
+    color: $colors--link;
+    text-decoration: underline;
+  }
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+}
+
+.queries-row {
+  display: flex;
+  border-bottom: 1px dashed $colors--neutral-5;
+}

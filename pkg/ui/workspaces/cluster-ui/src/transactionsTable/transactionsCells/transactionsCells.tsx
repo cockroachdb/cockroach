@@ -12,7 +12,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { getHighlightedText } from "src/highlightedText";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { limitText } from "../utils";
+import { limitText } from "src/util";
 import classNames from "classnames/bind";
 import statementsStyles from "../../statementsTable/statementsTableContent.module.scss";
 import transactionsCellsStyles from "./transactionsCells.module.scss";
