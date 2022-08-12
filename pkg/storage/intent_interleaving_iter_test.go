@@ -183,25 +183,25 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 }
 
 // TestIntentInterleavingIter is a datadriven test consisting of two commands:
-// - define: defines key-value pairs in the lock table and MVCC key spaces.
-//   Intents can be in both key spaces, and inline meta and MVCC values in
-//   the latter.
-//   meta k=<key> ts=<ts> txn=<txn>  defines an intent
-//   meta k=<key>                    defines an inline meta
-//   value k=<key> ts=<ts> v=<value> defines an MVCC value
-//   It is acceptable to define intents without provisional values to test
-//   out error checking code paths.
-// - iter: for iterating, is defined as
-//   iter [lower=<lower>] [upper=<upper>] [prefix=<true|false>]
-//   followed by newline separated sequence of operations:
+//   - define: defines key-value pairs in the lock table and MVCC key spaces.
+//     Intents can be in both key spaces, and inline meta and MVCC values in
+//     the latter.
+//     meta k=<key> ts=<ts> txn=<txn>  defines an intent
+//     meta k=<key>                    defines an inline meta
+//     value k=<key> ts=<ts> v=<value> defines an MVCC value
+//     It is acceptable to define intents without provisional values to test
+//     out error checking code paths.
+//   - iter: for iterating, is defined as
+//     iter [lower=<lower>] [upper=<upper>] [prefix=<true|false>]
+//     followed by newline separated sequence of operations:
 //     next, prev, seek-lt, seek-ge, next-key, stats
 //
 // Keys are interpreted as:
-// - starting with L is interpreted as a local-range key.
-// - starting with S is interpreted as a store local key.
-// - starting with Y is interpreted as a local key starting immediately after
-//   the lock table key space. This is for testing edge cases wrt bounds.
-// - a single Z is interpreted as LocalMax
+//   - starting with L is interpreted as a local-range key.
+//   - starting with S is interpreted as a store local key.
+//   - starting with Y is interpreted as a local key starting immediately after
+//     the lock table key space. This is for testing edge cases wrt bounds.
+//   - a single Z is interpreted as LocalMax
 //
 // Note: This test still manually writes interleaved intents. Even though
 // we've removed codepaths to write interleaved intents, intentInterleavingIter

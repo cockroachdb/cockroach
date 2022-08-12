@@ -30,7 +30,6 @@ import (
 //   - It does not include subqueries.
 //   - It does not include non-immutable, aggregate, window, or set returning
 //     functions.
-//
 func ValidateUniqueWithoutIndexPredicate(
 	ctx context.Context,
 	tn tree.TableName,

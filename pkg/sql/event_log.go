@@ -494,9 +494,9 @@ func InsertEventRecords(
 // for tests.
 //
 // Otherwise, an asynchronous task is spawned to do the write:
-// - if there's at txn, after the txn commit time (i.e. we don't log
-//   if the txn ends up aborting), using a txn commit trigger.
-// - otherwise (no txn), immediately.
+//   - if there's at txn, after the txn commit time (i.e. we don't log
+//     if the txn ends up aborting), using a txn commit trigger.
+//   - otherwise (no txn), immediately.
 func insertEventRecords(
 	ctx context.Context,
 	execCfg *ExecutorConfig,

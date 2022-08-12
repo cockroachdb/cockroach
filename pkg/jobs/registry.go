@@ -1071,7 +1071,6 @@ func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id jobspb.JobID) er
 // canceled.
 //
 // Resumers are created through registered Constructor functions.
-//
 type Resumer interface {
 	// Resume is called when a job is started or resumed. execCtx is a sql.JobExecCtx.
 	Resume(ctx context.Context, execCtx interface{}) error
@@ -1093,8 +1092,8 @@ type RegisterOption func(opts *registerOptions)
 // Storage I/O costs (i.e. from reads/writes) from tenant accounting, based on
 // this principle:
 //
-//   Jobs that are not triggered by user actions should be exempted from cost
-//   control.
+//	Jobs that are not triggered by user actions should be exempted from cost
+//	control.
 //
 // For example, SQL stats compaction, span reconciler, and long-running
 // migration jobs are not triggered by user actions, and so should be exempted.

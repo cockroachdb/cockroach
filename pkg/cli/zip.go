@@ -13,7 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -357,7 +357,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, ioutil.Discard, stderr, clisqlclient.MakeQuery(query))
+			return sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, io.Discard, stderr, clisqlclient.MakeQuery(query))
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {

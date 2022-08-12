@@ -47,36 +47,36 @@ import (
 // (default) RANGE DEFAULT are printed in the test output for readability. It
 // offers the following commands:
 //
-// - "exec-sql"
-//   Executes the input SQL query.
+//   - "exec-sql"
+//     Executes the input SQL query.
 //
-// - "query-sql"
-//   Executes the input SQL query and prints the results.
+//   - "query-sql"
+//     Executes the input SQL query and prints the results.
 //
-// - "translate" [database=<str>] [table=<str>] [named-zone=<str>] [id=<int>]
-//   Translates the SQL zone config state to the span config state starting
-//   from the referenced object (named zone, database, database + table, or
-//   descriptor id) as the root.
+//   - "translate" [database=<str>] [table=<str>] [named-zone=<str>] [id=<int>]
+//     Translates the SQL zone config state to the span config state starting
+//     from the referenced object (named zone, database, database + table, or
+//     descriptor id) as the root.
 //
-// - "full-translate"
-//   Performs a full translation of the SQL zone config state to the implied
-//   span config state.
+//   - "full-translate"
+//     Performs a full translation of the SQL zone config state to the implied
+//     span config state.
 //
-// - "mark-table-offline" [database=<str>] [table=<str>]
-//   Marks the given table as offline for testing purposes.
+//   - "mark-table-offline" [database=<str>] [table=<str>]
+//     Marks the given table as offline for testing purposes.
 //
-// - "mark-table-public" [database=<str>] [table=<str>]
-//   Marks the given table as public.
+//   - "mark-table-public" [database=<str>] [table=<str>]
+//     Marks the given table as public.
 //
-// - "protect" [record-id=<int>] [ts=<int>]
-//   cluster                  OR
-//   tenants       id1,id2... OR
-//   descs         id1,id2...
-//   Creates and writes a protected timestamp record with id and ts with an
-//   appropriate ptpb.Target.
+//   - "protect" [record-id=<int>] [ts=<int>]
+//     cluster                  OR
+//     tenants       id1,id2... OR
+//     descs         id1,id2...
+//     Creates and writes a protected timestamp record with id and ts with an
+//     appropriate ptpb.Target.
 //
-// - "release" [record-id=<int>]
-//   Releases the protected timestamp record with id.
+//   - "release" [record-id=<int>]
+//     Releases the protected timestamp record with id.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

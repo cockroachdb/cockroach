@@ -31,7 +31,6 @@ func (m tokensLinearModel) applyLinearModel(b int64) int64 {
 // However, the simple approach here should be an improvement on the additive
 // approach we previously used.
 //
-//
 // TODO(sumeer): improve the model based on realistic combinations of
 // workloads (e.g. foreground writes + index backfills).
 type tokensLinearModelFitter struct {
@@ -73,21 +72,21 @@ func makeTokensLinearModelFitter(
 // probably poor, though an improvement on what we had previously. The approach
 // taken is:
 //
-// - Fit the best model we can for the interval,
-//   multiplier*accountedBytes + workCount*constant = actualBytes, while
-//   minimizing the constant. We prefer the model to use the multiplier for
-//   most of what it needs to account for actualBytes.
-//   This exact model ignores inaccuracies due to integer arithmetic -- we
-//   don't care about rounding errors since an error of 2 bytes per request is
-//   inconsequential.
+//   - Fit the best model we can for the interval,
+//     multiplier*accountedBytes + workCount*constant = actualBytes, while
+//     minimizing the constant. We prefer the model to use the multiplier for
+//     most of what it needs to account for actualBytes.
+//     This exact model ignores inaccuracies due to integer arithmetic -- we
+//     don't care about rounding errors since an error of 2 bytes per request is
+//     inconsequential.
 //
-// - The multiplier has to conform to the [min,max] configured for this model,
-//   and constant has to conform to a value >= 1. The constant is constrained
-//   to be >=1 on the intuition that we want a request to consume at least 1
-//   token -- it isn't clear that this intuition is meaningful in any way.
+//   - The multiplier has to conform to the [min,max] configured for this model,
+//     and constant has to conform to a value >= 1. The constant is constrained
+//     to be >=1 on the intuition that we want a request to consume at least 1
+//     token -- it isn't clear that this intuition is meaningful in any way.
 //
-// - Exponentially smooth this exact model's multiplier and constant based on
-//   history.
+//   - Exponentially smooth this exact model's multiplier and constant based on
+//     history.
 func (f *tokensLinearModelFitter) updateModelUsingIntervalStats(
 	accountedBytes int64, actualBytes int64, workCount int64,
 ) {

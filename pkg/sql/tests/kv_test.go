@@ -349,29 +349,30 @@ func BenchmarkKV(b *testing.B) {
 // are small and already fast are not really beneficial to the user.
 // Specifically, these transactional update queries run as a 1PC transaction
 // and do two significant pieces of work in storage:
-// - A read-only batch with 100 ScanRequests (this should eventually be
-//   optimized by SQL to 100 GetRequests
-//   https://github.com/cockroachdb/cockroach/issues/46758). The spans in the
-//   batch are in sorted order. At the storage layer, the same iterator is
-//   reused across the requests in a batch, and results in the following
-//   sequence of calls repeated a 100 times: SetBounds, SeekGE, <iterate>.
-//   The <iterate> part is looking for the next MVCCKey (not version) within
-//   the span, and will not find such a key, but needs to step over the
-//   versions of the key that it did find. This exercises the
-//   pebbleMVCCScanner's itersBeforeSeek optimization, and will only involve
-//   Next calls if the versions are <= 5. Else it will Seek after doing Next 5
-//   times. That is, if there are k version per key and k <= 5, <Iterate> will
-//   be k Next calls. If k > 5, there will be 5 Next calls followed by a
-//   SeekGE. The maxVersions=8 benchmark below has some iterations that will
-//   need to do this seek.
-// - A write batch with 100 PutRequests, again in sorted order. At
-//   the storage layer, the same iterator will get reused across the requests
-//   in a batch, and results in 100 SeekPrefixGE calls to that iterator.
-//   Note that in this case the Distinct batch optimization is not being used.
-//   Even the experimental approach in
-//   https://github.com/sumeerbhola/cockroach/commit/eeeec51bd40ef47e743dc0c9ca47cf15710bae09
-//   indicates that we cannot use an unindexed Pebble batch (which would have
-//   been an optimization).
+//   - A read-only batch with 100 ScanRequests (this should eventually be
+//     optimized by SQL to 100 GetRequests
+//     https://github.com/cockroachdb/cockroach/issues/46758). The spans in the
+//     batch are in sorted order. At the storage layer, the same iterator is
+//     reused across the requests in a batch, and results in the following
+//     sequence of calls repeated a 100 times: SetBounds, SeekGE, <iterate>.
+//     The <iterate> part is looking for the next MVCCKey (not version) within
+//     the span, and will not find such a key, but needs to step over the
+//     versions of the key that it did find. This exercises the
+//     pebbleMVCCScanner's itersBeforeSeek optimization, and will only involve
+//     Next calls if the versions are <= 5. Else it will Seek after doing Next 5
+//     times. That is, if there are k version per key and k <= 5, <Iterate> will
+//     be k Next calls. If k > 5, there will be 5 Next calls followed by a
+//     SeekGE. The maxVersions=8 benchmark below has some iterations that will
+//     need to do this seek.
+//   - A write batch with 100 PutRequests, again in sorted order. At
+//     the storage layer, the same iterator will get reused across the requests
+//     in a batch, and results in 100 SeekPrefixGE calls to that iterator.
+//     Note that in this case the Distinct batch optimization is not being used.
+//     Even the experimental approach in
+//     https://github.com/sumeerbhola/cockroach/commit/eeeec51bd40ef47e743dc0c9ca47cf15710bae09
+//     indicates that we cannot use an unindexed Pebble batch (which would have
+//     been an optimization).
+//
 // This workload has keys that are clustered in the storage key space. Also,
 // the volume of data is small, so the Pebble iterator stack is not deep. Both
 // these things may not be representative of the real world. I like to run

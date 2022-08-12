@@ -334,10 +334,10 @@ type historyItem struct {
 // any dependency on how key splitting is done inside pebble.
 // Generated expected values are produces by simulating GC in a naive way where
 // each value is considered live if:
-// - it is a value or tombstone and its timestamp is higher than gc threshold
-// - it is a range tombstone and its timestamp is higher than gc threshold
-// - it is a first value at or below gc threshold and there are no deletions
-//   between gc threshold and the value
+//   - it is a value or tombstone and its timestamp is higher than gc threshold
+//   - it is a range tombstone and its timestamp is higher than gc threshold
+//   - it is a first value at or below gc threshold and there are no deletions
+//     between gc threshold and the value
 func assertLiveData(
 	t *testing.T,
 	after, before storage.Reader,

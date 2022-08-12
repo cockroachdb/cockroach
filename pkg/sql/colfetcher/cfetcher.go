@@ -182,21 +182,22 @@ const noOutputColumn = -1
 // cFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
 // Usage:
-//   var cf cFetcher
-//   err := cf.Init(..)
-//   // Handle err
-//   err := cf.StartScan(..)
-//   // Handle err
-//   for {
-//      res, err := cf.NextBatch()
-//      // Handle err
-//      if res.colBatch.Length() == 0 {
-//         // Done
-//         break
-//      }
-//      // Process res.colBatch
-//   }
-//   cf.Close(ctx)
+//
+//	var cf cFetcher
+//	err := cf.Init(..)
+//	// Handle err
+//	err := cf.StartScan(..)
+//	// Handle err
+//	for {
+//	   res, err := cf.NextBatch()
+//	   // Handle err
+//	   if res.colBatch.Length() == 0 {
+//	      // Done
+//	      break
+//	   }
+//	   // Process res.colBatch
+//	}
+//	cf.Close(ctx)
 type cFetcher struct {
 	cFetcherArgs
 

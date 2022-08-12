@@ -39,7 +39,7 @@ var sqlAPIClock timeutil.TimeSource = timeutil.DefaultTimeSource{}
 
 // swagger:operation POST /sql/ execSQL
 //
-// Execute one or more SQL statements
+// # Execute one or more SQL statements
 //
 // Executes one or more SQL statements.
 //
@@ -66,132 +66,134 @@ var sqlAPIClock timeutil.TimeSource = timeutil.DefaultTimeSource{}
 // consumes:
 // - application/json
 // parameters:
-// - in: body
-//   name: request
-//   schema:
+//   - in: body
+//     name: request
+//     schema:
 //     type: object
 //     required:
-//     - statements
+//   - statements
 //     properties:
-//       database:
-//         type: string
-//         description: The current database for the execution. Defaults to defaultdb.
-//       application_name:
-//         type: string
-//         description: The SQL application_name parameter.
-//       timeout:
-//         type: string
-//         description: Max time budget for the execution, using Go duration syntax. Default to 5 seconds.
-//       max_result_size:
-//         type: integer
-//         description:
-//            Max size in bytes for the execution field in the response.
-//            Execution stops with an error if the results do not fit.
-//       statements:
-//         description: The SQL statement(s) to run.
-//         type: array
-//         items:
-//            type: object
-//            required:
-//            - sql
-//            properties:
-//               sql:
-//                 type: string
-//                 description: SQL syntax for one statement.
-//               arguments:
-//                 type: array
-//                 description: Placeholder parameter values.
+//     database:
+//     type: string
+//     description: The current database for the execution. Defaults to defaultdb.
+//     application_name:
+//     type: string
+//     description: The SQL application_name parameter.
+//     timeout:
+//     type: string
+//     description: Max time budget for the execution, using Go duration syntax. Default to 5 seconds.
+//     max_result_size:
+//     type: integer
+//     description:
+//     Max size in bytes for the execution field in the response.
+//     Execution stops with an error if the results do not fit.
+//     statements:
+//     description: The SQL statement(s) to run.
+//     type: array
+//     items:
+//     type: object
+//     required:
+//   - sql
+//     properties:
+//     sql:
+//     type: string
+//     description: SQL syntax for one statement.
+//     arguments:
+//     type: array
+//     description: Placeholder parameter values.
+//
 // produces:
 // - application/json
 // responses:
-//  '405':
-//    description: Bad method. Only the POST method is supported.
-//  '400':
-//    description: Bad request. Bad input encoding, missing SQL or invalid parameter.
-//  '500':
-//    description: Internal error encountered.
-//  '200':
-//    description: Query results and optional execution error.
-//    schema:
-//      type: object
-//      required:
-//       - num_statements
-//       - execution
-//      properties:
-//        num_statements:
-//          type: integer
-//          description: The number of statements in the input SQL.
-//        txn_error:
-//          type: object
-//          description: The details of the error, if an error was encountered.
-//          required:
-//            - message
-//            - code
-//          properties:
-//            code:
-//              type: string
-//              description: The SQLSTATE 5-character code of the error.
-//            message:
-//              type: string
-//          additionalProperties: {}
-//        execution:
-//          type: object
-//          required:
-//            - retries
-//            - txn_results
-//          properties:
-//            retries:
-//              type: integer
-//              description: The number of times the transaction was retried.
-//            txn_results:
-//              type: array
-//              description: The result sets, one per SQL statement.
-//              items:
-//                type: object
-//                required:
-//                  - statement
-//                  - tag
-//                  - start
-//                  - end
-//                properties:
-//                  statement:
-//                    type: integer
-//                    description: The statement index in the SQL input.
-//                  tag:
-//                    type: string
-//                    description: The short statement tag.
-//                  start:
-//                    type: string
-//                    description: Start timestamp, encoded as RFC3339.
-//                  end:
-//                    type: string
-//                    description: End timestamp, encoded as RFC3339.
-//                  rows_affected:
-//                    type: integer
-//                    description: The number of rows affected.
-//                  columns:
-//                    type: array
-//                    description: The list of columns in the result rows.
-//                    items:
-//                      type: object
-//                      properties:
-//                        name:
-//                          type: string
-//                          description: The column name.
-//                        type:
-//                          type: string
-//                          description: The SQL type of the column.
-//                        oid:
-//                          type: integer
-//                          description: The PostgreSQL OID for the column type.
-//                      required:
-//                        - name
-//                        - type
-//                        - oid
-//                  rows:
-//                    type: array
-//                    description: The result rows.
-//                    items: {}
+//
+//	'405':
+//	  description: Bad method. Only the POST method is supported.
+//	'400':
+//	  description: Bad request. Bad input encoding, missing SQL or invalid parameter.
+//	'500':
+//	  description: Internal error encountered.
+//	'200':
+//	  description: Query results and optional execution error.
+//	  schema:
+//	    type: object
+//	    required:
+//	     - num_statements
+//	     - execution
+//	    properties:
+//	      num_statements:
+//	        type: integer
+//	        description: The number of statements in the input SQL.
+//	      txn_error:
+//	        type: object
+//	        description: The details of the error, if an error was encountered.
+//	        required:
+//	          - message
+//	          - code
+//	        properties:
+//	          code:
+//	            type: string
+//	            description: The SQLSTATE 5-character code of the error.
+//	          message:
+//	            type: string
+//	        additionalProperties: {}
+//	      execution:
+//	        type: object
+//	        required:
+//	          - retries
+//	          - txn_results
+//	        properties:
+//	          retries:
+//	            type: integer
+//	            description: The number of times the transaction was retried.
+//	          txn_results:
+//	            type: array
+//	            description: The result sets, one per SQL statement.
+//	            items:
+//	              type: object
+//	              required:
+//	                - statement
+//	                - tag
+//	                - start
+//	                - end
+//	              properties:
+//	                statement:
+//	                  type: integer
+//	                  description: The statement index in the SQL input.
+//	                tag:
+//	                  type: string
+//	                  description: The short statement tag.
+//	                start:
+//	                  type: string
+//	                  description: Start timestamp, encoded as RFC3339.
+//	                end:
+//	                  type: string
+//	                  description: End timestamp, encoded as RFC3339.
+//	                rows_affected:
+//	                  type: integer
+//	                  description: The number of rows affected.
+//	                columns:
+//	                  type: array
+//	                  description: The list of columns in the result rows.
+//	                  items:
+//	                    type: object
+//	                    properties:
+//	                      name:
+//	                        type: string
+//	                        description: The column name.
+//	                      type:
+//	                        type: string
+//	                        description: The SQL type of the column.
+//	                      oid:
+//	                        type: integer
+//	                        description: The PostgreSQL OID for the column type.
+//	                    required:
+//	                      - name
+//	                      - type
+//	                      - oid
+//	                rows:
+//	                  type: array
+//	                  description: The result rows.
+//	                  items: {}
 func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	// Type for the request.
 	type requestType struct {
