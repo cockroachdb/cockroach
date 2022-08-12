@@ -285,30 +285,14 @@ USE defaultdb;
 		})
 	}
 
-	// Test drop behavior in declarative schema changer.
+	// Test drop behavior in declarative schema changer, make sure it falls back
+	// to legacy schema changer.
 	tDB.Exec(t, "SET use_declarative_schema_changer = on")
 
-	dropStmts := []string{
-		"DROP TABLE t",
-		"DROP TABLE t CASCADE",
-		"DROP SEQUENCE sq1",
-		"DROP SEQUENCE sq1 CASCADE",
-		"DROP TABLE t2 CASCADE",
-		"DROP VIEW v",
-		"DROP VIEW v CASCADE",
-		"DROP TYPE notmyworkday",
-		"DROP SCHEMA test_sc CASCADE",
-		"DROP SCHEMA test_sc CASCADE",
-		"DROP DATABASE test_udf_db CASCADE",
-		"DROP DATABASE test_udf_db CASCADE",
-		"ALTER TABLE t DROP COLUMN b",
-		"ALTER TABLE t DROP COLUMN b CASCADE",
-	}
-
-	for _, stmt := range dropStmts {
-		t.Run(stmt, func(t *testing.T) {
-			_, err := sqlDB.Exec(stmt)
-			require.Equal(t, "pq: unimplemented: function descriptor not supported in declarative schema changer", err.Error())
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			_, err := sqlDB.Exec(tc.stmt)
+			require.Equal(t, tc.expectedErr, err.Error())
 		})
 	}
 }
@@ -380,6 +364,39 @@ $$;
 			tDB.Exec(t, setupQuery)
 			// Test drop/rename behavior in legacy schema changer.
 			tDB.Exec(t, "SET use_declarative_schema_changer = off;")
+
+			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				require.NoError(t, err)
+				require.Equal(t, "f", fnDesc.GetName())
+				require.True(t, fnDesc.Public())
+				return nil
+			})
+			require.NoError(t, err)
+
+			tDB.Exec(t, tc.stmt)
+
+			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				_, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				require.Error(t, err)
+				require.Regexp(t, "descriptor is being dropped", err.Error())
+				return nil
+			})
+			require.NoError(t, err)
+		})
+	}
+
+	// Make sure declarative schema changer falls back to legacy schema changer to
+	// drop the function.
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			tDB := sqlutils.MakeSQLRunner(sqlDB)
+			tDB.Exec(t, setupQuery)
+			// Test drop/rename behavior in legacy schema changer.
+			tDB.Exec(t, "SET use_declarative_schema_changer = on;")
 
 			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 				fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
