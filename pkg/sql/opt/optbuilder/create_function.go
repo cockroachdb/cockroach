@@ -106,12 +106,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		}
 
 		// Add the argument to the base scope of the body.
-		id := b.factory.Metadata().AddColumn(string(arg.Name), typ)
-		bodyScope.appendColumn(&scopeColumn{
-			name: scopeColName(arg.Name),
-			typ:  typ,
-			id:   id,
-		})
+		argColName := funcArgColName(arg.Name, i)
+		col := b.synthesizeColumn(bodyScope, argColName, typ, nil /* expr */, nil /* scalar */)
+		col.setArgOrd(i)
 
 		// Collect the user defined type dependencies.
 		typeIDs, err := typedesc.GetTypeDescriptorClosure(typ)
