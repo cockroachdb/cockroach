@@ -73,6 +73,42 @@ var replicationBuiltins = map[string]builtinDefinition{
 				" job has left the cluster in a consistent state.",
 			Volatility: volatility.Volatile,
 		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"job_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mgr, err := streaming.GetStreamIngestManager(evalCtx)
+				if err != nil {
+					return nil, err
+				}
+
+				ingestionJobID := jobspb.JobID(*args[0].(*tree.DInt))
+				stats, err := mgr.GetStreamIngestionStats(evalCtx, evalCtx.Txn, ingestionJobID)
+				if err != nil {
+					return nil, err
+				}
+
+				if stats.ReplicationLagInfo == nil || stats.ReplicationLagInfo.MinIngestedTimestamp.IsEmpty() {
+					return nil, errors.New("replication job has no high watermark recorded")
+				}
+				cutoverTimestamp := stats.ReplicationLagInfo.MinIngestedTimestamp
+				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, ingestionJobID, cutoverTimestamp)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(ingestionJobID)), err
+			},
+			Info: "This function can be used to signal a running stream ingestion job to complete. " +
+				"The job will eventually stop ingesting, revert to the latest safe timestamp and leave the " +
+				"cluster in a consistent state. " +
+				"This function does not wait for the job to reach a terminal state, " +
+				"but instead returns the job id as soon as it has signaled the job to complete. " +
+				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
+				"job has left the cluster in a consistent state.",
+			Volatility: volatility.Volatile,
+		},
 	),
 
 	"crdb_internal.stream_ingestion_stats_json": makeBuiltin(
