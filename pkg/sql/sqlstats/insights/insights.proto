@@ -65,6 +65,8 @@ message Statement {
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 17;
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
+  repeated string index_recommendation = 19;
+
 }
 
 message Insight {
