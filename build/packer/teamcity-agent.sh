@@ -61,6 +61,9 @@ tar --strip-components=1 -C /usr -xzf /tmp/cmake.tar.gz
 rm -f /tmp/cmake.tar.gz
 
 if [ $ARCH = x86_64 ]; then
+    curl -fsSL https://dl.google.com/go/go1.19.linux-amd64.tar.gz > /tmp/go.tgz
+    sha256sum -c - <<EOF
+    464b6b66591f6cf055bc5df90a9750bf5fbc9d038722bb84a9d56a2bea974be6  /tmp/go.tgz
     curl -fsSL https://dl.google.com/go/go1.18.4.linux-amd64.tar.gz > /tmp/go.tgz
     sha256sum -c - <<EOF
 c9b099b68d93f5c5c8a8844a89f8db07eaa58270e3a1e01804f17f4cf8df02f5  /tmp/go.tgz

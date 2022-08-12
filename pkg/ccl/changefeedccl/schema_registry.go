@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"path"
 
@@ -141,8 +140,7 @@ func (r *confluentSchemaRegistry) Ping(ctx context.Context) error {
 // RegisterSchemaForSubject registers the given schema for the given
 // subject. The schema type is assumed to be AVRO.
 //
-//   https://docs.confluent.io/platform/current/schema-registry/develop/api.html#post--subjects-(string-%20subject)-versions
-//
+//	https://docs.confluent.io/platform/current/schema-registry/develop/api.html#post--subjects-(string-%20subject)-versions
 func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 	ctx context.Context, subject string, schema string,
 ) (int32, error) {
@@ -214,7 +212,7 @@ func gracefulClose(ctx context.Context, toClose io.ReadCloser) {
 	//
 	// We read upto 4k to try to reach io.EOF.
 	const respExtraReadLimit = 4096
-	_, _ = io.CopyN(ioutil.Discard, toClose, respExtraReadLimit)
+	_, _ = io.CopyN(io.Discard, toClose, respExtraReadLimit)
 	if err := toClose.Close(); err != nil {
 		log.VInfof(ctx, 2, "failure to close schema registry connection", err)
 	}

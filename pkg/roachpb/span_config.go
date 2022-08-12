@@ -98,7 +98,8 @@ func (s *SpanConfig) ValidateSystemTargetSpanConfig() error {
 // GetNumVoters returns the number of voting replicas as defined in the
 // span config.
 // TODO(arul): We can get rid of this now that we're correctly populating
-//  numVoters when going from ZoneConfigs -> SpanConfigs.
+//
+//	numVoters when going from ZoneConfigs -> SpanConfigs.
 func (s *SpanConfig) GetNumVoters() int32 {
 	if s.NumVoters != 0 {
 		return s.NumVoters

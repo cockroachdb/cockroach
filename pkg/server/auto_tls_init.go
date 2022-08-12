@@ -96,14 +96,14 @@ func (sb *ServiceCertificateBundle) loadCACertAndKey(certPath string, keyPath st
 
 // loadOrCreateServiceCertificates will attempt to load the service cert/key
 // into the service bundle.
-// * If they do not exist:
-//   It will attempt to load the service CA cert/key pair.
-//   * If they do not exist:
+//   - If they do not exist:
+//     It will attempt to load the service CA cert/key pair.
+//   - If they do not exist:
 //     It will generate the service CA cert/key pair.
 //     It will persist these to disk and store them
-//       in the ServiceCertificateBundle.
-//   It will generate the service cert/key pair.
-//   It will persist these to disk and store them
+//     in the ServiceCertificateBundle.
+//     It will generate the service cert/key pair.
+//     It will persist these to disk and store them
 //     in the ServiceCertificateBundle.
 func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	ctx context.Context,

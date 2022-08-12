@@ -197,7 +197,9 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //
 // The aborter only works with INSERT statements operating on the table t.test
 // defined as:
+//
 //	`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT)`
+//
 // The TxnAborter runs transactions deleting the row for the `k` that the
 // trapped transactions were writing to.
 //

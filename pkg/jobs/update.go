@@ -124,14 +124,14 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 //
 // Sample usage:
 //
-//   err := j.Update(ctx, func(_ *client.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-//     if md.Status != StatusRunning {
-//       return errors.New("job no longer running")
-//     }
-//     md.UpdateStatus(StatusPaused)
-//     // <modify md.Payload>
-//     md.UpdatePayload(md.Payload)
-//   }
+//	err := j.Update(ctx, func(_ *client.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+//	  if md.Status != StatusRunning {
+//	    return errors.New("job no longer running")
+//	  }
+//	  md.UpdateStatus(StatusPaused)
+//	  // <modify md.Payload>
+//	  md.UpdatePayload(md.Payload)
+//	}
 //
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.

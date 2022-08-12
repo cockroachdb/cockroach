@@ -315,17 +315,17 @@ func (o *Optimizer) optimizeExpr(
 // The following is a simplified walkthrough of how the optimizer might handle
 // the following SQL query:
 //
-//   SELECT * FROM a WHERE x=1 ORDER BY y
+//	SELECT * FROM a WHERE x=1 ORDER BY y
 //
 // Before the optimizer is invoked, the memo group contains a single normalized
 // expression:
 //
-//   memo
-//    ├── G1: (select G2 G3)
-//    ├── G2: (scan a)
-//    ├── G3: (eq 3 2)
-//    ├── G4: (variable x)
-//    └── G5: (const 1)
+//	memo
+//	 ├── G1: (select G2 G3)
+//	 ├── G2: (scan a)
+//	 ├── G3: (eq 3 2)
+//	 ├── G4: (variable x)
+//	 └── G5: (const 1)
 //
 // Optimization begins at the root of the memo (group #1), and calls
 // optimizeGroup with the properties required of that group ("ordering:y").
@@ -345,32 +345,32 @@ func (o *Optimizer) optimizeExpr(
 // cost expression for that group for that set of properties (i.e. the empty
 // set).
 //
-//   memo
-//    ├── G1: (select G2 G3)
-//    ├── G2: (scan a)
-//    │    └── []
-//    │         ├── best: (scan a)
-//    │         └── cost: 100.00
-//    ├── G3: (eq 3 2)
-//    ├── G4: (variable x)
-//    └── G5: (const 1)
+//	memo
+//	 ├── G1: (select G2 G3)
+//	 ├── G2: (scan a)
+//	 │    └── []
+//	 │         ├── best: (scan a)
+//	 │         └── cost: 100.00
+//	 ├── G3: (eq 3 2)
+//	 ├── G4: (variable x)
+//	 └── G5: (const 1)
 //
 // The recursion pops up a level, and now the Sort enforcer knows its input,
 // and so it too can be costed (cost of input + extra cost of sort) and added
 // as the best expression for the property set with the ordering requirement.
 //
-//   memo
-//    ├── G1: (select G2 G3)
-//    ├── G2: (scan a)
-//    │    ├── [ordering: y]
-//    │    │    ├── best: (sort G2)
-//    │    │    └── cost: 150.00
-//    │    └── []
-//    │         ├── best: (scan a)
-//    │         └── cost: 100.00
-//    ├── G3: (eq 3 2)
-//    ├── G4: (variable x)
-//    └── G5: (const 1)
+//	memo
+//	 ├── G1: (select G2 G3)
+//	 ├── G2: (scan a)
+//	 │    ├── [ordering: y]
+//	 │    │    ├── best: (sort G2)
+//	 │    │    └── cost: 150.00
+//	 │    └── []
+//	 │         ├── best: (scan a)
+//	 │         └── cost: 100.00
+//	 ├── G3: (eq 3 2)
+//	 ├── G4: (variable x)
+//	 └── G5: (const 1)
 //
 // Recursion pops up another level, and the Select operator now knows its input
 // (the Sort of the Scan). It then moves on to its scalar filter child and
@@ -381,21 +381,21 @@ func (o *Optimizer) optimizeExpr(
 // ordering requirement. It requires the same ordering requirement from its
 // input child (i.e. the scan).
 //
-//   memo
-//    ├── G1: (select G2 G3)
-//    │    └── [ordering: y]
-//    │         ├── best: (select G2="ordering: y" G3)
-//    │         └── cost: 160.00
-//    ├── G2: (scan a)
-//    │    ├── [ordering: y]
-//    │    │    ├── best: (sort G2)
-//    │    │    └── cost: 150.00
-//    │    └── []
-//    │         ├── best: (scan a)
-//    │         └── cost: 100.00
-//    ├── G3: (eq 3 2)
-//    ├── G4: (variable x)
-//    └── G5: (const 1)
+//	memo
+//	 ├── G1: (select G2 G3)
+//	 │    └── [ordering: y]
+//	 │         ├── best: (select G2="ordering: y" G3)
+//	 │         └── cost: 160.00
+//	 ├── G2: (scan a)
+//	 │    ├── [ordering: y]
+//	 │    │    ├── best: (sort G2)
+//	 │    │    └── cost: 150.00
+//	 │    └── []
+//	 │         ├── best: (scan a)
+//	 │         └── cost: 100.00
+//	 ├── G3: (eq 3 2)
+//	 ├── G4: (variable x)
+//	 └── G5: (const 1)
 //
 // But the process is not yet complete. After traversing the Select child
 // groups, optimizeExpr generates an alternate plan that satisfies the ordering
@@ -407,24 +407,24 @@ func (o *Optimizer) optimizeExpr(
 // returns them immediately with no extra work. The Select expression is now
 // costed and added as the best expression without an ordering requirement.
 //
-//   memo
-//    ├── G1: (select G2 G3)
-//    │    ├── [ordering: y]
-//    │    │    ├── best: (select G2="ordering: y" G3)
-//    │    │    └── cost: 160.00
-//    │    └── []
-//    │         ├── best: (select G2 G3)
-//    │         └── cost: 110.00
-//    ├── G2: (scan a)
-//    │    ├── [ordering: y]
-//    │    │    ├── best: (sort G2)
-//    │    │    └── cost: 150.00
-//    │    └── []
-//    │         ├── best: (scan a)
-//    │         └── cost: 100.00
-//    ├── G3: (eq 3 2)
-//    ├── G4: (variable x)
-//    └── G5: (const 1)
+//	memo
+//	 ├── G1: (select G2 G3)
+//	 │    ├── [ordering: y]
+//	 │    │    ├── best: (select G2="ordering: y" G3)
+//	 │    │    └── cost: 160.00
+//	 │    └── []
+//	 │         ├── best: (select G2 G3)
+//	 │         └── cost: 110.00
+//	 ├── G2: (scan a)
+//	 │    ├── [ordering: y]
+//	 │    │    ├── best: (sort G2)
+//	 │    │    └── cost: 150.00
+//	 │    └── []
+//	 │         ├── best: (scan a)
+//	 │         └── cost: 100.00
+//	 ├── G3: (eq 3 2)
+//	 ├── G4: (variable x)
+//	 └── G5: (const 1)
 //
 // Finally, the Sort enforcer for group #1 has its input and can be costed. But
 // rather than costing 50.0 like the other Sort enforcer, this one only costs
@@ -432,39 +432,38 @@ func (o *Optimizer) optimizeExpr(
 // cost is only 111.0, which makes it the new best expression for group #1 with
 // an ordering requirement:
 //
-//   memo
-//    ├── G1: (select G2 G3)
-//    │    ├── [ordering: y]
-//    │    │    ├── best: (sort G1)
-//    │    │    └── cost: 111.00
-//    │    └── []
-//    │         ├── best: (select G2 G3)
-//    │         └── cost: 110.00
-//    ├── G2: (scan a)
-//    │    ├── [ordering: y]
-//    │    │    ├── best: (sort G2)
-//    │    │    └── cost: 150.00
-//    │    └── []
-//    │         ├── best: (scan a)
-//    │         └── cost: 100.00
-//    ├── G3: (eq 3 2)
-//    ├── G4: (variable x)
-//    └── G5: (const 1)
+//	memo
+//	 ├── G1: (select G2 G3)
+//	 │    ├── [ordering: y]
+//	 │    │    ├── best: (sort G1)
+//	 │    │    └── cost: 111.00
+//	 │    └── []
+//	 │         ├── best: (select G2 G3)
+//	 │         └── cost: 110.00
+//	 ├── G2: (scan a)
+//	 │    ├── [ordering: y]
+//	 │    │    ├── best: (sort G2)
+//	 │    │    └── cost: 150.00
+//	 │    └── []
+//	 │         ├── best: (scan a)
+//	 │         └── cost: 100.00
+//	 ├── G3: (eq 3 2)
+//	 ├── G4: (variable x)
+//	 └── G5: (const 1)
 //
 // Now the memo has been fully optimized, and the best expression for group #1
 // and "ordering:y" can be set as the root of the tree by setLowestCostTree:
 //
-//   sort
-//    ├── columns: x:1(int) y:2(int)
-//    ├── ordering: +2
-//    └── select
-//         ├── columns: x:1(int) y:2(int)
-//         ├── scan
-//         │    └── columns: x:1(int) y:2(int)
-//         └── eq [type=bool]
-//              ├── variable: a.x [type=int]
-//              └── const: 1 [type=int]
-//
+//	sort
+//	 ├── columns: x:1(int) y:2(int)
+//	 ├── ordering: +2
+//	 └── select
+//	      ├── columns: x:1(int) y:2(int)
+//	      ├── scan
+//	      │    └── columns: x:1(int) y:2(int)
+//	      └── eq [type=bool]
+//	           ├── variable: a.x [type=int]
+//	           └── const: 1 [type=int]
 func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required) *groupState {
 	// Always start with the first expression in the group.
 	grp = grp.FirstExpr()
@@ -616,12 +615,12 @@ func (o *Optimizer) optimizeScalarExpr(
 // been provided by an enforcer rather than by the expression itself. There are
 // two reasons why this is necessary/desirable:
 //
-//   1. The expression may not be able to provide the property on its own. For
-//      example, a hash join cannot provide ordered results.
-//   2. The enforcer might be able to provide the property at lower overall
-//      cost. For example, an enforced sort on top of a hash join might be
-//      lower cost than a merge join that is already sorted, but at the cost of
-//      requiring one of its children to be sorted.
+//  1. The expression may not be able to provide the property on its own. For
+//     example, a hash join cannot provide ordered results.
+//  2. The enforcer might be able to provide the property at lower overall
+//     cost. For example, an enforced sort on top of a hash join might be
+//     lower cost than a merge join that is already sorted, but at the cost of
+//     requiring one of its children to be sorted.
 //
 // Note that enforceProps will recursively optimize this same group, but with
 // one less required physical property. The recursive call will eventually make
@@ -710,15 +709,15 @@ func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 // the memo, with a normalized tree containing the first expression in each of
 // the groups:
 //
-//   memo
-//    ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
-//    ├── G2: (scan a)
-//    ├── G3: (select G5 G6) (scan b,constrained)
-//    ├── G4: (true)
-//    ├── G5: (scan b)
-//    ├── G6: (eq G7 G8)
-//    ├── G7: (variable b.x)
-//    └── G8: (const 1)
+//	memo
+//	 ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
+//	 ├── G2: (scan a)
+//	 ├── G3: (select G5 G6) (scan b,constrained)
+//	 ├── G4: (true)
+//	 ├── G5: (scan b)
+//	 ├── G6: (eq G7 G8)
+//	 ├── G7: (variable b.x)
+//	 └── G8: (const 1)
 //
 // setLowestCostTree is called after exploration is complete, and after each
 // group member has been costed. If the second expression in groups G1 and G3

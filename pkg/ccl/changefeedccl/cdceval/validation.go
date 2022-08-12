@@ -29,9 +29,10 @@ import (
 // expression is valid for a table and target family.  includeVirtual indicates
 // if virtual columns should be considered valid in the expressions.
 // Normalization steps include:
-//   * Table name replaces with table reference
-//   * UDTs values replaced with their physical representation (to keep expression stable
+//   - Table name replaces with table reference
+//   - UDTs values replaced with their physical representation (to keep expression stable
 //     across data type changes).
+//
 // The normalized (updated) select clause expression can be serialized into protocol
 // buffer using cdceval.AsStringUnredacted.
 func NormalizeAndValidateSelectForTarget(

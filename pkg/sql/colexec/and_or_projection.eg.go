@@ -190,6 +190,7 @@ func (o *andProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
+//
 func (o *andProjOp) Next() coldata.Batch {
 	batch := o.input.Next()
 	origLen := batch.Length()
@@ -625,6 +626,7 @@ func (o *andRightNullProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
+//
 func (o *andRightNullProjOp) Next() coldata.Batch {
 	batch := o.input.Next()
 	origLen := batch.Length()
@@ -1027,6 +1029,7 @@ func (o *andLeftNullProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
+//
 func (o *andLeftNullProjOp) Next() coldata.Batch {
 	batch := o.input.Next()
 	origLen := batch.Length()
@@ -1410,6 +1413,7 @@ func (o *orProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
+//
 func (o *orProjOp) Next() coldata.Batch {
 	batch := o.input.Next()
 	origLen := batch.Length()
@@ -1846,6 +1850,7 @@ func (o *orRightNullProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
+//
 func (o *orRightNullProjOp) Next() coldata.Batch {
 	batch := o.input.Next()
 	origLen := batch.Length()
@@ -2249,6 +2254,7 @@ func (o *orLeftNullProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
+//
 func (o *orLeftNullProjOp) Next() coldata.Batch {
 	batch := o.input.Next()
 	origLen := batch.Length()

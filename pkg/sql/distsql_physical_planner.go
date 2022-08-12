@@ -63,22 +63,22 @@ import (
 // DistSQLPlanner is used to generate distributed plans from logical
 // plans. A rough overview of the process:
 //
-//  - the plan is based on a planNode tree (in the future it will be based on an
-//    intermediate representation tree). Only a subset of the possible trees is
-//    supported (this can be checked via CheckSupport).
+//   - the plan is based on a planNode tree (in the future it will be based on an
+//     intermediate representation tree). Only a subset of the possible trees is
+//     supported (this can be checked via CheckSupport).
 //
-//  - we generate a PhysicalPlan for the planNode tree recursively. The
-//    PhysicalPlan consists of a network of processors and streams, with a set
-//    of unconnected "result routers". The PhysicalPlan also has information on
-//    ordering and on the mapping planNode columns to columns in the result
-//    streams (all result routers output streams with the same schema).
+//   - we generate a PhysicalPlan for the planNode tree recursively. The
+//     PhysicalPlan consists of a network of processors and streams, with a set
+//     of unconnected "result routers". The PhysicalPlan also has information on
+//     ordering and on the mapping planNode columns to columns in the result
+//     streams (all result routers output streams with the same schema).
 //
-//    The PhysicalPlan for a scanNode leaf consists of TableReaders, one for each node
-//    that has one or more ranges.
+//     The PhysicalPlan for a scanNode leaf consists of TableReaders, one for each node
+//     that has one or more ranges.
 //
-//  - for each an internal planNode we start with the plan of the child node(s)
-//    and add processing stages (connected to the result routers of the children
-//    node).
+//   - for each an internal planNode we start with the plan of the child node(s)
+//     and add processing stages (connected to the result routers of the children
+//     node).
 type DistSQLPlanner struct {
 	// planVersion is the version of DistSQL targeted by the plan we're building.
 	// This is currently only assigned to the node's current DistSQL version and
@@ -1104,13 +1104,13 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 // partitionSpans takes a single span and splits it up according to the owning
 // nodes (if the span touches multiple ranges).
 //
-// - partitions is the set of SpanPartitions so far. The updated set is
-//   returned.
-// - nodeMap maps a SQLInstanceID to an index inside the partitions array. If
-//   the SQL instance chosen for the span is not in this map, then a new
-//   SpanPartition is appended to partitions and nodeMap is updated accordingly.
-// - getSQLInstanceIDForKVNodeID is a resolver from the KV node ID to the SQL
-//   instance ID.
+//   - partitions is the set of SpanPartitions so far. The updated set is
+//     returned.
+//   - nodeMap maps a SQLInstanceID to an index inside the partitions array. If
+//     the SQL instance chosen for the span is not in this map, then a new
+//     SpanPartition is appended to partitions and nodeMap is updated accordingly.
+//   - getSQLInstanceIDForKVNodeID is a resolver from the KV node ID to the SQL
+//     instance ID.
 //
 // The updated array of SpanPartitions is returned as well as the index into
 // that array pointing to the SpanPartition that included the last part of the
@@ -1502,9 +1502,10 @@ func (dsp *DistSQLPlanner) convertOrdering(
 
 // initTableReaderSpecTemplate initializes a TableReaderSpec/PostProcessSpec
 // that corresponds to a scanNode, except for the following fields:
-//  - Spans
-//  - Parallelize
-//  - BatchBytesLimit
+//   - Spans
+//   - Parallelize
+//   - BatchBytesLimit
+//
 // The generated specs will be used as templates for planning potentially
 // multiple TableReaders.
 func initTableReaderSpecTemplate(
@@ -1909,20 +1910,20 @@ func (dsp *DistSQLPlanner) addAggregators(
 // planAggregators plans the aggregator processors. An evaluator stage is added
 // if necessary.
 // Invariants assumed:
-//  - There is strictly no "pre-evaluation" necessary. If the given query is
-//  'SELECT COUNT(k), v + w FROM kv GROUP BY v + w', the evaluation of the first
-//  'v + w' is done at the source of the groupNode.
-//  - We only operate on the following expressions:
-//      - ONLY aggregation functions, with arguments pre-evaluated. So for
-//        COUNT(k + v), we assume a stream of evaluated 'k + v' values.
-//      - Expressions that CONTAIN an aggregation function, e.g. 'COUNT(k) + 1'.
-//        These are set as render expressions in the post-processing spec and
-//        are evaluated on the rows that the aggregator returns.
-//      - Expressions that also appear verbatim in the GROUP BY expressions.
-//        For 'SELECT k GROUP BY k', the aggregation function added is IDENT,
-//        therefore k just passes through unchanged.
-//    All other expressions simply pass through unchanged, for e.g. '1' in
-//    'SELECT 1 GROUP BY k'.
+//   - There is strictly no "pre-evaluation" necessary. If the given query is
+//     'SELECT COUNT(k), v + w FROM kv GROUP BY v + w', the evaluation of the first
+//     'v + w' is done at the source of the groupNode.
+//   - We only operate on the following expressions:
+//   - ONLY aggregation functions, with arguments pre-evaluated. So for
+//     COUNT(k + v), we assume a stream of evaluated 'k + v' values.
+//   - Expressions that CONTAIN an aggregation function, e.g. 'COUNT(k) + 1'.
+//     These are set as render expressions in the post-processing spec and
+//     are evaluated on the rows that the aggregator returns.
+//   - Expressions that also appear verbatim in the GROUP BY expressions.
+//     For 'SELECT k GROUP BY k', the aggregation function added is IDENT,
+//     therefore k just passes through unchanged.
+//     All other expressions simply pass through unchanged, for e.g. '1' in
+//     'SELECT 1 GROUP BY k'.
 func (dsp *DistSQLPlanner) planAggregators(
 	planCtx *PlanningCtx, p *PhysicalPlan, info *aggregatorPlanningInfo,
 ) error {
@@ -3671,31 +3672,32 @@ func (dsp *DistSQLPlanner) isOnlyOnGateway(plan *PhysicalPlan) bool {
 // unnecessary network I/O.
 //
 // Examples (single node):
-// - Query: ( VALUES (1), (2), (2) ) UNION ( VALUES (2), (3) )
-//   Plan:
-//   VALUES        VALUES
-//     |             |
-//      -------------
-//            |
-//        DISTINCT
 //
-// - Query: ( VALUES (1), (2), (2) ) INTERSECT ALL ( VALUES (2), (3) )
-//   Plan:
-//   VALUES        VALUES
+//   - Query: ( VALUES (1), (2), (2) ) UNION ( VALUES (2), (3) )
+//     Plan:
+//     VALUES        VALUES
 //     |             |
-//      -------------
-//            |
-//          JOIN
+//     -------------
+//     |
+//     DISTINCT
 //
-// - Query: ( VALUES (1), (2), (2) ) EXCEPT ( VALUES (2), (3) )
-//   Plan:
-//   VALUES        VALUES
+//   - Query: ( VALUES (1), (2), (2) ) INTERSECT ALL ( VALUES (2), (3) )
+//     Plan:
+//     VALUES        VALUES
 //     |             |
-//  DISTINCT       DISTINCT
+//     -------------
+//     |
+//     JOIN
+//
+//   - Query: ( VALUES (1), (2), (2) ) EXCEPT ( VALUES (2), (3) )
+//     Plan:
+//     VALUES        VALUES
 //     |             |
-//      -------------
-//            |
-//          JOIN
+//     DISTINCT       DISTINCT
+//     |             |
+//     -------------
+//     |
+//     JOIN
 func (dsp *DistSQLPlanner) createPlanForSetOp(
 	ctx context.Context, planCtx *PlanningCtx, n *unionNode,
 ) (*PhysicalPlan, error) {

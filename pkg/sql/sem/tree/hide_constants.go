@@ -93,12 +93,13 @@ func (node *Exprs) formatHideConstants(ctx *FmtCtx) {
 // placeholders and longer than 1 element as a tuple of its first
 // two elements, scrubbed.
 // e.g. (1)               -> (_)
-//      (1, 2)            -> (_, _)
-//      (1, 2, 3)         -> (_, _, __more1_10__)
-//      ROW()             -> ROW()
-//      ROW($1, $2, $3)   -> ROW($1, $2, __more1_10__)
-//      (1+2, 2+3, 3+4)   -> (_ + _, _ + _, _ + _)
-//      (1+2, b, c)       -> (_ + _, b, c)
+//
+//	(1, 2)            -> (_, _)
+//	(1, 2, 3)         -> (_, _, __more1_10__)
+//	ROW()             -> ROW()
+//	ROW($1, $2, $3)   -> ROW($1, $2, __more1_10__)
+//	(1+2, 2+3, 3+4)   -> (_ + _, _ + _, _ + _)
+//	(1+2, b, c)       -> (_ + _, b, c)
 func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
 	if len(node.Exprs) < 2 {
 		node.Format(ctx)
@@ -135,9 +136,10 @@ func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
 // literals or placeholders and longer than 1 element as an array
 // expression of its first two elements, scrubbed.
 // e.g. array[1]             -> array[_]
-//      array[1, 2]          -> array[_, _]
-//      array[1, 2, 3]       -> array[_, _, __more1_10__]
-//      array[1+2, 2+3, 3+4] -> array[_ + _, _ + _, _ + _]
+//
+//	array[1, 2]          -> array[_, _]
+//	array[1, 2, 3]       -> array[_, _, __more1_10__]
+//	array[1+2, 2+3, 3+4] -> array[_ + _, _ + _, _ + _]
 func (node *Array) formatHideConstants(ctx *FmtCtx) {
 	if len(node.Exprs) < 2 {
 		node.Format(ctx)

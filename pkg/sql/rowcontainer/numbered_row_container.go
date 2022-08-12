@@ -52,13 +52,13 @@ type DiskBackedNumberedRowContainer struct {
 // NewDiskBackedNumberedRowContainer creates a DiskBackedNumberedRowContainer.
 //
 // Arguments:
-//  - deDup is true if it should de-duplicate.
-//  - types is the schema of rows that will be added to this container.
-//  - evalCtx defines the context.
-//  - engine is the underlying store that rows are stored on when the container
-//    spills to disk.
-//  - memoryMonitor is used to monitor this container's memory usage.
-//  - diskMonitor is used to monitor this container's disk usage.
+//   - deDup is true if it should de-duplicate.
+//   - types is the schema of rows that will be added to this container.
+//   - evalCtx defines the context.
+//   - engine is the underlying store that rows are stored on when the container
+//     spills to disk.
+//   - memoryMonitor is used to monitor this container's memory usage.
+//   - diskMonitor is used to monitor this container's disk usage.
 func NewDiskBackedNumberedRowContainer(
 	deDup bool,
 	types []*types.T,
@@ -249,18 +249,18 @@ func (d *DiskBackedNumberedRowContainer) Close(ctx context.Context) {
 // the highest reuse distance currently in the cache. This optimality requires
 // some book-keeping overhead:
 //
-// - A map with O(R) entries where R is the number of unique rows that will be
-//   accessed and an overall size proportional to the total number of accesses.
-//   Overall this is within a constant factor of [][]int, but the constant could
-//   be high. Note that we need this map because when doing Next() on the iterator
-//   we encounter entries different from the ones that caused this cache miss
-//   and we need to decide whether to cache them -- if we had a random access
-//   iterator such that sequential access was the same cost as random
-//   access, then a single []int with the next reuse position for each access
-//   would have sufficed.
-// - A heap containing the rows in the cache that is updated on each cache hit,
-//   and whenever a row is evicted or added to the cache. This is O(log N) where
-//   N is the number of entries in the cache.
+//   - A map with O(R) entries where R is the number of unique rows that will be
+//     accessed and an overall size proportional to the total number of accesses.
+//     Overall this is within a constant factor of [][]int, but the constant could
+//     be high. Note that we need this map because when doing Next() on the iterator
+//     we encounter entries different from the ones that caused this cache miss
+//     and we need to decide whether to cache them -- if we had a random access
+//     iterator such that sequential access was the same cost as random
+//     access, then a single []int with the next reuse position for each access
+//     would have sufficed.
+//   - A heap containing the rows in the cache that is updated on each cache hit,
+//     and whenever a row is evicted or added to the cache. This is O(log N) where
+//     N is the number of entries in the cache.
 //
 // Overall, this may be too much memory and cpu overhead for not enough
 // benefit, but it will put an upper bound on what we can achieve with a
@@ -273,8 +273,8 @@ func (d *DiskBackedNumberedRowContainer) Close(ctx context.Context) {
 // cost of a cache miss is high.
 //
 // TODO(sumeer):
-// - Use some realistic inverted index workloads (including geospatial) to
-//   measure the effect of this cache.
+//   - Use some realistic inverted index workloads (including geospatial) to
+//     measure the effect of this cache.
 type numberedDiskRowIterator struct {
 	rowIter *numberedRowIterator
 	// After creation, the rowIter is not positioned. isPositioned transitions

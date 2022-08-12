@@ -36,43 +36,44 @@ import (
 //
 // For example, if the input is "(Eq (Const 1) (Const 2))", the output is the
 // corresponding expression tree:
-//   eq [type=bool]
-//    ├── const: 1 [type=int]
-//    └── const: 2 [type=int]
+//
+//	eq [type=bool]
+//	 ├── const: 1 [type=int]
+//	 └── const: 2 [type=int]
 //
 // There are some peculiarities compared to the usual opt-gen replace syntax:
 //
-//  - Filters are specified as simply [ <condition> ... ]; no FiltersItem is
-//    necessary.
+//   - Filters are specified as simply [ <condition> ... ]; no FiltersItem is
+//     necessary.
 //
-//  - Various implicit conversions are allowed for convenience, e.g. list of
-//    columns to ColList/ColSet.
+//   - Various implicit conversions are allowed for convenience, e.g. list of
+//     columns to ColList/ColSet.
 //
-//  - Operation privates (e.g. ScanPrivate) are specified as lists of fields
-//    of the form [ (FiledName <value>) ]. For example:
-//      [ (Table "abc") (Index "abc@ab") (Cols "a,b") ]
-//    Implicit conversions are allowed here for column lists, orderings, etc.
+//   - Operation privates (e.g. ScanPrivate) are specified as lists of fields
+//     of the form [ (FiledName <value>) ]. For example:
+//     [ (Table "abc") (Index "abc@ab") (Cols "a,b") ]
+//     Implicit conversions are allowed here for column lists, orderings, etc.
 //
-//  - A Root custom function is used to set the physical properties of the root.
-//    Setting the physical properties (in particular the presentation) is always
-//    necessary for the plan to be run via PREPARE .. AS OPT PLAN '..'.
+//   - A Root custom function is used to set the physical properties of the root.
+//     Setting the physical properties (in particular the presentation) is always
+//     necessary for the plan to be run via PREPARE .. AS OPT PLAN '..'.
 //
 // Some examples of valid inputs:
-//    (Tuple [ (True) (False) ] "tuple{bool, bool}" )
 //
-//    (Root
-//      (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
-//      (Presentation "a,b")
-//      (OrderingChoice "+a,+b")
-//    )
+//	(Tuple [ (True) (False) ] "tuple{bool, bool}" )
 //
-//    (Select
-//      (Scan [ (Table "abc") (Cols "a,b,c") ])
-//      [ (Eq (Var "a") (Const 1)) ]
-//    )
+//	(Root
+//	  (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
+//	  (Presentation "a,b")
+//	  (OrderingChoice "+a,+b")
+//	)
+//
+//	(Select
+//	  (Scan [ (Table "abc") (Cols "a,b,c") ])
+//	  [ (Eq (Var "a") (Const 1)) ]
+//	)
 //
 // For more examples, see the various testdata/ files.
-//
 func Build(catalog cat.Catalog, factory *norm.Factory, input string) (_ opt.Expr, err error) {
 	return buildAndOptimize(catalog, nil /* optimizer */, factory, input)
 }

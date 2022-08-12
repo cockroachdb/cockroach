@@ -321,9 +321,9 @@ func (sp *Span) FinishAndGetConfiguredRecording() tracingpb.Recording {
 //
 // A few internal tags are added to denote span properties:
 //
-//    "_unfinished"	The span was never Finish()ed
-//    "_verbose"	The span is a verbose one
-//    "_dropped"	The span dropped recordings due to sizing constraints
+//	"_unfinished"	The span was never Finish()ed
+//	"_verbose"	The span is a verbose one
+//	"_dropped"	The span dropped recordings due to sizing constraints
 //
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
@@ -474,14 +474,14 @@ type LazyTag interface {
 // SetLazyTag adds a tag to the span. The tag's value is expected to implement
 // either fmt.Stringer or LazyTag, and is only stringified using one of
 // the two on demand:
-// - if the Span has an otel span or a net.Trace, the tag
-//   is stringified immediately and passed to the external trace (see
-//   SetLazyStatusTag if you want to avoid that).
-//- if/when the span's recording is collected, the tag is stringified on demand.
-//  If the recording is collected multiple times, the tag is stringified
-//  multiple times (so, the tag can evolve over time). Since generally the
-//  collection of a recording can happen asynchronously, the implementation of
-//  Stringer or LazyTag should be thread-safe.
+//   - if the Span has an otel span or a net.Trace, the tag
+//     is stringified immediately and passed to the external trace (see
+//     SetLazyStatusTag if you want to avoid that).
+//   - if/when the span's recording is collected, the tag is stringified on demand.
+//     If the recording is collected multiple times, the tag is stringified
+//     multiple times (so, the tag can evolve over time). Since generally the
+//     collection of a recording can happen asynchronously, the implementation of
+//     Stringer or LazyTag should be thread-safe.
 func (sp *Span) SetLazyTag(key string, value interface{}) {
 	if sp.detectUseAfterFinish() {
 		return

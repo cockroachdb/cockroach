@@ -325,11 +325,14 @@ func (ir *IntentResolver) PushTransaction(
 //
 // Callers are involved with
 // a) conflict resolution for commands being executed at the Store with the
-//    client waiting,
+//
+//	client waiting,
+//
 // b) resolving intents encountered during inconsistent operations, and
 // c) resolving intents upon EndTxn which are not local to the given range.
-//    This is the only path in which the transaction is going to be in
-//    non-pending state and doesn't require a push.
+//
+//	This is the only path in which the transaction is going to be in
+//	non-pending state and doesn't require a push.
 func (ir *IntentResolver) MaybePushTransactions(
 	ctx context.Context,
 	pushTxns map[uuid.UUID]*enginepb.TxnMeta,
