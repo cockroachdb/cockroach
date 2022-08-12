@@ -145,3 +145,30 @@ rm -rf crdb-checkout/pkg/ui/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/db-console/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/db-console/src/js/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/node_modules
+
+exec
+dev ui e2e
+----
+bazel info workspace --color=no
+bazel info workspace --color=no
+bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
+bazel build //pkg/cmd/cockroach:cockroach --config=with_ui
+crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run
+
+exec
+dev ui e2e ./foo/bar
+----
+bazel info workspace --color=no
+bazel info workspace --color=no
+bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
+bazel build //pkg/cmd/cockroach:cockroach --config=with_ui
+crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run ./foo/bar
+
+exec
+dev ui e2e --headed
+----
+bazel info workspace --color=no
+bazel info workspace --color=no
+bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
+bazel build //pkg/cmd/cockroach:cockroach --config=with_ui
+crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:debug
