@@ -157,6 +157,9 @@ export class LocalSetting<S, T> {
       innerSelector,
       () => getValueFromSessionStorage(this.key),
       (uiSettings, cachedValue) => {
+        if (cachedValue != null && uiSettings[this.key] == null) {
+          uiSettings[this.key] = cachedValue;
+        }
         return uiSettings[this.key] ?? cachedValue ?? defaultValue;
       },
     );
