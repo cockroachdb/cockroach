@@ -195,8 +195,9 @@ func (ob *OutputBuilder) buildTreeRows() []string {
 // BuildExplainRows builds the output rows for an EXPLAIN (PLAN) statement.
 //
 // The columns are:
-//   verbose=false:  Tree Field Description
-//   verbose=true:   Tree Level Type Field Description
+//
+//	verbose=false:  Tree Field Description
+//	verbose=true:   Tree Level Type Field Description
 func (ob *OutputBuilder) BuildExplainRows() []tree.Datums {
 	treeRows := ob.buildTreeRows()
 	rows := make([]tree.Datums, len(ob.entries))

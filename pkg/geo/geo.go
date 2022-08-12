@@ -701,7 +701,8 @@ func AdjustGeomTSRID(t geom.T, srid geopb.SRID) {
 // IsLinearRingCCW returns whether a given linear ring is counter clock wise.
 // See 2.07 of http://www.faqs.org/faqs/graphics/algorithms-faq/.
 // "Find the lowest vertex (or, if  there is more than one vertex with the same lowest coordinate,
-//  the rightmost of those vertices) and then take the cross product of the edges fore and aft of it."
+//
+//	the rightmost of those vertices) and then take the cross product of the edges fore and aft of it."
 func IsLinearRingCCW(linearRing *geom.LinearRing) bool {
 	smallestIdx := 0
 	smallest := linearRing.Coord(0)

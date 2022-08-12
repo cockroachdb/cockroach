@@ -47,11 +47,11 @@ const (
 //
 // Simple (identical to the roachpb.Value encoding):
 //
-//   <4-byte-checksum><1-byte-tag><encoded-data>
+//	<4-byte-checksum><1-byte-tag><encoded-data>
 //
 // Extended (header prepended to roachpb.Value encoding):
 //
-//   <4-byte-header-len><1-byte-sentinel><mvcc-header><4-byte-checksum><1-byte-tag><encoded-data>
+//	<4-byte-header-len><1-byte-sentinel><mvcc-header><4-byte-checksum><1-byte-tag><encoded-data>
 //
 // The two encoding scheme variants are distinguished using the 5th byte, which
 // is either the roachpb.Value tag (which has many values) or a sentinel tag not
@@ -62,17 +62,16 @@ const (
 // be empty, i.e., no checksum, tag, or encoded-data. In that case the extended
 // encoding above is simply:
 //
-//   <4-byte-header-len><1-byte-sentinel><mvcc-header>
+//	<4-byte-header-len><1-byte-sentinel><mvcc-header>
 //
 // To identify a deletion tombstone from an encoded MVCCValue, callers should
 // decode the value using DecodeMVCCValue and then use the IsTombstone method.
 // For example:
 //
-//   valRaw := iter.UnsafeValue()
-//   val, err := DecodeMVCCValue(valRaw)
-//   if err != nil { ... }
-//   isTombstone := val.IsTombstone()
-//
+//	valRaw := iter.UnsafeValue()
+//	val, err := DecodeMVCCValue(valRaw)
+//	if err != nil { ... }
+//	isTombstone := val.IsTombstone()
 type MVCCValue struct {
 	enginepb.MVCCValueHeader
 	Value roachpb.Value
@@ -179,6 +178,7 @@ var emptyValueHeader = func() enginepb.MVCCValueHeader {
 }()
 
 // encodedMVCCValueSize returns the size of the MVCCValue when encoded.
+//
 //gcassert:inline
 func encodedMVCCValueSize(v MVCCValue) int {
 	if v.MVCCValueHeader == emptyValueHeader {
@@ -189,6 +189,7 @@ func encodedMVCCValueSize(v MVCCValue) int {
 
 // EncodeMVCCValue encodes an MVCCValue into its Pebble representation. See the
 // comment on MVCCValue for a description of the encoding scheme.
+//
 //gcassert:inline
 func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 	if v.MVCCValueHeader == emptyValueHeader {
@@ -251,6 +252,7 @@ var errMVCCValueMissingHeader = errors.Errorf("invalid encoded mvcc value, missi
 // simple encoding. If successful, returns the decoded value and true. If the
 // value was using the extended encoding, returns false, in which case the
 // caller should call decodeExtendedMVCCValue.
+//
 //gcassert:inline
 func tryDecodeSimpleMVCCValue(buf []byte) (MVCCValue, bool, error) {
 	if len(buf) == 0 {

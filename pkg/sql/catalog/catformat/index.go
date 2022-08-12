@@ -45,12 +45,11 @@ const (
 // If tableName is anonymous then no table name is included in the formatted
 // string. For example:
 //
-//   INDEX i (a) WHERE b > 0
+//	INDEX i (a) WHERE b > 0
 //
 // If tableName is not anonymous, then "ON" and the name is included:
 //
-//   INDEX i ON t (a) WHERE b > 0
-//
+//	INDEX i ON t (a) WHERE b > 0
 func IndexForDisplay(
 	ctx context.Context,
 	table catalog.TableDescriptor,

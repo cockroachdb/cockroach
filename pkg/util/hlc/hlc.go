@@ -634,12 +634,11 @@ func DecimalToHLC(d *apd.Decimal) (Timestamp, error) {
 //
 // This function is used to parse:
 //
-//   1580361670629466905.0000000001
+//	1580361670629466905.0000000001
 //
 // hlc.ParseTimestamp() would be used to parse:
 //
-//   1580361670.629466905,1
-//
+//	1580361670.629466905,1
 func ParseHLC(s string) (Timestamp, error) {
 	dec, _, err := apd.NewFromString(s)
 	if err != nil {

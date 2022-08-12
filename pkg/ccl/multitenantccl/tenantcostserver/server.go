@@ -30,7 +30,8 @@ type instance struct {
 }
 
 // Note: the "four" in the description comes from
-//   tenantcostclient.extendedReportingPeriodFactor.
+//
+//	tenantcostclient.extendedReportingPeriodFactor.
 var instanceInactivity = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"tenant_usage_instance_inactivity",

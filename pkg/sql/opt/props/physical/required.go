@@ -137,7 +137,8 @@ func (p *Required) LimitHintInt64() int64 {
 // While it cannot add unique columns, Presentation can rename, reorder,
 // duplicate and discard columns. If Presentation is not defined, then no
 // particular column presentation is required or provided. For example:
-//   a.y:2 a.x:1 a.y:2 column1:3
+//
+//	a.y:2 a.x:1 a.y:2 column1:3
 type Presentation []opt.AliasedColumn
 
 // Any is true if any column presentation is allowed or can be provided.

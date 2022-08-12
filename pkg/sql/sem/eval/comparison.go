@@ -57,15 +57,19 @@ func evalComparison(
 // It returns the result of the ANY/SOME/ALL predicate.
 //
 // A NULL result is returned if there exists a NULL element and:
-//   ANY/SOME: no comparisons evaluate to true
-//   ALL: no comparisons evaluate to false
+//
+//	ANY/SOME: no comparisons evaluate to true
+//	ALL: no comparisons evaluate to false
 //
 // For example, given 1 < ANY (SELECT * FROM generate_series(1,3))
 // (right is a DTuple), evalTupleCmp would be called with:
-//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightTuple.D).
+//
+//	evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightTuple.D).
+//
 // Similarly, given 1 < ANY (ARRAY[1, 2, 3]) (right is a DArray),
 // evalArrayCmp would be called with:
-//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
+//
+//	evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
 func evalDatumsCmp(
 	ctx *Context,
 	op, subOp treecmp.ComparisonOperator,

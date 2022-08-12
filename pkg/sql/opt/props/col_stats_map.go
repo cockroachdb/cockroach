@@ -50,19 +50,19 @@ type colStatVal struct {
 // value plus a prefix id that uniquely identifies the set of smaller values.
 // For example, if an opt.ColSet contains (2, 3, 6), then its index looks like:
 //
-//   (prefix: 0, id: 2)           => (prefix: 1, pos: -1)
-//    └── (prefix: 1, id: 3)      => (prefix: 2, pos: -1)
-//         └── (prefix: 2, id: 6) => (prefix: 3, pos: 0)
+//	(prefix: 0, id: 2)           => (prefix: 1, pos: -1)
+//	 └── (prefix: 1, id: 3)      => (prefix: 2, pos: -1)
+//	      └── (prefix: 2, id: 6) => (prefix: 3, pos: 0)
 //
 // Where pos is the ordinal position of the statistic in ColStatsMap, and pos=-1
 // signifies that there is not yet any statistic for that column set. If an
 // additional opt.ColSet containing (2, 4) is added to the index, then it shares
 // the initial lookup node, but then diverges:
 //
-//   (prefix: 0, id: 2)           => (prefix: 1, pos: -1)
-//    ├── (prefix: 1, id: 3)      => (prefix: 2, pos: -1)
-//    │    └── (prefix: 2, id: 6) => (prefix: 3, pos: 0)
-//    └── (prefix: 1, id: 4)      => (prefix: 4, pos: 1)
+//	(prefix: 0, id: 2)           => (prefix: 1, pos: -1)
+//	 ├── (prefix: 1, id: 3)      => (prefix: 2, pos: -1)
+//	 │    └── (prefix: 2, id: 6) => (prefix: 3, pos: 0)
+//	 └── (prefix: 1, id: 4)      => (prefix: 4, pos: 1)
 //
 // This algorithm can be implemented by a single Go map that uses efficient
 // int64 keys and values. It requires O(N) accesses to add and find a column
@@ -97,9 +97,10 @@ func (m *ColStatsMap) Count() int {
 // Get returns the nth statistic in the map, by its ordinal position. This
 // position is stable across calls to Get or Add (but not RemoveIntersecting).
 // NOTE: The returned *ColumnStatistic is only valid until this ColStatsMap is
-//       updated via a call to Add() or RemoveIntersecting(). At that point,
-//       the address of the statistic may have changed, so it must be fetched
-//       again using another call to Get() or Lookup().
+//
+//	updated via a call to Add() or RemoveIntersecting(). At that point,
+//	the address of the statistic may have changed, so it must be fetched
+//	again using another call to Get() or Lookup().
 func (m *ColStatsMap) Get(nth int) *ColumnStatistic {
 	if nth < initialColStatsCap {
 		return &m.initial[nth]
@@ -110,9 +111,10 @@ func (m *ColStatsMap) Get(nth int) *ColumnStatistic {
 // Lookup returns the column statistic indexed by the given column set. If no
 // such statistic exists in the map, then ok=false.
 // NOTE: The returned *ColumnStatistic is only valid until this ColStatsMap is
-//       updated via a call to Add() or RemoveIntersecting(). At that point,
-//       the address of the statistic may have changed, so it must be fetched
-//       again using another call to Lookup() or Get().
+//
+//	updated via a call to Add() or RemoveIntersecting(). At that point,
+//	the address of the statistic may have changed, so it must be fetched
+//	again using another call to Lookup() or Get().
 func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool) {
 	// Scan the inlined statistics if there are only a few statistics in the map.
 	if m.count <= initialColStatsCap {
@@ -157,9 +159,10 @@ func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool
 // and returns it, along with added=true. Otherwise, Add returns the existing
 // ColumnStatistic with added=false.
 // NOTE: The returned *ColumnStatistic is only valid until this ColStatsMap is
-//       updated via another call to Add() or RemoveIntersecting(). At that
-//       point, the address of the statistic may have changed, so it must be
-//       fetched again using Lookup() or Get().
+//
+//	updated via another call to Add() or RemoveIntersecting(). At that
+//	point, the address of the statistic may have changed, so it must be
+//	fetched again using Lookup() or Get().
 func (m *ColStatsMap) Add(cols opt.ColSet) (_ *ColumnStatistic, added bool) {
 	// Only add column set if it is not already present in the map.
 	colStat, ok := m.Lookup(cols)

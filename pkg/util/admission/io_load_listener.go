@@ -83,18 +83,18 @@ var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
 
 // Experimental observations:
-// - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
-//   4s. With a setting that limits sub-level count to 10, before the system
-//   is considered overloaded, and adjustmentInterval = 60, we see the actual
-//   sub-level count ranging from 5-30, with p90, p99 node heartbeat latency
-//   showing a similar wide range, with 1s, 2s being the middle of the range
-//   respectively.
-// - With tpcc, we sometimes see a sub-level count > 10 with only 100 files in
-//   L0. We don't want to restrict tokens in this case since the store is able
-//   to recover on its own. One possibility would be to require both the
-//   thresholds to be exceeded before we consider the store overloaded. But
-//   then we run the risk of having 100+ sub-levels when we hit a file count
-//   of 1000. Instead we use a sub-level overload threshold of 20.
+//   - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
+//     4s. With a setting that limits sub-level count to 10, before the system
+//     is considered overloaded, and adjustmentInterval = 60, we see the actual
+//     sub-level count ranging from 5-30, with p90, p99 node heartbeat latency
+//     showing a similar wide range, with 1s, 2s being the middle of the range
+//     respectively.
+//   - With tpcc, we sometimes see a sub-level count > 10 with only 100 files in
+//     L0. We don't want to restrict tokens in this case since the store is able
+//     to recover on its own. One possibility would be to require both the
+//     thresholds to be exceeded before we consider the store overloaded. But
+//     then we run the risk of having 100+ sub-levels when we hit a file count
+//     of 1000. Instead we use a sub-level overload threshold of 20.
 //
 // We've set these overload thresholds in a way that allows the system to
 // absorb short durations (say a few minutes) of heavy write load.
@@ -107,16 +107,15 @@ const l0SubLevelCountOverloadThreshold = 20
 // just means that the write has been applied to the WAL. Most of the work is
 // in flushing to sstables and the following compactions, which happens later.
 //
-//
 // Token units are in bytes and used to protect a number of virtual or
 // physical resource bottlenecks:
-// - Compactions out of L0: compactions out of L0 can fall behind and cause
-//   too many sub-levels or files in L0.
-// - Flushes into L0: flushes of memtables to L0 can fall behind and cause
-//   write stalls due to too many memtables.
-// - Disk bandwidth: there is typically an aggregate read+write provisioned
-//   bandwidth, and if it is fully utilized, IO operations can start queueing
-//   and encounter high latency.
+//   - Compactions out of L0: compactions out of L0 can fall behind and cause
+//     too many sub-levels or files in L0.
+//   - Flushes into L0: flushes of memtables to L0 can fall behind and cause
+//     write stalls due to too many memtables.
+//   - Disk bandwidth: there is typically an aggregate read+write provisioned
+//     bandwidth, and if it is fully utilized, IO operations can start queueing
+//     and encounter high latency.
 //
 // For simplicity, after ioLoadListener computes the tokens due to compaction
 // or flush bottlenecks, it computes the minimum and passes that value to
@@ -139,19 +138,19 @@ const l0SubLevelCountOverloadThreshold = 20
 // dimension. However, since modeling as a separate dimension everywhere would
 // lead to code complexity, we adopt the following compromise:
 //
-// - Like the other token dimensions, ioLoadListener computes a different
-//   elastic token count (using diskBandwidthLimiter), and a different model
-//   for consumption (via
-//   storePerWorkTokenEstimator.atDoneDiskBWTokensLinearModel).
+//   - Like the other token dimensions, ioLoadListener computes a different
+//     elastic token count (using diskBandwidthLimiter), and a different model
+//     for consumption (via
+//     storePerWorkTokenEstimator.atDoneDiskBWTokensLinearModel).
 //
-// - granterWithIOTokens, implemented by kvStoreTokenGranter, which enforces
-//   the token count, also treats this as a separate dimension.
+//   - granterWithIOTokens, implemented by kvStoreTokenGranter, which enforces
+//     the token count, also treats this as a separate dimension.
 //
-// - WorkQueue works with a single dimension, so the tokens consumed at
-//   admission time are based on L0-bytes estimate. However, when
-//   StoreWorkQueue informs kvStoreTokenGranter of work completion (by calling
-//   storeWriteDone), the tokens are adjusted differently for the
-//   flush/compaction L0 tokens and for the "disk bandwidth" tokens.
+//   - WorkQueue works with a single dimension, so the tokens consumed at
+//     admission time are based on L0-bytes estimate. However, when
+//     StoreWorkQueue informs kvStoreTokenGranter of work completion (by calling
+//     storeWriteDone), the tokens are adjusted differently for the
+//     flush/compaction L0 tokens and for the "disk bandwidth" tokens.
 type ioLoadListener struct {
 	storeID     int32
 	settings    *cluster.Settings
@@ -220,11 +219,11 @@ const unlimitedTokens = math.MaxInt64
 // compactions can take ~10s to complete. The totalNumByteTokens to give out over
 // the 15s interval are given out in a smoothed manner, at 250ms intervals.
 // This has similarities with the following kinds of token buckets:
-// - Zero replenishment rate and a burst value that is changed every 15s. We
-//   explicitly don't want a huge burst every 15s.
-// - A replenishment rate equal to totalNumByteTokens/60, with a burst capped at
-//   totalNumByteTokens/60. The only difference with the code here is that if
-//   totalNumByteTokens is small, the integer rounding effects are compensated for.
+//   - Zero replenishment rate and a burst value that is changed every 15s. We
+//     explicitly don't want a huge burst every 15s.
+//   - A replenishment rate equal to totalNumByteTokens/60, with a burst capped at
+//     totalNumByteTokens/60. The only difference with the code here is that if
+//     totalNumByteTokens is small, the integer rounding effects are compensated for.
 //
 // In an experiment with extreme overload using KV0 with block size 64KB,
 // and 4096 clients, we observed the following states of L0 at 1min
@@ -232,13 +231,13 @@ const unlimitedTokens = math.MaxInt64
 // admission control:
 //
 // __level_____count____size___score______in__ingest(sz_cnt)____move(sz_cnt)___write(sz_cnt)____read___r-amp___w-amp›
-//       0        96   158 M    2.09   315 M     0 B       0     0 B       0   305 M     178     0 B       3     1.0›
-//       0      1026   1.7 G    3.15   4.7 G     0 B       0     0 B       0   4.7 G   2.8 K     0 B      24     1.0›
-//       0      1865   3.0 G    2.86   9.1 G     0 B       0     0 B       0   9.1 G   5.5 K     0 B      38     1.0›
-//       0      3225   4.9 G    3.46    13 G     0 B       0     0 B       0    13 G   8.3 K     0 B      59     1.0›
-//       0      4720   7.0 G    3.46    17 G     0 B       0     0 B       0    17 G    11 K     0 B      85     1.0›
-//       0      6120   9.0 G    4.13    21 G     0 B       0     0 B       0    21 G    14 K     0 B     109     1.0›
 //
+//	0        96   158 M    2.09   315 M     0 B       0     0 B       0   305 M     178     0 B       3     1.0›
+//	0      1026   1.7 G    3.15   4.7 G     0 B       0     0 B       0   4.7 G   2.8 K     0 B      24     1.0›
+//	0      1865   3.0 G    2.86   9.1 G     0 B       0     0 B       0   9.1 G   5.5 K     0 B      38     1.0›
+//	0      3225   4.9 G    3.46    13 G     0 B       0     0 B       0    13 G   8.3 K     0 B      59     1.0›
+//	0      4720   7.0 G    3.46    17 G     0 B       0     0 B       0    17 G    11 K     0 B      85     1.0›
+//	0      6120   9.0 G    4.13    21 G     0 B       0     0 B       0    21 G    14 K     0 B     109     1.0›
 //
 // Note the fast growth in sub-level count. Production issues typically have
 // slower growth towards an unhealthy state (remember that similar stats in
