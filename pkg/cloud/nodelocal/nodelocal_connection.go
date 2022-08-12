@@ -16,14 +16,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/utils"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
 
 func parseAndValidateLocalFileConnectionURI(
-	_ context.Context, uri *url.URL,
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL,
 ) (externalconn.ExternalConnection, error) {
-	if err := validateLocalFileURI(uri); err != nil {
-		return nil, errors.Wrap(err, "invalid `nodelocal` URI")
+	if err := utils.CheckExternalStorageConnection(ctx, execCfg, user, uri.String()); err != nil {
+		return nil, errors.Wrap(err, "failed to create nodelocal external connection")
 	}
 
 	connDetails := connectionpb.ConnectionDetails{

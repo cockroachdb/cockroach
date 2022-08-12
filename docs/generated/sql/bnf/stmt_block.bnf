@@ -92,6 +92,7 @@ grant_stmt ::=
 	| 'GRANT' privileges 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privileges 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' privileges 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' 'SYSTEM' privileges 'TO' role_spec_list opt_with_grant_option
 
 prepare_stmt ::=
@@ -109,6 +110,8 @@ revoke_stmt ::=
 	| 'REVOKE' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' privileges 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' privileges 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'SYSTEM' privileges 'FROM' role_spec_list
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'SYSTEM' privileges 'FROM' role_spec_list
 
@@ -360,6 +363,7 @@ grant_targets ::=
 	| 'TABLE' table_pattern_list
 	| 'DATABASE' name_list
 	| 'EXTERNAL' 'CONNECTION' name_list
+	| 'FUNCTION' function_with_argtypes_list
 
 role_spec_list ::=
 	( role_spec ) ( ( ',' role_spec ) )*
@@ -1447,6 +1451,9 @@ table_pattern ::=
 	simple_db_object_name
 	| complex_table_pattern
 
+function_with_argtypes_list ::=
+	( function_with_argtypes ) ( ( ',' function_with_argtypes ) )*
+
 privilege ::=
 	name
 	| 'CREATE'
@@ -1963,6 +1970,10 @@ unrestricted_name ::=
 	| type_func_name_keyword
 	| reserved_keyword
 
+function_with_argtypes ::=
+	db_object_name func_args
+	| db_object_name
+
 type_name ::=
 	db_object_name
 
@@ -2465,9 +2476,6 @@ table_index_name_list ::=
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
 
-function_with_argtypes_list ::=
-	( function_with_argtypes ) ( ( ',' function_with_argtypes ) )*
-
 non_reserved_word ::=
 	'identifier'
 	| unreserved_keyword
@@ -2657,6 +2665,10 @@ reserved_keyword ::=
 	| 'WITH'
 	| cockroachdb_extra_reserved_keyword
 
+func_args ::=
+	'(' func_args_list ')'
+	| '(' ')'
+
 simple_typename ::=
 	general_type_name
 	| '@' iconst32
@@ -2737,6 +2749,7 @@ target_object_type ::=
 	| 'SEQUENCES'
 	| 'TYPES'
 	| 'SCHEMAS'
+	| 'FUNCTIONS'
 
 alter_changefeed_cmd ::=
 	'ADD' changefeed_targets opt_with_options
@@ -2746,10 +2759,6 @@ alter_changefeed_cmd ::=
 
 alter_backup_cmd ::=
 	'ADD' backup_kms
-
-function_with_argtypes ::=
-	db_object_name func_args
-	| db_object_name
 
 alter_func_opt_list ::=
 	( common_func_opt_item ) ( ( common_func_opt_item ) )*
@@ -3116,6 +3125,9 @@ type_func_name_no_crdb_extra_keyword ::=
 	| 'RIGHT'
 	| 'SIMILAR'
 
+func_args_list ::=
+	( func_arg ) ( ( ',' func_arg ) )*
+
 general_type_name ::=
 	type_function_name_no_crdb_extra
 
@@ -3194,10 +3206,6 @@ sequence_option_elem ::=
 
 backup_kms ::=
 	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
-
-func_args ::=
-	'(' func_args_list ')'
-	| '(' ')'
 
 common_func_opt_item ::=
 	'CALLED' 'ON' 'NULL' 'INPUT'
@@ -3474,6 +3482,13 @@ join_qual ::=
 rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
 
+func_arg ::=
+	func_arg_class param_name func_arg_type
+	| param_name func_arg_class func_arg_type
+	| param_name func_arg_type
+	| func_arg_class func_arg_type
+	| func_arg_type
+
 opt_varying ::=
 	'VARYING'
 	| 
@@ -3538,9 +3553,6 @@ storage_parameter_key_list ::=
 
 partition_by_index ::=
 	partition_by
-
-func_args_list ::=
-	( func_arg ) ( ( ',' func_arg ) )*
 
 opt_float ::=
 	'(' 'ICONST' ')'
@@ -3677,13 +3689,6 @@ opt_family_name ::=
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')' opt_with_storage_parameter_list
 
-func_arg ::=
-	func_arg_class param_name func_arg_type
-	| param_name func_arg_class func_arg_type
-	| param_name func_arg_type
-	| func_arg_class func_arg_type
-	| func_arg_type
-
 func_as ::=
 	'SCONST'
 
@@ -3699,6 +3704,12 @@ join_outer ::=
 
 rowsfrom_item ::=
 	func_expr_windowless
+
+func_arg_class ::=
+	'IN'
+
+param_name ::=
+	type_function_name
 
 char_aliases ::=
 	'CHAR'
@@ -3767,12 +3778,6 @@ create_as_col_qualification_elem ::=
 
 create_as_params ::=
 	( create_as_param ) ( ( ',' create_as_param ) )*
-
-func_arg_class ::=
-	'IN'
-
-param_name ::=
-	type_function_name
 
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem

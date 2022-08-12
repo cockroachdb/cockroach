@@ -67,7 +67,8 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	return params
 }
 
-func validateKMSURI(uri url.URL) error {
+// ValidateKMSURI validates the passed in URI.
+func ValidateKMSURI(uri url.URL) error {
 	if uri.Path == "/" {
 		return errors.Newf("host component of the GCS KMS cannot be empty; must contain the Customer Managed Key")
 	}
@@ -86,7 +87,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	// Validate the URI parameters.
-	if err := validateKMSURI(*kmsURI); err != nil {
+	if err := ValidateKMSURI(*kmsURI); err != nil {
 		return nil, err
 	}
 
