@@ -21,27 +21,27 @@ import (
 func TestSumDiskCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	counters := []diskStats{
+	counters := []DiskStats{
 		{
-			readBytes:      1,
+			ReadBytes:      1,
 			readCount:      1,
 			iopsInProgress: 1,
-			writeBytes:     1,
+			WriteBytes:     1,
 			writeCount:     1,
 		},
 		{
-			readBytes:      1,
+			ReadBytes:      1,
 			readCount:      1,
 			iopsInProgress: 1,
-			writeBytes:     1,
+			WriteBytes:     1,
 			writeCount:     1,
 		},
 	}
 	summed := sumDiskCounters(counters)
-	expected := diskStats{
-		readBytes:      2,
+	expected := DiskStats{
+		ReadBytes:      2,
 		readCount:      2,
-		writeBytes:     2,
+		WriteBytes:     2,
 		writeCount:     2,
 		iopsInProgress: 2,
 	}
@@ -82,24 +82,24 @@ func TestSumNetCounters(t *testing.T) {
 func TestSubtractDiskCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	from := diskStats{
-		readBytes:      3,
+	from := DiskStats{
+		ReadBytes:      3,
 		readCount:      3,
-		writeBytes:     3,
+		WriteBytes:     3,
 		writeCount:     3,
 		iopsInProgress: 3,
 	}
-	sub := diskStats{
-		readBytes:      1,
+	sub := DiskStats{
+		ReadBytes:      1,
 		readCount:      1,
 		iopsInProgress: 1,
-		writeBytes:     1,
+		WriteBytes:     1,
 		writeCount:     1,
 	}
-	expected := diskStats{
-		readBytes:  2,
+	expected := DiskStats{
+		ReadBytes:  2,
 		readCount:  2,
-		writeBytes: 2,
+		WriteBytes: 2,
 		writeCount: 2,
 		// Don't touch iops in progress; it is a gauge, not a counter.
 		iopsInProgress: 3,

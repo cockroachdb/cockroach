@@ -20,20 +20,22 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 )
 
-func getDiskCounters(ctx context.Context) ([]diskStats, error) {
+// GetDiskCounters returns DiskStats for all disks.
+func GetDiskCounters(ctx context.Context) ([]DiskStats, error) {
 	driveStats, err := disk.IOCountersWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	output := make([]diskStats, len(driveStats))
+	output := make([]DiskStats, len(driveStats))
 	i := 0
 	for _, counters := range driveStats {
-		output[i] = diskStats{
-			readBytes:      int64(counters.ReadBytes),
+		output[i] = DiskStats{
+			Name:           counters.Name,
+			ReadBytes:      int64(counters.ReadBytes),
 			readCount:      int64(counters.ReadCount),
 			readTime:       time.Duration(counters.ReadTime) * time.Millisecond,
-			writeBytes:     int64(counters.WriteBytes),
+			WriteBytes:     int64(counters.WriteBytes),
 			writeCount:     int64(counters.WriteCount),
 			writeTime:      time.Duration(counters.WriteTime) * time.Millisecond,
 			ioTime:         time.Duration(counters.IoTime) * time.Millisecond,
