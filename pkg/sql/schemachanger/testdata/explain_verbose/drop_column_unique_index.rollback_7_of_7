@@ -16,6 +16,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │
     │   ├── • 8 elements transitioning toward ABSENT
     │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
     │   │   │     PUBLIC → ABSENT
     │   │   │
@@ -24,9 +27,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
     │   │   │     PUBLIC → ABSENT
-    │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
-    │   │   │     WRITE_ONLY → DELETE_ONLY
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 1}
     │   │   │     WRITE_ONLY → DELETE_ONLY
@@ -70,6 +70,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │     Name: pi
     │       │     TableID: 106
     │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 4
+    │       │     TableID: 106
+    │       │
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 1
     │       │     IndexID: 4
@@ -86,10 +90,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │     IndexID: 4
     │       │     Kind: 2
     │       │     Ordinal: 1
-    │       │     TableID: 106
-    │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
-    │       │     IndexID: 4
     │       │     TableID: 106
     │       │
     │       ├── • MakeDroppedIndexDeleteOnly
@@ -129,16 +129,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: test_pkey, IndexID: 4}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
         │   │   │     rule: "dependents removed before index"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
-        │   │   │     rule: "dependents removed before index"
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: test_pkey, IndexID: 4}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
         │   │         rule: "dependents removed before index"
         │   │
         │   └── • TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 1}

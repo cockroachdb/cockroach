@@ -26,9 +26,9 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -73,6 +73,15 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         SourceIndexID: 1
         TableID: 107
         TemporaryIndexID: 4
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 3
+      TableID: 107
+    *scop.AddColumnToIndex
+      ColumnID: 3
+      IndexID: 3
+      Kind: 2
+      TableID: 107
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
         ConstraintID: 4
@@ -87,15 +96,6 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     *scop.AddColumnToIndex
       ColumnID: 3
       IndexID: 4
-      Kind: 2
-      TableID: 107
-    *scop.AddColumnToIndex
-      ColumnID: 1
-      IndexID: 3
-      TableID: 107
-    *scop.AddColumnToIndex
-      ColumnID: 3
-      IndexID: 3
       Kind: 2
       TableID: 107
 PreCommitPhase stage 1 of 1 with 5 MutationType ops
@@ -877,9 +877,9 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 107, IndexID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -924,6 +924,15 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         SourceIndexID: 1
         TableID: 107
         TemporaryIndexID: 4
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 3
+      TableID: 107
+    *scop.AddColumnToIndex
+      ColumnID: 2
+      IndexID: 3
+      Kind: 2
+      TableID: 107
     *scop.MakeAddedTempIndexDeleteOnly
       Index:
         ConstraintID: 4
@@ -938,15 +947,6 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 4
-      Kind: 2
-      TableID: 107
-    *scop.AddColumnToIndex
-      ColumnID: 1
-      IndexID: 3
-      TableID: 107
-    *scop.AddColumnToIndex
-      ColumnID: 2
-      IndexID: 3
       Kind: 2
       TableID: 107
 PreCommitPhase stage 1 of 1 with 6 MutationType ops
