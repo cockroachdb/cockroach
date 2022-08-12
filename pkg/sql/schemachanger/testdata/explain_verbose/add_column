@@ -36,6 +36,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   │ ABSENT → BACKFILL_ONLY
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column existence precedes index existence"
+│       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
@@ -56,12 +62,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
-│       │   │
-│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │   │ ABSENT → BACKFILL_ONLY
-│       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │         rule: "column existence precedes index existence"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
 │       │   │   │ ABSENT → PUBLIC
@@ -150,6 +150,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │       TableID: 106
 │           │       TemporaryIndexID: 3
 │           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 2
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
@@ -163,20 +174,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     IndexID: 3
 │           │     TableID: 106
 │           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 2
-│           │     IndexID: 3
-│           │     Kind: 2
-│           │     TableID: 106
-│           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 1
-│           │     IndexID: 2
-│           │     TableID: 106
-│           │
 │           └── • AddColumnToIndex
 │                 ColumnID: 2
-│                 IndexID: 2
+│                 IndexID: 3
 │                 Kind: 2
 │                 TableID: 106
 │

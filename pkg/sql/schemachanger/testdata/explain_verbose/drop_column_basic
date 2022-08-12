@@ -23,14 +23,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │
 │       ├── • 3 elements transitioning toward PUBLIC
 │       │   │
+│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │     ABSENT → BACKFILL_ONLY
+│       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index-column added to index after index exists"
-│       │   │
-│       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │     ABSENT → BACKFILL_ONLY
 │       │   │
 │       │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
 │       │       │ ABSENT → PUBLIC
@@ -80,6 +80,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │       TableID: 104
 │           │       TemporaryIndexID: 3
 │           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 2
+│           │     TableID: 104
+│           │
 │           ├── • MakeAddedTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
@@ -88,14 +93,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │       SourceIndexID: 1
 │           │       TableID: 104
 │           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 1
-│           │     IndexID: 3
-│           │     TableID: 104
-│           │
 │           └── • AddColumnToIndex
 │                 ColumnID: 1
-│                 IndexID: 2
+│                 IndexID: 3
 │                 TableID: 104
 │
 ├── • PreCommitPhase

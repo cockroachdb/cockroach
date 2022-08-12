@@ -14,10 +14,10 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 106, ColumnID: 3}
  │         │    └── PUBLIC → ABSENT        ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
  │         ├── 7 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
- │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 5}
@@ -28,13 +28,13 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
  │              ├── MakeAddedIndexBackfilling {"Index":{"ConstraintID":5,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":106,"TemporaryIndexID":5}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":4,"Kind":2,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":4,"Kind":2,"Ordinal":1,"TableID":106}
  │              ├── MakeAddedTempIndexDeleteOnly {"Index":{"ConstraintID":6,"IndexID":5,"IsUnique":true,"SourceIndexID":1,"TableID":106}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":5,"Kind":2,"TableID":106}
- │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":5,"Kind":2,"Ordinal":1,"TableID":106}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":106}
- │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":4,"Kind":2,"TableID":106}
- │              └── AddColumnToIndex {"ColumnID":4,"IndexID":4,"Kind":2,"Ordinal":1,"TableID":106}
+ │              └── AddColumnToIndex {"ColumnID":4,"IndexID":5,"Kind":2,"Ordinal":1,"TableID":106}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 2 Mutation operations
