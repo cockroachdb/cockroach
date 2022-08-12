@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,6 +46,8 @@ func TestInsightsIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	const appName = "TestInsightsIntegration"
+
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
@@ -56,12 +60,17 @@ func TestInsightsIntegration(t *testing.T) {
 	latencyThreshold := 250 * time.Millisecond
 	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
 
+	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
+	require.NoError(t, err)
+
 	// See no recorded insights.
 	var count int
-	row := conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.cluster_execution_insights")
-	err := row.Scan(&count)
+	var queryText string
+	row := conn.QueryRowContext(ctx, "SELECT count(*), coalesce(string_agg(query, ';'),'') "+
+		"FROM crdb_internal.cluster_execution_insights where app_name = $1 ", appName)
+	err = row.Scan(&count, &queryText)
 	require.NoError(t, err)
-	require.Equal(t, 0, count)
+	require.Equal(t, 0, count, "expect:0, actual:%d, queries:%s", count, queryText)
 
 	queryDelayInSeconds := 2 * latencyThreshold.Seconds()
 	// Execute a "long-running" statement, running longer than our latencyThreshold.
@@ -70,12 +79,13 @@ func TestInsightsIntegration(t *testing.T) {
 
 	// Eventually see one recorded insight.
 	testutils.SucceedsWithin(t, func() error {
-		row = conn.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.cluster_execution_insights")
-		if err = row.Scan(&count); err != nil {
+		row = conn.QueryRowContext(ctx, "SELECT count(*), coalesce(string_agg(query, ';'),'') "+
+			"FROM crdb_internal.cluster_execution_insights where app_name = $1 ", appName)
+		if err = row.Scan(&count, &queryText); err != nil {
 			return err
 		}
 		if count != 1 {
-			return fmt.Errorf("expected 1, but was %d", count)
+			return fmt.Errorf("expected 1, but was %d, queryText:%s", count, queryText)
 		}
 		return nil
 	}, 1*time.Second)
@@ -88,17 +98,26 @@ func TestInsightsIntegration(t *testing.T) {
 			"start_time, "+
 			"end_time, "+
 			"full_scan "+
-			"FROM crdb_internal.node_execution_insights")
+			"FROM crdb_internal.node_execution_insights where "+
+			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
 		var query, status string
 		var startInsights, endInsights time.Time
 		var fullScan bool
 		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan)
 
-		require.NoError(t, err)
-		require.Equal(t, "SELECT pg_sleep($1)", query)
-		require.Equal(t, "completed", status)
-		require.GreaterOrEqual(t, endInsights.Sub(startInsights).Seconds(), queryDelayInSeconds)
+		if err != nil {
+			return err
+		}
+
+		if status != "completed" {
+			return fmt.Errorf("expected 'completed', but was %s", status)
+		}
+
+		delayFromTable := endInsights.Sub(startInsights).Seconds()
+		if delayFromTable < queryDelayInSeconds {
+			return fmt.Errorf("expected at least %f, but was %f", delayFromTable, queryDelayInSeconds)
+		}
 
 		return nil
 	}, 1*time.Second)
@@ -194,6 +213,91 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 
 		if rowCount < 1 {
 			return fmt.Errorf("node_execution_insights did not return any rows")
+		}
+
+		return nil
+	}, 1*time.Second)
+}
+
+// Testing that the index recommendation is included
+// in the insights table
+func TestInsightsIndexRecommendationIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable detection by setting a latencyThreshold > 0.
+	latencyThreshold := 30 * time.Millisecond
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+
+	sqlConn := tc.ServerConn(0)
+
+	_, err := sqlConn.ExecContext(ctx, "CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)")
+	require.NoError(t, err)
+	_, err = sqlConn.ExecContext(ctx, "CREATE TABLE t2 (k INT, i INT, s STRING)")
+	require.NoError(t, err)
+
+	query := "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3"
+
+	// Execute enough times to have index recommendations generated.
+	// This will generate two recommendations.
+	for i := 0; i < 10; i++ {
+		tx, err := sqlConn.BeginTx(ctx, &gosql.TxOptions{})
+		require.NoError(t, err)
+		_, err = tx.ExecContext(ctx, "select pg_sleep(.05);")
+		require.NoError(t, err)
+		_, err = tx.ExecContext(ctx, query)
+		require.NoError(t, err)
+		err = tx.Commit()
+		require.NoError(t, err)
+	}
+
+	// Verify the table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		rows, err := sqlConn.QueryContext(ctx, "SELECT "+
+			"query, "+
+			"array_to_string(index_recommendations, ';') as cmb_index_recommendations "+
+			"FROM crdb_internal.node_execution_insights "+
+			"where array_length(index_recommendations, 1) > 0 and "+
+			"query like 'SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k%' ")
+
+		if err != nil {
+			return err
+		}
+
+		var rowCount int
+		for rows.Next() {
+			var query string
+			var idxRecommendation string
+			err := rows.Scan(&query, &idxRecommendation)
+			if err != nil {
+				return err
+			}
+
+			if query != "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE (t1.i > _) AND (t2.i > _)" {
+				return fmt.Errorf("'SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE (t1.i > _) AND (t2.i > _)' should be %s", query)
+			}
+
+			if idxRecommendation == "" {
+				return fmt.Errorf("index recommendation should not be empty '%s'", idxRecommendation)
+			}
+
+			if !strings.Contains(idxRecommendation, "CREATE INDEX") {
+				return fmt.Errorf("index recommendation should contain 'CREATE INDEX' actual:'%s'", idxRecommendation)
+			}
+
+			rowCount++
+		}
+
+		if rowCount < 1 {
+			return fmt.Errorf("no rows found with index recommendation")
 		}
 
 		return nil
