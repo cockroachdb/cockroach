@@ -82,14 +82,6 @@ func MakeFastIntSet(vals ...int) FastIntSet {
 	return res
 }
 
-func (s *FastIntSet) toLarge() *intsets.Sparse {
-	if s.large != nil {
-		return s.large
-	}
-	large := new(intsets.Sparse)
-	return large
-}
-
 // fitsInSmall returns whether all elements in this set are between 0 and
 // smallCutoff.
 func (s *FastIntSet) fitsInSmall() bool {
@@ -106,7 +98,7 @@ func (s *FastIntSet) Add(i int) {
 		return
 	}
 	if s.large == nil {
-		s.large = s.toLarge()
+		s.large = new(intsets.Sparse)
 	}
 	if i >= smallCutoff {
 		i -= smallCutoff
@@ -274,7 +266,7 @@ func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 		return
 	}
 	if s.large == nil {
-		s.large = s.toLarge()
+		s.large = new(intsets.Sparse)
 	}
 	s.large.UnionWith(rhs.large)
 }
@@ -296,8 +288,7 @@ func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
 		// Fast path.
 		return
 	}
-
-	s.large.IntersectionWith(rhs.toLarge())
+	s.large.IntersectionWith(rhs.large)
 }
 
 // Intersection returns the intersection of s and rhs as a new set.
@@ -315,17 +306,17 @@ func (s FastIntSet) Intersects(rhs FastIntSet) bool {
 	if s.large == nil || rhs.large == nil {
 		return false
 	}
-	return s.large.Intersects(rhs.toLarge())
+	return s.large.Intersects(rhs.large)
 }
 
 // DifferenceWith removes any elements in rhs from this set.
 func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
 	s.small.DifferenceWith(rhs.small)
-	if s.large == nil {
+	if s.large == nil || rhs.large == nil {
 		// Fast path
 		return
 	}
-	s.large.DifferenceWith(rhs.toLarge())
+	s.large.DifferenceWith(rhs.large)
 }
 
 // Difference returns the elements of s that are not in rhs as a new set.
