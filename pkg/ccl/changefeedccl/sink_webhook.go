@@ -84,6 +84,10 @@ type webhookSink struct {
 	metrics     metricsRecorder
 }
 
+func (s *webhookSink) getConcreteType() sinkType {
+	return sinkTypeWebhook
+}
+
 type webhookSinkPayload struct {
 	Payload []json.RawMessage `json:"payload"`
 	Length  int               `json:"length"`
@@ -292,14 +296,6 @@ func makeWebhookSink(
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
-	}
-
-	if !encodingOpts.KeyInValue {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
-	}
-
-	if !encodingOpts.TopicInValue {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptTopicInValue)
 	}
 
 	var connTimeout time.Duration
