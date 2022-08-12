@@ -184,14 +184,13 @@ func (s *Store) SendWithWriteBytes(
 		if !repl.IsInitialized() {
 			// If we have an uninitialized copy of the range, then we are
 			// probably a valid member of the range, we're just in the
-			// process of getting our snapshot. If we returned
-			// RangeNotFoundError, the client would invalidate its cache,
-			// but we can be smarter: the replica that caused our
-			// uninitialized replica to be created is most likely the
-			// leader.
+			// RangeNotFoundError, the client would invalidate its cache. Instead,
+			// we return a NLHE error to indicate to the client that it should move
+			// on and try the next replica. Very likely, the next replica the client
+			// tries will be initialized and will have useful leaseholder information
+			// for the client.
 			return nil, nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
-				RangeID:     ba.RangeID,
-				LeaseHolder: repl.creatingReplica,
+				RangeID: ba.RangeID,
 				// The replica doesn't have a range descriptor yet, so we have to build
 				// a ReplicaDescriptor manually.
 				Replica: roachpb.ReplicaDescriptor{
