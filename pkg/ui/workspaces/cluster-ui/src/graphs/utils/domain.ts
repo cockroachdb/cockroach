@@ -10,6 +10,7 @@
 
 import _ from "lodash";
 import moment from "moment";
+import { format } from "d3-format";
 
 import {
   BytesFitScale,
@@ -180,11 +181,11 @@ function computeAxisDomain(extent: Extent, factor = 1): AxisDomain {
   // but with a metric prefix for large numbers (i.e. 1000 will display as "1k")
   let unitFormat: (v: number) => string;
   if (Math.floor(increment) !== increment) {
-    unitFormat = (n: number) => n.toFixed(1);
+    unitFormat = format(".1f");
   } else {
     unitFormat = (n: number) => abbreviateNumber(n, 4);
   }
-  axisDomain.tickFormat = (v: number) => unitFormat(v / factor);
+  axisDomain.tickFormat = (v: number = 0) => unitFormat(v / factor);
 
   return axisDomain;
 }
@@ -198,8 +199,8 @@ function ComputeCountAxisDomain(extent: Extent): AxisDomain {
   // fractional metric prefix; this is because the use of fractional metric
   // prefixes (i.e. milli, micro, nano) have proved confusing to users.
   const metricFormat = (n: number) => abbreviateNumber(n, 4);
-  const decimalFormat = (n: number) => n.toFixed(4);
-  axisDomain.guideFormat = (n: number) => {
+  const decimalFormat = format(".4f");
+  axisDomain.guideFormat = (n: number = 0) => {
     if (n < 1) {
       return decimalFormat(n);
     }
@@ -241,8 +242,8 @@ function ComputePercentageAxisDomain(min: number, max: number) {
   const increment = computeNormalizedIncrement(range, percentIncrementTable);
   const axisDomain = new AxisDomain([min, max], increment);
   axisDomain.label = "percentage";
-  axisDomain.tickFormat = (n: number) => formatPercentage(n, 1);
-  axisDomain.guideFormat = (n: number) => formatPercentage(n, 2);
+  axisDomain.tickFormat = format(".0%");
+  axisDomain.guideFormat = format(".2%");
   return axisDomain;
 }
 
