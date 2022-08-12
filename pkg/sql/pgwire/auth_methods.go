@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
@@ -67,17 +66,11 @@ func loadDefaultMethods() {
 	// The "scram-sha-256" authentication method uses the 5-way SCRAM
 	// handshake to negotiate password authn with the client. It hides
 	// the password from the network connection and is non-replayable.
-	RegisterAuthMethod("scram-sha-256", authScram, hba.ConnAny,
-		chainOptions(
-			requireClusterVersion(clusterversion.SCRAMAuthentication),
-			NoOptionsAllowed))
+	RegisterAuthMethod("scram-sha-256", authScram, hba.ConnAny, NoOptionsAllowed)
 
 	// The "cert-scram-sha-256" method is alike to "cert-password":
 	// it allows either a client certificate, or a valid 5-way SCRAM handshake.
-	RegisterAuthMethod("cert-scram-sha-256", authCertScram, hba.ConnAny,
-		chainOptions(
-			requireClusterVersion(clusterversion.SCRAMAuthentication),
-			NoOptionsAllowed))
+	RegisterAuthMethod("cert-scram-sha-256", authCertScram, hba.ConnAny, NoOptionsAllowed)
 
 	// The "reject" method rejects any connection attempt that matches
 	// the current rule.

@@ -2093,9 +2093,7 @@ func (desc *Mutable) AddIndexMutationMaybeWithTempIndex(
 	settings *cluster.Settings,
 ) error {
 	// Maybe use the old index backfill protocol to add an index.
-	if direction == descpb.DescriptorMutation_ADD &&
-		(!settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) ||
-			!UseMVCCCompliantIndexCreation.Get(&settings.SV)) {
+	if direction == descpb.DescriptorMutation_ADD && !UseMVCCCompliantIndexCreation.Get(&settings.SV) {
 		return desc.AddIndexMutation(
 			idx, direction, descpb.DescriptorMutation_DELETE_ONLY,
 		)

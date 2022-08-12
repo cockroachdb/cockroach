@@ -8,6 +8,7 @@ workspace(
         "@npm_protos": ["pkg/ui/workspaces/db-console/src/js/node_modules"],
         "@npm_cluster_ui": ["pkg/ui/workspaces/cluster_ui/node_modules"],
         "@npm_db_console": ["pkg/ui/workspaces/db-console/node_modules"],
+        "@npm_e2e_tests": ["pkg/ui/workspaces/e2e-tests/node_modules"],
     },
 )
 
@@ -260,6 +261,21 @@ yarn_install(
     package_json = "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
     strict_visibility = False,
     yarn_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
+    symlink_node_modules = True,
+)
+
+yarn_install(
+    name = "npm_e2e_tests",
+    args = [
+        "--offline",
+    ],
+    data = [
+      "//pkg/ui:.yarnrc",
+      "@yarn_cache//:.seed",
+    ],
+    package_json = "//pkg/ui/workspaces/e2e-tests:package.json",
+    strict_visibility = False,
+    yarn_lock = "//pkg/ui/workspaces/e2e-tests:yarn.lock",
     symlink_node_modules = True,
 )
 
