@@ -134,6 +134,10 @@ type kafkaSink struct {
 	disableInternalRetry bool
 }
 
+func (s *kafkaSink) getConcreteType() sinkType {
+	return sinkTypeKafka
+}
+
 type saramaConfig struct {
 	// These settings mirror ones in sarama config.
 	// We just tag them w/ JSON annotations.
