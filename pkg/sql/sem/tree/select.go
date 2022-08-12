@@ -308,14 +308,15 @@ type IndexID = catid.IndexID
 
 // IndexFlags represents "@<index_name|index_id>" or "@{param[,param]}" where
 // param is one of:
-//  - FORCE_INDEX=<index_name|index_id>
-//  - ASC / DESC
-//  - NO_INDEX_JOIN
-//  - NO_ZIGZAG_JOIN
-//  - NO_FULL_SCAN
-//  - IGNORE_FOREIGN_KEYS
-//  - FORCE_ZIGZAG
-//  - FORCE_ZIGZAG=<index_name|index_id>*
+//   - FORCE_INDEX=<index_name|index_id>
+//   - ASC / DESC
+//   - NO_INDEX_JOIN
+//   - NO_ZIGZAG_JOIN
+//   - NO_FULL_SCAN
+//   - IGNORE_FOREIGN_KEYS
+//   - FORCE_ZIGZAG
+//   - FORCE_ZIGZAG=<index_name|index_id>*
+//
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
 	Index   UnrestrictedName
@@ -423,8 +424,8 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 }
 
 // Check verifies if the flags are valid:
-//  - ascending/descending is not specified without an index;
-//  - no_index_join isn't specified with an index.
+//   - ascending/descending is not specified without an index;
+//   - no_index_join isn't specified with an index.
 func (ih *IndexFlags) Check() error {
 	if ih.NoIndexJoin && ih.ForceIndex() {
 		return errors.New("FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN")

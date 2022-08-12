@@ -42,8 +42,9 @@ type truncateNode struct {
 
 // Truncate deletes all rows from a table.
 // Privileges: DROP on table.
-//   Notes: postgres requires TRUNCATE.
-//          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
+//
+//	Notes: postgres requires TRUNCATE.
+//	       mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, error) {
 	return &truncateNode{n: n}, nil
 }

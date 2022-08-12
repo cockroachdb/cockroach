@@ -29,16 +29,15 @@ import (
 //
 // The SSTs were created via the following commands:
 //
-//  VERSION=...
-//  roachprod create local
-//  roachprod wipe localÅ
-//  roachprod stage local release ${VERSION}
-//  roachprod start local
-//  roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_sequences/create.sql)"
-//  roachprod sql local:1 -- -e "BACKUP DATABASE test TO 'nodelocal://1/backup'"
-//  # Then grab the backups and put the files into the appropriate
-//  # testdata directory.
-//
+//	VERSION=...
+//	roachprod create local
+//	roachprod wipe localÅ
+//	roachprod stage local release ${VERSION}
+//	roachprod start local
+//	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_sequences/create.sql)"
+//	roachprod sql local:1 -- -e "BACKUP DATABASE test TO 'nodelocal://1/backup'"
+//	# Then grab the backups and put the files into the appropriate
+//	# testdata directory.
 func TestRestoreOldSequences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

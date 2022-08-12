@@ -16,7 +16,7 @@ import (
 	"context"
 	enc_hex "encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -493,7 +493,7 @@ func TestZipRetries(t *testing.T) {
 			Host:     s.ServingSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}
-		sqlConn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, sqlURL.String())
+		sqlConn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, sqlURL.String())
 		defer func() {
 			if err := sqlConn.Close(); err != nil {
 				t.Fatal(err)
