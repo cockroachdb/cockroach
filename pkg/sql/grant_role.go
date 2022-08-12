@@ -170,8 +170,9 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	opName := "grant-role"
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.
+	withID := params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.RoleMembersTableHasIDColumns)
 	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member", "role_id", "member_id")`
-	if !params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.RoleMembersTableHasIDColumns) {
+	if !withID {
 		memberStmt = `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
 	}
 	if n.adminOption {
@@ -182,10 +183,14 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 		memberStmt += ` DO NOTHING`
 	}
 
-	withID := params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.RoleMembersTableHasIDColumns)
+	var qargs []interface{}
+	if withID {
+		qargs = make([]interface{}, 5)
+	} else {
+		qargs = make([]interface{}, 3)
+	}
 	var rowsAffected int
 	for _, r := range n.roles {
-		qargs := make([]interface{}, 5)
 		qargs[0] = r.Normalized()
 		qargs[2] = n.adminOption
 		if withID {

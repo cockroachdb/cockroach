@@ -359,6 +359,13 @@ const (
 	// RoleMembersTableHasIDColumns is the version where the role
 	// members table has ids.
 	RoleMembersTableHasIDColumns
+	// RoleMembersIDColumnsAreBackfilled is the version where ids in the
+	// role options table are backfilled.
+	RoleMembersIDColumnsAreBackfilled
+	// SetRoleMembersUserIDColumnsNotNull is the version where the role
+	// members table id columns cannot be null. This is the final step
+	// of the system.role_members table migration.
+	SetRoleMembersUserIDColumnsNotNull
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -639,6 +646,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RoleMembersTableHasIDColumns,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
+	},
+	{
+		Key:     SetRoleMembersUserIDColumnsNotNull,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 56},
+	},
+	{
+		Key:     SetRoleMembersUserIDColumnsNotNull,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

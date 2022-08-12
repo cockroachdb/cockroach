@@ -143,6 +143,21 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		setSystemRoleOptionsUserIDColumnNotNull,
 	),
+	upgrade.NewTenantUpgrade("alter system.role_members to include role_id and member_id columns",
+		toCV(clusterversion.RoleMembersTableHasIDColumns),
+		NoPrecondition,
+		alterSystemRoleMembersAddColumnsAndIndexes,
+	),
+	upgrade.NewTenantUpgrade("backfill entries in system.role_members to include IDs",
+		toCV(clusterversion.RoleMembersIDColumnsAreBackfilled),
+		NoPrecondition,
+		backfillSystemRoleMembersIDColumns,
+	),
+	upgrade.NewTenantUpgrade("set system.role_members role_id and member_id columns to not null",
+		toCV(clusterversion.SetRoleMembersUserIDColumnsNotNull),
+		NoPrecondition,
+		setSystemRoleMembersIDColumnsNotNull,
+	),
 }
 
 func init() {

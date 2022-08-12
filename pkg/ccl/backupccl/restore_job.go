@@ -2442,6 +2442,14 @@ func (r *restoreResumer) restoreSystemUsers(
 			return nil
 		}
 
+		hasIDColumnsQuery := fmt.Sprintf(
+			`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'role_id')`, "crdb_temp_system.role_members")
+		row, err := executor.QueryRow(ctx, "has-id-column", txn, hasIDColumnsQuery)
+		if err != nil {
+			return err
+		}
+		backupSystemRoleMembersHsIDColumns := bool(tree.MustBeDBool(row[0]))
+
 		selectNonExistentRoleMembers := "SELECT * FROM crdb_temp_system.role_members temp_rm WHERE " +
 			"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)"
 		roleMembers, err := executor.QueryBuffered(ctx, "get-role-members",
@@ -2450,12 +2458,43 @@ func (r *restoreResumer) restoreSystemUsers(
 			return err
 		}
 
+		roleMembersHasIDColumn := r.execCfg.Settings.Version.IsActive(ctx, clusterversion.RoleMembersTableHasIDColumns)
 		insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3)`
+		if roleMembersHasIDColumn {
+			insertRoleMember = `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5)`
+		}
+
+		var qargs []interface{}
+		if roleMembersHasIDColumn {
+			qargs = make([]interface{}, 5)
+		} else {
+			qargs = make([]interface{}, 3)
+		}
+
 		for _, roleMember := range roleMembers {
 			// Only grant roles to users that don't currently exist, i.e., new users we just added
 			if _, ok := newUsernames[roleMember[1].String()]; ok {
+				qargs[0], qargs[1], qargs[2] = roleMember[0], roleMember[1], roleMember[2]
+
+				if roleMembersHasIDColumn && !backupSystemRoleMembersHsIDColumns {
+					// Populate the IDs by getting it from the system.users table.
+					roleID, err := getIDForUser(ctx, tree.MustBeDString(roleMember[0]), executor, txn)
+					if err != nil {
+						return err
+					}
+					memberID, err := getIDForUser(ctx, tree.MustBeDString(roleMember[1]), executor, txn)
+					if err != nil {
+						return err
+					}
+					qargs[3] = roleID
+					qargs[4] = memberID
+				} else {
+					qargs[3] = roleMember[3]
+					qargs[4] = roleMember[4]
+				}
+
 				if _, err = executor.Exec(ctx, "insert-non-existent-role-members", txn, insertRoleMember,
-					roleMember[0], roleMember[1], roleMember[2]); err != nil {
+					qargs...); err != nil {
 					return err
 				}
 			}
