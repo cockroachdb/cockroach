@@ -63,6 +63,8 @@ message Statement {
   string auto_retry_reason = 16;
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 17;
+  repeated string index_recommendation = 19;
+
 }
 
 message Insight {
