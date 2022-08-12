@@ -127,18 +127,29 @@ func (c *tenantStreamingClusters) compareResult(query string) {
 
 // Waits for the ingestion job high watermark to reach the given high watermark.
 func (c *tenantStreamingClusters) waitUntilHighWatermark(
-	highWatermark hlc.Timestamp, ingestionJobID jobspb.JobID,
+	targetWatermark hlc.Timestamp, ingestionJobID jobspb.JobID,
 ) {
 	testutils.SucceedsSoon(c.t, func() error {
 		progress := jobutils.GetJobProgress(c.t, c.destSysSQL, ingestionJobID)
 		if progress.GetHighWater() == nil {
 			return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
-				highWatermark.String())
+				targetWatermark.String())
 		}
 		highwater := *progress.GetHighWater()
-		if highwater.Less(highWatermark) {
+		if highwater.Less(targetWatermark) {
 			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
-				highwater.String(), highWatermark.String())
+				highwater.String(), targetWatermark.String())
+		}
+		return nil
+	})
+}
+
+// Waits for the ingestion job to have a high watermark.
+func (c *tenantStreamingClusters) waitUntilAnyHighWatermark(ingestionJobID jobspb.JobID) {
+	testutils.SucceedsSoon(c.t, func() error {
+		highWatermark := jobutils.GetJobProgress(c.t, c.destSysSQL, ingestionJobID).GetHighWater()
+		if highWatermark == nil {
+			return errors.New("stream ingestion has not recorded any progress yet")
 		}
 		return nil
 	})
@@ -853,6 +864,54 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 
 	// Ingestion job should succeed despite source failure due to the successful cutover
 	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+func compareTenantFingerprintsAtTimestamp(
+	t *testing.T, c *tenantStreamingClusters, ts hlc.Timestamp,
+) {
+	fingerprintQuery := fmt.Sprintf(`
+SELECT
+    xor_agg(
+        fnv64(crdb_internal.trim_tenant_prefix(key),
+              substring(value from 5))
+    ) AS fingerprint
+FROM crdb_internal.scan(crdb_internal.tenant_span($1))
+AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime())
+
+	srcTenantID := c.args.srcTenantID
+	destTenantID := c.args.destTenantID
+
+	var srcFingerprint int64
+	c.srcSysSQL.QueryRow(t, fingerprintQuery, srcTenantID.InternalValue).Scan(&srcFingerprint)
+
+	var destFingerprint int64
+	c.destSysSQL.QueryRow(t, fingerprintQuery, destTenantID.InternalValue).Scan(&destFingerprint)
+
+	require.Equal(t, srcFingerprint, destFingerprint)
+}
+
+func TestTenantCutoverToLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	c.waitUntilAnyHighWatermark(jobspb.JobID(ingestionJobID))
+
+	c.srcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3)")
+
+	checkTimestamp := c.srcSysServer.Clock().Now()
+	c.waitUntilHighWatermark(checkTimestamp, jobspb.JobID(ingestionJobID))
+
+	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1)`, ingestionJobID)
+	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	compareTenantFingerprintsAtTimestamp(t, c, checkTimestamp)
 }
 
 func TestTenantStreamingDeleteRange(t *testing.T) {
