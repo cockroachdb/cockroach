@@ -1471,6 +1471,9 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(
 	var lastAppResp raftpb.Message
 	for _, message := range messages {
 		_, drop := blocked[roachpb.ReplicaID(message.To)]
+		if drop {
+			r.store.Metrics().RaftPausedFollowerDroppedMsgs.Inc(1)
+		}
 		switch message.Type {
 		case raftpb.MsgApp:
 			if util.RaceEnabled {
@@ -1534,9 +1537,6 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(
 			}
 		}
 
-		// TODO(tbg): record this to metrics.
-		//
-		// See: https://github.com/cockroachdb/cockroach/issues/83917
 		if !drop {
 			r.sendRaftMessageRaftMuLocked(ctx, message)
 		}
