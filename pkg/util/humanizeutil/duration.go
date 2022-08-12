@@ -21,11 +21,11 @@ import (
 // and the granularity is no smaller than microseconds.
 //
 // Examples:
-//   0              ->  "0µs"
-//   123456ns       ->  "123µs"
-//   12345678ns     ->  "12ms"
-//   12345678912ns  ->  "1.2s"
 //
+//	0              ->  "0µs"
+//	123456ns       ->  "123µs"
+//	12345678ns     ->  "12ms"
+//	12345678912ns  ->  "1.2s"
 func Duration(val time.Duration) redact.SafeString {
 	val = val.Round(time.Microsecond)
 	if val == 0 {
@@ -54,12 +54,12 @@ func Duration(val time.Duration) redact.SafeString {
 // the granularity is no smaller than seconds.
 //
 // Examples:
-//  - 0 seconds
-//  - 1 second
-//  - 3 minutes
-//  - 1 hour
-//  - 5 days
-//  - 1000 days
+//   - 0 seconds
+//   - 1 second
+//   - 3 minutes
+//   - 1 hour
+//   - 5 days
+//   - 1000 days
 func LongDuration(val time.Duration) redact.SafeString {
 	var round time.Duration
 	var unit string

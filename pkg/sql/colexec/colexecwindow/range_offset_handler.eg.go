@@ -742,16 +742,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -889,16 +889,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -1036,16 +1036,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -1183,16 +1183,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -1319,16 +1319,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -1471,16 +1471,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -1600,16 +1600,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -1759,16 +1759,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -1901,16 +1901,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2038,16 +2038,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2158,16 +2158,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2278,16 +2278,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2398,16 +2398,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2507,16 +2507,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2632,16 +2632,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2734,16 +2734,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2866,16 +2866,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -2981,16 +2981,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -3091,16 +3091,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -3255,16 +3255,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -3419,16 +3419,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -3583,16 +3583,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -3736,16 +3736,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -3905,16 +3905,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -4051,16 +4051,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -4227,16 +4227,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -4386,16 +4386,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -4540,16 +4540,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -4677,16 +4677,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -4814,16 +4814,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -4951,16 +4951,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -5077,16 +5077,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -5219,16 +5219,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -5338,16 +5338,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -5487,16 +5487,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -5619,16 +5619,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -5746,16 +5746,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -5893,16 +5893,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -6040,16 +6040,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -6187,16 +6187,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -6323,16 +6323,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -6475,16 +6475,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -6604,16 +6604,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -6763,16 +6763,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -6905,16 +6905,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7042,16 +7042,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7162,16 +7162,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7282,16 +7282,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7402,16 +7402,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7511,16 +7511,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7636,16 +7636,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7738,16 +7738,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7870,16 +7870,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -7985,16 +7985,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -8095,16 +8095,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -8259,16 +8259,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -8423,16 +8423,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -8587,16 +8587,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -8740,16 +8740,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -8909,16 +8909,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -9055,16 +9055,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -9231,16 +9231,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -9390,16 +9390,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -9544,16 +9544,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt16{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -9681,16 +9681,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt32{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -9818,16 +9818,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -9955,16 +9955,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDecimal{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -10081,16 +10081,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescFloat64{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -10223,16 +10223,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInterval{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -10342,16 +10342,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDate{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -10491,16 +10491,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescTimestamp{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,
@@ -10623,16 +10623,16 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDatum{}
 // location of the last bound index. It is called for the first row of each
 // peer group. For example:
 //
-//    ord col
-//    -------
-//       1
-//       2
-//       2
-//       3
+//	 ord col
+//	 -------
+//	    1
+//	    2
+//	    2
+//	    3
 //
-//   currRow: 1
-//   lastIdx: 0
-//   offset:  1
+//	currRow: 1
+//	lastIdx: 0
+//	offset:  1
 //
 // Assume we are calculating the end index for an ascending column. In this
 // case, the value at the current row is '2' and the offset is '1' unit. So,

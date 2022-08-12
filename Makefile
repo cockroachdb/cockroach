@@ -795,8 +795,8 @@ SQLPARSER_TARGETS = \
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
 
-SWAGGER_TARGETS := \
-  docs/generated/swagger/spec.json
+SWAGGER_TARGETS :=
+  #docs/generated/swagger/spec.json
 
 DOCGEN_TARGETS := \
 	bin/.docgen_bnfs \

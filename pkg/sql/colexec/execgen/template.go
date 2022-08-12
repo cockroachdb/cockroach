@@ -102,41 +102,45 @@ func replaceTemplateVars(
 // For example, given the function:
 // // execgen:inline
 // // execgen:template<t, i>
-// func b(t bool, i int) int {
-//   if t {
-//     x = 3
-//   } else {
-//     x = 4
-//   }
-//   switch i {
-//     case 5: fmt.Println("5")
-//     case 6: fmt.Println("6")
-//   }
-//   return x
-// }
+//
+//	func b(t bool, i int) int {
+//	  if t {
+//	    x = 3
+//	  } else {
+//	    x = 4
+//	  }
+//	  switch i {
+//	    case 5: fmt.Println("5")
+//	    case 6: fmt.Println("6")
+//	  }
+//	  return x
+//	}
 //
 // and a caller
-//   b(true, 5)
+//
+//	b(true, 5)
+//
 // this function will generate
-//   if true {
-//     x = 3
-//   } else {
-//     x = 4
-//   }
-//   switch 5 {
-//     case 5: fmt.Println("5")
-//     case 6: fmt.Println("6")
-//   }
-//   return x
+//
+//	if true {
+//	  x = 3
+//	} else {
+//	  x = 4
+//	}
+//	switch 5 {
+//	  case 5: fmt.Println("5")
+//	  case 6: fmt.Println("6")
+//	}
+//	return x
 //
 // in its first pass. However, because the if's condition (true, in this case)
 // is a logical expression containing boolean literals, and the switch statement
 // is a switch on a template variable alone, a second pass "folds"
 // the conditionals and replaces them like so:
 //
-//   x = 3
-//   fmt.Println(5)
-//   return x
+//	x = 3
+//	fmt.Println(5)
+//	return x
 //
 // Note that this method lexically replaces all formal parameters, so together
 // with createTemplateFuncVariant, it enables templates to call other templates
@@ -180,11 +184,12 @@ func monomorphizeTemplate(n dst.Node, info *funcInfo, args []dst.Expr) dst.Node 
 // if <bool> { } else { } and if !<bool> { } else { }
 //
 // execgen:switch
-// switch <ident> {
-//   case <otherIdent>:
-//   case <ident>:
-//   ...
-// }
+//
+//	switch <ident> {
+//	  case <otherIdent>:
+//	  case <ident>:
+//	  ...
+//	}
 func foldConditionals(
 	n dst.Node, info *funcInfo, templateSwitches map[*dst.SwitchStmt]struct{},
 ) dst.Node {
@@ -696,13 +701,14 @@ func trimLeadingNewLines(decs []string) []string {
 // For example, given a template function:
 //
 // // execgen:template<b>
-// func foo (a int, b bool) {
-//   if b {
-//     return a
-//   } else {
-//     return a + 1
-//   }
-// }
+//
+//	func foo (a int, b bool) {
+//	  if b {
+//	    return a
+//	  } else {
+//	    return a + 1
+//	  }
+//	}
 //
 // And callsites:
 //
@@ -711,13 +717,13 @@ func trimLeadingNewLines(decs []string) []string {
 //
 // This function will add 2 new func decls to the AST:
 //
-// func foo_true(a int) {
-//   return a
-// }
+//	func foo_true(a int) {
+//	  return a
+//	}
 //
-// func foo_false(a int) {
-//   return a + 1
-// }
+//	func foo_false(a int) {
+//	  return a + 1
+//	}
 func replaceAndExpandTemplates(f *dst.File, templateFuncInfos map[string]*funcInfo) dst.Node {
 	// First, create the DAG of template functions. This DAG points from template
 	// function to any other template functions that are called from within its

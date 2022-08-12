@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"testing"
 
@@ -39,8 +38,8 @@ const (
 // DataDriven divvies up these files as subtests, so individual "files" are
 // runnable through:
 //
-//  		dev test pkg/cmd/dev -f TestDataDriven/<fname> [--rewrite]
-// 	OR  go test ./pkg/cmd/dev -run TestDataDriven/<fname> [-rewrite]
+//	 		dev test pkg/cmd/dev -f TestDataDriven/<fname> [--rewrite]
+//		OR  go test ./pkg/cmd/dev -run TestDataDriven/<fname> [-rewrite]
 //
 // NB: See commentary on TestRecorderDriven to see how they compare.
 // TestDataDriven is well suited for exercising flows that don't depend on
@@ -66,7 +65,7 @@ func TestDataDriven(t *testing.T) {
 		}
 
 		if !verbose { // suppress all internal output unless told otherwise
-			execOpts = append(execOpts, exec.WithStdOutErr(ioutil.Discard, ioutil.Discard))
+			execOpts = append(execOpts, exec.WithStdOutErr(io.Discard, io.Discard))
 		}
 
 		devExec := exec.New(execOpts...)
@@ -88,8 +87,8 @@ func TestDataDriven(t *testing.T) {
 			dev.log = log.New(logger, "", 0)
 
 			if !verbose {
-				dev.cli.SetErr(ioutil.Discard)
-				dev.cli.SetOut(ioutil.Discard)
+				dev.cli.SetErr(io.Discard)
+				dev.cli.SetOut(io.Discard)
 			}
 
 			require.Equalf(t, d.Cmd, "exec", "unknown command: %s", d.Cmd)

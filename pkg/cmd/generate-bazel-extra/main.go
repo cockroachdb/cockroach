@@ -15,7 +15,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -75,7 +74,7 @@ func getTestTargets(testTargetSize string) ([]string, error) {
 
 func generateTestSuites() {
 	// First list all test and binary targets.
-	infos, err := ioutil.ReadDir("pkg")
+	infos, err := os.ReadDir("pkg")
 	if err != nil {
 		panic(err)
 	}

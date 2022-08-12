@@ -59,7 +59,9 @@ type xmlMessage struct {
 
 // OutputOfBinaryRule returns the path of the binary produced by the
 // given build target, relative to bazel-bin. That is,
-//    filepath.Join(bazelBin, OutputOfBinaryRule(target, isWindows)) is the absolute
+//
+//	filepath.Join(bazelBin, OutputOfBinaryRule(target, isWindows)) is the absolute
+//
 // path to the build binary for the target.
 func OutputOfBinaryRule(target string, isWindows bool) string {
 	colon := strings.Index(target, ":")

@@ -2297,8 +2297,10 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 //
 // Args:
 // kvTracingEnabled: If set, the traces will also include "KV trace" messages -
-//   verbose messages around the interaction of SQL with KV. Some of the messages
-//   are per-row.
+//
+//	verbose messages around the interaction of SQL with KV. Some of the messages
+//	are per-row.
+//
 // showResults: If set, result rows are reported in the trace.
 func (st *SessionTracing) StartTracing(
 	recType tracingpb.RecordingType, kvTracingEnabled, showResults bool,
@@ -2518,11 +2520,11 @@ type traceRow [traceNumCols]tree.Datum
 
 // A regular expression to split log messages.
 // It has three parts:
-// - the (optional) code location, with at least one forward slash and a period
-//   in the file name:
-//   ((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?)
-// - the (optional) tag: ((?:\[(?:[^][]|\[[^]]*\])*\])?)
-// - the message itself: the rest.
+//   - the (optional) code location, with at least one forward slash and a period
+//     in the file name:
+//     ((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?)
+//   - the (optional) tag: ((?:\[(?:[^][]|\[[^]]*\])*\])?)
+//   - the message itself: the rest.
 var logMessageRE = regexp.MustCompile(
 	`(?s:^((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?) *((?:\[(?:[^][]|\[[^]]*\])*\])?) *(.*))`)
 

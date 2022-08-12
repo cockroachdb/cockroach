@@ -13,7 +13,6 @@ package testutils
 import (
 	"bufio"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -30,7 +29,7 @@ func ReadAllFiles(pattern string) {
 		if err != nil {
 			continue
 		}
-		_, _ = io.Copy(ioutil.Discard, bufio.NewReader(f))
+		_, _ = io.Copy(io.Discard, bufio.NewReader(f))
 		f.Close()
 	}
 }

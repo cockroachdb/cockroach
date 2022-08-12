@@ -82,16 +82,16 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 // tuples, where |m| is left input cardinality and |n| is right input
 // cardinality. With a query like this:
 //
-//    SELECT *
-//    FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
-//    INNER JOIN uv ON x = u
+//	SELECT *
+//	FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
+//	INNER JOIN uv ON x = u
 //
 // An ordering like the following is valid but not desirable, since the cross
 // join will likely be very expensive compared to a join with a predicate:
 //
-//    SELECT *
-//    FROM (SELECT * FROM uv INNER JOIN ab ON True)
-//    INNER JOIN xy ON x = a AND x = u
+//	SELECT *
+//	FROM (SELECT * FROM uv INNER JOIN ab ON True)
+//	INNER JOIN xy ON x = a AND x = u
 //
 // Avoiding cross joins significantly decreases the search space (and therefore
 // planning time) without preventing the best plan from being found in most
@@ -113,16 +113,16 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 //
 // Taking this query as an example:
 //
-//    SELECT *
-//    FROM (SELECT * FROM xy LEFT JOIN ab ON x = a)
-//    INNER JOIN uv ON x = u AND (y = b OR b IS NULL)
+//	SELECT *
+//	FROM (SELECT * FROM xy LEFT JOIN ab ON x = a)
+//	INNER JOIN uv ON x = u AND (y = b OR b IS NULL)
 //
 // The vertexes of the graph would represent the base relations xy, ab and uv.
 // The three edges would be:
 //
-//   x = a [left]
-//   x = u [inner]
-//   y = b OR b IS NULL [inner]
+//	x = a [left]
+//	x = u [inner]
+//	y = b OR b IS NULL [inner]
 //
 // Then, the DPSube algorithm is executed (see citations: [8]). DPSube
 // enumerates all disjoint pairs of subsets of base relations such as
@@ -145,10 +145,10 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 // contained in the SES of a join must be present in the join's input. For
 // example, take the following query:
 //
-//    SELECT *
-//    FROM xy
-//    LEFT JOIN (SELECT * FROM ab INNER JOIN uv ON a = u)
-//    ON x = u
+//	SELECT *
+//	FROM xy
+//	LEFT JOIN (SELECT * FROM ab INNER JOIN uv ON a = u)
+//	ON x = u
 //
 // The SES for the left join will contain relations xy and uv because both are
 // referenced by the join's predicate. Therefore, both must be in the input of
@@ -166,10 +166,10 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 //
 // Consider the following (invalid) reordering of the above example):
 //
-//    SELECT *
-//    FROM ab
-//    INNER JOIN (SELECT * FROM xy LEFT JOIN uv ON x = u)
-//    ON a = u
+//	SELECT *
+//	FROM ab
+//	INNER JOIN (SELECT * FROM xy LEFT JOIN uv ON x = u)
+//	ON a = u
 //
 // The left join's TES will include relations xy and uv because they are in the
 // SES. The TES will also contain ab because the right-asscom property does not
@@ -195,9 +195,9 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 // their original operator, free to be combined with conjuncts from other inner
 // joins. For example, take this query:
 //
-//    SELECT *
-//    FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
-//    INNER JOIN uv ON x = u AND a = u
+//	SELECT *
+//	FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
+//	INNER JOIN uv ON x = u AND a = u
 //
 // Treating the ON conditions of these joins as a conglomerate (as we do with
 // non-inner joins), a join between base relations xy and uv would not be
@@ -206,37 +206,38 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 // conjunct solves this problem, allowing a reordering like the following
 // (the ab and uv relations are switched, along with the filters):
 //
-//    SELECT *
-//    FROM (SELECT * FROM xy INNER JOIN uv ON x = u)
-//    INNER JOIN ab ON x = a AND a = u
+//	SELECT *
+//	FROM (SELECT * FROM xy INNER JOIN uv ON x = u)
+//	INNER JOIN ab ON x = a AND a = u
 //
 // In fact, this idea can be taken even further. Take this query as an example:
 //
-//    SELECT *
-//    FROM xy
-//    INNER JOIN (SELECT * FROM ab LEFT JOIN uv ON b = v)
-//    ON x = a AND (y = u OR u IS NULL)
+//	SELECT *
+//	FROM xy
+//	INNER JOIN (SELECT * FROM ab LEFT JOIN uv ON b = v)
+//	ON x = a AND (y = u OR u IS NULL)
 //
 // The following is a valid reformulation:
 //
-//    SELECT *
-//    FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
-//    LEFT JOIN uv ON b = v
-//    WHERE y = u OR u IS NULL
+//	SELECT *
+//	FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
+//	LEFT JOIN uv ON b = v
+//	WHERE y = u OR u IS NULL
 //
 // Notice the new Select operation that now carries the inner join conjunct that
 // references the right side of the left join. We can model the process that
 // leads to this reformulation as follows:
-//   1. The inner join is rewritten as a cross join and two selects, each
-//      carrying a conjunct: (x = a) for one and (y = u OR u IS NULL) for the
-//      other.
-//   2. The Select operators are pulled above the inner join.
-//   3. The left join and inner join are reordered according to the associative
-//      property (see citations: [8] table 2).
-//   4. Finally, the inner join conjuncts are pushed back down the reordered
-//      join tree as far as possible. The x = a conjunct can be pushed to the
-//      inner join, but the (y = u OR u IS NULL) conjunct must remain on the
-//      Select.
+//  1. The inner join is rewritten as a cross join and two selects, each
+//     carrying a conjunct: (x = a) for one and (y = u OR u IS NULL) for the
+//     other.
+//  2. The Select operators are pulled above the inner join.
+//  3. The left join and inner join are reordered according to the associative
+//     property (see citations: [8] table 2).
+//  4. Finally, the inner join conjuncts are pushed back down the reordered
+//     join tree as far as possible. The x = a conjunct can be pushed to the
+//     inner join, but the (y = u OR u IS NULL) conjunct must remain on the
+//     Select.
+//
 // JoinOrderBuilder is able to effect this transformation (though it is not
 // accomplished in so many steps).
 //
@@ -258,9 +259,9 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 // we can add new edges that are implied by the transitive closure of the inner
 // join edges. For example, take this query:
 //
-//    SELECT * FROM xy
-//    INNER JOIN ab ON x = a
-//    INNER JOIN uv ON a = u
+//	SELECT * FROM xy
+//	INNER JOIN ab ON x = a
+//	INNER JOIN uv ON a = u
 //
 // The two edges x = a and a = u are explicit in this join tree. However, there
 // is the additional implicit edge x = u which can be added to the join graph.
@@ -438,7 +439,7 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 // reflect the transitive closure of all equality filters between columns.
 // As an example, take a query like the following:
 //
-//    SELECT * FROM xy INNER JOIN ab ON x = a INNER JOIN uv ON u = a
+//	SELECT * FROM xy INNER JOIN ab ON x = a INNER JOIN uv ON u = a
 //
 // Contains the explicit edges x = a and u = a, and the implicit edge x = u.
 // This implicit edge will be added by ensureClosure.
@@ -1038,9 +1039,9 @@ type operator struct {
 // 'to' set must be a subset of the input relations (from -> to). Take the
 // following query as an example:
 //
-//    SELECT * FROM xy
-//    INNER JOIN (SELECT * FROM ab LEFT JOIN uv ON a = u)
-//    ON x = a
+//	SELECT * FROM xy
+//	INNER JOIN (SELECT * FROM ab LEFT JOIN uv ON a = u)
+//	ON x = a
 //
 // During execution of the CD-C algorithm, the following conflict rule would
 // be added to inner join edge: [uv -> ab]. This means that, for any join that
@@ -1071,19 +1072,19 @@ func (e *edge) calcNullRejectedRels(jb *JoinOrderBuilder) {
 // a join uses a predicate in its ON condition, all relations in the SES must be
 // part of the join's inputs. For example, in this query:
 //
-//    SELECT *
-//    FROM xy
-//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON b = (u*2))
-//    ON x = a
+//	SELECT *
+//	FROM xy
+//	INNER JOIN (SELECT * FROM ab INNER JOIN uv ON b = (u*2))
+//	ON x = a
 //
 // The SES for the x = a edge would contain relations xy and ab. The SES for the
 // b = u*2 edge would contain ab and uv. Therefore, this query could be
 // reordered like so:
 //
-//    SELECT *
-//    FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
-//    INNER JOIN uv
-//    ON b = (u*2)
+//	SELECT *
+//	FROM (SELECT * FROM xy INNER JOIN ab ON x = a)
+//	INNER JOIN uv
+//	ON b = (u*2)
 //
 // While still satisfying the syntactic eligibility sets of the edges.
 func (e *edge) calcSES(jb *JoinOrderBuilder) {
@@ -1368,21 +1369,20 @@ func commute(op opt.Operator) bool {
 // by the given edges are associative with each other. An example of an
 // application of the associative property:
 //
-//    SELECT * FROM
-//    (
-//      SELECT * FROM xy
-//      INNER JOIN ab ON x = a
-//    )
-//    INNER JOIN uv ON a = u
-//    =>
-//    SELECT * FROM xy
-//    INNER JOIN
-//    (
-//      SELECT * FROM ab
-//      INNER JOIN uv ON a = u
-//    )
-//    ON x = a
-//
+//	SELECT * FROM
+//	(
+//	  SELECT * FROM xy
+//	  INNER JOIN ab ON x = a
+//	)
+//	INNER JOIN uv ON a = u
+//	=>
+//	SELECT * FROM xy
+//	INNER JOIN
+//	(
+//	  SELECT * FROM ab
+//	  INNER JOIN uv ON a = u
+//	)
+//	ON x = a
 func assoc(edgeA, edgeB *edge) bool {
 	return checkProperty(assocTable, edgeA, edgeB)
 }
@@ -1391,20 +1391,19 @@ func assoc(edgeA, edgeB *edge) bool {
 // described by the given edges allow the left-asscom property. An example of
 // an application of the left-asscom property:
 //
-//    SELECT * FROM
-//    (
-//      SELECT * FROM xy
-//      INNER JOIN ab ON x = a
-//    )
-//    INNER JOIN uv ON x = u
-//    =>
-//    SELECT * FROM
-//    (
-//      SELECT * FROM xy
-//      INNER JOIN uv ON x = u
-//    )
-//    INNER JOIN ab ON x = a
-//
+//	SELECT * FROM
+//	(
+//	  SELECT * FROM xy
+//	  INNER JOIN ab ON x = a
+//	)
+//	INNER JOIN uv ON x = u
+//	=>
+//	SELECT * FROM
+//	(
+//	  SELECT * FROM xy
+//	  INNER JOIN uv ON x = u
+//	)
+//	INNER JOIN ab ON x = a
 func leftAsscom(edgeA, edgeB *edge) bool {
 	return checkProperty(leftAsscomTable, edgeA, edgeB)
 }
@@ -1413,22 +1412,21 @@ func leftAsscom(edgeA, edgeB *edge) bool {
 // described by the given edges allow the right-asscom property. An example of
 // an application of the right-asscom property:
 //
-//    SELECT * FROM uv
-//    INNER JOIN
-//    (
-//      SELECT * FROM xy
-//      INNER JOIN ab ON x = a
-//    )
-//    ON a = u
-//    =>
-//    SELECT * FROM xy
-//    INNER JOIN
-//    (
-//      SELECT * FROM uv
-//      INNER JOIN ab ON a = u
-//    )
-//    ON x = a
-//
+//	SELECT * FROM uv
+//	INNER JOIN
+//	(
+//	  SELECT * FROM xy
+//	  INNER JOIN ab ON x = a
+//	)
+//	ON a = u
+//	=>
+//	SELECT * FROM xy
+//	INNER JOIN
+//	(
+//	  SELECT * FROM uv
+//	  INNER JOIN ab ON a = u
+//	)
+//	ON x = a
 func rightAsscom(edgeA, edgeB *edge) bool {
 	return checkProperty(rightAsscomTable, edgeA, edgeB)
 }

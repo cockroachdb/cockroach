@@ -16,15 +16,14 @@
 // index these entities (struct pointers) by those attributes. These entities
 // can be queried using a declarative query language exposed by the library.
 //
-// Why rel
+// # Why rel
 //
 // The key motivations end up being explainability, maintainability, and
 // observability. There's a runtime consideration we'll get to later, but
 // a driving motivation here is the ability to present domain complexity
 // outside the considerations of runtime performance and imperative code.
 //
-//
-// Uniformity dealing with heterogeneous data
+// # Uniformity dealing with heterogeneous data
 //
 // The schema is fundamentally full of heterogeneous data with a number of cross
 // references. Having a uniform mechanism to describe and interact with this
@@ -38,19 +37,19 @@
 //
 // Design Goals
 //
-//  * Observable: The library's rules should be trivially serialized in
-//    an easy to consume format.
-//  * Declarative: The library should separate the logic of the domain from
-//    the process of the evaluation.
-//  * Ergonomic: The library should feel comfortable to use for go programmers
-//    looking to model relational graph problems for which it was intended.
-//  * Reasonable efficiency: The library should provide mechanisms to index
-//    data to accelerate queries out of band such that the big-O runtime can
-//    be made sane and the constant overheads aren't too many orders of
-//    magnitude off of specialized imperative code as to make its use
-//    unacceptable.
+//   - Observable: The library's rules should be trivially serialized in
+//     an easy to consume format.
+//   - Declarative: The library should separate the logic of the domain from
+//     the process of the evaluation.
+//   - Ergonomic: The library should feel comfortable to use for go programmers
+//     looking to model relational graph problems for which it was intended.
+//   - Reasonable efficiency: The library should provide mechanisms to index
+//     data to accelerate queries out of band such that the big-O runtime can
+//     be made sane and the constant overheads aren't too many orders of
+//     magnitude off of specialized imperative code as to make its use
+//     unacceptable.
 //
-// Terminology
+// # Terminology
 //
 // The basic design of the library is that we want to index and find tuples of
 // struct pointers, which are termed entities. These entities have attribute
@@ -86,7 +85,7 @@
 // less elegant) than datomic. The language does not permit any recursion or
 // runtime creation of facts.
 //
-// Query Language
+// # Query Language
 //
 // The query language provides a mechanism to reason relationally about data
 // stored in regular structs which may themselves have hierarchy between them.
@@ -100,7 +99,7 @@
 // libraries can generate queries of an arbitrary depth. Furthermore, users
 // can implement their own forms of recursion.
 //
-// Runtime considerations
+// # Runtime considerations
 //
 // An early primary motivation for this package was the relatively
 // straightforward problem of determining the set of dependency edges which
@@ -154,38 +153,34 @@
 // indexes in O(N*log(N)) per statement meaning at worst O(N^2 log(N)) which is
 // acceptable for an N of ~1000 as opposed to O(N^3) which isn't really.
 //
-//
-// Future work
+// # Future work
 //
 // Below find a listing of features not yet done.
 //
-//  * Arrays, Maps, Slices.
-//    - It would be nice to have a mechanism to talk about decomposing
-//      data stored in these collections. One approach would be to define
-//      some more system attributes and some exported structs which act to
-//      bind a slice member to the entity holding the slice. Consider:
+//   - Arrays, Maps, Slices.
 //
-//         type SliceMember struct {
-//            Index      int
-//            SourceAttr Attr
-//            Source     interface{}
-//            Value      interface{}
-//         }
+//   - It would be nice to have a mechanism to talk about decomposing
+//     data stored in these collections. One approach would be to define
+//     some more system attributes and some exported structs which act to
+//     bind a slice member to the entity holding the slice. Consider:
 //
-//  * More ergonomic iteration with reflection.
-//    - The current Result interface requires type assertions.
-//      Given we know about the types of the variables, we could
-//      accept a function with an appropriate signature and use
-//      reflection to make sure that the corresponding variables
-//      are properly typed.
-//  * Variable bindings.
-//    - If we wanted to make recursion more sane, it'd be better to plan a
-//      query with some input parameters and then be able to invoke it on those
-//      parameters. In that way, we could imagine invoking a query recursively.
-//  * More generalized disjunction.
+//   - More ergonomic iteration with reflection.
+//
+//   - The current Result interface requires type assertions.
+//     Given we know about the types of the variables, we could
+//     accept a function with an appropriate signature and use
+//     reflection to make sure that the corresponding variables
+//     are properly typed.
+//
+//   - Variable bindings.
+//
+//   - If we wanted to make recursion more sane, it'd be better to plan a
+//     query with some input parameters and then be able to invoke it on those
+//     parameters. In that way, we could imagine invoking a query recursively.
+//
+//   - More generalized disjunction.
 //
 // TODO(ajwerner): Note that arrays of bytes can probably be used as slice but
 // that would probably be unfortunate. We'd probably prefer to shove them into
 // a string using some unsafe magic.
-//
 package rel

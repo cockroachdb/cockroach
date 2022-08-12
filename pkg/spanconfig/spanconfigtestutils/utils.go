@@ -144,13 +144,12 @@ func ParseSpanConfigRecord(t testing.TB, conf string) spanconfig.Record {
 // kvaccessor-get arguments into the relevant spans. The input is of the
 // following form:
 //
-// 		span [a,e)
-// 		span [a,b)
-// 		span [b,c)
-//		system-target {source=1,target=1}
-//		system-target {source=20,target=20}
-//		system-target {source=1,target=20}
-//
+//	span [a,e)
+//	span [a,b)
+//	span [b,c)
+//	system-target {source=1,target=1}
+//	system-target {source=20,target=20}
+//	system-target {source=1,target=20}
 func ParseKVAccessorGetArguments(t testing.TB, input string) []spanconfig.Target {
 	var targets []spanconfig.Target
 	for _, line := range strings.Split(input, "\n") {
@@ -183,14 +182,13 @@ func ParseKVAccessorGetArguments(t testing.TB, input string) []spanconfig.Target
 // kvaccessor-update arguments into the relevant targets and records. The input
 // is of the following form:
 //
-// 		delete [c,e)
-// 		upsert [c,d):C
-// 		upsert [d,e):D
-// 		delete {source=1,target=1}
-// 		delete {source=1,target=20}
-// 		upsert {source=1,target=1}:A
-// 		delete {source=1,target=20}:D
-//
+//	delete [c,e)
+//	upsert [c,d):C
+//	upsert [d,e):D
+//	delete {source=1,target=1}
+//	delete {source=1,target=20}
+//	upsert {source=1,target=1}:A
+//	delete {source=1,target=20}:D
 func ParseKVAccessorUpdateArguments(
 	t testing.TB, input string,
 ) ([]spanconfig.Target, []spanconfig.Record) {
@@ -221,10 +219,9 @@ func ParseKVAccessorUpdateArguments(
 // ParseStoreApplyArguments is a helper function that parses datadriven
 // store update arguments. The input is of the following form:
 //
-//      delete [c,e)
-//      set [c,d):C
-//      set [d,e):D
-//
+//	delete [c,e)
+//	set [c,d):C
+//	set [d,e):D
 func ParseStoreApplyArguments(t testing.TB, input string) (updates []spanconfig.Update) {
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)

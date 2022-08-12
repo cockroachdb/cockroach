@@ -28,7 +28,7 @@ pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination
 pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
-pkg/server/api_v2.go://go:generate swagger generate spec -w . -o ../../docs/generated/swagger/spec.json --scan-models
+pkg/server/api_v2.go://-go:generate swagger generate spec -w . -o ../../docs/generated/swagger/spec.json --scan-models
 pkg/spanconfig/spanconfigstore/span_store.go://go:generate ../../util/interval/generic/gen.sh *entry spanconfigstore
 pkg/sql/conn_fsm.go://go:generate ../util/fsm/gen/reports.sh TxnStateTransitions stateNoTxn
 pkg/sql/opt/optgen/lang/gen.go://go:generate langgen -out expr.og.go exprs lang.opt
@@ -40,7 +40,7 @@ pkg/sql/schemachanger/scop/validation.go://go:generate go run ./generate_visitor
 pkg/sql/schemachanger/scpb/state.go://go:generate go run element_generator.go --in elements.proto --out elements_generated.go
 pkg/sql/schemachanger/scpb/state.go://go:generate go run element_uml_generator.go --out uml/table.puml
 pkg/sql/sem/tree/eval.go://go:generate go run ./evalgen *.go
-pkg/util/interval/generic/doc.go:  //go:generate ../../util/interval/generic/gen.sh *latch spanlatch
+pkg/util/interval/generic/doc.go:	//go:generate ../../util/interval/generic/gen.sh *latch spanlatch
 pkg/util/interval/generic/example_t.go://go:generate ./gen.sh *example generic
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto channel.go channel/channel_generated.go
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto log_channels.go log_channels_generated.go

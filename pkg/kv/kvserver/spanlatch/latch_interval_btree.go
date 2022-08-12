@@ -32,17 +32,20 @@ const (
 
 // cmp returns a value indicating the sort order relationship between
 // a and b. The comparison is performed lexicographically on
-//  (a.Key(), a.EndKey(), a.ID())
+//
+//	(a.Key(), a.EndKey(), a.ID())
+//
 // and
-//  (b.Key(), b.EndKey(), b.ID())
+//
+//	(b.Key(), b.EndKey(), b.ID())
+//
 // tuples.
 //
 // Given c = cmp(a, b):
 //
-//  c == -1  if (a.Key(), a.EndKey(), a.ID()) <  (b.Key(), b.EndKey(), b.ID())
-//  c ==  0  if (a.Key(), a.EndKey(), a.ID()) == (b.Key(), b.EndKey(), b.ID())
-//  c ==  1  if (a.Key(), a.EndKey(), a.ID()) >  (b.Key(), b.EndKey(), b.ID())
-//
+//	c == -1  if (a.Key(), a.EndKey(), a.ID()) <  (b.Key(), b.EndKey(), b.ID())
+//	c ==  0  if (a.Key(), a.EndKey(), a.ID()) == (b.Key(), b.EndKey(), b.ID())
+//	c ==  1  if (a.Key(), a.EndKey(), a.ID()) >  (b.Key(), b.EndKey(), b.ID())
 func cmp(a, b *latch) int {
 	c := bytes.Compare(a.Key(), b.Key())
 	if c != 0 {
@@ -325,21 +328,21 @@ func (n *node) find(item *latch) (index int, found bool) {
 //
 // Before:
 //
-//          +-----------+
-//          |   x y z   |
-//          +--/-/-\-\--+
+//	+-----------+
+//	|   x y z   |
+//	+--/-/-\-\--+
 //
 // After:
 //
-//          +-----------+
-//          |     y     |
-//          +----/-\----+
-//              /   \
-//             v     v
+//	+-----------+
+//	|     y     |
+//	+----/-\----+
+//	    /   \
+//	   v     v
+//
 // +-----------+     +-----------+
 // |         x |     | z         |
 // +-----------+     +-----------+
-//
 func (n *node) split(i int) (*latch, *node) {
 	out := n.items[i]
 	var next *node
@@ -1004,9 +1007,9 @@ func (i *iterator) Cur() *latch {
 // is to minimize the number of key comparisons performed in total. The
 // algorithm operates based on the following two invariants maintained by
 // augmented interval btree:
-// 1. all items are sorted in the btree based on their start key.
-// 2. all btree nodes maintain the upper bound end key of all items
-//    in their subtree.
+//  1. all items are sorted in the btree based on their start key.
+//  2. all btree nodes maintain the upper bound end key of all items
+//     in their subtree.
 //
 // The scan algorithm starts in "unconstrained minimum" and "unconstrained
 // maximum" states. To enter a "constrained minimum" state, the scan must reach
@@ -1021,28 +1024,28 @@ func (i *iterator) Cur() *latch {
 //
 // The scan algorithm works like a standard btree forward scan with the
 // following augmentations:
-// 1. before tranversing the tree, the scan performs a binary search on the
-//    root node's items to determine a "soft" lower-bound constraint position
-//    and a "hard" upper-bound constraint position in the root's children.
-// 2. when tranversing into a child node in the lower or upper bound constraint
-//    position, the constraint is refined by searching the child's items.
-// 3. the initial traversal down the tree follows the left-most children
-//    whose upper bound end keys are equal to or greater than the start key
-//    of the search range. The children followed will be equal to or less
-//    than the soft lower bound constraint.
-// 4. once the initial tranversal completes and the scan is in the left-most
-//    btree node whose upper bound overlaps the search range, key comparisons
-//    must be performed with each item in the tree. This is necessary because
-//    any of these items may have end keys that cause them to overlap with the
-//    search range.
-// 5. once the scan reaches the lower bound constraint position (the first item
-//    with a start key equal to or greater than the search range's start key),
-//    it can begin scaning without performing key comparisons. This is allowed
-//    because all items from this point forward will have end keys that are
-//    greater than the search range's start key.
-// 6. once the scan reaches the upper bound constraint position, it terminates.
-//    It does so because the item at this position is the first item with a
-//    start key larger than the search range's end key.
+//  1. before tranversing the tree, the scan performs a binary search on the
+//     root node's items to determine a "soft" lower-bound constraint position
+//     and a "hard" upper-bound constraint position in the root's children.
+//  2. when tranversing into a child node in the lower or upper bound constraint
+//     position, the constraint is refined by searching the child's items.
+//  3. the initial traversal down the tree follows the left-most children
+//     whose upper bound end keys are equal to or greater than the start key
+//     of the search range. The children followed will be equal to or less
+//     than the soft lower bound constraint.
+//  4. once the initial tranversal completes and the scan is in the left-most
+//     btree node whose upper bound overlaps the search range, key comparisons
+//     must be performed with each item in the tree. This is necessary because
+//     any of these items may have end keys that cause them to overlap with the
+//     search range.
+//  5. once the scan reaches the lower bound constraint position (the first item
+//     with a start key equal to or greater than the search range's start key),
+//     it can begin scaning without performing key comparisons. This is allowed
+//     because all items from this point forward will have end keys that are
+//     greater than the search range's start key.
+//  6. once the scan reaches the upper bound constraint position, it terminates.
+//     It does so because the item at this position is the first item with a
+//     start key larger than the search range's end key.
 type overlapScan struct {
 	// The "soft" lower-bound constraint.
 	constrMinN       *node

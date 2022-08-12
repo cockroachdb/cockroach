@@ -25,8 +25,6 @@ import (
 //
 // However, issues[^1] at the KV layer could prevent this.
 //
-// [^1]: https://github.com/cockroachdb/cockroach/issues/86818
-//
 // The canceler is notified via ping() whenever the associated RangeFeed receives an event.
 // Should ping() not be called for the configured threshold duration, the provided cancel
 // function will be invoked.
@@ -42,6 +40,8 @@ import (
 // The canceler detects changes to the configured threshold duration on each call
 // to ping(), i.e. in the common case of no stuck rangefeeds, it will ~immediately
 // pick up the new value and apply it.
+//
+// [^1]: https://github.com/cockroachdb/cockroach/issues/86818
 type stuckRangeFeedCanceler struct {
 	threshold       func() time.Duration
 	cancel          context.CancelFunc

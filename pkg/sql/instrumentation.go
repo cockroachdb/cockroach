@@ -61,17 +61,16 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 // instrumentationHelper encapsulates the logic around extracting information
 // about the execution of a statement, like bundles and traces. Typical usage:
 //
-//  - SetOutputMode() can be used as necessary if we are running an EXPLAIN
-//    ANALYZE variant.
+//   - SetOutputMode() can be used as necessary if we are running an EXPLAIN
+//     ANALYZE variant.
 //
-//  - Setup() is called before query execution.
+//   - Setup() is called before query execution.
 //
-//  - SetDiscardRows(), ShouldDiscardRows(), ShouldSaveFlows(),
-//    ShouldBuildExplainPlan(), RecordExplainPlan(), RecordPlanInfo(),
-//    PlanForStats() can be called at any point during execution.
+//   - SetDiscardRows(), ShouldDiscardRows(), ShouldSaveFlows(),
+//     ShouldBuildExplainPlan(), RecordExplainPlan(), RecordPlanInfo(),
+//     PlanForStats() can be called at any point during execution.
 //
-//  - Finish() is called after query execution.
-//
+//   - Finish() is called after query execution.
 type instrumentationHelper struct {
 	outputMode outputMode
 	// explainFlags is used when outputMode is explainAnalyzePlanOutput or

@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -57,7 +56,9 @@ import (
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [priority] [uncertainty-limit=<int>[,<int>]]
 // new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
-//   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
+//
+//	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
+//
 // sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
 // poison       req=<req-name>
 // finish       req=<req-name>
@@ -85,7 +86,6 @@ import (
 // debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
 // debug-set-max-locks n=<count>
 // reset
-//
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1297,7 +1297,7 @@ var goroutineStalledStates = map[string]bool{
 // allocations.
 func goroutineStatus(t *testing.T, filter string, buf *[]byte) []*stack.Goroutine {
 	b := stacks(buf)
-	s, _, err := stack.ScanSnapshot(bytes.NewBuffer(b), ioutil.Discard, stack.DefaultOpts())
+	s, _, err := stack.ScanSnapshot(bytes.NewBuffer(b), io.Discard, stack.DefaultOpts())
 	if err != io.EOF {
 		t.Fatalf("could not parse goroutine dump: %v", err)
 		return nil

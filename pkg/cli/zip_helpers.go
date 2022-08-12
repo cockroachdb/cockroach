@@ -501,9 +501,10 @@ func (z *zipReporter) result(err error) error {
 // timestampValue is a wrapper around time.Time which supports the
 // pflag.Value interface and can be initialized from a command line flag.
 // It recognizes the following input formats:
-//    YYYY-MM-DD
-//    YYYY-MM-DD HH:MM
-//    YYYY-MM-DD HH:MM:SS
+//
+//	YYYY-MM-DD
+//	YYYY-MM-DD HH:MM
+//	YYYY-MM-DD HH:MM:SS
 type timestampValue time.Time
 
 // Type implements the pflag.Value interface.

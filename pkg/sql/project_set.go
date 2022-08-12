@@ -24,7 +24,7 @@ import (
 // returns tuples of values from a,b,c picked "simultaneously". NULLs
 // are used when an iterator is "shorter" than another. For example:
 //
-//    zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
+//	zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
 //
 // In this context, projectSetNode corresponds to a relational
 // operator project(R, a, b, c, ...) which, for each row in R,

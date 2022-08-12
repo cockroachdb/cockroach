@@ -47,10 +47,10 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 
 // prepareUsingOptimizer builds a memo for a prepared statement and populates
 // the following stmt.Prepared fields:
-//  - Columns
-//  - Types
-//  - AnonymizedStr
-//  - Memo (for reuse during exec, if appropriate).
+//   - Columns
+//   - Types
+//   - AnonymizedStr
+//   - Memo (for reuse during exec, if appropriate).
 func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) {
 	stmt := &p.stmt
 

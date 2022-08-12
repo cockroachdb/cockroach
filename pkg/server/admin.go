@@ -3117,13 +3117,13 @@ func (q *sqlQuery) QueryArguments() []interface{} {
 //
 // For example, suppose we have the following calls:
 //
-//   query.Append("SELECT * FROM foo WHERE a > $ AND a < $ ", arg1, arg2)
-//   query.Append("LIMIT $", limit)
+//	query.Append("SELECT * FROM foo WHERE a > $ AND a < $ ", arg1, arg2)
+//	query.Append("LIMIT $", limit)
 //
 // The query is rewritten into:
 //
-//   SELECT * FROM foo WHERE a > $1 AND a < $2 LIMIT $3
-//   /* $1 = arg1, $2 = arg2, $3 = limit */
+//	SELECT * FROM foo WHERE a > $1 AND a < $2 LIMIT $3
+//	/* $1 = arg1, $2 = arg2, $3 = limit */
 //
 // Note that this method does NOT return any errors. Instead, we queue up
 // errors, which can later be accessed. Returning an error here would make

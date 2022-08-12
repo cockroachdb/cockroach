@@ -52,13 +52,14 @@ const (
 // systemBackupConfiguration holds any configuration related to backing up
 // system tables. System tables differ from normal tables with respect to backup
 // for 2 reasons:
-// 1) For some tables, their contents are read during the restore, so it is non-
-//    trivial to restore this data without affecting the restore job itself.
 //
-// 2) It may reference system data which could be rewritten. This is particularly
-//    problematic for data that references tables. At time of writing, cluster
-//    restore creates descriptors with the same ID as they had in the backing up
-//    cluster so there is no need to rewrite system table data.
+//  1. For some tables, their contents are read during the restore, so it is non-
+//     trivial to restore this data without affecting the restore job itself.
+//
+//  2. It may reference system data which could be rewritten. This is particularly
+//     problematic for data that references tables. At time of writing, cluster
+//     restore creates descriptors with the same ID as they had in the backing up
+//     cluster so there is no need to rewrite system table data.
 type systemBackupConfiguration struct {
 	shouldIncludeInClusterBackup clusterBackupInclusion
 	// restoreBeforeData indicates that this system table should be fully restored

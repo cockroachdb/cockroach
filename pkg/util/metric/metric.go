@@ -318,11 +318,11 @@ func (h *Histogram) Mean() float64 {
 // https://github.com/prometheus/prometheus/blob/d91621890a2ccb3191a6d74812cc1827dd4093bf/promql/quantile.go#L75
 // This function is mostly taken from a prometheus internal function that
 // does the same thing. There are a few differences for our use case:
-// 		1. As a user of the prometheus go client library, we don't have access
-//			 to the implicit +Inf bucket, so we don't need special cases to deal
-//			 with the quantiles that include the +Inf bucket.
-//		2. Since the prometheus client library ensures buckets are in a strictly
-//			 increasing order at creation, we do not sort them.
+//  1. As a user of the prometheus go client library, we don't have access
+//     to the implicit +Inf bucket, so we don't need special cases to deal
+//     with the quantiles that include the +Inf bucket.
+//  2. Since the prometheus client library ensures buckets are in a strictly
+//     increasing order at creation, we do not sort them.
 func (h *Histogram) ValueAtQuantileWindowed(q float64) float64 {
 	m := h.ToPrometheusMetricWindowed()
 

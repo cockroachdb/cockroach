@@ -57,72 +57,78 @@ import (
 // It supports the following DSL:
 //
 // config [secure] [insecure]
-//       Only run the test file if the server is in the specified
-//       security mode. (The default is `config secure insecure` i.e.
-//       the test file is applicable to both.)
+//
+//	Only run the test file if the server is in the specified
+//	security mode. (The default is `config secure insecure` i.e.
+//	the test file is applicable to both.)
 //
 // accept_sql_without_tls
-//       Enable TCP connections without TLS in secure mode.
+//
+//	Enable TCP connections without TLS in secure mode.
 //
 // set_hba
 // <hba config>
-//       Load the provided HBA configuration via the cluster setting
-//       server.host_based_authentication.configuration.
-//       The expected output is the configuration after parsing
-//       and reloading in the server.
+//
+//	Load the provided HBA configuration via the cluster setting
+//	server.host_based_authentication.configuration.
+//	The expected output is the configuration after parsing
+//	and reloading in the server.
 //
 // set_identity_map
 // <identity map>
-//       Load the provided identity map via the cluster setting
-//       server.identity_map.configuration.
-//       The expected output is the configuration after parsing
-//       and reloading in the server.
+//
+//	Load the provided identity map via the cluster setting
+//	server.identity_map.configuration.
+//	The expected output is the configuration after parsing
+//	and reloading in the server.
 //
 // sql
 // <sql input>
-//       Execute the specified SQL statement using the default root
-//       connection provided by StartServer().
+//
+//	Execute the specified SQL statement using the default root
+//	connection provided by StartServer().
 //
 // authlog N
 // <regexp>
-//       Expect <regexp> at the end of the auth log then report the
-//       N entries before that.
+//
+//	Expect <regexp> at the end of the auth log then report the
+//	N entries before that.
 //
 // connect [key=value ...]
-//       Attempt a SQL connection using the provided connection
-//       parameters using the pg "DSN notation": k/v pairs separated
-//       by spaces.
-//       The following standard pg keys are recognized:
-//            user - the username
-//            password - the password
-//            host - the server name/address
-//            port - the server port
-//            force_certs - force the use of baked-in certificates
-//            sslmode, sslrootcert, sslcert, sslkey - SSL parameters.
 //
-//       The order of k/v pairs matters: if the same key is specified
-//       multiple times, the first occurrence takes priority.
+//	Attempt a SQL connection using the provided connection
+//	parameters using the pg "DSN notation": k/v pairs separated
+//	by spaces.
+//	The following standard pg keys are recognized:
+//	     user - the username
+//	     password - the password
+//	     host - the server name/address
+//	     port - the server port
+//	     force_certs - force the use of baked-in certificates
+//	     sslmode, sslrootcert, sslcert, sslkey - SSL parameters.
 //
-//       Additionally, the test runner will always _append_ a default
-//       value for user (root), host/port/sslrootcert from the
-//       initialized test server. This default configuration is placed
-//       at the end so that each test can override the values.
+//	The order of k/v pairs matters: if the same key is specified
+//	multiple times, the first occurrence takes priority.
 //
-//       The test runner also adds a default value for sslcert and
-//       sslkey based on the value of "user" — either when provided by
-//       the test, or root by default.
+//	Additionally, the test runner will always _append_ a default
+//	value for user (root), host/port/sslrootcert from the
+//	initialized test server. This default configuration is placed
+//	at the end so that each test can override the values.
 //
-//       When the user is either "root" or "testuser" (those are the
-//       users for which the test server generates certificates),
-//       sslmode also gets a default of "verify-full". For other
-//       users, sslmode is initialized by default to "verify-ca".
+//	The test runner also adds a default value for sslcert and
+//	sslkey based on the value of "user" — either when provided by
+//	the test, or root by default.
+//
+//	When the user is either "root" or "testuser" (those are the
+//	users for which the test server generates certificates),
+//	sslmode also gets a default of "verify-full". For other
+//	users, sslmode is initialized by default to "verify-ca".
 //
 // For the directives "sql" and "connect", the expected output can be
 // either "ok" (no error) or "ERROR:" followed by the expected error
 // string.
 // The auth and connection log entries, if any, are also produced
 // alongside the "ok" or "ERROR" message.
-//
 func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderRace(t, "takes >1min under race")

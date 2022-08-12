@@ -132,17 +132,17 @@ func acquireUnreplicatedLocksOnKeys(
 
 // copyKey copies the provided roachpb.Key into a new byte slice, returning the
 // copy. It is used in acquireUnreplicatedLocksOnKeys for two reasons:
-// 1. the keys in an MVCCScanResult, regardless of the scan format used, point
-//    to a small number of large, contiguous byte slices. These "MVCCScan
-//    batches" contain keys and their associated values in the same backing
-//    array. To avoid holding these entire backing arrays in memory and
-//    preventing them from being garbage collected indefinitely, we copy the key
-//    slices before coupling their lifetimes to those of unreplicated locks.
-// 2. the KV API has a contract that byte slices returned from KV will not be
-//    mutated by higher levels. However, we have seen cases (e.g.#64228) where
-//    this contract is broken due to bugs. To defensively guard against this
-//    class of memory aliasing bug and prevent keys associated with unreplicated
-//    locks from being corrupted, we copy them.
+//  1. the keys in an MVCCScanResult, regardless of the scan format used, point
+//     to a small number of large, contiguous byte slices. These "MVCCScan
+//     batches" contain keys and their associated values in the same backing
+//     array. To avoid holding these entire backing arrays in memory and
+//     preventing them from being garbage collected indefinitely, we copy the key
+//     slices before coupling their lifetimes to those of unreplicated locks.
+//  2. the KV API has a contract that byte slices returned from KV will not be
+//     mutated by higher levels. However, we have seen cases (e.g.#64228) where
+//     this contract is broken due to bugs. To defensively guard against this
+//     class of memory aliasing bug and prevent keys associated with unreplicated
+//     locks from being corrupted, we copy them.
 func copyKey(k roachpb.Key) roachpb.Key {
 	k2 := make([]byte, len(k))
 	copy(k2, k)

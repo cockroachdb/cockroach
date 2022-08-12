@@ -35,33 +35,33 @@ type contextDecl struct {
 // difference becomes even more pronounced when there are multiple nested
 // match expressions, such as in:
 //
-//   (InnerJoin
-//     (Select $input:* $filters:*)
-//     $right:*
-//     $on:*
-//   )
+//	(InnerJoin
+//	  (Select $input:* $filters:*)
+//	  $right:*
+//	  $on:*
+//	)
 //
 // If the inner-join group has 3 expressions and the select group has 2
 // expressions, then an exploration rule must consider 6 possible combinations.
 // It does this by generating a loop rather than an if statement (as in the
 // normalization case), similar to this:
 //
-//   var _member memo.RelExpr
-//   for _ord := 0; _ord < _state.end; _ord++ {
-//     if _member == nil {
-//       _member = _innerJoin.Left.FirstExpr()
-//     } else {
-//       _member = _member.NextExpr()
-//     }
-//     _select, _ := _member.(*SelectExpr)
-//     if _select != nil {
+//	var _member memo.RelExpr
+//	for _ord := 0; _ord < _state.end; _ord++ {
+//	  if _member == nil {
+//	    _member = _innerJoin.Left.FirstExpr()
+//	  } else {
+//	    _member = _member.NextExpr()
+//	  }
+//	  _select, _ := _member.(*SelectExpr)
+//	  if _select != nil {
 //
 // If the join contained another match pattern, it would be another loop nested
 // within that loop. If this was a Normalize rule, then the code would look
 // like this instead:
 //
-//     _select := _innerJoin.Left.(*SelectExpr)
-//     if _select != nil {
+//	_select := _innerJoin.Left.(*SelectExpr)
+//	if _select != nil {
 //
 // ruleGen will also do a short-circuiting optimization designed to avoid
 // duplicate work for exploration rules. The *exploreState passed to each
@@ -70,23 +70,22 @@ type contextDecl struct {
 // skipped. When this optimization is added to the above example, the code would
 // instead look more like this:
 //
-//   _partlyExplored := _innerJoinOrd < _innerJoinState.start
-//   _state := _e.lookupExploreState(_innerJoin.Left)
-//   var _member memo.RelExpr
-//   for _ord := 0; _ord < _state.end; _ord++ {
-//     if _member == nil {
-//       _member = _innerJoin.Left.FirstExpr()
-//     } else {
-//       _member = _member.NextExpr()
-//     }
-//     if !_partlyExplored || _ord >= _state.start {
-//       _select, _ := _member.(*SelectExpr)
-//       if _select != nil {
+//	_partlyExplored := _innerJoinOrd < _innerJoinState.start
+//	_state := _e.lookupExploreState(_innerJoin.Left)
+//	var _member memo.RelExpr
+//	for _ord := 0; _ord < _state.end; _ord++ {
+//	  if _member == nil {
+//	    _member = _innerJoin.Left.FirstExpr()
+//	  } else {
+//	    _member = _member.NextExpr()
+//	  }
+//	  if !_partlyExplored || _ord >= _state.start {
+//	    _select, _ := _member.(*SelectExpr)
+//	    if _select != nil {
 //
 // If the inner join expression has already been explored (i.e. if
 // _partlyExplored is true), then this logic only explores newly added Left
 // children.
-//
 type newRuleGen struct {
 	compiled     *lang.CompiledExpr
 	md           *metadata
@@ -188,16 +187,16 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 // that is currently being matched against. It also contains the type of that
 // expression. For example:
 //
-//   for i := range elems {
-//     _item := &elems[i]
-//     _eq := _item.(*memo.EqExpr)
-//     if _eq != nil {
-//       _const := _eq.Left.(*memo.ConstExpr)
-//       if _const != nil {
-//         ...
-//       }
-//     }
-//   }
+//	for i := range elems {
+//	  _item := &elems[i]
+//	  _eq := _item.(*memo.EqExpr)
+//	  if _eq != nil {
+//	    _const := _eq.Left.(*memo.ConstExpr)
+//	    if _const != nil {
+//	      ...
+//	    }
+//	  }
+//	}
 //
 // In that example, the context starts out as "elems", which is the top-level
 // Tuple operator field that's being list matched. Then, the context recursively
@@ -286,13 +285,12 @@ func (g *newRuleGen) genMatch(match lang.Expr, context *contextDecl, noMatch boo
 // has any number of ListAnyOp children (produced by '...' syntax) arranged
 // around at most one non-ListAnyOp child. The following variants are possible:
 //
-//   match child in any position  : [ ... <child> ... ]
-//   match child in first position: [ <child> ... ]
-//   match child in last position : [ ... <child> ]
-//   match singleton list         : [ <child> ]
-//   match empty list             : [ ]
-//   match any  list              : [ ... ]
-//
+//	match child in any position  : [ ... <child> ... ]
+//	match child in first position: [ <child> ... ]
+//	match child in last position : [ ... <child> ]
+//	match singleton list         : [ <child> ]
+//	match empty list             : [ ]
+//	match any  list              : [ ... ]
 func (g *newRuleGen) genMatchList(match *lang.ListExpr, context *contextDecl, noMatch bool) {
 	// The list's type should already have been set by the Optgen compiler, and
 	// should be the name of a list type.
@@ -392,9 +390,9 @@ func (g *newRuleGen) genMatchList(match *lang.ListExpr, context *contextDecl, no
 // makeListItemRef returns a list item reference expression. Some list operators
 // inline children into the list slice, whereas others keep only pointers:
 //
-//   _item := &project.Projections[i]
-//   vs.
-//   _item := tuple.Elems[i]
+//	_item := &project.Projections[i]
+//	vs.
+//	_item := tuple.Elems[i]
 //
 // If the list item type has its own Optgen define, then it is a generated type,
 // and will be inlined in its owning list slice. Otherwise, the list slice is
@@ -808,17 +806,16 @@ func (g *newRuleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleE
 // bound to variables. Those variables can be used when constructing other parts
 // of the result tree. For example:
 //
-//   (InnerJoin $left:* $right:* $on:*)
-//   =>
-//   (InnerJoin
-//     $varname:(SomeFunc $left)
-//     $varname2:(Select $varname (SomeOtherFunc $right))
-//     (MakeOn $varname $varname2)
-//   )
+//	(InnerJoin $left:* $right:* $on:*)
+//	=>
+//	(InnerJoin
+//	  $varname:(SomeFunc $left)
+//	  $varname2:(Select $varname (SomeOtherFunc $right))
+//	  (MakeOn $varname $varname2)
+//	)
 //
-//   varname := _f.funcs.SomeFunc(left)
-//   varname2 := _f.ConstructSelect(varname, _f.funcs.SomeOtherFunc(right))
-//
+//	varname := _f.funcs.SomeFunc(left)
+//	varname2 := _f.ConstructSelect(varname, _f.funcs.SomeOtherFunc(right))
 func (g *newRuleGen) genBoundStatements(e lang.Expr) {
 	var visitFunc lang.VisitFunc
 	visitFunc = func(e lang.Expr) lang.Expr {
@@ -1026,11 +1023,10 @@ func (g *newRuleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
 
 // genConstructList generates code to construct an interned list of items:
 //
-//   ProjectionsList{
-//     _f.ConstructProjectionsItem(elem, 1),
-//     _f.ConstructProjectionsItem(elem2, 2),
-//   }
-//
+//	ProjectionsList{
+//	  _f.ConstructProjectionsItem(elem, 1),
+//	  _f.ConstructProjectionsItem(elem2, 2),
+//	}
 func (g *newRuleGen) genConstructList(list *lang.ListExpr) {
 	// The list's type should already have been set by the Optgen compiler, and
 	// should be the name of a list type.

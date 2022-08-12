@@ -134,16 +134,18 @@ var (
 //
 // Additionally, the pseudo-command `with` enables sharing
 // a group of arguments between multiple commands, for example:
-//   with t=A
-//     txn_begin
-//     with k=a
-//       put v=b
-//       resolve_intent
-// Really means:
-//   txn_begin          t=A
-//   put v=b        k=a t=A
-//   resolve_intent k=a t=A
 //
+//	with t=A
+//	  txn_begin
+//	  with k=a
+//	    put v=b
+//	    resolve_intent
+//
+// Really means:
+//
+//	txn_begin          t=A
+//	put v=b        k=a t=A
+//	resolve_intent k=a t=A
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

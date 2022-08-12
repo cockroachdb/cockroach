@@ -11,8 +11,8 @@
 // bazci is glue code to make debugging Bazel builds and tests in Teamcity as
 // painless as possible.
 //
-// bazci [build|test] \
-//     --artifacts_dir=$ARTIFACTS_DIR targets... -- [command-line options]
+//	bazci [build|test] \
+//	    --artifacts_dir=$ARTIFACTS_DIR targets... -- [command-line options]
 //
 // bazci will invoke a `bazel build` or `bazel test` of all the given targets
 // and stage the resultant build/test artifacts in the given `artifacts_dir`.

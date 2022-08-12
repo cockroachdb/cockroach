@@ -55,11 +55,11 @@ const replicaChecksumGCInterval = time.Hour
 
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
 // stats mismatch is the event in which
-// - the consistency checker finds that all replicas are consistent
-//   (i.e. byte-by-byte identical)
-// - the (identical) stats tracked in them do not correspond to a recomputation
-//   via the data, i.e. the stats were incorrect
-// - ContainsEstimates==false, i.e. the stats claimed they were correct.
+//   - the consistency checker finds that all replicas are consistent
+//     (i.e. byte-by-byte identical)
+//   - the (identical) stats tracked in them do not correspond to a recomputation
+//     via the data, i.e. the stats were incorrect
+//   - ContainsEstimates==false, i.e. the stats claimed they were correct.
 //
 // Before issuing the fatal error, the cluster bootstrap version is verified.
 // We know that old versions of CockroachDB sometimes violated this invariant,

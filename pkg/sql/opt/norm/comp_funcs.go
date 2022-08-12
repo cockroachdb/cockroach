@@ -21,9 +21,12 @@ import (
 
 // CommuteInequality swaps the operands of an inequality comparison expression,
 // changing the operator to compensate:
-//   5 < x
+//
+//	5 < x
+//
 // to:
-//   x > 5
+//
+//	x > 5
 func (c *CustomFuncs) CommuteInequality(
 	op opt.Operator, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
@@ -33,9 +36,12 @@ func (c *CustomFuncs) CommuteInequality(
 
 // NormalizeTupleEquality remaps the elements of two tuples compared for
 // equality, like this:
-//   (a, b, c) = (x, y, z)
+//
+//	(a, b, c) = (x, y, z)
+//
 // into this:
-//   (a = x) AND (b = y) AND (c = z)
+//
+//	(a = x) AND (b = y) AND (c = z)
 func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) opt.ScalarExpr {
 	if len(left) != len(right) {
 		panic(errors.AssertionFailedf("tuple length mismatch"))

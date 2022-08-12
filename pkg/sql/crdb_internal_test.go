@@ -739,15 +739,17 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 // Traces on node1:
 // -------------
 // root                            <-- traceID1
-//   root.child                    <-- traceID1
-//     root.child.detached_child   <-- traceID1
+//
+//	root.child                    <-- traceID1
+//	  root.child.detached_child   <-- traceID1
 //
 // Traces on node2:
 // -------------
 // root.child.remotechild			<-- traceID1
 // root.child.remotechilddone		<-- traceID1
 // root2												<-- traceID2
-// 		root2.child								<-- traceID2
+//
+//	root2.child								<-- traceID2
 func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 	// Start a root span on "node 1".
 	root := t1.StartSpan("root", tracing.WithRecording(tracingpb.RecordingVerbose))

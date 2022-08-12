@@ -154,9 +154,9 @@ func (b *CheckConstraintBuilder) generateUniqueName(expr tree.Expr) (string, err
 //
 // For example:
 //
-//   CHECK (a < 0) => check_a
-//   CHECK (a < 0 AND b = 'foo') => check_a_b
-//   CHECK (a < 0 AND b = 'foo' AND a < 10) => check_a_b_a
+//	CHECK (a < 0) => check_a
+//	CHECK (a < 0 AND b = 'foo') => check_a_b
+//	CHECK (a < 0 AND b = 'foo' AND a < 10) => check_a_b_a
 //
 // Note that the generated name is not guaranteed to be unique among the other
 // constraints of the table.

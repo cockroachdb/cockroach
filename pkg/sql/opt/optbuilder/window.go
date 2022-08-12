@@ -228,18 +228,19 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 // To support this ordering, we build the aggregate as a window function like below:
 //
 // scalar-group-by
-//  ├── columns: array_agg:2(int[])
-//  ├── window partition=() ordering=+1
-//  │    ├── columns: col1:1(int!null) array_agg:2(int[])
-//  │    ├── scan tab
-//  │    │    └── columns: col1:1(int!null)
-//  │    └── windows
-//  │         └── windows-item: range from unbounded to unbounded [type=int[]]
-//  │              └── array-agg [type=int[]]
-//  │                   └── variable: col1 [type=int]
-//  └── aggregations
-//       └── const-agg [type=int[]]
-//            └── variable: array_agg [type=int[]]
+//
+//	├── columns: array_agg:2(int[])
+//	├── window partition=() ordering=+1
+//	│    ├── columns: col1:1(int!null) array_agg:2(int[])
+//	│    ├── scan tab
+//	│    │    └── columns: col1:1(int!null)
+//	│    └── windows
+//	│         └── windows-item: range from unbounded to unbounded [type=int[]]
+//	│              └── array-agg [type=int[]]
+//	│                   └── variable: col1 [type=int]
+//	└── aggregations
+//	     └── const-agg [type=int[]]
+//	          └── variable: array_agg [type=int[]]
 func (b *Builder) buildAggregationAsWindow(
 	groupingColSet opt.ColSet, having opt.ScalarExpr, fromScope *scope,
 ) *scope {

@@ -336,10 +336,11 @@ func (o *routerOutputOp) forwardErr(err error) {
 // internal buffer. Zero-length batch should be passed-in to indicate that no
 // more batches will be added.
 // TODO(asubiotto): We should explore pipelining addBatch if disk-spilling
-//  performance becomes a concern. The main router goroutine will be writing to
-//  disk as the code is written, meaning that we impact the performance of
-//  writing rows to a fast output if we have to write to disk for a single
-//  slow output.
+//
+//	performance becomes a concern. The main router goroutine will be writing to
+//	disk as the code is written, meaning that we impact the performance of
+//	writing rows to a fast output if we have to write to disk for a single
+//	slow output.
 func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()

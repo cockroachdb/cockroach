@@ -59,11 +59,11 @@ func init() {
 //
 // Consider the following point keys and range keys:
 //
-//     4: a4  b4
-//     3: [-------)
-//     2: [-------)
-//     1:     b1  c1
-//        a   b   c
+//	4: a4  b4
+//	3: [-------)
+//	2: [-------)
+//	1:     b1  c1
+//	   a   b   c
 //
 // Range keys cover a span between two roachpb.Key bounds (start inclusive, end
 // exclusive) and contain timestamp/value pairs. They overlap *all* point key
@@ -109,9 +109,9 @@ func init() {
 // between two keys form a stack of range key fragments at different timestamps.
 // For example, writing [a-e)@1 and [c-g)@2 will yield this fragment structure:
 //
-//     2:     |---|---|
-//     1: |---|---|
-//        a   c   e   g
+//	2:     |---|---|
+//	1: |---|---|
+//	   a   c   e   g
 //
 // Fragmentation makes all range key properties local, which avoids incurring
 // unnecessary access costs across SSTs and CRDB ranges. It is deterministic
@@ -497,12 +497,13 @@ const (
 // Reader is the read interface to an engine's data. Certain implementations
 // of Reader guarantee consistency of the underlying engine state across the
 // different iterators created by NewMVCCIterator, NewEngineIterator:
-// - pebbleSnapshot, because it uses an engine snapshot.
-// - pebbleReadOnly, pebbleBatch: when the IterOptions do not specify a
-//   timestamp hint (see IterOptions). Note that currently the engine state
-//   visible here is not as of the time of the Reader creation. It is the time
-//   when the first iterator is created, or earlier if
-//   PinEngineStateForIterators is called.
+//   - pebbleSnapshot, because it uses an engine snapshot.
+//   - pebbleReadOnly, pebbleBatch: when the IterOptions do not specify a
+//     timestamp hint (see IterOptions). Note that currently the engine state
+//     visible here is not as of the time of the Reader creation. It is the time
+//     when the first iterator is created, or earlier if
+//     PinEngineStateForIterators is called.
+//
 // The ConsistentIterators method returns true when this consistency is
 // guaranteed by the Reader.
 // TODO(sumeer): this partial consistency can be a source of bugs if future

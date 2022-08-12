@@ -116,7 +116,6 @@ func (b *Builder) buildSetOp(
 // Throws an error if the scopes don't have the same number of columns, or when
 // column types don't match 1-1 or can't be cast to a single output type. The
 // error messages use clauseTag.
-//
 func (b *Builder) typeCheckSetOp(
 	leftScope, rightScope *scope, clauseTag string,
 ) (setOpTypes []*types.T, leftCastsNeeded, rightCastsNeeded bool) {

@@ -27,8 +27,9 @@ import (
 // delegateShowGrants implements SHOW GRANTS which returns grant details for the
 // specified objects and users.
 // Privileges: None.
-//   Notes: postgres does not have a SHOW GRANTS statement.
-//          mysql only returns the user's privileges.
+//
+//	Notes: postgres does not have a SHOW GRANTS statement.
+//	       mysql only returns the user's privileges.
 func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, error) {
 	var params []string
 

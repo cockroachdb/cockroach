@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,18 +47,17 @@ import (
 //
 // The SSTs were created via the following commands:
 //
-//  VERSION=...
-//  roachprod wipe local
-//  roachprod stage local release ${VERSION}
-//  roachprod start local
-//  # If the version is v1.0.7 then you need to enable enterprise with the
-//  # enterprise.enabled cluster setting.
-//  roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/create.sql)"
-//  # Create an S3 bucket to store the backup.
-//  roachprod sql local:1 -- -e "BACKUP DATABASE test TO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
-//  # Then download the backup from s3 and plop the files into the appropriate
-//  # testdata directory.
-//
+//	VERSION=...
+//	roachprod wipe local
+//	roachprod stage local release ${VERSION}
+//	roachprod start local
+//	# If the version is v1.0.7 then you need to enable enterprise with the
+//	# enterprise.enabled cluster setting.
+//	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/create.sql)"
+//	# Create an S3 bucket to store the backup.
+//	roachprod sql local:1 -- -e "BACKUP DATABASE test TO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
+//	# Then download the backup from s3 and plop the files into the appropriate
+//	# testdata directory.
 func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -77,7 +75,7 @@ func TestRestoreOldVersions(t *testing.T) {
 	)
 
 	t.Run("table-restore", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(exportDirsWithoutInterleave)
+		dirs, err := os.ReadDir(exportDirsWithoutInterleave)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -88,7 +86,7 @@ func TestRestoreOldVersions(t *testing.T) {
 	})
 
 	t.Run("table-restore-with-interleave", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(exportDirsWithoutInterleave)
+		dirs, err := os.ReadDir(exportDirsWithoutInterleave)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -99,7 +97,7 @@ func TestRestoreOldVersions(t *testing.T) {
 	})
 
 	t.Run("fk-rev-restore", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(fkRevDirs)
+		dirs, err := os.ReadDir(fkRevDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -110,7 +108,7 @@ func TestRestoreOldVersions(t *testing.T) {
 	})
 
 	t.Run("cluster-restore", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(clusterDirs)
+		dirs, err := os.ReadDir(clusterDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -129,7 +127,7 @@ func TestRestoreOldVersions(t *testing.T) {
 
 	t.Run("multi-region-restore", func(t *testing.T) {
 		skip.UnderRace(t, "very slow as it starts multiple servers")
-		dirs, err := ioutil.ReadDir(multiRegionDirs)
+		dirs, err := os.ReadDir(multiRegionDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -246,7 +244,7 @@ ORDER BY object_type, object_name`, [][]string{
 	})
 
 	t.Run("zoneconfig_privilege_restore", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(privilegeDirs)
+		dirs, err := os.ReadDir(privilegeDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -257,7 +255,7 @@ ORDER BY object_type, object_name`, [][]string{
 	})
 
 	t.Run("public_schema_remap", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(publicSchemaDirs)
+		dirs, err := os.ReadDir(publicSchemaDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -268,7 +266,7 @@ ORDER BY object_type, object_name`, [][]string{
 	})
 
 	t.Run("missing_public_schema_namespace_entry_cleanup_on_fail", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(publicSchemaDirs)
+		dirs, err := os.ReadDir(publicSchemaDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -279,7 +277,7 @@ ORDER BY object_type, object_name`, [][]string{
 	})
 
 	t.Run("system-users-restore", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(systemUsersDirs)
+		dirs, err := os.ReadDir(systemUsersDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())
@@ -290,7 +288,7 @@ ORDER BY object_type, object_name`, [][]string{
 	})
 
 	t.Run("full-cluster-restore-users-without-ids", func(t *testing.T) {
-		dirs, err := ioutil.ReadDir(systemUsersDirs)
+		dirs, err := os.ReadDir(systemUsersDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
 			require.True(t, dir.IsDir())

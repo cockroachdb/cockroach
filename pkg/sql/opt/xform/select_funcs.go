@@ -50,18 +50,18 @@ var _ = (*CustomFuncs).IsLocking
 // generated along with a combination of an IndexJoin and Selects. There are
 // three questions to consider which determine which operators are generated.
 //
-//   1. Does the index "cover" the columns needed?
-//   2. Are there any remaining filters to apply after the Scan?
-//   3. If there are remaining filters does the index cover the referenced
-//      columns?
+//  1. Does the index "cover" the columns needed?
+//  2. Are there any remaining filters to apply after the Scan?
+//  3. If there are remaining filters does the index cover the referenced
+//     columns?
 //
 // If the index covers the columns needed, no IndexJoin is need. The two
 // possible generated expressions are either a lone Scan or a Scan wrapped in a
 // Select that applies any remaining filters.
 //
-//       (Scan $scanDef)
+//	(Scan $scanDef)
 //
-//       (Select (Scan $scanDef) $remainingFilters)
+//	(Select (Scan $scanDef) $remainingFilters)
 //
 // If the index is not covering, then an IndexJoin is required to retrieve the
 // needed columns. Some or all of the remaining filters may be required to be
@@ -77,26 +77,25 @@ var _ = (*CustomFuncs).IsLocking
 // the IndexJoin, if their columns are not covered. Therefore, Selects can be
 // constructed before, after, or both before and after the IndexJoin.
 //
-//       (IndexJoin (Scan $scanDef) $indexJoinDef)
+//	 (IndexJoin (Scan $scanDef) $indexJoinDef)
 //
-//       (IndexJoin
-//         (Select (Scan $scanDef) $remainingFilters)
-//         $indexJoinDef
-//       )
+//	 (IndexJoin
+//	   (Select (Scan $scanDef) $remainingFilters)
+//	   $indexJoinDef
+//	 )
 //
-//      (Select
-//        (IndexJoin (Scan $scanDef) $indexJoinDef)
-//        $outerFilter
-//      )
+//	(Select
+//	  (IndexJoin (Scan $scanDef) $indexJoinDef)
+//	  $outerFilter
+//	)
 //
-//      (Select
-//        (IndexJoin
-//          (Select (Scan $scanDef) $innerFilter)
-//          $indexJoinDef
-//        )
-//        $outerFilter
-//      )
-//
+//	(Select
+//	  (IndexJoin
+//	    (Select (Scan $scanDef) $innerFilter)
+//	    $indexJoinDef
+//	  )
+//	  $outerFilter
+//	)
 func (c *CustomFuncs) GeneratePartialIndexScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
@@ -156,18 +155,21 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 // MakeCombinedFiltersConstraint builds a constraint from explicitFilters,
 // optionalFilters and conditionally an IN list filter generated from the
 // index's PARTITION BY LIST values if both of these conditions are true:
-//   1) The first partitioning column is not referenced in either
-//      optionalFilters or explicitFilters
-//   2) No index key columns are referenced in optionalFilters or
-//      explicitFilters.
+//  1. The first partitioning column is not referenced in either
+//     optionalFilters or explicitFilters
+//  2. No index key columns are referenced in optionalFilters or
+//     explicitFilters.
+//
 // These filters are passed in a single call to tryConstrainIndex.
 // In all known uses, optionalFilters consists of the CHECK constraint filters
 // and computed column filters.
 // Returns:
-//   partitionFilters as the IN list of PARTITION BY values, if it was built
-//   remainingFilters as any filters which weren't used in combinedConstraint
-//   combinedConstraint as the collection of Spans to scan
-//   ok==false if we failed to constrain the scan
+//
+//	partitionFilters as the IN list of PARTITION BY values, if it was built
+//	remainingFilters as any filters which weren't used in combinedConstraint
+//	combinedConstraint as the collection of Spans to scan
+//	ok==false if we failed to constrain the scan
+//
 // See additional comments below.
 func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 	tabMeta *opt.TableMeta,
@@ -355,53 +357,53 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 // For each secondary index that "covers" the columns needed by the scan, there
 // are three cases:
 //
-//  - a filter that can be completely converted to a constraint over that index
-//    generates a single constrained Scan operator (to be added to the same
-//    group as the original Select operator):
+//   - a filter that can be completely converted to a constraint over that index
+//     generates a single constrained Scan operator (to be added to the same
+//     group as the original Select operator):
 //
-//      (Scan $scanDef)
+//     (Scan $scanDef)
 //
-//  - a filter that can be partially converted to a constraint over that index
-//    generates a constrained Scan operator in a new memo group, wrapped in a
-//    Select operator having the remaining filter (to be added to the same group
-//    as the original Select operator):
+//   - a filter that can be partially converted to a constraint over that index
+//     generates a constrained Scan operator in a new memo group, wrapped in a
+//     Select operator having the remaining filter (to be added to the same group
+//     as the original Select operator):
 //
-//      (Select (Scan $scanDef) $filter)
+//     (Select (Scan $scanDef) $filter)
 //
-//  - a filter that cannot be converted to a constraint generates nothing
+//   - a filter that cannot be converted to a constraint generates nothing
 //
 // And for a secondary index that does not cover the needed columns:
 //
-//  - a filter that can be completely converted to a constraint over that index
-//    generates a single constrained Scan operator in a new memo group, wrapped
-//    in an IndexJoin operator that looks up the remaining needed columns (and
-//    is added to the same group as the original Select operator)
+//   - a filter that can be completely converted to a constraint over that index
+//     generates a single constrained Scan operator in a new memo group, wrapped
+//     in an IndexJoin operator that looks up the remaining needed columns (and
+//     is added to the same group as the original Select operator)
 //
-//      (IndexJoin (Scan $scanDef) $indexJoinDef)
+//     (IndexJoin (Scan $scanDef) $indexJoinDef)
 //
-//  - a filter that can be partially converted to a constraint over that index
-//    generates a constrained Scan operator in a new memo group, wrapped in an
-//    IndexJoin operator that looks up the remaining needed columns; the
-//    remaining filter is distributed above and/or below the IndexJoin,
-//    depending on which columns it references:
+//   - a filter that can be partially converted to a constraint over that index
+//     generates a constrained Scan operator in a new memo group, wrapped in an
+//     IndexJoin operator that looks up the remaining needed columns; the
+//     remaining filter is distributed above and/or below the IndexJoin,
+//     depending on which columns it references:
 //
-//      (IndexJoin
-//        (Select (Scan $scanDef) $filter)
-//        $indexJoinDef
-//      )
+//     (IndexJoin
+//     (Select (Scan $scanDef) $filter)
+//     $indexJoinDef
+//     )
 //
-//      (Select
-//        (IndexJoin (Scan $scanDef) $indexJoinDef)
-//        $filter
-//      )
+//     (Select
+//     (IndexJoin (Scan $scanDef) $indexJoinDef)
+//     $filter
+//     )
 //
-//      (Select
-//        (IndexJoin
-//          (Select (Scan $scanDef) $innerFilter)
-//          $indexJoinDef
-//        )
-//        $outerFilter
-//      )
+//     (Select
+//     (IndexJoin
+//     (Select (Scan $scanDef) $innerFilter)
+//     $indexJoinDef
+//     )
+//     $outerFilter
+//     )
 //
 // GenerateConstrainedScans will further constrain the enumerated index scans
 // by trying to use the check constraints and computed columns that apply to the
@@ -499,7 +501,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 // ID into a constant value, by evaluating it with respect to a set of other
 // columns that are constant. If the computed column is constant, enter it into
 // the constCols map and return true. Otherwise, return false.
-//
 func (c *CustomFuncs) tryFoldComputedCol(
 	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols constColsMap,
 ) bool {
@@ -555,18 +556,22 @@ func (c *CustomFuncs) tryFoldComputedCol(
 // these spans.
 //
 // For example, if we have:
-//   PARTITION BY LIST (a, b) (
-//     PARTITION a VALUES IN ((1, 10)),
-//     PARTITION b VALUES IN ((2, 20)),
-//   )
+//
+//	PARTITION BY LIST (a, b) (
+//	  PARTITION a VALUES IN ((1, 10)),
+//	  PARTITION b VALUES IN ((2, 20)),
+//	)
+//
 // The in-between filters are:
-//   (a, b) < (1, 10) OR
-//   ((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
-//   (a, b) > (2, 20)
+//
+//	(a, b) < (1, 10) OR
+//	((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
+//	(a, b) > (2, 20)
 //
 // When passed as optional filters to index constrains, these filters generate
 // the desired spans:
-//   [ - /1/10), (/1/10 - /2/20), (2/20 - ].
+//
+//	[ - /1/10), (/1/10 - /2/20), (2/20 - ].
 //
 // TODO(radu,mgartner): technically these filters are not correct with respect
 // to NULL values - we would want the tuple comparisons to treat NULLs as the
@@ -772,19 +777,22 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 // For example consider the following table and partitioned index:
 //
 // CREATE TABLE orders (
-//     region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, seq_num INT NOT NULL,
-//     PRIMARY KEY (region, id)
+//
+//	region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, seq_num INT NOT NULL,
+//	PRIMARY KEY (region, id)
+//
 // )
 //
 // CREATE INDEX orders_by_seq_num
-//     ON orders (region, seq_num, id)
-//     STORING (total)
-//     PARTITION BY LIST (region)
-//         (
-//             PARTITION us_east1 VALUES IN ('us-east1'),
-//             PARTITION us_west1 VALUES IN ('us-west1'),
-//             PARTITION europe_west2 VALUES IN ('europe-west2')
-//         )
+//
+//	ON orders (region, seq_num, id)
+//	STORING (total)
+//	PARTITION BY LIST (region)
+//	    (
+//	        PARTITION us_east1 VALUES IN ('us-east1'),
+//	        PARTITION us_west1 VALUES IN ('us-west1'),
+//	        PARTITION europe_west2 VALUES IN ('europe-west2')
+//	    )
 //
 // Now consider the following query:
 // SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
@@ -795,21 +803,21 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 // filters to catch all the values that are not part of the partitions).
 // By doing so, we get the following plan:
 // scalar-group-by
-//  ├── select
-//  │    ├── scan orders@orders_by_seq_num
-//  │    │    └── constraint: /1/4/2: [ - /'europe-west2')
-//  │    │                            [/'europe-west2'/100 - /'europe-west2'/199]
-//  │    │                            [/e'europe-west2\x00'/100 - /'us-east1')
-//  │    │                            [/'us-east1'/100 - /'us-east1'/199]
-//  │    │                            [/e'us-east1\x00'/100 - /'us-west1')
-//  │    │                            [/'us-west1'/100 - /'us-west1'/199]
-//  │    │                            [/e'us-west1\x00'/100 - ]
-//  │    └── filters
-//  │         └── (seq_num >= 100) AND (seq_num < 200)
-//  └── aggregations
-//       └── sum
-//            └── variable: total
 //
+//	├── select
+//	│    ├── scan orders@orders_by_seq_num
+//	│    │    └── constraint: /1/4/2: [ - /'europe-west2')
+//	│    │                            [/'europe-west2'/100 - /'europe-west2'/199]
+//	│    │                            [/e'europe-west2\x00'/100 - /'us-east1')
+//	│    │                            [/'us-east1'/100 - /'us-east1'/199]
+//	│    │                            [/e'us-east1\x00'/100 - /'us-west1')
+//	│    │                            [/'us-west1'/100 - /'us-west1'/199]
+//	│    │                            [/e'us-west1\x00'/100 - ]
+//	│    └── filters
+//	│         └── (seq_num >= 100) AND (seq_num < 200)
+//	└── aggregations
+//	     └── sum
+//	          └── variable: total
 func (c *CustomFuncs) partitionValuesFilters(
 	tabID opt.TableID, index cat.Index,
 ) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
@@ -978,10 +986,9 @@ func (c *CustomFuncs) tryConstrainIndex(
 // If any of the three following statements are true, then it is
 // possible that the index can be constrained:
 //
-//   1. The filter references the first index column.
-//   2. The constraints are not tight (see props.Scalar.TightConstraints).
-//   3. Any of the filter's constraints start with the first index column.
-//
+//  1. The filter references the first index column.
+//  2. The constraints are not tight (see props.Scalar.TightConstraints).
+//  3. Any of the filter's constraints start with the first index column.
 func (c *CustomFuncs) canMaybeConstrainNonInvertedIndex(
 	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) bool {
@@ -1654,14 +1661,14 @@ func (c *CustomFuncs) SplitDisjunction(
 //
 // An "interesting" pair of expressions is one where:
 //
-//   1. The column sets of both expressions in the pair are not
-//      equal.
-//   2. Two index scans can potentially be constrained by both expressions in
-//      the pair.
+//  1. The column sets of both expressions in the pair are not
+//     equal.
+//  2. Two index scans can potentially be constrained by both expressions in
+//     the pair.
 //
 // Consider the expression:
 //
-//   u = 1 OR v = 2
+//	u = 1 OR v = 2
 //
 // If an index exists on u and another on v, an "interesting" pair exists, ("u =
 // 1", "v = 1"). If both indexes do not exist, there is no "interesting" pair
@@ -1669,7 +1676,7 @@ func (c *CustomFuncs) SplitDisjunction(
 //
 // Now consider the expression:
 //
-//   u = 1 OR u = 2
+//	u = 1 OR u = 2
 //
 // There is no possible "interesting" pair here because the left and right sides
 // of the disjunction share the same columns.
@@ -1754,14 +1761,14 @@ func (c *CustomFuncs) findInterestingDisjunctionPair(
 // negatives. As an example of a false negative, consider the following table
 // and query.
 //
-//   CREATE TABLE t (
-//     k PRIMARY KEY,
-//     a INT,
-//     hash INT AS (a % 4) STORED,
-//     INDEX hash (hash)
-//   )
+//	CREATE TABLE t (
+//	  k PRIMARY KEY,
+//	  a INT,
+//	  hash INT AS (a % 4) STORED,
+//	  INDEX hash (hash)
+//	)
 //
-//   SELECT * FROM t WHERE a = 5
+//	SELECT * FROM t WHERE a = 5
 //
 // The expression "a = 5" can constrain a scan over the hash index: The columns
 // "hash" must be a constant value of 1 because it is dependent on column "a"

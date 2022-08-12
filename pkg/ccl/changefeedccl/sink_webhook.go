@@ -218,17 +218,18 @@ type retryConfig struct {
 }
 
 // proper JSON schema for webhook sink config:
-// {
-//   "Flush": {
-//	   "Messages":  ...,
-//	   "Bytes":     ...,
-//	   "Frequency": ...,
-//   },
-//	 "Retry": {
-//	   "Max":     ...,
-//	   "Backoff": ...,
-//   }
-// }
+//
+//	{
+//	  "Flush": {
+//		   "Messages":  ...,
+//		   "Bytes":     ...,
+//		   "Frequency": ...,
+//	  },
+//		 "Retry": {
+//		   "Max":     ...,
+//		   "Backoff": ...,
+//	  }
+//	}
 type webhookSinkConfig struct {
 	Flush batchConfig `json:",omitempty"`
 	Retry retryConfig `json:",omitempty"`

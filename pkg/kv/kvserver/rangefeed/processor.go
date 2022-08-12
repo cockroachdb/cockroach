@@ -107,9 +107,9 @@ func (sc *Config) SetDefaults() {
 // Processor manages a set of rangefeed registrations and handles the routing of
 // logical updates to these registrations. While routing logical updates to
 // rangefeed registrations, the processor performs two important tasks:
-// 1. it translates logical updates into rangefeed events.
-// 2. it transforms a range-level closed timestamp to a rangefeed-level resolved
-//    timestamp.
+//  1. it translates logical updates into rangefeed events.
+//  2. it transforms a range-level closed timestamp to a rangefeed-level resolved
+//     timestamp.
 type Processor struct {
 	Config
 	reg registry

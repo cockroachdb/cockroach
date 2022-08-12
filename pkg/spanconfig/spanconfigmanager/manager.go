@@ -57,7 +57,8 @@ var jobEnabledSetting = settings.RegisterBoolSetting(
 // captures all relevant dependencies for the job.
 //
 // [1]: The reconciliation job is responsible for reconciling a tenant's zone
-//      configurations with the clusters span configurations.
+//
+//	configurations with the clusters span configurations.
 type Manager struct {
 	db       *kv.DB
 	jr       *jobs.Registry

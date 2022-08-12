@@ -29,17 +29,18 @@ const PreferredEncoding = descpb.DatumEncoding_ASCENDING_KEY
 // StreamEncoder converts EncDatum rows into a sequence of ProducerMessage.
 //
 // Sample usage:
-//   se := StreamEncoder{}
 //
-//   for {
-//       for ... {
-//          err := se.AddRow(...)
-//          ...
-//       }
-//       msg := se.FormMessage(nil)
-//       // Send out message.
-//       ...
-//   }
+//	se := StreamEncoder{}
+//
+//	for {
+//	    for ... {
+//	       err := se.AddRow(...)
+//	       ...
+//	    }
+//	    msg := se.FormMessage(nil)
+//	    // Send out message.
+//	    ...
+//	}
 type StreamEncoder struct {
 	types []*types.T
 	// encodings is fully initialized when the first row is received.

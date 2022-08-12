@@ -119,12 +119,13 @@ func New(
 // entries we can then simply issue deletes for.
 //
 // [1]: #73399 proposes a new KV request type that would let us more rapidly
-//      trigger reconciliation after a tenant's SQL transaction. If we're able
-//      to do this fast enough, it would be reasonable to wait for
-//      reconciliation to happen before returning to the client. We could
-//      alternatively use it as part of a handshake protocol during pod
-//      suspension, to ensure that all outstanding work ("reconciliation" has
-//      been done before a pod is suspended.
+//
+//	trigger reconciliation after a tenant's SQL transaction. If we're able
+//	to do this fast enough, it would be reasonable to wait for
+//	reconciliation to happen before returning to the client. We could
+//	alternatively use it as part of a handshake protocol during pod
+//	suspension, to ensure that all outstanding work ("reconciliation" has
+//	been done before a pod is suspended.
 //
 // TODO(irfansharif): The descriptions above presume holding the entire set of
 // span configs in memory, but we could break away from that by adding
@@ -442,10 +443,10 @@ type incrementalReconciler struct {
 }
 
 // reconcile runs the incremental reconciliation process. It takes in:
-// - the timestamp to start the incremental process from (typically a timestamp
-//   we've already reconciled up until);
-// - a callback that it invokes periodically with timestamps that it's
-//   reconciled up until.
+//   - the timestamp to start the incremental process from (typically a timestamp
+//     we've already reconciled up until);
+//   - a callback that it invokes periodically with timestamps that it's
+//     reconciled up until.
 func (r *incrementalReconciler) reconcile(
 	ctx context.Context, startTS hlc.Timestamp, callback func(reconciledUpUntil hlc.Timestamp) error,
 ) error {
@@ -623,7 +624,8 @@ func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
 // they've been GC-ed away[1].
 //
 // [1]: Or if the ExcludeDroppedDescriptorsFromLookup testing knob is used,
-//      this includes dropped descriptors.
+//
+//	this includes dropped descriptors.
 func (r *incrementalReconciler) filterForMissingTableIDs(
 	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, updates []spanconfig.SQLUpdate,
 ) (descpb.IDs, error) {

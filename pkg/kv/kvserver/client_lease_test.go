@@ -372,19 +372,19 @@ func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
 // and makes sure that if lease transfer fails during a joint configuration
 // the previous leaseholder will successfully re-aquire the lease.
 // The test proceeds as follows:
-// - Creates a range with 3 replicas n1, n2, n3, and makes sure the lease is on n1
-// - Makes sure lease transfers on this range fail from now on
-// - Invokes AdminChangeReplicas to remove n1 and add n4
-// - This causes the range to go into a joint configuration. A lease transfer
-//   is attempted to move the lease from n1 to n4 before exiting the joint config,
-//   but that fails, causing us to remain in the joint configuration with the original
-//   leaseholder having revoked its lease, but everyone else thinking it's still
-//   the leaseholder. In this situation, only n1 can re-aquire the lease as long as it is live.
-// - We re-enable lease transfers on this range.
-// - n1 is able to re-aquire the lease, due to the fix in #83686 which enables a
-//   VOTER_DEMOTING_LEARNER (n1) replica to get the lease if there's also a VOTER_INCOMING
-//   which is the case here (n4).
-// - n1 transfers the lease away and the range leaves the joint configuration.
+//   - Creates a range with 3 replicas n1, n2, n3, and makes sure the lease is on n1
+//   - Makes sure lease transfers on this range fail from now on
+//   - Invokes AdminChangeReplicas to remove n1 and add n4
+//   - This causes the range to go into a joint configuration. A lease transfer
+//     is attempted to move the lease from n1 to n4 before exiting the joint config,
+//     but that fails, causing us to remain in the joint configuration with the original
+//     leaseholder having revoked its lease, but everyone else thinking it's still
+//     the leaseholder. In this situation, only n1 can re-aquire the lease as long as it is live.
+//   - We re-enable lease transfers on this range.
+//   - n1 is able to re-aquire the lease, due to the fix in #83686 which enables a
+//     VOTER_DEMOTING_LEARNER (n1) replica to get the lease if there's also a VOTER_INCOMING
+//     which is the case here (n4).
+//   - n1 transfers the lease away and the range leaves the joint configuration.
 func TestTransferLeaseFailureDuringJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

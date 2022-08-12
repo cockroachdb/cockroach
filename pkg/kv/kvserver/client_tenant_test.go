@@ -43,8 +43,8 @@ import (
 // TestTenantsStorageMetrics ensures that tenant storage metrics are properly
 // set upon split. There's two interesting cases:
 //
-//  1) The common case where the RHS and LHS of the split are co-located
-//  2) The rare case where the RHS of the split has already been removed from
+//  1. The common case where the RHS and LHS of the split are co-located
+//  2. The rare case where the RHS of the split has already been removed from
 //     the store by the time the LHS applies the split.
 //
 // This test at time of writing only deals with ensuring that 1) is covered.

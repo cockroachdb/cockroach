@@ -836,9 +836,11 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 //
 // It is likely that this method is called from RowSource.Start implementation,
 // and the recommended layout is the following:
-//   ctx = pb.StartInternal(ctx, name)
-//   < inputs >.Start(ctx) // if there are any inputs-RowSources to pb
-//   < other initialization >
+//
+//	ctx = pb.StartInternal(ctx, name)
+//	< inputs >.Start(ctx) // if there are any inputs-RowSources to pb
+//	< other initialization >
+//
 // so that the caller doesn't mistakenly use old ctx object.
 func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string) context.Context {
 	return pb.startImpl(ctx, true /* createSpan */, name)
@@ -877,9 +879,9 @@ func (pb *ProcessorBaseNoHelper) startImpl(
 // Notably, it calls ConsumerClosed() on all the inputsToDrain and updates
 // pb.Ctx to the context passed into StartInternal() call.
 //
-//   if pb.InternalClose() {
-//     // Perform processor specific close work.
-//   }
+//	if pb.InternalClose() {
+//	  // Perform processor specific close work.
+//	}
 func (pb *ProcessorBase) InternalClose() bool {
 	return pb.InternalCloseEx(nil /* onClose */)
 }

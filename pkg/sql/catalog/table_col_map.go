@@ -95,7 +95,9 @@ func (s *TableColMap) ForEach(f func(colID descpb.ColumnID, returnIndex int)) {
 }
 
 // String prints out the contents of the map in the following format:
-//   map[key1:val1 key2:val2 ...]
+//
+//	map[key1:val1 key2:val2 ...]
+//
 // The keys are in ascending order.
 func (s *TableColMap) String() string {
 	var buf bytes.Buffer

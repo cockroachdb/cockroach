@@ -188,7 +188,8 @@ func (u *UUID) SetVariant(v byte) {
 // Must is a helper that wraps a call to a function returning (UUID, error)
 // and panics if the error is non-nil. It is intended for use in variable
 // initializations such as
-//  var packageUUID = uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+//
+//	var packageUUID = uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
 func Must(u UUID, err error) UUID {
 	if err != nil {
 		panic(err)

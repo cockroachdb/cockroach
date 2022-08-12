@@ -28,11 +28,11 @@ import (
 // Constraint is used to constrain a lookup join. There are two types of
 // constraints:
 //
-//   1. Constraints with KeyCols use columns from the input to directly
-//      constrain lookups into a target index.
-//   2. Constraints with a LookupExpr build multiple spans from an expression
-//      that is evaluated for each input row. These spans are used to perform
-//      lookups into a target index.
+//  1. Constraints with KeyCols use columns from the input to directly
+//     constrain lookups into a target index.
+//  2. Constraints with a LookupExpr build multiple spans from an expression
+//     that is evaluated for each input row. These spans are used to perform
+//     lookups into a target index.
 //
 // A constraint is not constraining if both KeyCols and LookupExpr are empty.
 // See IsUnconstrained.
@@ -397,49 +397,49 @@ func (b *ConstraintBuilder) Build(
 // ok=true when a join equality constraint can be generated for the column. This
 // is possible when:
 //
-//   1. col is non-nullable.
-//   2. col is a computed column.
-//   3. Columns referenced in the computed expression are a subset of columns
-//      that already have equality constraints.
+//  1. col is non-nullable.
+//  2. col is a computed column.
+//  3. Columns referenced in the computed expression are a subset of columns
+//     that already have equality constraints.
 //
 // For example, consider the table and query:
 //
-//   CREATE TABLE a (
-//     a INT
-//   )
+//	CREATE TABLE a (
+//	  a INT
+//	)
 //
-//   CREATE TABLE bc (
-//     b INT,
-//     c INT NOT NULL AS (b + 1) STORED
-//   )
+//	CREATE TABLE bc (
+//	  b INT,
+//	  c INT NOT NULL AS (b + 1) STORED
+//	)
 //
-//   SELECT * FROM a JOIN b ON a = b
+//	SELECT * FROM a JOIN b ON a = b
 //
 // We can add an equality constraint for c because c is a function of b and b
 // has an equality constraint in the join predicate:
 //
-//   SELECT * FROM a JOIN b ON a = b AND a + 1 = c
+//	SELECT * FROM a JOIN b ON a = b AND a + 1 = c
 //
 // Condition (1) is required to prevent generating invalid equality constraints
 // for computed column expressions that can evaluate to NULL even when the
 // columns referenced in the expression are non-NULL. For example, consider the
 // table and query:
 //
-//   CREATE TABLE a (
-//     a INT
-//   )
+//	CREATE TABLE a (
+//	  a INT
+//	)
 //
-//   CREATE TABLE bc (
-//     b INT,
-//     c INT AS (CASE WHEN b > 0 THEN NULL ELSE -1 END) STORED
-//   )
+//	CREATE TABLE bc (
+//	  b INT,
+//	  c INT AS (CASE WHEN b > 0 THEN NULL ELSE -1 END) STORED
+//	)
 //
-//   SELECT a, b FROM a JOIN b ON a = b
+//	SELECT a, b FROM a JOIN b ON a = b
 //
 // The following is an invalid transformation: a row such as (a=1, b=1) would no
 // longer be returned because NULL=NULL is false.
 //
-//   SELECT a, b FROM a JOIN b ON a = b AND (CASE WHEN a > 0 THEN NULL ELSE -1 END) = c
+//	SELECT a, b FROM a JOIN b ON a = b AND (CASE WHEN a > 0 THEN NULL ELSE -1 END) = c
 //
 // TODO(mgartner): We can relax condition (1) to allow nullable columns if it
 // can be proven that the expression will never evaluate to NULL. We can use

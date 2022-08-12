@@ -104,7 +104,9 @@ func (data DataSeries) fillForResolution(resolution int64, fillFunc fillFunc) Da
 
 // rateOfChange returns the rate of change (over the supplied period) for each
 // point in the supplied series, which is defined as:
-//         (value - valuePrev) / ((time - timePrev) / period)
+//
+//	(value - valuePrev) / ((time - timePrev) / period)
+//
 // The returned series will be shorter than the original series by one, since
 // the rate of change for the first datapoint cannot be computed in this
 // fashion.

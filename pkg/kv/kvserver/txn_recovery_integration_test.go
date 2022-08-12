@@ -203,20 +203,19 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 // transaction. The test contains a subtest for each of the combinations of the
 // following boolean options:
 //
-// - pushAbort: configures whether or not the high-priority operation is a
+//   - pushAbort: configures whether or not the high-priority operation is a
 //     read (false) or a write (true), which dictates the kind of push
 //     operation dispatched against the staging transaction.
 //
-// - newEpoch: configures whether or not the staging transaction wrote the
+//   - newEpoch: configures whether or not the staging transaction wrote the
 //     intent which the high-priority operation conflicts with at a higher
 //     epoch than it is staged at. If true, the staging transaction is not
 //     implicitly committed.
 //
-// - newTimestamp: configures whether or not the staging transaction wrote the
+//   - newTimestamp: configures whether or not the staging transaction wrote the
 //     intent which the high-priority operation conflicts with at a higher
 //     timestamp than it is staged at. If true, the staging transaction is not
 //     implicitly committed.
-//
 func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

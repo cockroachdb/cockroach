@@ -70,8 +70,9 @@ func impl() error {
 		nogoX = filepath.Join(cwd, nogoX)
 		cmd := exec.Command(gobin, "tool", "pack", "x", nogoX, "unused.out")
 		cmd.Dir = tmpdir
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("%w (got output %s while processing file %s)", err, string(output), nogoX)
+		if err := cmd.Run(); err != nil {
+			// The unused.out file might be missing -- this is fine.
+			continue
 		}
 		encoded, err := os.ReadFile(filepath.Join(tmpdir, "unused.out"))
 		if err != nil {

@@ -28,13 +28,12 @@ const (
 //
 // The type has three benefits over using a channel directly and
 // closing the channel when the operation completes:
-// 1. signaled() uses atomics to provide a fast-path for checking
-//    whether the operation has completed. It is ~75x faster than
-//    using a channel for this purpose.
-// 2. the receiver's channel is lazily initialized when signalChan()
-//    is called, avoiding the allocation when one is not needed.
-// 3. because of 2, the type's zero value can be used directly.
-//
+//  1. signaled() uses atomics to provide a fast-path for checking
+//     whether the operation has completed. It is ~75x faster than
+//     using a channel for this purpose.
+//  2. the receiver's channel is lazily initialized when signalChan()
+//     is called, avoiding the allocation when one is not needed.
+//  3. because of 2, the type's zero value can be used directly.
 type signal struct {
 	a int32
 	c unsafe.Pointer // chan struct{}, lazily initialized

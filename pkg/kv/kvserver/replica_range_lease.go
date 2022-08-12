@@ -589,7 +589,7 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // to serve a request at a specific timestamp (which may be a future timestamp)
 // under the lease, as well as a notion of the current hlc time (now).
 //
-// Explanation
+// # Explanation
 //
 // A status of ERROR indicates a failure to determine the correct lease status,
 // and should not occur under normal operations. The caller's only recourse is
@@ -621,7 +621,7 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // Finally, for requests timestamps falling before the stasis period of a lease
 // that is not EXPIRED and also not PROSCRIBED, the status is VALID.
 //
-// Implementation Note
+// # Implementation Note
 //
 // On the surface, it might seem like we could easily abandon the lease stasis
 // concept in favor of consulting a request's uncertainty interval. We would
@@ -637,15 +637,14 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // occur for two non-transactional requests operating on a single register
 // during a lease change:
 //
-// * a range lease gets committed on the new lease holder (but not the old).
-// * client proposes and commits a write on new lease holder (with a timestamp
-//   just greater than the expiration of the old lease).
-// * client tries to read what it wrote, but hits a slow coordinator (which
-//   assigns a timestamp covered by the old lease).
-// * the read is served by the old lease holder (which has not processed the
-//   change in lease holdership).
-// * the client fails to read their own write.
-//
+//   - a range lease gets committed on the new lease holder (but not the old).
+//   - client proposes and commits a write on new lease holder (with a timestamp
+//     just greater than the expiration of the old lease).
+//   - client tries to read what it wrote, but hits a slow coordinator (which
+//     assigns a timestamp covered by the old lease).
+//   - the read is served by the old lease holder (which has not processed the
+//     change in lease holdership).
+//   - the client fails to read their own write.
 func (r *Replica) leaseStatus(
 	ctx context.Context,
 	lease roachpb.Lease,
@@ -1115,16 +1114,23 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 // The method can has four possible outcomes:
 //
 // (1) the request timestamp is too far in the future. In this case,
-//     a nonstructured error is returned. This shouldn't happen.
+//
+//	a nonstructured error is returned. This shouldn't happen.
+//
 // (2) the lease is invalid or otherwise unable to serve a request at
-//     the specified timestamp. In this case, an InvalidLeaseError is
-//     returned, which is caught in executeBatchWithConcurrencyRetries
-//     and used to trigger a lease acquisition/extension.
+//
+//	the specified timestamp. In this case, an InvalidLeaseError is
+//	returned, which is caught in executeBatchWithConcurrencyRetries
+//	and used to trigger a lease acquisition/extension.
+//
 // (3) the lease is valid but held by a different replica. In this case,
-//     a NotLeaseHolderError is returned, which is propagated back up to
-//     the DistSender and triggers a redirection of the request.
+//
+//	a NotLeaseHolderError is returned, which is propagated back up to
+//	the DistSender and triggers a redirection of the request.
+//
 // (4) the lease is valid, held locally, and capable of serving the
-//     given request. In this case, no error is returned.
+//
+//	given request. In this case, no error is returned.
 //
 // In addition to the lease status, the method also returns whether the
 // lease should be considered for extension using maybeExtendLeaseAsync
@@ -1222,10 +1228,11 @@ func (r *Replica) leaseGoodToGo(
 // served.
 //
 // TODO(spencer): for write commands, don't wait while requesting
-//  the range lease. If the lease acquisition fails, the write cmd
-//  will fail as well. If it succeeds, as is likely, then the write
-//  will not incur latency waiting for the command to complete.
-//  Reads, however, must wait.
+//
+//	the range lease. If the lease acquisition fails, the write cmd
+//	will fail as well. If it succeeds, as is likely, then the write
+//	will not incur latency waiting for the command to complete.
+//	Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {

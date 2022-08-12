@@ -35,10 +35,13 @@ var fdAnnID = opt.NewTableAnnID()
 // buildProps is called by the memo group construction code in order to
 // initialize the new group's logical properties.
 // NOTE: When deriving properties from children, be sure to keep the child
-//       properties immutable by copying them if necessary.
+//
+//	properties immutable by copying them if necessary.
+//
 // NOTE: The parent expression is passed as an expression for convenient access
-//       to children, but certain properties on it are not yet defined (like
-//       its logical properties!).
+//
+//	to children, but certain properties on it are not yet defined (like
+//	its logical properties!).
 type logicalPropsBuilder struct {
 	evalCtx *eval.Context
 	mem     *Memo
@@ -2713,14 +2716,15 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 // DECIMAL.
 //
 // A formal definition:
-//   Let (c1,c2,...) be the outer columns of the scalar expression. Let
-//   f(x1,x2,..) be the result of the scalar expression for the given outer
-//   column values. The expression is composite insensitive if, for any two
-//   sets of values (x1,x2,...) and (y1,y2,...)
-//      (x1=y1 AND x2=y2 AND ...) => f(x1,x2,...) = f(y1,y2,...)
 //
-//   Note that this doesn't mean that the final results are always *identical*
-//   just that they are logically equal.
+//	Let (c1,c2,...) be the outer columns of the scalar expression. Let
+//	f(x1,x2,..) be the result of the scalar expression for the given outer
+//	column values. The expression is composite insensitive if, for any two
+//	sets of values (x1,x2,...) and (y1,y2,...)
+//	   (x1=y1 AND x2=y2 AND ...) => f(x1,x2,...) = f(y1,y2,...)
+//
+//	Note that this doesn't mean that the final results are always *identical*
+//	just that they are logically equal.
 //
 // This property is used to determine when a scalar expression can be copied,
 // with outer column variable references changed to refer to other columns that

@@ -183,9 +183,9 @@ func (e RuleSetExpr) Sort(less func(left, right *RuleExpr) bool) {
 // construct several different operators; which it constructs is not known until
 // runtime. For example:
 //
-//   (Select $input:(Left | InnerJoin $left:* $right:* $on))
-//   =>
-//   ((OpName $input) $left $right $on)
+//	(Select $input:(Left | InnerJoin $left:* $right:* $on))
+//	=>
+//	((OpName $input) $left $right $on)
 //
 // The replace pattern uses a constructor function that dynamically constructs
 // either a Left or InnerJoin operator.

@@ -38,11 +38,11 @@ import (
 // operators constitute the "cost model". A given cost model can be designed to
 // maximize any optimization goal, such as:
 //
-//   1. Max aggregate cluster throughput (txns/sec across cluster)
-//   2. Min transaction latency (time to commit txns)
-//   3. Min latency to first row (time to get first row of txns)
-//   4. Min memory usage
-//   5. Some weighted combination of #1 - #4
+//  1. Max aggregate cluster throughput (txns/sec across cluster)
+//  2. Min transaction latency (time to commit txns)
+//  3. Min latency to first row (time to get first row of txns)
+//  4. Min memory usage
+//  5. Some weighted combination of #1 - #4
 //
 // The cost model in this file targets #1 as the optimization goal. However,
 // note that #2 is implicitly important to that goal, since overall cluster
@@ -192,7 +192,9 @@ const (
 // yet. Although function costs differ based on the overload (due to
 // arguments), here we are using the minimum from similar functions based on
 // postgres' pg_proc table. The following query can be used to generate this table:
-//   SELECT proname, min(procost) FROM pg_proc WHERE proname LIKE 'st\_%' AND procost > 1 GROUP BY proname ORDER BY proname
+//
+//	SELECT proname, min(procost) FROM pg_proc WHERE proname LIKE 'st\_%' AND procost > 1 GROUP BY proname ORDER BY proname
+//
 // TODO(mjibson): Add costs directly to overloads. When that is done, we should
 // also add a test that ensures those costs match postgres.
 var fnCost = map[string]memo.Cost{
@@ -1442,17 +1444,17 @@ func (c *coster) rowScanCost(
 
 // rowBufferCost adds a cost for buffering rows according to a ramp function:
 //
-//                  cost
-//                 factor
+//	               cost
+//	              factor
 //
-//                    |               spillRowCount
-//   spillCostFactor _|                  ___________ _ _ _
-//                    |                 /
-//                    |                /
-//                    |               /
-//                0  _| _ _ _________/______________________    row
-//                    |                                        count
-//                         noSpillRowCount
+//	                 |               spillRowCount
+//	spillCostFactor _|                  ___________ _ _ _
+//	                 |                 /
+//	                 |                /
+//	                 |               /
+//	             0  _| _ _ _________/______________________    row
+//	                 |                                        count
+//	                      noSpillRowCount
 //
 // This function models the fact that operators that buffer rows become more
 // expensive the more rows they need to buffer, since eventually they will need
@@ -1500,42 +1502,42 @@ func (c *coster) largeCardinalityCostPenalty(
 // leaseholder preferences, with 0.0 indicating 0% and 1.0 indicating 100%. This
 // is the basic algorithm:
 //
-//   t = total # of locality tiers
+//	t = total # of locality tiers
 //
-//   Match each locality tier against the constraint set, and compute a value
-//   for each tier:
+//	Match each locality tier against the constraint set, and compute a value
+//	for each tier:
 //
-//      0 = key not present in constraint set or key matches prohibited
-//          constraint, but value doesn't match
-//     +1 = key matches required constraint, and value does match
-//     -1 = otherwise
+//	   0 = key not present in constraint set or key matches prohibited
+//	       constraint, but value doesn't match
+//	  +1 = key matches required constraint, and value does match
+//	  -1 = otherwise
 //
-//   m = length of longest locality prefix that ends in a +1 value and doesn't
-//       contain a -1 value.
+//	m = length of longest locality prefix that ends in a +1 value and doesn't
+//	    contain a -1 value.
 //
-//   Compute "m" for both the ReplicaConstraints constraints set, as well as for
-//   the LeasePreferences constraints set:
+//	Compute "m" for both the ReplicaConstraints constraints set, as well as for
+//	the LeasePreferences constraints set:
 //
-//     constraint-score = m / t
-//     lease-pref-score = m / t
+//	  constraint-score = m / t
+//	  lease-pref-score = m / t
 //
-//   if there are no lease preferences, then final-score = lease-pref-score
-//   else final-score = (constraint-score * 2 + lease-pref-score) / 3
+//	if there are no lease preferences, then final-score = lease-pref-score
+//	else final-score = (constraint-score * 2 + lease-pref-score) / 3
 //
 // Here are some scoring examples:
 //
-//   Locality = region=us,dc=east
-//   0.0 = []                     // No constraints to match
-//   0.0 = [+region=eu,+dc=uk]    // None of the tiers match
-//   0.0 = [+region=eu,+dc=east]  // 2nd tier matches, but 1st tier doesn't
-//   0.0 = [-region=us,+dc=east]  // 1st tier matches PROHIBITED constraint
-//   0.0 = [-region=eu]           // 1st tier PROHIBITED and non-matching
-//   0.5 = [+region=us]           // 1st tier matches
-//   0.5 = [+region=us,-dc=east]  // 1st tier matches, 2nd tier PROHIBITED
-//   0.5 = [+region=us,+dc=west]  // 1st tier matches, but 2nd tier doesn't
-//   1.0 = [+region=us,+dc=east]  // Both tiers match
-//   1.0 = [+dc=east]             // 2nd tier matches, no constraints for 1st
-//   1.0 = [+region=us,+dc=east,+rack=1,-ssd]  // Extra constraints ignored
+//	Locality = region=us,dc=east
+//	0.0 = []                     // No constraints to match
+//	0.0 = [+region=eu,+dc=uk]    // None of the tiers match
+//	0.0 = [+region=eu,+dc=east]  // 2nd tier matches, but 1st tier doesn't
+//	0.0 = [-region=us,+dc=east]  // 1st tier matches PROHIBITED constraint
+//	0.0 = [-region=eu]           // 1st tier PROHIBITED and non-matching
+//	0.5 = [+region=us]           // 1st tier matches
+//	0.5 = [+region=us,-dc=east]  // 1st tier matches, 2nd tier PROHIBITED
+//	0.5 = [+region=us,+dc=west]  // 1st tier matches, but 2nd tier doesn't
+//	1.0 = [+region=us,+dc=east]  // Both tiers match
+//	1.0 = [+dc=east]             // 2nd tier matches, no constraints for 1st
+//	1.0 = [+region=us,+dc=east,+rack=1,-ssd]  // Extra constraints ignored
 //
 // Note that constraints need not be specified in any particular order, so all
 // constraints are scanned when matching each locality tier. In cases where

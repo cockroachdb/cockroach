@@ -88,9 +88,9 @@ var allMaxMinAggregateTypes = append(
 // an aggregate function call to NULL in the presence of a NULL argument may
 // not be correct. There are two cases where an aggregate function must handle
 // be called with null inputs:
-// 1) the aggregate function does not skip NULLs (e.g., ARRAY_AGG); and
-// 2) the aggregate function does not return NULL when it aggregates no rows
-//		(e.g., COUNT).
+//  1. the aggregate function does not skip NULLs (e.g., ARRAY_AGG); and
+//  2. the aggregate function does not return NULL when it aggregates no rows
+//     (e.g., COUNT).
 //
 // For use in other packages, see AllAggregateBuiltinNames and
 // GetBuiltinProperties().
@@ -1372,13 +1372,13 @@ type anyNotNullAggregate struct {
 // Note that NULL values do not affect the result of the aggregation; this is
 // important in a few different contexts:
 //
-//  - in distributed multi-stage aggregations, we can have a local stage with
-//    multiple (parallel) instances feeding into a final stage. If some of the
-//    instances see no rows, they emit a NULL into the final stage which needs
-//    to be ignored.
+//   - in distributed multi-stage aggregations, we can have a local stage with
+//     multiple (parallel) instances feeding into a final stage. If some of the
+//     instances see no rows, they emit a NULL into the final stage which needs
+//     to be ignored.
 //
-//  - for query optimization, when moving aggregations across left joins (which
-//    add NULL values).
+//   - for query optimization, when moving aggregations across left joins (which
+//     add NULL values).
 func NewAnyNotNullAggregate(evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &anyNotNullAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -3688,7 +3688,8 @@ func (a *floatSumSqrDiffsAggregate) Count() int64 {
 }
 
 // The signature for the datums is:
-//   SQRDIFF (float), SUM (float), COUNT(int)
+//
+//	SQRDIFF (float), SUM (float), COUNT(int)
 func (a *floatSumSqrDiffsAggregate) Add(
 	_ context.Context, sqrDiffD tree.Datum, otherArgs ...tree.Datum,
 ) error {
@@ -3944,8 +3945,9 @@ func newDecimalFinalVarianceAggregate(
 }
 
 // Add is part of the eval.AggregateFunc interface.
-//  Variance: VALUE(float)
-//  FinalVariance: SQRDIFF(float), SUM(float), COUNT(int)
+//
+//	Variance: VALUE(float)
+//	FinalVariance: SQRDIFF(float), SUM(float), COUNT(int)
 func (a *floatVarianceAggregate) Add(
 	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
 ) error {
@@ -3953,8 +3955,9 @@ func (a *floatVarianceAggregate) Add(
 }
 
 // Add is part of the eval.AggregateFunc interface.
-//  Variance: VALUE(int|decimal)
-//  FinalVariance: SQRDIFF(decimal), SUM(decimal), COUNT(int)
+//
+//	Variance: VALUE(int|decimal)
+//	FinalVariance: SQRDIFF(decimal), SUM(decimal), COUNT(int)
 func (a *decimalVarianceAggregate) Add(
 	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
 ) error {
@@ -4060,7 +4063,8 @@ func newDecimalFinalVarPopAggregate(
 }
 
 // Add is part of the eval.AggregateFunc interface.
-//  Population Variance: VALUE(float)
+//
+//	Population Variance: VALUE(float)
 func (a *floatVarPopAggregate) Add(
 	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
 ) error {
@@ -4068,7 +4072,8 @@ func (a *floatVarPopAggregate) Add(
 }
 
 // Add is part of the eval.AggregateFunc interface.
-//  Population Variance: VALUE(int|decimal)
+//
+//	Population Variance: VALUE(int|decimal)
 func (a *decimalVarPopAggregate) Add(
 	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
 ) error {
@@ -4214,8 +4219,9 @@ func newFloatFinalStdDevPopAggregate(
 
 // Add implements the eval.AggregateFunc interface.
 // The signature of the datums is:
-//  StdDev: VALUE(float)
-//  FinalStdDev: SQRDIFF(float), SUM(float), COUNT(int)
+//
+//	StdDev: VALUE(float)
+//	FinalStdDev: SQRDIFF(float), SUM(float), COUNT(int)
 func (a *floatStdDevAggregate) Add(
 	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
 ) error {
@@ -4224,8 +4230,9 @@ func (a *floatStdDevAggregate) Add(
 
 // Add is part of the eval.AggregateFunc interface.
 // The signature of the datums is:
-//  StdDev: VALUE(int|decimal)
-//  FinalStdDev: SQRDIFF(decimal), SUM(decimal), COUNT(int)
+//
+//	StdDev: VALUE(int|decimal)
+//	FinalStdDev: SQRDIFF(decimal), SUM(decimal), COUNT(int)
 func (a *decimalStdDevAggregate) Add(
 	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
 ) error {

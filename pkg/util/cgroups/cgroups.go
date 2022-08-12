@@ -79,13 +79,15 @@ func GetMemoryInactiveFileUsage() (usage int64, warnings string, err error) {
 // getCgroupMemInactiveFileUsage reads the memory cgroup's current inactive
 // file-backed memory usage (in bytes) on the inactive LRU list for both cgroups
 // v1 and v2. The associated files and keys are:
-// 		cgroupv1: cgroupV1MemInactiveFileUsageStatKey in cgroupV1MemStatFilename
-// 		cgroupv2: cgroupV2MemInactiveFileUsageStatKey in cgroupV2MemStatFilename
+//
+//	cgroupv1: cgroupV1MemInactiveFileUsageStatKey in cgroupV1MemStatFilename
+//	cgroupv2: cgroupV2MemInactiveFileUsageStatKey in cgroupV2MemStatFilename
 //
 // The `root` parameter is set to "/" in production code and exists only for
 // testing. The cgroup inactive file usage detection path is implemented as:
+//
 //	/proc/self/cgroup file
-// 	|->	/proc/self/mountinfo mounts
+//	|->	/proc/self/mountinfo mounts
 //		|->	cgroup version
 //	 		|->	version specific usage check
 func getCgroupMemInactiveFileUsage(root string) (usage int64, warnings string, err error) {
@@ -118,13 +120,15 @@ func getCgroupMemInactiveFileUsage(root string) (usage int64, warnings string, e
 
 // getCgroupMemUsage reads the memory cgroup's current memory usage (in bytes)
 // for both cgroups v1 and v2. The associated files are:
-// 		cgroupv1: cgroupV1MemUsageFilename
-// 		cgroupv2: cgroupV2MemUsageFilename
+//
+//	cgroupv1: cgroupV1MemUsageFilename
+//	cgroupv2: cgroupV2MemUsageFilename
 //
 // The `root` parameter is set to "/" in production code and exists only for
 // testing. The cgroup memory usage detection path is implemented here as:
+//
 //	/proc/self/cgroup file
-// 	|->	/proc/self/mountinfo mounts
+//	|->	/proc/self/mountinfo mounts
 //		|->	cgroup version
 //	 		|->	version specific usage check
 func getCgroupMemUsage(root string) (usage int64, warnings string, err error) {
@@ -157,13 +161,15 @@ func getCgroupMemUsage(root string) (usage int64, warnings string, err error) {
 
 // getCgroupMemLimit reads the memory cgroup's memory limit (in bytes) for both
 // cgroups v1 and v2. The associated files (and for cgroupv2, keys) are:
-// 		cgroupv1: cgroupV2MemLimitFilename
-// 		cgroupv2: cgroupV1MemLimitStatKey in cgroupV2MemStatFilename
+//
+//	cgroupv1: cgroupV2MemLimitFilename
+//	cgroupv2: cgroupV1MemLimitStatKey in cgroupV2MemStatFilename
 //
 // The `root` parameter is set to "/" in production code and exists only for
 // testing. The cgroup memory limit detection path is implemented here as:
+//
 //	/proc/self/cgroup file
-// 	|->	/proc/self/mountinfo mounts
+//	|->	/proc/self/mountinfo mounts
 //		|->	cgroup version
 //	 		|->	version specific limit check
 func getCgroupMemLimit(root string) (limit int64, warnings string, err error) {

@@ -553,12 +553,12 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 // changing before the proposal is passed to etcd/raft.
 //
 // Currently, the request types which may be rejected by this function are:
-// - RequestLease when the proposer is not the raft leader (with caveats).
-// - TransferLease when the proposer cannot guarantee that the lease transfer
-//   target does not currently need a Raft snapshot to catch up on its Raft log.
-//   In such cases, the proposer cannot guarantee that the lease transfer target
-//   will not need a Raft snapshot to catch up to and apply the lease transfer.
-//   This requires that the proposer is the raft leader.
+//   - RequestLease when the proposer is not the raft leader (with caveats).
+//   - TransferLease when the proposer cannot guarantee that the lease transfer
+//     target does not currently need a Raft snapshot to catch up on its Raft log.
+//     In such cases, the proposer cannot guarantee that the lease transfer target
+//     will not need a Raft snapshot to catch up to and apply the lease transfer.
+//     This requires that the proposer is the raft leader.
 //
 // The function returns true if the proposal was rejected, and false if not.
 // If the proposal was rejected and true is returned, it will have been cleaned
@@ -1047,13 +1047,13 @@ func (b *propBuf) TrackEvaluatingRequest(
 // ensuring that no future writes ever write below it.
 //
 // Returns false in the following cases:
-// 1) target is below the propBuf's closed timestamp. This ensures that the
-//    side-transport (the caller) is prevented from publishing closed timestamp
-//    regressions. In other words, for a given LAI, the side-transport only
-//    publishes closed timestamps higher than what Raft published.
-// 2) There are requests evaluating at timestamps equal to or below target (as
-//    tracked by the evalTracker). We can't close timestamps at or above these
-//    requests' write timestamps.
+//  1. target is below the propBuf's closed timestamp. This ensures that the
+//     side-transport (the caller) is prevented from publishing closed timestamp
+//     regressions. In other words, for a given LAI, the side-transport only
+//     publishes closed timestamps higher than what Raft published.
+//  2. There are requests evaluating at timestamps equal to or below target (as
+//     tracked by the evalTracker). We can't close timestamps at or above these
+//     requests' write timestamps.
 func (b *propBuf) MaybeForwardClosedLocked(ctx context.Context, target hlc.Timestamp) bool {
 	if lb := b.evalTracker.LowerBound(ctx); !lb.IsEmpty() && lb.LessEq(target) {
 		return false

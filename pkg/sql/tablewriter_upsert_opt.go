@@ -30,15 +30,15 @@ import (
 // and other upsert operations into the input query, rather than requiring the
 // upserter to do it. For example:
 //
-//   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
-//   INSERT INTO abc VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=10
+//	CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+//	INSERT INTO abc VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=10
 //
 // The CBO will generate an input expression similar to this:
 //
-//   SELECT ins_a, ins_b, ins_c, fetch_a, fetch_b, fetch_c, 10 AS upd_b
-//   FROM (VALUES (1, 2, NULL)) AS ins(ins_a, ins_b, ins_c)
-//   LEFT OUTER JOIN abc AS fetch(fetch_a, fetch_b, fetch_c)
-//   ON ins_a = fetch_a
+//	SELECT ins_a, ins_b, ins_c, fetch_a, fetch_b, fetch_c, 10 AS upd_b
+//	FROM (VALUES (1, 2, NULL)) AS ins(ins_a, ins_b, ins_c)
+//	LEFT OUTER JOIN abc AS fetch(fetch_a, fetch_b, fetch_c)
+//	ON ins_a = fetch_a
 //
 // The other non-CBO upserters perform custom left lookup joins. However, that
 // doesn't allow sharing of optimization rules and doesn't work with correlated

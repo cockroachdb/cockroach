@@ -159,20 +159,22 @@ func (v *Visitor) FindCaptures() []analysis.Diagnostic {
 // reported by this linter:
 //
 // 1:
-//     for k, v := range myMap {
-//         // same for `defer`, errgroup.Group.Go(), etc
-//         go func() {
-//            fmt.Printf("k = %v, v = %v\n", k, v)
-//         }()
-//     }
+//
+//	for k, v := range myMap {
+//	    // same for `defer`, errgroup.Group.Go(), etc
+//	    go func() {
+//	       fmt.Printf("k = %v, v = %v\n", k, v)
+//	    }()
+//	}
 //
 // 2:
-//     for k, v := range myMap {
-//         // same for `defer`, errgroup.Group.Go(), etc
-//         go doWork(func() {
-//             doMoreWork(k, v)
-//         })
-//     }
+//
+//	for k, v := range myMap {
+//	    // same for `defer`, errgroup.Group.Go(), etc
+//	    go doWork(func() {
+//	        doMoreWork(k, v)
+//	    })
+//	}
 //
 // If a `go` routine (or `defer`) calls a previously-defined closure
 // that captures a loop variable, that is also reported.

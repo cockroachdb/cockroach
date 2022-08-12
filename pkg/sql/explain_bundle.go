@@ -491,7 +491,8 @@ func TestingOverrideExplainEnvVersion(ver string) func() {
 }
 
 // PrintVersion appends a row of the form:
-//  -- Version: CockroachDB CCL v20.1.0 ...
+//
+//	-- Version: CockroachDB CCL v20.1.0 ...
 func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 	version, err := c.query("SELECT version()")
 	if err != nil {

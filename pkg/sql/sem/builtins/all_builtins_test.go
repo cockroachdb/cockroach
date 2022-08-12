@@ -48,13 +48,15 @@ func TestOverloadsHaveVolatility(t *testing.T) {
 // overloads for Volatility.
 // Dump command below:
 // COPY (SELECT proname, args, rettype, provolatile, proleakproof FROM (
-//   SELECT
-//     lhs.oid, proname, pg2.typname as rettype, ARRAY_AGG(pg1.typname) as args, provolatile, proleakproof
-//     FROM
-//     (select oid, proname, unnest(proargtypes) as typ, proargnames, prorettype, provolatile, proleakproof from pg_proc) AS lhs
-//     JOIN pg_type AS pg1 ON (lhs.typ = pg1.oid)
-//     JOIN pg_type AS pg2 ON (lhs.prorettype = pg2.oid) GROUP BY lhs.oid, proname, pg2.typname, provolatile, proleakproof) a
-//     ORDER BY proname, args
+//
+//	SELECT
+//	  lhs.oid, proname, pg2.typname as rettype, ARRAY_AGG(pg1.typname) as args, provolatile, proleakproof
+//	  FROM
+//	  (select oid, proname, unnest(proargtypes) as typ, proargnames, prorettype, provolatile, proleakproof from pg_proc) AS lhs
+//	  JOIN pg_type AS pg1 ON (lhs.typ = pg1.oid)
+//	  JOIN pg_type AS pg2 ON (lhs.prorettype = pg2.oid) GROUP BY lhs.oid, proname, pg2.typname, provolatile, proleakproof) a
+//	  ORDER BY proname, args
+//
 // ) TO '/tmp/pg_proc_provolatile_dump.csv' WITH CSV DELIMITER '|' HEADER;
 func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()

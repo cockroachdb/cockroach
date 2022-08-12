@@ -294,11 +294,11 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 
 // There are two goals of this testcase:
 //
-// 1) Ensure that we can properly export from REGIONAL BY ROW tables (that the
-//    hidden row stays hidden, unless explicitly requested).
-// 2) That we can import the exported data both into a non-RBR table, as well
-//    as a table which we can later convert to RBR, while preserving the
-//    crdb_region column data.
+//  1. Ensure that we can properly export from REGIONAL BY ROW tables (that the
+//     hidden row stays hidden, unless explicitly requested).
+//  2. That we can import the exported data both into a non-RBR table, as well
+//     as a table which we can later convert to RBR, while preserving the
+//     crdb_region column data.
 func TestMultiRegionExportImportRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

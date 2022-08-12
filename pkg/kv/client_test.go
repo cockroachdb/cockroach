@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-/* Package client_test tests clients against a fully-instantiated
+/*
+	Package client_test tests clients against a fully-instantiated
+
 cockroach cluster (a single node, but bootstrapped, gossiped, etc.).
 */
 package kv_test
@@ -48,7 +50,8 @@ var testUser = username.TestUser
 // checkKVs verifies that a KeyValue slice contains the expected keys and
 // values. The values can be either integers or strings; the expected results
 // are passed as alternating keys and values, e.g:
-//   checkScanResult(t, result, key1, val1, key2, val2)
+//
+//	checkScanResult(t, result, key1, val1, key2, val2)
 func checkKVs(t *testing.T, kvs []kv.KeyValue, expected ...interface{}) {
 	t.Helper()
 	expLen := len(expected) / 2

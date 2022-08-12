@@ -54,15 +54,16 @@ func nativeTimeToDatum(t time.Time, targetT *types.T) (tree.Datum, error) {
 //
 // While Avro's specification is fairly broad, and supports arbitrary complex
 // data types, this method concerns itself with
-// - primitive avro types: null, boolean, int (32), long (64), float (32), double (64),
-//   bytes, string, and arrays of the above.
-// - logical avro types (as defined by the go avro library): long.time-micros, int.time-millis,
-//    long.timestamp-micros,long.timestamp-millis, and int.date
+//   - primitive avro types: null, boolean, int (32), long (64), float (32), double (64),
+//     bytes, string, and arrays of the above.
+//   - logical avro types (as defined by the go avro library): long.time-micros, int.time-millis,
+//     long.timestamp-micros,long.timestamp-millis, and int.date
 //
 // An avro record is, essentially, a key->value mapping from field name to field value.
 // A field->value mapping may be represented directly (i.e. the
 // interface{} pass in will have corresponding go primitive type):
-//   user_id:123 -- that is the interface{} type will be int, and it's value is 123.
+//
+//	user_id:123 -- that is the interface{} type will be int, and it's value is 123.
 //
 // Or, we could see field_name:null, if the field is nullable and is null.
 //

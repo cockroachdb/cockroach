@@ -72,18 +72,18 @@ var eventBatchPool = &sync.Pool{
 // event collection. It subsequently resolves the transaction ID reported in the
 // contention event into transaction fingerprint ID.
 // eventStore relies on two background goroutines:
-// 1. intake goroutine: this goroutine is responsible for inserting batched
-//    contention events into the in-memory store, and then queue the batched
-//    events into the resolver. This means that the contention events can be
-//    immediately visible as early as possible to the readers of the eventStore
-//    before the txn id resolution is performed.
-// 2. resolver goroutine: this goroutine runs on a timer (controlled via
-//    sql.contention.event_store.resolution_interval cluster setting).
-//    Periodically, the timer fires and resolver attempts to contact remote
-//    nodes to resolve the transaction IDs in the queued contention events
-//    into transaction fingerprint IDs. If the attempt is successful, the
-//    resolver goroutine will update the stored contention events with the
-//    transaction fingerprint IDs.
+//  1. intake goroutine: this goroutine is responsible for inserting batched
+//     contention events into the in-memory store, and then queue the batched
+//     events into the resolver. This means that the contention events can be
+//     immediately visible as early as possible to the readers of the eventStore
+//     before the txn id resolution is performed.
+//  2. resolver goroutine: this goroutine runs on a timer (controlled via
+//     sql.contention.event_store.resolution_interval cluster setting).
+//     Periodically, the timer fires and resolver attempts to contact remote
+//     nodes to resolve the transaction IDs in the queued contention events
+//     into transaction fingerprint IDs. If the attempt is successful, the
+//     resolver goroutine will update the stored contention events with the
+//     transaction fingerprint IDs.
 type eventStore struct {
 	st *cluster.Settings
 
@@ -296,13 +296,13 @@ func (s *eventStore) getEventByEventHash(
 
 // flushAndResolve is the main method called by the resolver goroutine each
 // time the timer fires. This method does two things:
-// 1. it triggers the batching buffer to flush its content into the intake
-//    goroutine. This is to ensure that in the case where we have very low
-//    rate of contentions, the contention events won't be permanently trapped
-//    in the batching buffer.
-// 2. it invokes the dequeue() method on the resolverQueue. This cause the
-//    resolver to perform txnID resolution. See inline comments on the method
-//    for details.
+//  1. it triggers the batching buffer to flush its content into the intake
+//     goroutine. This is to ensure that in the case where we have very low
+//     rate of contentions, the contention events won't be permanently trapped
+//     in the batching buffer.
+//  2. it invokes the dequeue() method on the resolverQueue. This cause the
+//     resolver to perform txnID resolution. See inline comments on the method
+//     for details.
 func (s *eventStore) flushAndResolve(ctx context.Context) error {
 	// This forces the write-buffer flushes its batch into the intake goroutine.
 	// The intake goroutine will asynchronously add all events in the batch

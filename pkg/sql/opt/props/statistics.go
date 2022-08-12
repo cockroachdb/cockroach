@@ -33,7 +33,7 @@ import (
 // lazily, and only as needed to determine the row count for the current
 // expression or a parent expression. For example:
 //
-//   SELECT y FROM a WHERE x=1
+//	SELECT y FROM a WHERE x=1
 //
 // The only column that affects the row count of this query is x, since the
 // distribution of values in x is what determines the selectivity of the

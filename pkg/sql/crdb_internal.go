@@ -88,10 +88,10 @@ import (
 const CrdbInternalName = catconstants.CRDBInternalSchemaName
 
 // Naming convention:
-// - if the response is served from memory, prefix with node_
-// - if the response is served via a kv request, prefix with kv_
-// - if the response is not from kv requests but is cluster-wide (i.e. the
-//    answer isn't specific to the sql connection being used, prefix with cluster_.
+//   - if the response is served from memory, prefix with node_
+//   - if the response is served via a kv request, prefix with kv_
+//   - if the response is not from kv requests but is cluster-wide (i.e. the
+//     answer isn't specific to the sql connection being used, prefix with cluster_.
 //
 // Adding something new here will require an update to `pkg/cli` for inclusion in
 // a `debug zip`; the unit tests will guide you.

@@ -41,7 +41,8 @@ var (
 // SetSmallMaxGCIntervalForTest sets the MaxSQLGCInterval and then returns a closure
 // that resets it.
 // This is to be used in tests like:
-//    defer SetSmallMaxGCIntervalForTest()
+//
+//	defer SetSmallMaxGCIntervalForTest()
 func SetSmallMaxGCIntervalForTest() func() {
 	oldInterval := MaxSQLGCInterval
 	MaxSQLGCInterval = 500 * time.Millisecond

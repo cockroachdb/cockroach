@@ -30,9 +30,9 @@ import (
 //
 // For example:
 //
-//   tab.a > 0 AND db.tab.b = 'foo'
-//   =>
-//   a > 0 AND b = 'foo'
+//	tab.a > 0 AND db.tab.b = 'foo'
+//	=>
+//	a > 0 AND b = 'foo'
 //
 // This dequalification is necessary when CHECK constraints, computed columns,
 // or partial index predicates are created. If the table name was not stripped,

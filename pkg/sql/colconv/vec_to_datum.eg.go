@@ -94,10 +94,10 @@ func getNewVecToDatumConverter(batchWidth int, willRelease bool) *VecToDatumConv
 }
 
 // NewVecToDatumConverter creates a new VecToDatumConverter.
-// - batchWidth determines the width of the batches that it will be converting.
-// - vecIdxsToConvert determines which vectors need to be converted.
-// - willRelease indicates whether the caller intends to call Release() on the
-//   converter.
+//   - batchWidth determines the width of the batches that it will be converting.
+//   - vecIdxsToConvert determines which vectors need to be converted.
+//   - willRelease indicates whether the caller intends to call Release() on the
+//     converter.
 func NewVecToDatumConverter(
 	batchWidth int, vecIdxsToConvert []int, willRelease bool,
 ) *VecToDatumConverter {
