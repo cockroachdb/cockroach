@@ -486,6 +486,13 @@ var (
 	// comment).
 	binaryMinSupportedVersion = ByKey(V21_2)
 
+	// TODObinaryMinSupportedVersion is a temporary set to the next version
+	// in order to for TestPrecondition to pass while we remove 22.1 version
+	// gates.
+	// TODO(celia): replace this with binaryMinSupportedVersion once all
+	// 22.1 version gates are removed.
+	TODObinaryMinSupportedVersion = ByKey(V22_1)
+
 	// binaryVersion is the version of this binary.
 	//
 	// This is the version that a new cluster will use when created.

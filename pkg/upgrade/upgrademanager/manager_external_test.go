@@ -525,7 +525,9 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 2
 		return version
 	}
-	v0 := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	// TODO(celia): use clusterversion.TestingBinaryMinSupportedVersion instead of
+	// clusterversion.TODObinaryMinSupportedVersion, once all 22.1 version gates have been removed.
+	v0 := clusterversion.ClusterVersion{Version: clusterversion.TODObinaryMinSupportedVersion}
 	v1 := next(v0)
 	v2 := next(v1)
 	versions := []clusterversion.ClusterVersion{v0, v1, v2}
