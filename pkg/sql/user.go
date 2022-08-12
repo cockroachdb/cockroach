@@ -51,32 +51,32 @@ import (
 // The function is tolerant of unavailable clusters (or unavailable
 // system database) as follows:
 //
-// - if the user is root, the user is reported to exist immediately
-//   without querying system.users at all. The password retrieval
-//   is delayed until actually needed by the authentication method.
-//   This way, if the client presents a valid TLS certificate
-//   the password is not even needed at all. This is useful for e.g.
-//   `cockroach node status`.
+//   - if the user is root, the user is reported to exist immediately
+//     without querying system.users at all. The password retrieval
+//     is delayed until actually needed by the authentication method.
+//     This way, if the client presents a valid TLS certificate
+//     the password is not even needed at all. This is useful for e.g.
+//     `cockroach node status`.
 //
-//   If root is forced to use a password (e.g. logging in onto the UI)
-//   then a user login timeout greater than 5 seconds is also
-//   ignored. This ensures that root has a modicum of comfort
-//   logging into an unavailable cluster.
+//     If root is forced to use a password (e.g. logging in onto the UI)
+//     then a user login timeout greater than 5 seconds is also
+//     ignored. This ensures that root has a modicum of comfort
+//     logging into an unavailable cluster.
 //
-//   TODO(knz): this does not yet quite work because even if the pw
-//   auth on the UI succeeds writing to system.web_sessions will still
-//   stall on an unavailable cluster and prevent root from logging in.
+//     TODO(knz): this does not yet quite work because even if the pw
+//     auth on the UI succeeds writing to system.web_sessions will still
+//     stall on an unavailable cluster and prevent root from logging in.
 //
-// - if the user is another user than root, then the function fails
-//   after a timeout instead of blocking. The timeout is configurable
-//   via the cluster setting server.user_login.timeout. Note that this
-//   is a single timeout for looking up the password, role options, and
-//   default session variable settings.
+//   - if the user is another user than root, then the function fails
+//     after a timeout instead of blocking. The timeout is configurable
+//     via the cluster setting server.user_login.timeout. Note that this
+//     is a single timeout for looking up the password, role options, and
+//     default session variable settings.
 //
-// - there is a cache for the the information from system.users,
-//   system.role_options, and system.database_role_settings. As long as the
-//   lookup succeeded before and there haven't been any CREATE/ALTER/DROP ROLE
-//   commands since, then the cache is used without a KV lookup.
+//   - there is a cache for the the information from system.users,
+//     system.role_options, and system.database_role_settings. As long as the
+//     lookup succeeded before and there haven't been any CREATE/ALTER/DROP ROLE
+//     commands since, then the cache is used without a KV lookup.
 func GetUserSessionInitInfo(
 	ctx context.Context,
 	execCfg *ExecutorConfig,

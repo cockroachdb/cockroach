@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/url"
@@ -255,7 +254,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	hasSSTs := func(t *testing.T, location string) bool {
 		sstMatcher := regexp.MustCompile(`\d+\.sst`)
 		subDir := filepath.Join(locationToDir(location), "data")
-		files, err := ioutil.ReadDir(subDir)
+		files, err := os.ReadDir(subDir)
 		if err != nil {
 			if oserror.IsNotExist(err) {
 				return false
@@ -289,7 +288,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		partitionMatcher := regexp.MustCompile(`^BACKUP_PART_`)
 		for _, location := range locations {
 			subDir := locationToDir(location)
-			files, err := ioutil.ReadDir(subDir)
+			files, err := os.ReadDir(subDir)
 			if err != nil {
 				t.Fatal(err)
 			}

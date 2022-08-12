@@ -68,12 +68,12 @@ type PGMetadataColumnDiff struct {
 type PGMetadataColumnDiffs map[string]*PGMetadataColumnDiff
 
 // PGMetadataTableDiffs is used to store and load expected diffs:
-// - A table name pointing to a zero length PGMetadataColumnDiffs means that we expect this table to be missing
-//   in cockroach db.
-// - If PGMetadataColumnDiffs is not empty but columnName points to null, we expect that column to be missing in that table in
-//   cockroach db.
-// - If column Name points to a not null PGMetadataColumnDiff, the test column describes how we expect that data type to be
-//   different between cockroach db and postgres.
+//   - A table name pointing to a zero length PGMetadataColumnDiffs means that we expect this table to be missing
+//     in cockroach db.
+//   - If PGMetadataColumnDiffs is not empty but columnName points to null, we expect that column to be missing in that table in
+//     cockroach db.
+//   - If column Name points to a not null PGMetadataColumnDiff, the test column describes how we expect that data type to be
+//     different between cockroach db and postgres.
 type PGMetadataTableDiffs map[string]PGMetadataColumnDiffs
 
 // PGMetadataColumnType represents a column type from postgres/mysql.
@@ -286,7 +286,7 @@ func Save(writer io.Writer, file interface{}) {
 	}
 }
 
-//getUnimplementedTables retrieves the tables that are not yet part of CRDB.
+// getUnimplementedTables retrieves the tables that are not yet part of CRDB.
 func (d PGMetadataTableDiffs) getUnimplementedTables(source PGMetadataTables) PGMetadataTables {
 	unimplementedTables := make(PGMetadataTables)
 	for tableName := range d {

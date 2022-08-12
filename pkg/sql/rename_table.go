@@ -35,9 +35,10 @@ type renameTableNode struct {
 
 // RenameTable renames the table, view or sequence.
 // Privileges: DROP on source table/view/sequence, CREATE on destination database.
-//   Notes: postgres requires the table owner.
-//          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
-//          on the new table (and does not copy privileges over).
+//
+//	Notes: postgres requires the table owner.
+//	       mysql requires ALTER, DROP on the original table, and CREATE, INSERT
+//	       on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,

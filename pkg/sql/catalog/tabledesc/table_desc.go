@@ -300,10 +300,10 @@ func (desc *wrapper) ActiveIndexes() []catalog.Index {
 
 // NonDropIndexes returns a slice of all non-drop indexes in the underlying
 // proto, in their canonical order. This means:
-// - the primary index, if the table is a physical table,
-// - the public non-primary indexes in the Indexes array, in order,
-// - the non-public indexes present in the Mutations array, in order,
-//   if the mutation is not a drop.
+//   - the primary index, if the table is a physical table,
+//   - the public non-primary indexes in the Indexes array, in order,
+//   - the non-public indexes present in the Mutations array, in order,
+//     if the mutation is not a drop.
 //
 // See also catalog.Index.Ordinal().
 func (desc *wrapper) NonDropIndexes() []catalog.Index {

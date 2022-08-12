@@ -555,9 +555,10 @@ func makeSpanFromBucket(iter *histogramIter, prefix []tree.Datum) (span constrai
 // values are integers).
 //
 // The following spans will filter the bucket as shown:
-//   [/0 - /5]   => {NumEq: 1, NumRange: 5, UpperBound: 5}
-//   [/2 - /10]  => {NumEq: 5, NumRange: 8, UpperBound: 10}
-//   [/20 - /30] => error
+//
+//	[/0 - /5]   => {NumEq: 1, NumRange: 5, UpperBound: 5}
+//	[/2 - /10]  => {NumEq: 5, NumRange: 8, UpperBound: 10}
+//	[/20 - /30] => error
 //
 // Note that the calculations for NumEq and NumRange depend on the data type.
 // For discrete data types such as integers and dates, it is always possible
@@ -567,14 +568,13 @@ func makeSpanFromBucket(iter *histogramIter, prefix []tree.Datum) (span constrai
 // bound. For example, given the same bucket as in the above example, but with
 // floating point values instead of integers:
 //
-//   [/0 - /5]   => {NumEq: 0, NumRange: 5, UpperBound: 5.0}
-//   [/2 - /10]  => {NumEq: 5, NumRange: 8, UpperBound: 10.0}
-//   [/20 - /30] => error
+//	[/0 - /5]   => {NumEq: 0, NumRange: 5, UpperBound: 5.0}
+//	[/2 - /10]  => {NumEq: 5, NumRange: 8, UpperBound: 10.0}
+//	[/20 - /30] => error
 //
 // For non-numeric types such as strings, it is not possible to estimate
 // the size of NumRange if the bucket is cut off in the middle. In this case,
 // we use the heuristic that NumRange is reduced by half.
-//
 func getFilteredBucket(
 	iter *histogramIter, keyCtx *constraint.KeyContext, filteredSpan *constraint.Span, colOffset int,
 ) *cat.HistogramBucket {
@@ -694,36 +694,35 @@ func getFilteredBucket(
 // below, where [\bear - \bobcat] represents the before range and
 // [\bluejay - \boar] represents the after range.
 //
-//   bear    := [18  98  101 97  114 0   1          ]
-//           => [101 97  114 0   0   0   0   0      ]
+//	bear    := [18  98  101 97  114 0   1          ]
+//	        => [101 97  114 0   0   0   0   0      ]
 //
-//   bluejay := [18  98  108 117 101 106 97  121 0 1]
-//           => [108 117 101 106 97  121 0   0      ]
+//	bluejay := [18  98  108 117 101 106 97  121 0 1]
+//	        => [108 117 101 106 97  121 0   0      ]
 //
-//   boar    := [18  98  111 97  114 0   1          ]
-//           => [111 97  114 0   0   0   0   0      ]
+//	boar    := [18  98  111 97  114 0   1          ]
+//	        => [111 97  114 0   0   0   0   0      ]
 //
-//   bobcat  := [18  98  111 98  99  97  116 0   1  ]
-//           => [111 98  99  97  116 0   0   0      ]
+//	bobcat  := [18  98  111 98  99  97  116 0   1  ]
+//	        => [111 98  99  97  116 0   0   0      ]
 //
 // We can now find the range before/after by finding the difference between
 // the lower and upper bounds:
 //
-//	 rangeBefore := [111 98  99  97  116 0   1   0] -
-//                  [101 97  114 0   1   0   0   0]
+//		 rangeBefore := [111 98  99  97  116 0   1   0] -
+//	                 [101 97  114 0   1   0   0   0]
 //
-//   rangeAfter  := [111 97  114 0   1   0   0   0] -
-//                  [108 117 101 106 97  121 0   1]
+//	  rangeAfter  := [111 97  114 0   1   0   0   0] -
+//	                 [108 117 101 106 97  121 0   1]
 //
 // Subtracting the uint64 representations of the byte arrays, the resulting
 // rangeBefore and rangeAfter are:
 //
-//	 rangeBefore := 8,026,086,756,136,779,776 - 7,305,245,414,897,221,632
-//               := 720,841,341,239,558,100
+//		 rangeBefore := 8,026,086,756,136,779,776 - 7,305,245,414,897,221,632
+//	              := 720,841,341,239,558,100
 //
-//	 rangeAfter := 8,025,821,355,276,500,992 - 7,815,264,235,947,622,400
-//              := 210,557,119,328,878,600
-//
+//		 rangeAfter := 8,025,821,355,276,500,992 - 7,815,264,235,947,622,400
+//	             := 210,557,119,328,878,600
 func getRangesBeforeAndAfter(
 	beforeLowerBound, beforeUpperBound, afterLowerBound, afterUpperBound tree.Datum, swap bool,
 ) (rangeBefore, rangeAfter float64, ok bool) {
@@ -932,11 +931,15 @@ func getFixedLenArr(byteArr []byte, ind, fixLen int) []byte {
 }
 
 // histogramWriter prints histograms with the following formatting:
-//   NumRange1    NumEq1     NumRange2    NumEq2    ....
+//
+//	NumRange1    NumEq1     NumRange2    NumEq2    ....
+//
 // <----------- UpperBound1 ----------- UpperBound2 ....
 //
 // For example:
-//   0  1  90  10   0  20
+//
+//	0  1  90  10   0  20
+//
 // <--- 0 ---- 100 --- 200
 //
 // This describes a histogram with 3 buckets. The first bucket contains 1 value

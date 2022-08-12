@@ -24,17 +24,16 @@ import (
 // TestSetDataDriven tests the Set using a data-driven
 // exposition format. The tests support the following commands:
 //
-//   add [parent-id=...] [parent-schema-id=...] name=...
-//     Calls the add method with an entry matching the spec.
-//     Prints the entry.
+//	add [parent-id=...] [parent-schema-id=...] name=...
+//	  Calls the add method with an entry matching the spec.
+//	  Prints the entry.
 //
-//   contains [parent-id=...] [parent-schema-id=...] name=...
-//     Calls the Remove method on the specified id.
-//     Prints whether it is contained removed.
+//	contains [parent-id=...] [parent-schema-id=...] name=...
+//	  Calls the Remove method on the specified id.
+//	  Prints whether it is contained removed.
 //
-//   clear
-//     Clears the tree.
-//
+//	clear
+//	  Clears the tree.
 func TestSetDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t, "set"), func(t *testing.T, path string) {
 		var tr Set

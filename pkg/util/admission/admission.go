@@ -387,7 +387,8 @@ type WorkKind int8
 // units that are expected to be primarily CPU bound (with disk IO for KVWork,
 // but cache hit rates are typically high), and expected to be where most of
 // the CPU consumption happens. These are prioritized in the order
-//   KVWork > SQLKVResponseWork > SQLSQLResponseWork
+//
+//	KVWork > SQLKVResponseWork > SQLSQLResponseWork
 //
 // The high prioritization of KVWork reduces the likelihood that non-SQL KV
 // work will be starved. SQLKVResponseWork is prioritized over
@@ -399,7 +400,9 @@ type WorkKind int8
 //
 // Furthermore, SQLStatementLeafStartWork and SQLStatementRootStartWork are
 // prioritized lowest with
-//   SQLStatementLeafStartWork > SQLStatementRootStartWork
+//
+//	SQLStatementLeafStartWork > SQLStatementRootStartWork
+//
 // This follows the same idea of prioritizing lower layers above higher layers
 // since it releases memory caught up in lower layers, and exerts natural
 // backpressure on the higher layer.
@@ -428,39 +431,39 @@ type WorkKind int8
 // The aforementioned prioritization also enables us to get instantaneous
 // feedback on CPU resource overload. This instantaneous feedback for a grant
 // chain (mentioned earlier) happens in two ways:
-// - the chain requires the grantee's goroutine to run.
-// - the cpuOverloadIndicator (see later), specifically the implementation
-//   provided by kvSlotAdjuster, provides instantaneous feedback (which is
-//   viable only because KVWork is the highest priority).
+//   - the chain requires the grantee's goroutine to run.
+//   - the cpuOverloadIndicator (see later), specifically the implementation
+//     provided by kvSlotAdjuster, provides instantaneous feedback (which is
+//     viable only because KVWork is the highest priority).
 //
 // Weaknesses of this strict prioritization across WorkKinds:
-// - Priority inversion: Lower importance KVWork, not derived from SQL, like
-//   GC of MVCC versions, will happen before user-facing SQLKVResponseWork.
-//   This is because the backpressure, described in the example above, does
-//   not apply to work generated from within the KV layer.
-//   TODO(sumeer): introduce a KVLowPriWork and put it last in this ordering,
-//   to get over this limitation.
-// - Insufficient competition leading to poor isolation: Putting
-//   SQLStatementLeafStartWork, SQLStatementRootStartWork in this list, within
-//   the same GrantCoordinator, does provide node overload protection, but not
-//   necessarily performance isolation when we have WorkKinds of different
-//   importance. Consider the same OLAP example above: if the KVWork slots
-//   being full due to the OLAP query prevents SQLStatementRootStartWork for
-//   the OLTP queries, the competition is starved out before it has an
-//   opportunity to submit any KVWork. Given that control over admitting
-//   SQLStatement{Leaf,Root}StartWork is not primarily about CPU control (the
-//   lower-level work items are where cpu is consumed), we could decouple
-//   these two into a separate GrantCoordinator and only gate them with (high)
-//   fixed slot counts that allow for enough competition, plus a memory
-//   overload indicator.
-//   TODO(sumeer): experiment with this approach.
-// - Continuing the previous bullet, low priority long-lived
-//   {SQLStatementLeafStartWork, SQLStatementRootStartWork} could use up all
-//   the slots, if there was no high priority work for some period of time,
-//   and therefore starve admission of the high priority work when it does
-//   appear. The typical solution to this is to put a max on the number of
-//   slots low priority can use. This would be viable if we did not allow
-//   arbitrary int8 values to be set for Priority.
+//   - Priority inversion: Lower importance KVWork, not derived from SQL, like
+//     GC of MVCC versions, will happen before user-facing SQLKVResponseWork.
+//     This is because the backpressure, described in the example above, does
+//     not apply to work generated from within the KV layer.
+//     TODO(sumeer): introduce a KVLowPriWork and put it last in this ordering,
+//     to get over this limitation.
+//   - Insufficient competition leading to poor isolation: Putting
+//     SQLStatementLeafStartWork, SQLStatementRootStartWork in this list, within
+//     the same GrantCoordinator, does provide node overload protection, but not
+//     necessarily performance isolation when we have WorkKinds of different
+//     importance. Consider the same OLAP example above: if the KVWork slots
+//     being full due to the OLAP query prevents SQLStatementRootStartWork for
+//     the OLTP queries, the competition is starved out before it has an
+//     opportunity to submit any KVWork. Given that control over admitting
+//     SQLStatement{Leaf,Root}StartWork is not primarily about CPU control (the
+//     lower-level work items are where cpu is consumed), we could decouple
+//     these two into a separate GrantCoordinator and only gate them with (high)
+//     fixed slot counts that allow for enough competition, plus a memory
+//     overload indicator.
+//     TODO(sumeer): experiment with this approach.
+//   - Continuing the previous bullet, low priority long-lived
+//     {SQLStatementLeafStartWork, SQLStatementRootStartWork} could use up all
+//     the slots, if there was no high priority work for some period of time,
+//     and therefore starve admission of the high priority work when it does
+//     appear. The typical solution to this is to put a max on the number of
+//     slots low priority can use. This would be viable if we did not allow
+//     arbitrary int8 values to be set for Priority.
 const (
 	// KVWork represents requests submitted to the KV layer, from the same node
 	// or a different node. They may originate from the SQL layer or the KV

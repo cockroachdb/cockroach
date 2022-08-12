@@ -101,17 +101,16 @@ func (s *fixedNumTuplesNoInputOp) Next() coldata.Batch {
 //
 // The intended diagram is as follows:
 //
-//       original input                (with schema [t1, ..., tN])
-//       --------------
-//             |
-//             ↓
-//     vectorTypeEnforcer              (will enforce that tN+1 = outputType)
-//     ------------------
-//             |
-//             ↓
-//   "projecting" operator             (projects its output of type outputType
-//   ---------------------              in column at position of N+1)
-//
+//	    original input                (with schema [t1, ..., tN])
+//	    --------------
+//	          |
+//	          ↓
+//	  vectorTypeEnforcer              (will enforce that tN+1 = outputType)
+//	  ------------------
+//	          |
+//	          ↓
+//	"projecting" operator             (projects its output of type outputType
+//	---------------------              in column at position of N+1)
 type vectorTypeEnforcer struct {
 	colexecop.NonExplainable
 	allocator *colmem.Allocator

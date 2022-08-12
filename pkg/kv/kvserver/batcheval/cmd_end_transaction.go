@@ -810,40 +810,52 @@ func RunCommitTrigger(
 // replicas process the SplitTrigger before processing any Raft message for RHS
 // (right hand side) of the newly split range. Something like:
 //
-//         Node A             Node B             Node C
-//     ----------------------------------------------------
+//	    Node A             Node B             Node C
+//	----------------------------------------------------
+//
 // range 1   |                  |                  |
-//           |                  |                  |
-//      SplitTrigger            |                  |
-//           |             SplitTrigger            |
-//           |                  |             SplitTrigger
-//           |                  |                  |
-//     ----------------------------------------------------
+//
+//	      |                  |                  |
+//	 SplitTrigger            |                  |
+//	      |             SplitTrigger            |
+//	      |                  |             SplitTrigger
+//	      |                  |                  |
+//	----------------------------------------------------
+//
 // split finished on A, B and C |                  |
-//           |                  |                  |
+//
+//	|                  |                  |
+//
 // range 2   |                  |                  |
-//           | ---- MsgVote --> |                  |
-//           | ---------------------- MsgVote ---> |
+//
+//	| ---- MsgVote --> |                  |
+//	| ---------------------- MsgVote ---> |
 //
 // But that ideal ordering is not guaranteed. The split is "finished" when two
 // of the replicas have appended the end-txn request containing the
 // SplitTrigger to their Raft log. The following scenario is possible:
 //
-//         Node A             Node B             Node C
-//     ----------------------------------------------------
+//	    Node A             Node B             Node C
+//	----------------------------------------------------
+//
 // range 1   |                  |                  |
-//           |                  |                  |
-//      SplitTrigger            |                  |
-//           |             SplitTrigger            |
-//           |                  |                  |
-//     ----------------------------------------------------
+//
+//	      |                  |                  |
+//	 SplitTrigger            |                  |
+//	      |             SplitTrigger            |
+//	      |                  |                  |
+//	----------------------------------------------------
+//
 // split finished on A and B    |                  |
-//           |                  |                  |
+//
+//	|                  |                  |
+//
 // range 2   |                  |                  |
-//           | ---- MsgVote --> |                  |
-//           | --------------------- MsgVote ---> ???
-//           |                  |                  |
-//           |                  |             SplitTrigger
+//
+//	| ---- MsgVote --> |                  |
+//	| --------------------- MsgVote ---> ???
+//	|                  |                  |
+//	|                  |             SplitTrigger
 //
 // In this scenario, C will create range 2 upon reception of the MsgVote from
 // A, though locally that span of keys is still part of range 1. This is
