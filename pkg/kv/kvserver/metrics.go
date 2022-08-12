@@ -1004,9 +1004,16 @@ Such Replicas will be ignored for the purposes of proposal quota, and will not
 receive replication traffic. They are essentially treated as offline for the
 purpose of replication. This serves as a crude form of admission control.
 
-The count is emitted by the leaseholder of each range.
-.`,
+The count is emitted by the leaseholder of each range.`,
 		Measurement: "Followers",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftPausedFollowerDroppedMsgs = metric.Metadata{
+		Name: "admission.raft.paused_replicas_dropped_msgs",
+		Help: `Number of messages dropped instead of being sent to paused replicas.
+
+The messages are dropped to help these replicas to recover from I/O overload.`,
+		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -1754,7 +1761,8 @@ type StoreMetrics struct {
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
 
-	RaftPausedFollowerCount *metric.Gauge
+	RaftPausedFollowerCount       *metric.Gauge
+	RaftPausedFollowerDroppedMsgs *metric.Counter
 
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
@@ -2266,7 +2274,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
 		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
 
-		RaftPausedFollowerCount: metric.NewGauge(metaRaftFollowerPaused),
+		RaftPausedFollowerCount:       metric.NewGauge(metaRaftFollowerPaused),
+		RaftPausedFollowerDroppedMsgs: metric.NewCounter(metaRaftPausedFollowerDroppedMsgs),
 
 		// This Gauge measures the number of heartbeats queued up just before
 		// the queue is cleared, to avoid flapping wildly.
