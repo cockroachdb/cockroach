@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -48,15 +49,15 @@ func filterElements(name string, a, b nodeVars, fn interface{}) rel.Clause {
 	return rel.Filter(name, a.el, b.el)(fn)
 }
 
-func toPublic(from, to nodeVars) rel.Clause {
-	return toPublicUntyped(from.target, to.target)
+func toPublicOrTransient(from, to nodeVars) rel.Clause {
+	return toPublicOrTransientUntyped(from.target, to.target)
 }
 
-func statusesToPublic(
+func statusesToPublicOrTransient(
 	from nodeVars, fromStatus scpb.Status, to nodeVars, toStatus scpb.Status,
 ) rel.Clause {
 	return rel.And(
-		toPublic(from, to),
+		toPublicOrTransient(from, to),
 		from.currentStatus(fromStatus),
 		to.currentStatus(toStatus),
 	)
@@ -71,6 +72,20 @@ func statusesToAbsent(
 ) rel.Clause {
 	return rel.And(
 		toAbsent(from, to),
+		from.currentStatus(fromStatus),
+		to.currentStatus(toStatus),
+	)
+}
+
+func transient(from, to nodeVars) rel.Clause {
+	return transientUntyped(from.target, to.target)
+}
+
+func statusesTransient(
+	from nodeVars, fromStatus scpb.Status, to nodeVars, toStatus scpb.Status,
+) rel.Clause {
+	return rel.And(
+		transient(from, to),
 		from.currentStatus(fromStatus),
 		to.currentStatus(toStatus),
 	)
@@ -102,20 +117,20 @@ func columnInIndex(
 	return columnInIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
 }
 
-func columnInPrimaryIndexSwap(
+func columnInSwappedInPrimaryIndex(
 	indexColumn, index nodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
 ) rel.Clause {
-	return columnInPrimaryIndexSwapUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
+	return columnInSwappedInPrimaryIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
 }
 
 var (
-	toPublicUntyped = screl.Schema.Def2(
-		"toPublic",
+	toPublicOrTransientUntyped = screl.Schema.Def2(
+		"toPublicOrTransient",
 		"target1", "target2",
 		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
 			return rel.Clauses{
-				target1.AttrEq(screl.TargetStatus, scpb.Status_PUBLIC),
-				target2.AttrEq(screl.TargetStatus, scpb.Status_PUBLIC),
+				target1.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT),
+				target2.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT),
 			}
 		})
 
@@ -126,6 +141,16 @@ var (
 			return rel.Clauses{
 				target1.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 				target2.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			}
+		})
+
+	transientUntyped = screl.Schema.Def2(
+		"transient",
+		"target1", "target2",
+		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
+			return rel.Clauses{
+				target1.AttrEq(screl.TargetStatus, scpb.Status_TRANSIENT_ABSENT),
+				target2.AttrEq(screl.TargetStatus, scpb.Status_TRANSIENT_ABSENT),
 			}
 		})
 
@@ -191,7 +216,7 @@ var (
 			}
 		})
 
-	sourceIndexNotSetUntyped = screl.Schema.Def1("sourceIndexNotSet", "index", func(
+	sourceIndexIsSetUntyped = screl.Schema.Def1("sourceIndexIsSet", "index", func(
 		index rel.Var,
 	) rel.Clauses {
 		return rel.Clauses{
@@ -199,8 +224,8 @@ var (
 		}
 	})
 
-	columnInPrimaryIndexSwapUntyped = screl.Schema.Def5(
-		"columnInPrimaryIndexSwap",
+	columnInSwappedInPrimaryIndexUntyped = screl.Schema.Def5(
+		"columnInSwappedInPrimaryIndex",
 		"index-column", "index", "table-id", "column-id", "index-id", func(
 			indexColumn, index, tableID, columnID, indexID rel.Var,
 		) rel.Clauses {
@@ -208,7 +233,7 @@ var (
 				columnInIndexUntyped(
 					indexColumn, index, tableID, columnID, indexID,
 				),
-				sourceIndexNotSetUntyped(index),
+				sourceIndexIsSetUntyped(index),
 			}
 		})
 )
@@ -358,4 +383,59 @@ func isIndexDependent(e scpb.Element) bool {
 		return true
 	}
 	return false
+}
+
+// registerDepRuleForDrop is a convenience function which calls
+// registerDepRule with the cross-product of (ToAbsent,Transient)^2 target
+// states, which can't easily be composed.
+func registerDepRuleForDrop(
+	ruleName scgraph.RuleName,
+	kind scgraph.DepEdgeKind,
+	from, to string,
+	fromStatus, toStatus scpb.Status,
+	fn func(from, to nodeVars) rel.Clauses,
+) {
+
+	transientFromStatus, okFrom := scpb.GetTransientEquivalent(fromStatus)
+	if !okFrom {
+		panic(errors.AssertionFailedf("Invalid 'from' status %s", fromStatus))
+	}
+	transientToStatus, okTo := scpb.GetTransientEquivalent(toStatus)
+	if !okTo {
+		panic(errors.AssertionFailedf("Invalid 'from' status %s", toStatus))
+	}
+
+	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+		return append(
+			fn(from, to),
+			statusesToAbsent(from, fromStatus, to, toStatus),
+		)
+	})
+
+	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+		return append(
+			fn(from, to),
+			statusesTransient(from, transientFromStatus, to, transientToStatus),
+		)
+	})
+
+	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+		return append(
+			fn(from, to),
+			from.targetStatus(scpb.Transient),
+			from.currentStatus(transientFromStatus),
+			to.targetStatus(scpb.ToAbsent),
+			to.currentStatus(toStatus),
+		)
+	})
+
+	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+		return append(
+			fn(from, to),
+			from.targetStatus(scpb.ToAbsent),
+			from.currentStatus(fromStatus),
+			to.targetStatus(scpb.Transient),
+			to.currentStatus(transientToStatus),
+		)
+	})
 }

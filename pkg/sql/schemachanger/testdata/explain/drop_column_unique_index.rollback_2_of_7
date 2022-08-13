@@ -12,10 +12,10 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 8 elements transitioning toward ABSENT
+      │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
-      │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
       │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
@@ -23,17 +23,11 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
       │    ├── 2 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 106, ColumnID: 3}
       │    │    └── ABSENT        → PUBLIC      ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
-      │    └── 14 Mutation operations
+      │    └── 8 Mutation operations
+      │         ├── SetColumnName {"ColumnID":3,"Name":"pi","TableID":106}
+      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":5,"TableID":106}
       │         ├── MakeColumnPublic {"ColumnID":3,"TableID":106}
       │         ├── RefreshStats {"TableID":106}
-      │         ├── SetColumnName {"ColumnID":3,"Name":"pi","TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Kind":2,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":4,"Kind":2,"Ordinal":1,"TableID":106}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":5,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Kind":2,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":5,"Kind":2,"Ordinal":1,"TableID":106}
       │         ├── CreateGcJobForIndex {"IndexID":4,"TableID":106}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}

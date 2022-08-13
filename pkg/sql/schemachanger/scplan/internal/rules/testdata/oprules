@@ -6,9 +6,9 @@ columnInIndex(index-column, index, table-id, column-id, index-id):
     - $index-column[ColumnID] = $column-id
     - $index[IndexID] = $index-id
     - joinOnIndexID($index, $index-column, $table-id, $index-id)
-columnInPrimaryIndexSwap(index-column, index, table-id, column-id, index-id):
+columnInSwappedInPrimaryIndex(index-column, index, table-id, column-id, index-id):
     - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
-    - sourceIndexNotSet($index)
+    - sourceIndexIsSet($index)
 joinOnColumnID(a, b, desc-id, col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
@@ -35,14 +35,17 @@ joinTargetNode(element, target, node):
     - joinTarget($element, $target)
     - $node[Type] = '*screl.Node'
     - $node[Target] = $target
-sourceIndexNotSet(index):
+sourceIndexIsSet(index):
     - $index[SourceIndexID] != 0
 toAbsent(target1, target2):
     - $target1[TargetStatus] = ABSENT
     - $target2[TargetStatus] = ABSENT
-toPublic(target1, target2):
-    - $target1[TargetStatus] = PUBLIC
-    - $target2[TargetStatus] = PUBLIC
+toPublicOrTransient(target1, target2):
+    - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+transient(target1, target2):
+    - $target1[TargetStatus] = TRANSIENT_ABSENT
+    - $target2[TargetStatus] = TRANSIENT_ABSENT
 
 oprules
 ----
@@ -129,6 +132,17 @@ oprules
     - $relation-target[TargetStatus] = ABSENT
     - joinTargetNode($index, $index-target, $index-node)
     - $index-target[TargetStatus] = ABSENT
+- name: skip index-column removal ops on index removal
+  from: index-column-node
+  query:
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - joinOnIndexID($index-column, $index, $relation-id, $index-id)
+    - joinTargetNode($index-column, $index-column-target, $index-column-node)
+    - $index-column-target[TargetStatus] IN [ABSENT, TRANSIENT_ABSENT]
+    - $index-column-node[CurrentStatus] IN [PUBLIC, TRANSIENT_PUBLIC]
+    - joinTarget($index, $index-target)
+    - $index-target[TargetStatus] IN [ABSENT, TRANSIENT_ABSENT]
 - name: skip table comment removal ops on descriptor drop
   from: dep-node
   query:

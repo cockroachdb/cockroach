@@ -17,24 +17,22 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-        │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
         │   │
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-        │   │         rule: "secondary index in DELETE_ONLY before removing columns"
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
         │   │
         │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
-        │   │   │     rule: "secondary index columns removed before removing the index"
         │   │   │     rule: "dependents removed before index"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
-        │   │   │     rule: "secondary index columns removed before removing the index"
         │   │   │     rule: "dependents removed before index"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: idx1, IndexID: 2}
@@ -50,34 +48,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │         rule: "dependents removed before index"
         │   │
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-        │   │     PUBLIC → ABSENT
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
         │   │
         │   └── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-        │         PUBLIC → ABSENT
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       └── • skip PUBLIC → ABSENT operations
+        │             rule: "skip index-column removal ops on index removal"
         │
-        └── • 11 Mutation operations
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 2
-            │     IndexID: 3
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 1
-            │     IndexID: 3
-            │     Kind: 1
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 2
-            │     IndexID: 2
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 1
-            │     IndexID: 2
-            │     Kind: 1
-            │     TableID: 106
+        └── • 7 Mutation operations
             │
             ├── • LogEvent
             │     Element:

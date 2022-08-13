@@ -71,10 +71,24 @@ func makeIndexBackfillColumns(
 	var ib indexBackfillerCols
 	ib.cols = make([]catalog.Column, 0, len(deletableColumns))
 
-	var computedVirtual catalog.TableColSet
+	var computedVirtual, allIndexColumns catalog.TableColSet
+	primaryColumns := indexColumns(sourcePrimaryIndex)
+	for _, idx := range addedIndexes {
+		allIndexColumns.UnionWith(indexColumns(idx))
+	}
 	for _, column := range deletableColumns {
 		if !column.Public() &&
-			!(column.Adding() && column.WriteAndDeleteOnly()) {
+			// Include columns we are adding, in case we are adding them to a
+			// new primary index as part of an ADD COLUMN backfill. Later code
+			// will validate that we're allowed to be adding this column to the
+			// new index.
+			!(column.Adding() && column.WriteAndDeleteOnly()) &&
+			// Include columns we're dropping if the column is already part of
+			// the current primary index and needs to be in the new index. Code
+			// elsewhere will enforce that the index we're building including this
+			// dropped column is allowed to include the dropped column.
+			!(column.Dropped() && primaryColumns.Contains(column.GetID()) &&
+				allIndexColumns.Contains(column.GetID())) {
 			continue
 		}
 		if column.IsComputed() && column.IsVirtual() {
@@ -87,7 +101,6 @@ func makeIndexBackfillColumns(
 	}
 
 	// Find the adding columns which are being added to new primary indexes.
-	primaryColumns := indexColumns(sourcePrimaryIndex)
 	var addedDefaultOrComputed catalog.TableColSet
 	for _, idx := range addedIndexes {
 		if idx.GetEncodingType() != descpb.PrimaryIndexEncoding {

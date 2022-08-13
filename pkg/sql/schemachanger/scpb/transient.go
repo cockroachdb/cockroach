@@ -19,7 +19,13 @@ func GetTransientEquivalent(s Status) (Status, bool) {
 }
 
 var transientEquivalent = map[Status]Status{
-	Status_DELETE_ONLY: Status_TRANSIENT_DELETE_ONLY,
-	Status_WRITE_ONLY:  Status_TRANSIENT_WRITE_ONLY,
-	Status_ABSENT:      Status_TRANSIENT_ABSENT,
+	Status_DELETE_ONLY:   Status_TRANSIENT_DELETE_ONLY,
+	Status_WRITE_ONLY:    Status_TRANSIENT_WRITE_ONLY,
+	Status_ABSENT:        Status_TRANSIENT_ABSENT,
+	Status_PUBLIC:        Status_TRANSIENT_PUBLIC,
+	Status_BACKFILL_ONLY: Status_TRANSIENT_BACKFILL_ONLY,
+	Status_BACKFILLED:    Status_TRANSIENT_BACKFILLED,
+	Status_MERGE_ONLY:    Status_TRANSIENT_MERGE_ONLY,
+	Status_MERGED:        Status_TRANSIENT_MERGED,
+	Status_VALIDATED:     Status_TRANSIENT_VALIDATED,
 }

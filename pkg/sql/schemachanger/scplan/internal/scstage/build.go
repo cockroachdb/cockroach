@@ -13,6 +13,7 @@ package scstage
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -136,7 +137,13 @@ func buildStages(bc buildContext) (stages []Stage) {
 			if bs.phase == scop.LatestPhase {
 				// This should never happen, we should always be able to make forward
 				// progress because we haven't reached the terminal state yet.
-				panic(errors.AssertionFailedf("unable to make progress"))
+				var str strings.Builder
+				for _, t := range sb.current {
+					str.WriteString(" - ")
+					str.WriteString(screl.NodeString(t.n))
+					str.WriteString("\n")
+				}
+				panic(errors.WithDetailf(errors.AssertionFailedf("unable to make progress"), "terminal state:\n%s", str.String()))
 			}
 			bs.phase++
 			sb = bc.makeStageBuilder(bs)
@@ -379,6 +386,10 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 	_, fromIsFulfilled := sb.bs.fulfilled[de.From()]
 	_, fromIsCandidate := sb.fulfilling[de.From()]
 	switch de.Kind() {
+	case scgraph.PreviousStagePrecedence:
+		// True iff the source node has not been fulfilled in an earlier stage.
+		return !fromIsFulfilled
+
 	case scgraph.Precedence:
 		// True iff the source node has not been fulfilled in an earlier stage
 		// and also iff it's not (yet?) scheduled to be fulfilled in this stage.

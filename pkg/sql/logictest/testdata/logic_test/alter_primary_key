@@ -530,7 +530,6 @@ SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
-   rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 )
 
@@ -1150,10 +1149,9 @@ alter table t1 alter primary key using columns(id, id2);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-t1_pkey  id     ASC
-t1_pkey  id2    ASC
-t1_pkey  name   N/A
-t1_pkey  rowid  N/A
+t1_pkey  id    ASC
+t1_pkey  id2   ASC
+t1_pkey  name  N/A
 
 
 statement ok
@@ -1163,10 +1161,9 @@ alter table t1 alter primary key using columns(id, id2);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-t1_pkey  id     ASC
-t1_pkey  id2    ASC
-t1_pkey  name   N/A
-t1_pkey  rowid  N/A
+t1_pkey  id    ASC
+t1_pkey  id2   ASC
+t1_pkey  name  N/A
 
 # Validate drop and recreate
 statement ok
@@ -1175,10 +1172,9 @@ alter table t1 drop constraint t1_pkey, alter primary key using columns(id, id2)
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-t1_pkey  id     ASC
-t1_pkey  id2    ASC
-t1_pkey  name   N/A
-t1_pkey  rowid  N/A
+t1_pkey  id    ASC
+t1_pkey  id2   ASC
+t1_pkey  name  N/A
 
 statement ok
 alter table t1 alter primary key using columns(id);
@@ -1187,12 +1183,11 @@ alter table t1 alter primary key using columns(id);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-t1_pkey        id     ASC
-t1_pkey        id2    N/A
-t1_pkey        name   N/A
-t1_pkey        rowid  N/A
-t1_id_id2_key  id     ASC
-t1_id_id2_key  id2    ASC
+t1_pkey        id    ASC
+t1_pkey        id2   N/A
+t1_pkey        name  N/A
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1201,13 +1196,12 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-t1_pkey        id     DESC
-t1_pkey        id2    N/A
-t1_pkey        name   N/A
-t1_pkey        rowid  N/A
-t1_id_key      id     ASC
-t1_id_id2_key  id     ASC
-t1_id_id2_key  id2    ASC
+t1_pkey        id    DESC
+t1_pkey        id2   N/A
+t1_pkey        name  N/A
+t1_id_key      id    ASC
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
 
 
 statement ok
@@ -1216,13 +1210,12 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-t1_pkey        id     DESC
-t1_pkey        id2    N/A
-t1_pkey        name   N/A
-t1_pkey        rowid  N/A
-t1_id_key      id     ASC
-t1_id_id2_key  id     ASC
-t1_id_id2_key  id2    ASC
+t1_pkey        id    DESC
+t1_pkey        id2   N/A
+t1_pkey        name  N/A
+t1_id_key      id    ASC
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1230,13 +1223,12 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-t1_pkey        id     DESC
-t1_pkey        id2    N/A
-t1_pkey        name   N/A
-t1_pkey        rowid  N/A
-t1_id_key      id     ASC
-t1_id_id2_key  id     ASC
-t1_id_id2_key  id2    ASC
+t1_pkey        id    DESC
+t1_pkey        id2   N/A
+t1_pkey        name  N/A
+t1_id_key      id    ASC
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id) USING HASH WITH (bucket_count=10)
@@ -1248,7 +1240,6 @@ t1_pkey        crdb_internal_id_shard_10  ASC
 t1_pkey        id                         ASC
 t1_pkey        id2                        N/A
 t1_pkey        name                       N/A
-t1_pkey        rowid                      N/A
 t1_id_key1     id                         DESC
 t1_id_key1     crdb_internal_id_shard_10  ASC
 t1_id_key      id                         ASC
@@ -1715,3 +1706,39 @@ INSERT INTO t_multiple_cf VALUES (23, 24)
 
 statement ok
 ALTER TABLE t_multiple_cf ALTER PRIMARY KEY USING COLUMNS (j)
+
+subtest alter_primary_key_removes_rowid
+
+statement ok
+CREATE TABLE t_rowid (k INT NOT NULL, v STRING)
+
+# Weird but legal: a reference is held to the hidden rowid column.
+statement ok
+CREATE TABLE t_child (id INT8 PRIMARY KEY, CONSTRAINT fk FOREIGN KEY (id) REFERENCES t_rowid (rowid))
+
+# In this case, we expect the rowid column to NOT be dropped,
+# furthermore it should be covered by a unique index.
+statement ok
+ALTER TABLE t_rowid ALTER PRIMARY KEY USING COLUMNS (k)
+
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM t_rowid] ORDER BY column_name;
+----
+k
+rowid
+v
+
+# Recreate the table but without any references to rowid.
+statement ok
+DROP TABLE t_rowid CASCADE;
+CREATE TABLE t_rowid (k INT NOT NULL, v STRING)
+
+# Now we expect the rowid column to be dropped.
+statement ok
+ALTER TABLE t_rowid ALTER PRIMARY KEY USING COLUMNS (k)
+
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM t_rowid] ORDER BY column_name;
+----
+k
+v

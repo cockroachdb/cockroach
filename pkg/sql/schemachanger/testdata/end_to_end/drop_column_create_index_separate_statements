@@ -88,20 +88,6 @@ upsert descriptor #104
   +    direction: DROP
   +    mutationId: 1
   +    state: DELETE_AND_WRITE_ONLY
-  +  - column:
-  +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
-  +      id: 4
-  +      inaccessible: true
-  +      name: crdb_internal_column_4_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: IntFamily
-  +        oid: 20
-  +        width: 64
-  +      virtual: true
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -179,6 +165,20 @@ upsert descriptor #104
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
+  +  - column:
+  +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  +      id: 4
+  +      inaccessible: true
+  +      name: crdb_internal_column_4_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: DELETE_AND_WRITE_ONLY
      name: t
      nextColumnId: 5
   -  nextConstraintId: 2
@@ -262,8 +262,8 @@ upsert descriptor #104
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: DELETE_AND_WRITE_ONLY
-     name: t
-     nextColumnId: 5
+     - column:
+         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -397,6 +397,20 @@ upsert descriptor #104
        mutationId: 1
        state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
+  +  - column:
+  +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  +      id: 4
+  +      inaccessible: true
+  +      name: crdb_internal_column_4_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: DELETE_AND_WRITE_ONLY
   +  - direction: DROP
        index:
   -      constraintId: 3
@@ -428,6 +442,18 @@ upsert descriptor #104
          version: 4
        mutationId: 1
        state: DELETE_AND_WRITE_ONLY
+  -  - column:
+  -      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  -      id: 4
+  -      inaccessible: true
+  -      name: crdb_internal_column_4_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -      virtual: true
+  -    direction: DROP
   +  - direction: ADD
   +    index:
   +      constraintId: 4
@@ -450,7 +476,8 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      version: 4
-  +    mutationId: 1
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
@@ -627,7 +654,7 @@ begin transaction #17
 validate forward indexes [5] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 16 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
 upsert descriptor #104
   ...
            statementTag: CREATE INDEX
@@ -670,13 +697,6 @@ upsert descriptor #104
        mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
-     - column:
-         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
-  ...
-       direction: DROP
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
      - direction: DROP
        index:
   ...
@@ -690,6 +710,13 @@ upsert descriptor #104
          constraintId: 3
   ...
          version: 4
+       mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  ...
+       direction: DROP
        mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
@@ -798,20 +825,6 @@ upsert descriptor #104
   -    direction: DROP
   -    mutationId: 1
   -    state: DELETE_ONLY
-  -  - column:
-  -      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
-  -      id: 4
-  -      inaccessible: true
-  -      name: crdb_internal_column_4_name_placeholder
-  -      nullable: true
-  -      type:
-  -        family: IntFamily
-  -        oid: 20
-  -        width: 64
-  -      virtual: true
-  -    direction: DROP
-  -    mutationId: 1
-  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      createdAtNanos: "1640995200000000000"
@@ -861,6 +874,20 @@ upsert descriptor #104
   -      unique: true
   -      useDeletePreservingEncoding: true
   -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  -      id: 4
+  -      inaccessible: true
+  -      name: crdb_internal_column_4_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -      virtual: true
+  -    direction: DROP
   -    mutationId: 1
   -    state: DELETE_ONLY
   -  - direction: DROP
