@@ -503,13 +503,10 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 		return ms, hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(valCount)}
 	}
 
-	deleteWithTobmstone := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
-		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, ms,
-			[]byte{0}, []byte{0xff},
-			delTime, hlc.ClockTimestamp{},
-			nil, nil, 1, nil))
+	deleteWithTombstone := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
+		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
+			ctx, rw, ms, []byte{0}, []byte{0xff}, delTime, hlc.ClockTimestamp{}, nil, nil, false, 1, nil))
 	}
-	_ = deleteWithTobmstone
 	deleteWithPoints := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		for _, key := range keys {
 			require.NoError(t, storage.MVCCPut(ctx, rw, ms, key, delTime, hlc.ClockTimestamp{}, roachpb.Value{}, nil))
@@ -527,7 +524,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 
 	rangeMs := ms
 	pointMs := ms
-	deleteWithTobmstone(eng.NewBatch(), deletionTime, &rangeMs)
+	deleteWithTombstone(eng.NewBatch(), deletionTime, &rangeMs)
 	deleteWithPoints(eng.NewBatch(), deletionTime, &pointMs)
 
 	gcTTL := time.Minute * 30

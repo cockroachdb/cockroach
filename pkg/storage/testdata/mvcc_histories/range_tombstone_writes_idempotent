@@ -1,0 +1,286 @@
+# Tests idempotent MVCC range tombstone writes.
+#
+# Set up some point keys, point tombstones x, range tombstones o--o,
+# and intents [].
+#
+# 6                                 [i6]
+# 5
+# 4  x       c4      e4  x                   o---------------o
+# 3  o-----------o                           k3          x
+# 2  a2                      g2                      o-------o
+# 1                                                  m1
+# 0                                                              p0
+#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+run ok
+put k=a ts=2 v=a2
+del_range_ts k=a end=d ts=3
+del k=a ts=4
+put k=c ts=4 v=c4
+put k=e ts=4 v=e4
+del k=f ts=4
+put k=g ts=2 v=g2
+put k=m ts=1 v=m1
+del_range_ts k=m end=o ts=2
+put k=k ts=3 v=k3
+del k=n ts=3
+put k=p ts=0 v=p0
+del_range_ts k=k end=o ts=4
+with t=A
+  txn_begin ts=6
+  put k=i v=i6
+----
+del: "a": found key false
+del: "f": found key false
+del: "n": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+# Writing below point keys and tombstones errors, as does below range keys.
+run error
+del_range_ts k=e end=f ts=3 idempotent
+----
+>> at end:
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "e" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=f end=g ts=3 idempotent
+----
+>> at end:
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "f" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=l end=m ts=3 idempotent
+----
+>> at end:
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "l" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+# Writing below intents error.
+run error
+del_range_ts k=i end=j ts=3 idempotent
+----
+>> at end:
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+
+# Idempotent writes: exact, left, right, subset.
+run stats ok
+del_range_ts k=k end=o ts=5 idempotent
+del_range_ts k=k end=l ts=5 idempotent
+del_range_ts k=n end=o ts=5 idempotent
+del_range_ts k=k end=m ts=5 idempotent
+----
+>> del_range_ts k=k end=o ts=5 idempotent
+stats: no change
+>> del_range_ts k=k end=l ts=5 idempotent
+stats: no change
+>> del_range_ts k=n end=o ts=5 idempotent
+stats: no change
+>> del_range_ts k=k end=m ts=5 idempotent
+stats: no change
+>> at end:
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=3 range_key_bytes=48 range_val_count=4 live_count=5 live_bytes=155 gc_bytes_age=14602 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+
+# Non-idempotent writes above tombstone and point.
+run stats ok
+del_range_ts k=a end=b ts=5 idempotent
+del_range_ts k=c end=d ts=5 idempotent
+----
+>> del_range_ts k=a end=b ts=5 idempotent
+stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2108
+>> del_range_ts k=c end=d ts=5 idempotent
+stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 live_count=-1 live_bytes=-21 gc_bytes_age=+4103
+>> at end:
+rangekey: {a-b}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=5 range_key_bytes=92 range_val_count=8 live_count=4 live_bytes=134 gc_bytes_age=20813 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+
+# Writing on top of stacked range keys is also idempotent.
+run stats ok
+del_range_ts k=a end=d ts=6 idempotent
+----
+>> del_range_ts k=a end=d ts=6 idempotent
+stats: no change
+>> at end:
+rangekey: {a-b}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=5 range_key_bytes=92 range_val_count=8 live_count=4 live_bytes=134 gc_bytes_age=20813 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+
+# Non-idempotent writes on top of bare point keys.
+run stats ok
+del_range_ts k=e end=f ts=5 idempotent
+del_range_ts k=f end=g ts=5 idempotent
+----
+>> del_range_ts k=e end=f ts=5 idempotent
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3230
+>> del_range_ts k=f end=g ts=5 idempotent
+stats: no change
+>> at end:
+rangekey: {a-b}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=6 range_key_bytes=105 range_val_count=9 live_count=3 live_bytes=113 gc_bytes_age=24043 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+
+
+# Writes across empty key space is considered idempotent.
+run stats ok
+del_range_ts k=h end=i ts=5 idempotent
+del_range_ts k=j end=p ts=5 idempotent
+----
+>> del_range_ts k=h end=i ts=5 idempotent
+stats: no change
+>> del_range_ts k=j end=p ts=5 idempotent
+stats: no change
+>> at end:
+rangekey: {a-b}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=6 range_key_bytes=105 range_val_count=9 live_count=3 live_bytes=113 gc_bytes_age=24043 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94

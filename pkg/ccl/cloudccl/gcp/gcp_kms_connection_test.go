@@ -93,7 +93,7 @@ func TestGCSKMSExternalConnection(t *testing.T) {
 		params := make(url.Values)
 		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 
-		kmsURI := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
+		kmsURI := fmt.Sprintf("gcp-kms:///%s?%s", keyID, params.Encode())
 		createExternalConnection("auth-implicit-kms", kmsURI)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName, "auth-implicit-kms")
 	})
@@ -111,7 +111,7 @@ func TestGCSKMSExternalConnection(t *testing.T) {
 		// Set AUTH to specified.
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 
-		kmsURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+		kmsURI := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-specified-kms", kmsURI)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName, "auth-specified-kms")
 	})
@@ -136,7 +136,7 @@ func TestGCSKMSExternalConnection(t *testing.T) {
 		// Set AUTH to specified.
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 
-		kmsURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+		kmsURI := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-specified-bearer-token", kmsURI)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName,
 			"auth-specified-bearer-token")
@@ -178,6 +178,10 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 	createExternalConnection := func(externalConnectionName, uri string) {
 		sqlDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
 	}
+	disallowedCreateExternalConnection := func(externalConnectionName, uri string) {
+		sqlDB.ExpectErr(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED)",
+			fmt.Sprintf(`CREATE EXTERNAL CONNECTION '%s' AS '%s'`, externalConnectionName, uri))
+	}
 	backupAndRestoreFromExternalConnection := func(backupExternalConnectionName, kmsExternalConnectionName string) {
 		backupURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
 		kmsURI := fmt.Sprintf("external://%s", kmsExternalConnectionName)
@@ -186,12 +190,6 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * FROM bar.foo`, [][]string{{"1"}, {"2"}, {"3"}})
 		sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
 		sqlDB.Exec(t, `DROP DATABASE bar CASCADE`)
-	}
-	disallowedBackupToExternalConnection := func(backupExternalConnectionName, kmsExternalConnectionName string) {
-		backupURI := fmt.Sprintf("external://%s", backupExternalConnectionName)
-		kmsURI := fmt.Sprintf("external://%s", kmsExternalConnectionName)
-		sqlDB.ExpectErr(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED)",
-			fmt.Sprintf(`BACKUP INTO '%s' WITH kms='%s'`, backupURI, kmsURI))
 	}
 
 	envVars := []string{
@@ -217,31 +215,29 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 	createExternalConnection(backupExternalConnectionName, backupURI)
 
 	t.Run("auth-assume-role-implicit", func(t *testing.T) {
-		disallowedKMSURI := fmt.Sprintf("gs:///%s?%s=%s", keyID, cloud.AuthParam, cloud.AuthParamImplicit)
+		disallowedKMSURI := fmt.Sprintf("gcp-kms:///%s?%s=%s", keyID, cloud.AuthParam, cloud.AuthParamImplicit)
 		disallowedECName := "auth-assume-role-implicit-disallowed"
-		createExternalConnection(disallowedECName, disallowedKMSURI)
-		disallowedBackupToExternalConnection(backupExternalConnectionName, disallowedECName)
+		disallowedCreateExternalConnection(disallowedECName, disallowedKMSURI)
 
 		q := make(url.Values)
 		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
 		q.Set(gcp.AssumeRoleParam, assumedAccount)
-		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+		uri := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-assume-role-implicit", uri)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName, "auth-assume-role-implicit")
 	})
 
 	t.Run("auth-assume-role-specified", func(t *testing.T) {
-		disallowedKMSURI := fmt.Sprintf("gs:///%s?%s=%s&%s=%s", keyID, cloud.AuthParam,
+		disallowedKMSURI := fmt.Sprintf("gcp-kms:///%s?%s=%s&%s=%s", keyID, cloud.AuthParam,
 			cloud.AuthParamSpecified, gcp.CredentialsParam, url.QueryEscape(encodedCredentials))
 		disallowedECName := "auth-assume-role-specified-disallowed"
-		createExternalConnection(disallowedECName, disallowedKMSURI)
-		disallowedBackupToExternalConnection(backupExternalConnectionName, disallowedECName)
+		disallowedCreateExternalConnection(disallowedECName, disallowedKMSURI)
 
 		q := make(url.Values)
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 		q.Set(gcp.AssumeRoleParam, assumedAccount)
 		q.Set(gcp.CredentialsParam, encodedCredentials)
-		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+		uri := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-assume-role-specified", uri)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName, "auth-assume-role-specified")
 	})
@@ -262,14 +258,13 @@ func TestGCSExternalConnectionAssumeRole(t *testing.T) {
 		for i, role := range roleChain {
 			i := i
 			q.Set(gcp.AssumeRoleParam, role)
-			disallowedKMSURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+			disallowedKMSURI := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 			disallowedECName := fmt.Sprintf("auth-assume-role-chaining-disallowed-%d", i)
-			createExternalConnection(disallowedECName, disallowedKMSURI)
-			disallowedBackupToExternalConnection(backupExternalConnectionName, disallowedECName)
+			disallowedCreateExternalConnection(disallowedECName, disallowedKMSURI)
 		}
 
 		q.Set(gcp.AssumeRoleParam, roleChainStr)
-		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+		uri := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-assume-role-chaining", uri)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName, "auth-assume-role-chaining")
 	})

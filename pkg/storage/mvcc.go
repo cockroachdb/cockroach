@@ -2986,7 +2986,7 @@ func MVCCPredicateDeleteRange(
 			batchByteSize+runByteSize >= maxBatchByteSize {
 			if err := MVCCDeleteRangeUsingTombstone(ctx, rw, ms,
 				runStart, runEnd.Next(), endTime, localTimestamp, leftPeekBound, rightPeekBound,
-				maxIntents, nil); err != nil {
+				false /* idempotent */, maxIntents, nil); err != nil {
 				return err
 			}
 			batchByteSize += int64(MVCCRangeKey{StartKey: runStart, EndKey: runEnd, Timestamp: endTime}.EncodedSize())
@@ -3131,6 +3131,11 @@ func MVCCPredicateDeleteRange(
 // prevent the command from reading outside of the CRDB range bounds and latch
 // bounds. nil means no bounds.
 //
+// If idempotent is true, the MVCC range tombstone will only be written if there
+// exists any point keys/tombstones in the span that aren't already covered by
+// an MVCC range tombstone. Notably, it will not write a tombstone across an
+// empty span either.
+//
 // If msCovered is given, it must contain the current stats of the data that
 // will be covered by the MVCC range tombstone. This avoids scanning across all
 // point keys in the span, but will still do a time-bound scan to check for
@@ -3147,6 +3152,7 @@ func MVCCDeleteRangeUsingTombstone(
 	timestamp hlc.Timestamp,
 	localTimestamp hlc.ClockTimestamp,
 	leftPeekBound, rightPeekBound roachpb.Key,
+	idempotent bool,
 	maxIntents int64,
 	msCovered *enginepb.MVCCStats,
 ) error {
@@ -3174,6 +3180,36 @@ func MVCCDeleteRangeUsingTombstone(
 		return &roachpb.WriteIntentError{Intents: intents}
 	}
 
+	// If requested, check if there are any point keys/tombstones in the span that
+	// aren't already covered by MVCC range tombstones. Also check for conflicts
+	// with newer MVCC range tombstones.
+	if idempotent {
+		if noPointKeys, err := func() (bool, error) {
+			iter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				KeyTypes:             IterKeyTypePointsAndRanges,
+				LowerBound:           startKey,
+				UpperBound:           endKey,
+				RangeKeyMaskingBelow: timestamp,
+			})
+			defer iter.Close()
+			for iter.SeekGE(MVCCKey{Key: startKey}); ; iter.Next() {
+				if ok, err := iter.Valid(); err != nil {
+					return false, err
+				} else if !ok {
+					break
+				}
+				if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
+					return false, nil
+				} else if newest := iter.RangeKeys().Newest(); timestamp.LessEq(newest) {
+					return false, roachpb.NewWriteTooOldError(timestamp, newest.Next(), iter.RangeBounds().Key)
+				}
+			}
+			return true, nil
+		}(); err != nil || noPointKeys {
+			return err
+		}
+	}
+
 	// If we're omitting point keys in the stats/conflict scan below, we need to
 	// do a separate time-bound scan for point key conflicts.
 	if msCovered != nil {
@@ -3189,8 +3225,8 @@ func MVCCDeleteRangeUsingTombstone(
 			if ok, err := iter.Valid(); err != nil {
 				return err
 			} else if ok {
-				key := iter.UnsafeKey().Clone()
-				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key.Clone())
+				key := iter.UnsafeKey()
+				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
 			}
 			return nil
 		}(); err != nil {
@@ -3228,7 +3264,7 @@ func MVCCDeleteRangeUsingTombstone(
 		if hasPoint {
 			key := iter.UnsafeKey()
 			if timestamp.LessEq(key.Timestamp) {
-				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key.Clone())
+				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
 			}
 			if key.Timestamp.IsEmpty() {
 				return errors.Errorf("can't write range tombstone across inline key %s", key)
@@ -3242,8 +3278,7 @@ func MVCCDeleteRangeUsingTombstone(
 			if rangeBounds := iter.RangeBounds(); !rangeBounds.EndKey.Equal(prevRangeEnd) {
 				rangeKeys := iter.RangeKeys()
 				if timestamp.LessEq(rangeKeys.Newest()) {
-					return roachpb.NewWriteTooOldError(
-						timestamp, rangeKeys.Newest().Next(), rangeBounds.Key.Clone())
+					return roachpb.NewWriteTooOldError(timestamp, rangeKeys.Newest().Next(), rangeBounds.Key)
 				}
 
 				if ms != nil {

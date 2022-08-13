@@ -63,22 +63,24 @@ func TestDeleteRangeTombstone(t *testing.T) {
 		_, err := storage.MVCCDelete(ctx, rw, nil, roachpb.Key("d"), hlc.Timestamp{WallTime: 3e9}, localTS, nil)
 		require.NoError(t, err)
 		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("i"), hlc.Timestamp{WallTime: 5e9}, localTS, roachpb.MakeValueFromString("i5"), &txn))
-		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("f"), roachpb.Key("h"), hlc.Timestamp{WallTime: 3e9}, localTS, nil, nil, 0, nil))
-		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("Z"), roachpb.Key("a"), hlc.Timestamp{WallTime: 100e9}, localTS, nil, nil, 0, nil))
-		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("z"), roachpb.Key("|"), hlc.Timestamp{WallTime: 100e9}, localTS, nil, nil, 0, nil))
+		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("f"), roachpb.Key("h"), hlc.Timestamp{WallTime: 3e9}, localTS, nil, nil, false, 0, nil))
+		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("Z"), roachpb.Key("a"), hlc.Timestamp{WallTime: 100e9}, localTS, nil, nil, false, 0, nil))
+		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("z"), roachpb.Key("|"), hlc.Timestamp{WallTime: 100e9}, localTS, nil, nil, false, 0, nil))
 	}
 
 	now := hlc.ClockTimestamp{Logical: 9}
 	rangeStart, rangeEnd := roachpb.Key("a"), roachpb.Key("z")
 
 	testcases := map[string]struct {
-		start      string
-		end        string
-		ts         int64
-		txn        bool
-		inline     bool
-		returnKeys bool
-		expectErr  interface{} // error type, substring, or true (any)
+		start         string
+		end           string
+		ts            int64
+		txn           bool
+		inline        bool
+		returnKeys    bool
+		idempotent    bool
+		expectNoWrite bool
+		expectErr     interface{} // error type, substring, or true (any)
 
 		// The fields below test predicate based delete range rpc plumbing.
 		predicateStartTime int64 // if set, the test will only run with predicate based delete range
@@ -95,6 +97,14 @@ func TestDeleteRangeTombstone(t *testing.T) {
 			end:       "h",
 			ts:        10e9,
 			expectErr: nil,
+		},
+		"idempotent above range tombstone does not write": {
+			start:         "f",
+			end:           "h",
+			ts:            10e9,
+			idempotent:    true,
+			expectErr:     nil,
+			expectNoWrite: true,
 		},
 		"merging succeeds": {
 			start: "e",
@@ -174,6 +184,9 @@ func TestDeleteRangeTombstone(t *testing.T) {
 				if tc.predicateStartTime > 0 && !runWithPredicates {
 					continue
 				}
+				if runWithPredicates && tc.idempotent {
+					continue
+				}
 				t.Run(fmt.Sprintf("Predicates=%v", runWithPredicates), func(t *testing.T) {
 					ctx := context.Background()
 					st := cluster.MakeTestingClusterSettings()
@@ -223,10 +236,11 @@ func TestDeleteRangeTombstone(t *testing.T) {
 							Key:    rangeKey.StartKey,
 							EndKey: rangeKey.EndKey,
 						},
-						UseRangeTombstone: !tc.onlyPointKeys,
-						Inline:            tc.inline,
-						ReturnKeys:        tc.returnKeys,
-						Predicates:        predicates,
+						UseRangeTombstone:   !tc.onlyPointKeys,
+						IdempotentTombstone: tc.idempotent,
+						Inline:              tc.inline,
+						ReturnKeys:          tc.returnKeys,
+						Predicates:          predicates,
 					}
 
 					ms := computeStats(t, engine, rangeStart, rangeEnd, rangeKey.Timestamp.WallTime)
@@ -270,7 +284,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 					if runWithPredicates {
 						checkPredicateDeleteRange(t, engine, rangeKey)
 					} else {
-						checkDeleteRangeTombstone(t, engine, rangeKey, now)
+						checkDeleteRangeTombstone(t, engine, rangeKey, !tc.expectNoWrite, now)
 					}
 
 					// Check that range tombstone stats were updated correctly.
@@ -320,7 +334,11 @@ func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo sto
 
 // checkDeleteRangeTombstone checks that the range tombstone was written successfully.
 func checkDeleteRangeTombstone(
-	t *testing.T, engine storage.Reader, rangeKey storage.MVCCRangeKey, now hlc.ClockTimestamp,
+	t *testing.T,
+	engine storage.Reader,
+	rangeKey storage.MVCCRangeKey,
+	written bool,
+	now hlc.ClockTimestamp,
 ) {
 	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
@@ -352,13 +370,15 @@ func checkDeleteRangeTombstone(
 		}
 		iter.Next()
 	}
-	rangeKey.StartKey.Equal(seen.RangeKey.StartKey)
-	require.Equal(t, rangeKey, seen.RangeKey)
-
-	value, err := storage.DecodeMVCCValue(seen.Value)
-	require.NoError(t, err)
-	require.True(t, value.IsTombstone())
-	require.Equal(t, now, value.LocalTimestamp)
+	if written {
+		require.Equal(t, rangeKey, seen.RangeKey)
+		value, err := storage.DecodeMVCCValue(seen.Value)
+		require.NoError(t, err)
+		require.True(t, value.IsTombstone())
+		require.Equal(t, now, value.LocalTimestamp)
+	} else {
+		require.Empty(t, seen)
+	}
 }
 
 // computeStats computes MVCC stats for the given range.
