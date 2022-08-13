@@ -400,6 +400,7 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 				}
 				val.TableStatsCreatedAt = stat.CreatedAt()
 				val.LimitHint = scan.RequiredPhysical().LimitHint
+				val.Forecast = stat.IsForecast()
 			}
 		}
 		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
