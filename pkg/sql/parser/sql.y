@@ -1047,6 +1047,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> alter_rename_index_stmt
 %type <tree.Statement> alter_relocate_index_stmt
 %type <tree.Statement> alter_zone_index_stmt
+%type <tree.Statement> alter_index_visible_stmt
 
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
@@ -1388,7 +1389,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
-%type <bool> opt_index_access_method opt_index_visible
+%type <bool> opt_index_access_method opt_index_visible alter_index_visible
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_fetch_first_value
@@ -2099,6 +2100,7 @@ alter_range_stmt:
 //   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER INDEX ... RELOCATE [ LEASE | VOTERS | NONVOTERS ] <selectclause>
+//   ALTER INDEX ... [VISIBLE | NOT VISIBLE]
 //
 // Zone configurations:
 //   DISCARD
@@ -2115,6 +2117,7 @@ alter_index_stmt:
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
 | alter_zone_index_stmt
+| alter_index_visible_stmt
 // ALTER INDEX has its error help token here because the ALTER INDEX
 // prefix is spread over multiple non-terminals.
 | ALTER INDEX error // SHOW HELP: ALTER INDEX
@@ -2245,6 +2248,26 @@ alter_relocate_index_stmt:
       Rows: $6.slct(),
       SubjectReplicas: $5.relocateSubject(),
     }
+  }
+
+alter_index_visible_stmt:
+  ALTER INDEX table_index_name alter_index_visible
+  {
+    $$.val = &tree.AlterIndexVisible{Index: $3.tableIndexName(), NotVisible: $4.bool(), IfExists: false}
+  }
+| ALTER INDEX IF EXISTS table_index_name alter_index_visible
+  {
+    $$.val = &tree.AlterIndexVisible{Index: $5.tableIndexName(), NotVisible: $6.bool(), IfExists: true}
+  }
+
+alter_index_visible:
+  NOT VISIBLE
+  {
+    $$.val = true
+  }
+| VISIBLE
+  {
+    $$.val = false
   }
 
 // Note: even though the ALTER RANGE ... CONFIGURE ZONE syntax only
@@ -9623,9 +9646,9 @@ opt_index_visible:
     $$.val = true
   }
 | VISIBLE
-   {
-     $$.val = false
-   }
+  {
+    $$.val = false
+  }
 | /* EMPTY */
   {
     $$.val = false
