@@ -364,11 +364,11 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
-iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
-iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
-iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
-iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true a{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true a{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 a{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> a{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 a{-\x00}/[1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -376,9 +376,9 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=b
 iter_scan
 ----
-iter_seek_ge: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: b{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: b{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> b{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -386,8 +386,8 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=c
 iter_scan
 ----
-iter_seek_ge: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: c{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: c{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -395,10 +395,10 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=d
 iter_scan
 ----
-iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "d"/7.000000000,0=/BYTES/d7 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true d{-\x00}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true d{-\x00}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/7.000000000,0=/BYTES/d7 d{-\x00}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 d{-\x00}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -406,9 +406,9 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=e
 iter_scan
 ----
-iter_seek_ge: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: e{-\x00}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: e{-\x00}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 e{-\x00}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -416,11 +416,11 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=f
 iter_scan
 ----
-iter_seek_ge: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -428,10 +428,10 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=g
 iter_scan
 ----
-iter_seek_ge: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: g{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: g{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 g{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 g{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -439,10 +439,10 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=h
 iter_scan
 ----
-iter_seek_ge: {h-k}/[1.000000000,0=/<empty>]
-iter_scan: {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_seek_ge: h{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: h{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> h{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 h{-\x00}/[1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -450,8 +450,8 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=i
 iter_scan
 ----
-iter_seek_ge: {h-k}/[1.000000000,0=/<empty>]
-iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_seek_ge: i{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: i{-\x00}/[1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -459,9 +459,9 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=j
 iter_scan
 ----
-iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
-iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true j{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true j{-\x00}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 j{-\x00}/[1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -488,9 +488,9 @@ iter_new prefix types=pointsAndRanges
 iter_seek_ge k=m
 iter_scan
 ----
-iter_seek_ge: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-iter_scan: "m"/7.000000000,0=/BYTES/l7 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true m{-\x00}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true m{-\x00}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/7.000000000,0=/BYTES/l7 m{-\x00}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
 iter_scan: .
 
 run ok
@@ -1227,11 +1227,11 @@ iter_new prefix types=pointsAndRanges maskBelow=1
 iter_seek_ge k=f
 iter_scan
 ----
-iter_seek_ge: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -1239,11 +1239,11 @@ iter_new prefix types=pointsAndRanges maskBelow=2
 iter_seek_ge k=f
 iter_scan
 ----
-iter_seek_ge: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -1251,10 +1251,10 @@ iter_new prefix types=pointsAndRanges maskBelow=3
 iter_seek_ge k=f
 iter_scan
 ----
-iter_seek_ge: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -1262,10 +1262,10 @@ iter_new prefix types=pointsAndRanges maskBelow=4
 iter_seek_ge k=f
 iter_scan
 ----
-iter_seek_ge: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -1273,9 +1273,9 @@ iter_new prefix types=pointsAndRanges maskBelow=5
 iter_seek_ge k=f
 iter_scan
 ----
-iter_seek_ge: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
 
 run ok
@@ -1283,7 +1283,7 @@ iter_new prefix types=pointsAndRanges maskBelow=6
 iter_seek_ge k=f
 iter_scan
 ----
-iter_seek_ge: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_seek_ge: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 f{-\x00}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 iter_scan: .
