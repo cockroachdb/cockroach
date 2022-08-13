@@ -4844,10 +4844,10 @@ func MVCCGarbageCollect(
 		}
 
 		// For GCBytesAge, this requires keeping track of the previous key's
-		// timestamp (prevNanos). See ComputeStatsForRange for a more easily digested
-		// and better commented version of this logic. The below block will set
-		// prevNanos to the appropriate value and position the iterator at the
-		// first garbage version.
+		// timestamp (prevNanos). See ComputeStats for a more easily digested and
+		// better commented version of this logic. The below block will set
+		// prevNanos to the appropriate value and position the iterator at the first
+		// garbage version.
 		prevNanos := timestamp.WallTime
 		{
 			// If true - forward iteration positioned iterator on first garbage
@@ -5446,8 +5446,8 @@ func computeStatsForIterWithVisitors(
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 	var meta enginepb.MVCCMetadata
-	var prevKey, prevRangeStart []byte
-	first := false
+	var prevKey roachpb.Key
+	var first bool
 
 	// Values start accruing GCBytesAge at the timestamp at which they
 	// are shadowed (i.e. overwritten) whereas deletion tombstones
@@ -5455,7 +5455,7 @@ func computeStatsForIterWithVisitors(
 	// reverse chronological order and use this variable to keep track
 	// of the point in time at which the current key begins to age.
 	var accrueGCAgeNanos int64
-	var rangeKeys MVCCRangeKeyStack
+	var rangeTombstones MVCCRangeKeyVersions
 
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
@@ -5464,14 +5464,14 @@ func computeStatsForIterWithVisitors(
 			break
 		}
 
-		hasPoint, hasRange := iter.HasPointAndRange()
+		// Process MVCC range tombstones, and buffer them in rangeTombstones
+		// for all overlapping point keys.
+		if iter.RangeKeyChanged() {
+			if hasPoint, hasRange := iter.HasPointAndRange(); hasRange {
+				rangeKeys := iter.RangeKeys()
+				rangeKeys.Versions.CloneInto(&rangeTombstones)
 
-		if hasRange {
-			if rangeStart := iter.RangeBounds().Key; !rangeStart.Equal(prevRangeStart) {
-				prevRangeStart = append(prevRangeStart[:0], rangeStart...)
-				rangeKeys = iter.RangeKeys().Clone()
-
-				for i, v := range rangeKeys.Versions {
+				for i, v := range rangeTombstones {
 					// Only the top-most fragment contributes the key and its bounds, but
 					// all versions contribute timestamps and values.
 					//
@@ -5497,13 +5497,13 @@ func computeStatsForIterWithVisitors(
 						}
 					}
 				}
-			}
-		} else if !rangeKeys.IsEmpty() {
-			rangeKeys = MVCCRangeKeyStack{}
-		}
 
-		if !hasPoint {
-			continue
+				if !hasPoint {
+					continue
+				}
+			} else {
+				rangeTombstones.Clear()
+			}
 		}
 
 		unsafeKey := iter.UnsafeKey()
@@ -5540,9 +5540,14 @@ func computeStatsForIterWithVisitors(
 		// Find the closest range tombstone above the point key. Range tombstones
 		// cannot exist above intents, and are undefined across inline values, so we
 		// only take them into account for versioned values.
+		//
+		// TODO(erikgrinaker): Rather than doing a full binary search for each
+		// point, we can keep track of the current index and move downwards in the
+		// stack as we descend through older versions, resetting once we hit a new
+		// key.
 		var nextRangeTombstone hlc.Timestamp
 		if isValue {
-			if v, ok := rangeKeys.FirstAbove(unsafeKey.Timestamp); ok {
+			if v, ok := rangeTombstones.FirstAbove(unsafeKey.Timestamp); ok {
 				nextRangeTombstone = v.Timestamp
 			}
 		}
