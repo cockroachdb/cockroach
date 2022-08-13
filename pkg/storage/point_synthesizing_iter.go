@@ -635,6 +635,11 @@ func (i *pointSynthesizingIter) RangeKeys() MVCCRangeKeyStack {
 	return MVCCRangeKeyStack{}
 }
 
+// RangeKeyChanged implements MVCCIterator.
+func (i *pointSynthesizingIter) RangeKeyChanged() bool {
+	return false
+}
+
 // FindSplitKey implements MVCCIterator.
 func (i *pointSynthesizingIter) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,

@@ -209,6 +209,11 @@ func (s *testIterator) RangeKeys() storage.MVCCRangeKeyStack {
 	return storage.MVCCRangeKeyStack{}
 }
 
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (s *testIterator) RangeKeyChanged() bool {
+	return false
+}
+
 func TestInitResolvedTSScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	startKey := roachpb.RKey("d")

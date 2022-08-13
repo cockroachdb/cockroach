@@ -997,7 +997,7 @@ func mvccGet(
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.stats())
+	recordIteratorStats(ctx, mvccScanner.parent)
 
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
@@ -3363,12 +3363,13 @@ func MVCCDeleteRangeUsingTombstone(
 	return nil
 }
 
-func recordIteratorStats(ctx context.Context, iteratorStats IteratorStats) {
+func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp.RecordingType() == tracingpb.RecordingOff {
-		// Short-circuit before allocating ScanStats object.
+		// Short-circuit before doing any work.
 		return
 	}
+	iteratorStats := iter.Stats()
 	stats := &iteratorStats.Stats
 	steps := stats.ReverseStepCount[pebble.InterfaceCall] + stats.ForwardStepCount[pebble.InterfaceCall]
 	seeks := stats.ReverseSeekCount[pebble.InterfaceCall] + stats.ForwardSeekCount[pebble.InterfaceCall]
@@ -3456,7 +3457,7 @@ func mvccScanToBytes(
 	res.NumBytes = mvccScanner.results.bytes
 
 	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.stats())
+	recordIteratorStats(ctx, mvccScanner.parent)
 
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
