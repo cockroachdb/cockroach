@@ -490,7 +490,7 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		IsInverted:          oldPrimaryIndexElem.IsInverted,
 		Sharding:            oldPrimaryIndexElem.Sharding,
 		IsCreatedExplicitly: false,
-		ConstraintID:        b.NextTableConstraintID(tbl),
+		ConstraintID:        b.NextTableConstraintID(tbl.TableID),
 		SourceIndexID:       oldPrimaryIndexElem.IndexID,
 		TemporaryIndexID:    0,
 	}}
@@ -500,7 +500,7 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		Index:                    protoutil.Clone(newSecondaryIndexElem).(*scpb.SecondaryIndex).Index,
 		IsUsingSecondaryEncoding: true,
 	}
-	temporaryIndexElemForNewSecondaryIndex.ConstraintID = b.NextTableConstraintID(tbl)
+	temporaryIndexElemForNewSecondaryIndex.ConstraintID = b.NextTableConstraintID(tbl.TableID)
 	b.AddTransient(temporaryIndexElemForNewSecondaryIndex)
 
 	temporaryIndexElemForNewSecondaryIndex.IndexID = nextRelationIndexID(b, tbl)

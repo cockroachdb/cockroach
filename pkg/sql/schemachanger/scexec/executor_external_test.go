@@ -213,8 +213,9 @@ CREATE TABLE db.t (
 				return []scop.Op{
 					&scop.MakeAddedTempIndexDeleteOnly{
 						Index: scpb.Index{
-							TableID: table.ID,
-							IndexID: indexToAdd.ID,
+							TableID:      table.ID,
+							IndexID:      indexToAdd.ID,
+							ConstraintID: indexToAdd.ConstraintID,
 						},
 						IsSecondaryIndex: true,
 					},

@@ -14,7 +14,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  ├── PostCommitPhase
  │    ├── Stage 1 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
- │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+ │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":4,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
@@ -64,11 +64,11 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    │    ├── ABSENT    → PUBLIC        IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
- │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+ │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
  │    │    │    └── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
- │    │    │    └── ABSENT    → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 6, SourceIndexID: 3}
+ │    │    │    └── ABSENT    → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
  │    │    └── 12 Mutation operations
  │    │         ├── MakeDroppedPrimaryIndexDeleteAndWriteOnly {"IndexID":1,"TableID":104}
  │    │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
@@ -84,45 +84,45 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 9 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
- │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, SourceIndexID: 3}
+ │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":6,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 10 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    └── 1 Backfill operation
  │    │         └── BackfillIndex {"IndexID":5,"SourceIndexID":3,"TableID":104}
  │    ├── Stage 11 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+ │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":5,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 12 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":5,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 13 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+ │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    └── 1 Backfill operation
  │    │         └── MergeIndex {"BackfilledIndexID":5,"TableID":104,"TemporaryIndexID":6}
  │    ├── Stage 14 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGED → WRITE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+ │    │    │    └── MERGED → WRITE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeMergedIndexWriteOnly {"IndexID":5,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    └── Stage 15 of 15 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+ │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │         └── 1 Validation operation
  │              └── ValidateUniqueIndex {"IndexID":5,"TableID":104}
  └── PostCommitNonRevertiblePhase
@@ -139,11 +139,11 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    └── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── VALIDATED  → PUBLIC                SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 0, TemporaryIndexID: 6, SourceIndexID: 3}
+      │    │    ├── VALIDATED  → PUBLIC                SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
       │    │    └── ABSENT     → PUBLIC                IndexName:{DescID: 104, Name: idx, IndexID: 5}
       │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
-      │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
-      │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, SourceIndexID: 3}
+      │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+      │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
       │    └── 16 Mutation operations
       │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":4,"TableID":104}
@@ -170,8 +170,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
            │    ├── DELETE_ONLY           → ABSENT           PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
            │    └── DELETE_ONLY           → ABSENT           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
            ├── 2 elements transitioning toward TRANSIENT_ABSENT
-           │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
-           │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 6, SourceIndexID: 3}
+           │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+           │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
            └── 13 Mutation operations
                 ├── CreateGcJobForIndex {"IndexID":4,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}

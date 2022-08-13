@@ -61,7 +61,7 @@ ALTER TABLE defaultdb.t DROP COLUMN j
   {constraintId: 2, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
 - [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, name: t_pkey, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 5, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 5, tableId: 104}
@@ -111,7 +111,7 @@ ALTER TABLE defaultdb.t DROP COLUMN k
   {constraintId: 2, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
 - [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, name: t_pkey, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 5, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 5, tableId: 104}
@@ -167,7 +167,7 @@ ALTER TABLE defaultdb.t DROP COLUMN l
   {constraintId: 2, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
 - [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, name: t_pkey, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 5, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 5, tableId: 104}

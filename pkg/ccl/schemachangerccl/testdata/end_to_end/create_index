@@ -24,7 +24,6 @@ upsert descriptor #104
   +  mutations:
   +  - direction: ADD
   +    index:
-  +      constraintId: 2
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -57,7 +56,6 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 3
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -91,8 +89,7 @@ upsert descriptor #104
   +    state: DELETE_ONLY
      name: t1
      nextColumnId: 4
-  -  nextConstraintId: 2
-  +  nextConstraintId: 4
+     nextConstraintId: 2
      nextFamilyId: 1
   -  nextIndexId: 2
   +  nextIndexId: 4
@@ -272,8 +269,7 @@ upsert descriptor #104
   -  modificationTime:
   -    wallTime: "1640995200000000008"
   +  indexes:
-  +  - constraintId: 2
-  +    createdExplicitly: true
+  +  - createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
   +    id: 2
@@ -306,10 +302,9 @@ upsert descriptor #104
   -  - direction: ADD
   +  - direction: DROP
        index:
-  -      constraintId: 2
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
+         createdExplicitly: true
+         foreignKey: {}
+         geoConfig: {}
   -      id: 2
   -      interleave: {}
   -      keyColumnDirections:
@@ -339,8 +334,11 @@ upsert descriptor #104
   -    state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
   -    index:
-         constraintId: 3
-         createdExplicitly: true
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+         id: 3
+         interleave: {}
   ...
          version: 4
        mutationId: 1
@@ -387,7 +385,6 @@ upsert descriptor #104
   -  mutations:
   -  - direction: DROP
   -    index:
-  -      constraintId: 3
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}

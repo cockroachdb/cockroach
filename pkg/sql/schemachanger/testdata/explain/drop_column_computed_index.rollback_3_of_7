@@ -11,7 +11,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    ├── 4 elements transitioning toward ABSENT
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
       │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
       │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
       │    ├── 6 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 104, ColumnID: 2}
@@ -38,7 +38,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
-           │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, SourceIndexID: 1}
+           │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
            └── 4 Mutation operations
                 ├── CreateGcJobForIndex {"IndexID":4,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
