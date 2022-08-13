@@ -13,17 +13,20 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │
         ├── • 4 elements transitioning toward ABSENT
         │   │
-        │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-        │   │     PUBLIC → ABSENT
-        │   │
         │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
         │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
         │   │
         │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
@@ -32,12 +35,27 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │         rule: "dependents removed before index"
         │   │
         │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-        │         PUBLIC → ABSENT
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       └── • skip PUBLIC → ABSENT operations
+        │             rule: "skip index-column removal ops on index removal"
         │
         ├── • 4 elements transitioning toward PUBLIC
         │   │
         │   ├── • Column:{DescID: 104, ColumnID: 2}
-        │   │     WRITE_ONLY → PUBLIC
+        │   │   │ WRITE_ONLY → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+        │   │   │     rule: "column dependents exist before column becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
+        │   │   │     rule: "column dependents exist before column becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
+        │   │   │     rule: "column dependents exist before column becomes public"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+        │   │         rule: "column dependents exist before column becomes public"
         │   │
         │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
         │   │     ABSENT → PUBLIC
@@ -45,13 +63,30 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
         │   │   │ VALIDATED → PUBLIC
         │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+        │   │   │     rule: "index dependents exist before index becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+        │   │   │     rule: "index dependents exist before index becomes public"
+        │   │   │
         │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
+        │   │         rule: "index dependents exist before index becomes public"
         │   │         rule: "index named right before index becomes public"
         │   │
         │   └── • IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
         │         ABSENT → PUBLIC
         │
-        └── • 13 Mutation operations
+        └── • 11 Mutation operations
+            │
+            ├── • SetColumnName
+            │     ColumnID: 2
+            │     Name: j
+            │     TableID: 104
+            │
+            ├── • SetIndexName
+            │     IndexID: 2
+            │     Name: t_j_idx
+            │     TableID: 104
             │
             ├── • MakeColumnPublic
             │     ColumnID: 2
@@ -66,26 +101,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     TableID: 104
             │
             ├── • RefreshStats
-            │     TableID: 104
-            │
-            ├── • SetColumnName
-            │     ColumnID: 2
-            │     Name: j
-            │     TableID: 104
-            │
-            ├── • SetIndexName
-            │     IndexID: 2
-            │     Name: t_j_idx
-            │     TableID: 104
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 1
-            │     IndexID: 3
-            │     TableID: 104
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 1
-            │     IndexID: 4
             │     TableID: 104
             │
             ├── • MakeAddedSecondaryIndexPublic

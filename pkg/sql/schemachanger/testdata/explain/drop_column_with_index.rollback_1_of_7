@@ -9,8 +9,8 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 4 elements transitioning toward ABSENT
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
            │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
            ├── 4 elements transitioning toward PUBLIC
@@ -18,13 +18,11 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
            │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
            │    ├── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
            │    └── ABSENT        → PUBLIC IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
-           └── 13 Mutation operations
-                ├── MakeColumnPublic {"ColumnID":2,"TableID":104}
-                ├── RefreshStats {"TableID":104}
+           └── 11 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
                 ├── SetIndexName {"IndexID":2,"Name":"t_j_idx","TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+                ├── MakeColumnPublic {"ColumnID":2,"TableID":104}
+                ├── RefreshStats {"TableID":104}
                 ├── MakeAddedSecondaryIndexPublic {"IndexID":2,"TableID":104}
                 ├── CreateGcJobForIndex {"IndexID":3,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}

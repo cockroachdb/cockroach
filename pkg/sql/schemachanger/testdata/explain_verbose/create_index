@@ -17,13 +17,13 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │         rule: "index-column added to index after index exists"
+│       │   │         rule: "index existence precedes index dependents"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │         rule: "index-column added to index after index exists"
+│       │   │         rule: "index existence precedes index dependents"
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │     ABSENT → BACKFILL_ONLY
@@ -32,15 +32,13 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-│       │   │         rule: "temp index exists before columns, partitioning, and partial"
-│       │   │         rule: "index-column added to index after temp index exists"
+│       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
 │       │       │ ABSENT → PUBLIC
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-│       │             rule: "temp index exists before columns, partitioning, and partial"
-│       │             rule: "index-column added to index after temp index exists"
+│       │             rule: "temp index existence precedes index dependents"
 │       │
 │       ├── • 1 element transitioning toward TRANSIENT_ABSENT
 │       │   │
@@ -116,13 +114,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
 │   │   │   │
 │   │   │   └── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-│   │   │       │ DELETE_ONLY → WRITE_ONLY
-│   │   │       │
-│   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-│   │   │       │     rule: "index-column added to index before temp index receives writes"
-│   │   │       │
-│   │   │       └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-│   │   │             rule: "index-column added to index before temp index receives writes"
+│   │   │         DELETE_ONLY → WRITE_ONLY
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -256,14 +248,21 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │   │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 106, Name: idx1, IndexID: 2}
+    │   │   │         rule: "index dependents exist before index becomes public"
     │   │   │         rule: "index named right before index becomes public"
     │   │   │
     │   │   └── • IndexName:{DescID: 106, Name: idx1, IndexID: 2}
     │   │       │ ABSENT → PUBLIC
     │   │       │
     │   │       └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-    │   │             rule: "index existence precedes index name and comment"
+    │   │             rule: "index existence precedes index dependents"
     │   │
     │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
     │   │   │

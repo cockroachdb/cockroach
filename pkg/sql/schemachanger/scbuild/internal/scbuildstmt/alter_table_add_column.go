@@ -347,26 +347,20 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 
 	// Otherwise, create a new primary index target and swap it with the existing
 	// primary index.
-	return createNewPrimaryIndex(b, spec.tbl, existing, func(
-		b BuildCtx, newIndex *scpb.PrimaryIndex, existingColumns []*scpb.IndexColumn,
-	) (newColumns []*scpb.IndexColumn) {
-		for _, ec := range existingColumns {
-			cloned := protoutil.Clone(ec).(*scpb.IndexColumn)
-			cloned.IndexID = newIndex.IndexID
-			newColumns = append(newColumns, cloned)
-			b.Add(cloned)
-		}
-		ic := &scpb.IndexColumn{
-			TableID:       newIndex.TableID,
-			IndexID:       newIndex.IndexID,
-			ColumnID:      spec.col.ColumnID,
-			OrdinalInKind: getNextStoredIndexColumnOrdinal(allTargets, newIndex),
-			Kind:          scpb.IndexColumn_STORED,
-		}
-		newColumns = append(newColumns, ic)
-		b.Add(ic)
-		return newColumns
-	})
+	out := makePrimaryIndexSpec(b, existing)
+	inColumns := make([]indexColumnSpec, len(out.columns)+1)
+	for i, ic := range out.columns {
+		inColumns[i] = makeIndexColumnSpec(ic)
+	}
+	inColumns[len(out.columns)] = indexColumnSpec{
+		columnID: spec.col.ColumnID,
+		kind:     scpb.IndexColumn_STORED,
+	}
+	out.apply(b.Drop)
+	in, temp := makeSwapPrimaryIndexSpec(b, out, inColumns)
+	in.apply(b.Add)
+	temp.apply(b.AddTransient)
+	return in.idx
 }
 
 // handleAddColumnFreshlyAddedPrimaryIndex is used when adding a column to a
@@ -426,103 +420,6 @@ func handleAddColumnFreshlyAddedPrimaryIndex(
 	tempIC := protoutil.Clone(ic).(*scpb.IndexColumn)
 	tempIC.IndexID = tempIndex.IndexID
 	b.Add(tempIC)
-}
-
-// newPrimaryIndexColumnFn is a callback which is supplied the old primary
-// index and its columns and is responsible for constructing the set of
-// columns for use in the new primary index. It is used by
-// createNewPrimaryIndex.
-type newPrimaryIndexColumnsFn = func(
-	b BuildCtx,
-	newIndex *scpb.PrimaryIndex,
-	existingColumns []*scpb.IndexColumn,
-) (newColumns []*scpb.IndexColumn)
-
-// createNewPrimaryIndex creates a replacement primary index by dropping the
-// existing primary index and adding a newly synthesized primary index. The
-// makeColumnsFn is passed the existing columns and the new index and must
-// synthesize the new IndexColumn elements to be added.
-func createNewPrimaryIndex(
-	b BuildCtx, tbl *scpb.Table, existing *scpb.PrimaryIndex, makeColumnsFn newPrimaryIndexColumnsFn,
-) *scpb.PrimaryIndex {
-
-	// Drop all existing primary index elements.
-	existingName, existingPartitioning,
-		existingColumns := dropExistingPrimaryIndex(b, existing)
-
-	// Create the new primary index element and its dependents.
-	replacement := protoutil.Clone(existing).(*scpb.PrimaryIndex)
-	replacement.IndexID = b.NextTableIndexID(tbl)
-	replacement.SourceIndexID = existing.IndexID
-	replacementColumns := makeColumnsFn(b, replacement, existingColumns)
-	replacement.TemporaryIndexID = replacement.IndexID + 1
-	replacement.ConstraintID = b.NextTableConstraintID(tbl.TableID)
-	b.Add(replacement)
-	if existingName != nil {
-		updatedName := protoutil.Clone(existingName).(*scpb.IndexName)
-		updatedName.IndexID = replacement.IndexID
-		b.Add(updatedName)
-	}
-	if existingPartitioning != nil {
-		updatedPartitioning := protoutil.Clone(existingPartitioning).(*scpb.IndexPartitioning)
-		updatedPartitioning.IndexID = replacement.IndexID
-		b.Add(updatedPartitioning)
-	}
-	temp := &scpb.TemporaryIndex{
-		Index:                    protoutil.Clone(replacement).(*scpb.PrimaryIndex).Index,
-		IsUsingSecondaryEncoding: false,
-	}
-	temp.TemporaryIndexID = 0
-	temp.IndexID = b.NextTableIndexID(tbl)
-	temp.ConstraintID = b.NextTableConstraintID(tbl.TableID)
-	b.AddTransient(temp)
-	if existingPartitioning != nil {
-		updatedPartitioning := protoutil.Clone(existingPartitioning).(*scpb.IndexPartitioning)
-		updatedPartitioning.IndexID = temp.IndexID
-		b.Add(updatedPartitioning)
-	}
-	for _, ec := range replacementColumns {
-		cloned := protoutil.Clone(ec).(*scpb.IndexColumn)
-		cloned.IndexID = temp.IndexID
-		b.Add(cloned)
-	}
-	return replacement
-}
-
-// dropExistingPrimaryIndex drops a primary index which existed before this
-// schema change.
-func dropExistingPrimaryIndex(
-	b BuildCtx, existing *scpb.PrimaryIndex,
-) (
-	existingName *scpb.IndexName,
-	existingPartitioning *scpb.IndexPartitioning,
-	existingColumns []*scpb.IndexColumn,
-) {
-	b.Drop(existing)
-	publicTargets := b.QueryByID(existing.TableID).Filter(publicTargetFilter)
-	scpb.ForEachIndexName(publicTargets, func(_ scpb.Status, _ scpb.TargetStatus, name *scpb.IndexName) {
-		if name.IndexID == existing.IndexID {
-			existingName = name
-		}
-	})
-	scpb.ForEachIndexPartitioning(publicTargets, func(_ scpb.Status, _ scpb.TargetStatus, part *scpb.IndexPartitioning) {
-		if part.IndexID == existing.IndexID {
-			existingPartitioning = part
-		}
-	})
-	scpb.ForEachIndexColumn(publicTargets, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) {
-		if e.IndexID == existing.IndexID {
-			existingColumns = append(existingColumns, e)
-			b.Drop(e)
-		}
-	})
-	if existingPartitioning != nil {
-		b.Drop(existingPartitioning)
-	}
-	if existingName != nil {
-		b.Drop(existingName)
-	}
-	return existingName, existingPartitioning, existingColumns
 }
 
 func getNextStoredIndexColumnOrdinal(allTargets ElementResultSet, idx *scpb.PrimaryIndex) uint32 {

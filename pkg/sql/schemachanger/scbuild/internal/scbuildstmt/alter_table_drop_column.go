@@ -21,11 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -153,92 +151,188 @@ func dropColumn(
 	behavior tree.DropBehavior,
 ) {
 	_, _, cn := scpb.FindColumnName(colElts)
-	_, _, ct := scpb.FindColumnType(colElts)
-	checkColumnNotInPrimaryKey(b, col, cn)
-	b.Drop(col)
-	b.Drop(cn)
-	b.Drop(ct)
-	if _, _, cc := scpb.FindColumnComment(colElts); cc != nil {
-		b.Drop(cc)
-	}
-	handleDropColumnExpressions(b, colElts, behavior)
-	handleDropColumnIndexes(b, tn, col, behavior)
-	handleDropColumnComputedColumns(b, tn, cn, tbl, n, col, behavior)
-	handleDropColumnUniqueWithoutIndexConstraints(b, col, n)
-	handleDropColumnCheckConstraints(b, col, n)
-	handleDropColumnForeignKeyConstraintForwardReferences(b, col, n)
-	backrefs := undroppedBackrefs(b, col.TableID)
-	handleDropColumnViewBackReferences(b, backrefs, col, cn, behavior)
-	handleDropColumnForeignKeyConstraintBackReferences(b, cn, backrefs, col, n, behavior)
-	if !ct.IsVirtual {
+	var undroppedSeqBackrefsToCheck catalog.DescriptorIDSet
+	walkDropColumnDependencies(b, col, func(e scpb.Element) {
+		switch e := e.(type) {
+		case *scpb.Column:
+			if e.TableID == col.TableID && e.ColumnID == col.ColumnID {
+				b.Drop(e)
+				return
+			}
+			elts := b.QueryByID(e.TableID).Filter(hasColumnIDAttrFilter(e.ColumnID))
+			if behavior != tree.DropCascade {
+				_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
+				panic(sqlerrors.NewColumnReferencedByComputedColumnError(cn.Name, computedColName.Name))
+			}
+			dropColumn(b, tn, tbl, n, e, elts, behavior)
+		case *scpb.PrimaryIndex:
+			tableElts := b.QueryByID(e.TableID).Filter(publicTargetFilter)
+			scpb.ForEachIndexColumn(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+				if ic.ColumnID == col.ColumnID &&
+					e.IndexID == ic.IndexID &&
+					ic.Kind == scpb.IndexColumn_KEY {
+					panic(sqlerrors.NewColumnReferencedByPrimaryKeyError(cn.Name))
+				}
+			})
+		case *scpb.SecondaryIndex:
+			indexElts := b.QueryByID(e.TableID).Filter(hasIndexIDAttrFilter(e.IndexID))
+			_, _, indexName := scpb.FindIndexName(indexElts.Filter(publicTargetFilter))
+			name := tree.TableIndexName{
+				Table: *tn,
+				Index: tree.UnrestrictedName(indexName.Name),
+			}
+			dropSecondaryIndex(b, &name, behavior, e, indexElts)
+		case *scpb.UniqueWithoutIndexConstraint:
+			// TODO(ajwerner): Support dropping UNIQUE WITHOUT INDEX constraints.
+			panic(errors.Wrap(scerrors.NotImplementedError(n),
+				"dropping of UNIQUE WITHOUT INDEX constraints not supported"))
+		case *scpb.CheckConstraint:
+			// TODO(ajwerner): Support dropping CHECK constraints.
+			panic(errors.Wrap(scerrors.NotImplementedError(n),
+				"dropping of CHECK constraints not supported"))
+		case *scpb.ForeignKeyConstraint:
+			if e.TableID != col.TableID && behavior != tree.DropCascade {
+				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"cannot drop column %s because other objects depend on it", cn.Name))
+			}
+			// TODO(ajwerner): Support dropping FOREIGN KEY constraints.
+			panic(errors.Wrap(scerrors.NotImplementedError(n),
+				"dropping of FOREIGN KEY constraints not supported"))
+		case *scpb.View:
+			if behavior != tree.DropCascade {
+				_, _, ns := scpb.FindNamespace(b.QueryByID(col.TableID))
+				_, _, nsDep := scpb.FindNamespace(b.QueryByID(e.ViewID))
+				if nsDep.DatabaseID != ns.DatabaseID || nsDep.SchemaID != ns.SchemaID {
+					panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf(
+						"cannot drop column %q because view %q depends on it",
+						cn.Name, qualifiedName(b, e.ViewID)),
+						"you can drop %s instead.", nsDep.Name))
+				}
+				panic(sqlerrors.NewDependentObjectErrorf(
+					"cannot drop column %q because view %q depends on it",
+					cn.Name, nsDep.Name))
+			}
+			dropCascadeDescriptor(b, e.ViewID)
+		case *scpb.Sequence:
+			// Find all the sequences owned by this column and drop them either restrict
+			// or cascade. Then, we'll need to check whether these sequences have any
+			// other backreferences which have not yet been dropped. Note that we don't
+			// need to wait for the other commands in this statement; postgres fails on
+			// something like:
+			//
+			//  create table t (i serial);
+			//  alter table t add column j default nextval('t_i_seq'::regclass);
+			//  alter table t drop column i, drop column j;
+			//  2BP01: cannot drop column i of table t because other objects depend on it
+			//
+			if behavior == tree.DropCascade {
+				dropCascadeDescriptor(b, e.SequenceID)
+			} else {
+				dropRestrictDescriptor(b, e.SequenceID)
+				undroppedSeqBackrefsToCheck.Add(e.SequenceID)
+			}
+		default:
+			b.Drop(e)
+		}
+	})
+	// TODO(ajwerner): Track the undropped backrefs to populate a detail
+	// message like postgres does. For example:
+	//
+	//  create table t (i serial);
+	//  create table t2 (i int default nextval('t_i_seq'::regclass));
+	//  drop table t restrict;
+	//  ERROR:  cannot drop table t because other objects depend on it
+	//  DETAIL:  default value for column i of table t2 depends on sequence t_i_seq
+	//  HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+	//
+	undroppedSeqBackrefsToCheck.ForEach(func(seqID descpb.ID) {
+		if udr := undroppedBackrefs(b, seqID); !udr.IsEmpty() {
+			panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"cannot drop column %s because other objects depend on it", cn.Name))
+		}
+	})
+	if _, _, ct := scpb.FindColumnType(colElts); !ct.IsVirtual {
 		handleDropColumnPrimaryIndexes(b, tbl, n, col)
 	}
 	assertAllColumnElementsAreDropped(colElts)
 }
 
-func checkColumnNotInPrimaryKey(b BuildCtx, col *scpb.Column, cn *scpb.ColumnName) {
-	publicTargets := b.QueryByID(col.TableID).Filter(publicTargetFilter)
-	_, _, pi := scpb.FindPrimaryIndex(publicTargets)
-	var ic *scpb.IndexColumn
-	scpb.ForEachIndexColumn(publicTargets, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
-	) {
-		if e.ColumnID == col.ColumnID &&
-			e.IndexID == pi.IndexID &&
-			e.Kind == scpb.IndexColumn_KEY {
-			ic = e
-		}
-	})
-	if ic != nil {
-		panic(sqlerrors.NewColumnReferencedByPrimaryKeyError(cn.Name))
-	}
-}
-
-func handleDropColumnComputedColumns(
-	b BuildCtx,
-	tn *tree.TableName,
-	cn *scpb.ColumnName,
-	tbl *scpb.Table,
-	n tree.NodeFormatter,
-	col *scpb.Column,
-	behavior tree.DropBehavior,
-) {
-	var toRemove catalog.TableColSet
-	allElts := b.QueryByID(col.TableID)
-	publicElts := allElts.Filter(publicTargetFilter)
-	scpb.ForEachColumnType(publicElts, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnType,
-	) {
-		// The below check is defensive given, at the time of writing, we already
-		// dropped the column type for the column in question.
-		if e.ColumnID == col.ColumnID ||
-			// We only care about references in the computed expression.
-			e.ComputeExpr == nil {
-			return
-		}
-		if descpb.ColumnIDs.Contains(e.ComputeExpr.ReferencedColumnIDs, col.ColumnID) {
-			toRemove.Add(e.ColumnID)
-		}
-	})
-	if !toRemove.Empty() && behavior != tree.DropCascade {
-		first, _ := toRemove.Next(0)
-		var computedColumnName *scpb.ColumnName
-		scpb.ForEachColumnName(publicElts, func(
-			_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName,
-		) {
-			if e.ColumnID == first {
-				computedColumnName = e
+func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Element)) {
+	var sequencesToDrop catalog.DescriptorIDSet
+	var indexesToDrop catid.IndexSet
+	var columnsToDrop catalog.TableColSet
+	tblElts := b.QueryByID(col.TableID).Filter(publicTargetFilter)
+	tblElts.
+		Filter(referencesColumnIDFilter(col.ColumnID)).
+		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+			switch elt := e.(type) {
+			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment:
+				fn(e)
+			case *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
+				fn(e)
+			case *scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint:
+				fn(e)
+			case *scpb.ColumnType:
+				if elt.ColumnID == col.ColumnID {
+					fn(e)
+				} else {
+					columnsToDrop.Add(elt.ColumnID)
+				}
+			case *scpb.SequenceOwner:
+				fn(e)
+				sequencesToDrop.Add(elt.SequenceID)
+			case *scpb.SecondaryIndexPartial:
+				indexesToDrop.Add(elt.IndexID)
+			case *scpb.IndexColumn:
+				indexesToDrop.Add(elt.IndexID)
+			case *scpb.ForeignKeyConstraint:
+				if elt.TableID == col.TableID &&
+					catalog.MakeTableColSet(elt.ColumnIDs...).Contains(col.ColumnID) {
+					fn(e)
+				} else if elt.ReferencedTableID == col.TableID &&
+					catalog.MakeTableColSet(elt.ReferencedColumnIDs...).Contains(col.ColumnID) {
+					fn(e)
+				}
 			}
 		})
-		panic(sqlerrors.NewColumnReferencedByComputedColumnError(cn.Name, computedColumnName.Name))
-	}
-	toRemove.ForEach(func(computedColumnID descpb.ColumnID) {
-		elts := allElts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
-			idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
-			return idI != nil && idI.(catid.ColumnID) == computedColumnID
-		})
-		_, _, computedCol := scpb.FindColumn(elts)
-		dropColumn(b, tn, tbl, n, computedCol, elts, behavior)
+	tblElts.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch elt := e.(type) {
+		case *scpb.Column:
+			if columnsToDrop.Contains(elt.ColumnID) {
+				fn(e)
+			}
+		case *scpb.PrimaryIndex:
+			if indexesToDrop.Contains(elt.IndexID) {
+				fn(e)
+			}
+		case *scpb.SecondaryIndex:
+			if indexesToDrop.Contains(elt.IndexID) {
+				fn(e)
+			}
+		}
+	})
+	sequencesToDrop.ForEach(func(id descpb.ID) {
+		_, target, seq := scpb.FindSequence(b.QueryByID(id))
+		if target == scpb.ToPublic && seq != nil {
+			fn(seq)
+		}
+	})
+	backrefs := undroppedBackrefs(b, col.TableID)
+	backrefs.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch elt := e.(type) {
+		case *scpb.View:
+			for _, ref := range elt.ForwardReferences {
+				if ref.ToID == col.TableID &&
+					catalog.MakeTableColSet(ref.ColumnIDs...).Contains(col.ColumnID) {
+					fn(e)
+				}
+			}
+		case *scpb.ForeignKeyConstraint:
+			if elt.ReferencedTableID == col.TableID &&
+				catalog.MakeTableColSet(elt.ReferencedColumnIDs...).Contains(col.ColumnID) {
+				fn(e)
+			}
+		}
 	})
 }
 
@@ -256,58 +350,48 @@ func handleDropColumnPrimaryIndexes(
 	}
 	existing, freshlyAdded := getPrimaryIndexes(b, tbl.TableID)
 	if freshlyAdded != nil {
-		handleDropColumnFreshlyAddedPrimaryIndex(b, tbl, freshlyAdded, col)
+		handleDropColumnFreshlyAddedPrimaryIndex(b, freshlyAdded, col)
 	} else {
-		handleDropColumnCreateNewPrimaryIndex(b, tbl, existing, col)
+		handleDropColumnCreateNewPrimaryIndex(b, existing, col)
 	}
 }
 
 func handleDropColumnCreateNewPrimaryIndex(
-	b BuildCtx, tbl *scpb.Table, existing *scpb.PrimaryIndex, col *scpb.Column,
+	b BuildCtx, existing *scpb.PrimaryIndex, col *scpb.Column,
 ) *scpb.PrimaryIndex {
-	return createNewPrimaryIndex(b, tbl, existing, func(
-		b BuildCtx, newIndex *scpb.PrimaryIndex, existingColumns []*scpb.IndexColumn,
-	) (newColumns []*scpb.IndexColumn) {
-		var ic *scpb.IndexColumn
-		for _, c := range existingColumns {
-			if c.ColumnID == col.ColumnID {
-				ic = c
-				break
-			}
+	out := makePrimaryIndexSpec(b, existing)
+	inColumns := make([]indexColumnSpec, 0, len(out.columns)-1)
+	var dropped *scpb.IndexColumn
+	for _, ic := range out.columns {
+		if ic.ColumnID == col.ColumnID {
+			dropped = ic
+		} else {
+			inColumns = append(inColumns, makeIndexColumnSpec(ic))
 		}
-		if ic == nil {
-			panic(errors.AssertionFailedf("failed to find column"))
-		}
-		if ic.Kind != scpb.IndexColumn_STORED {
-			panic(errors.AssertionFailedf("can only drop columns which are stored in the primary index, this one is %v ",
-				ic.Kind))
-		}
-		for _, ec := range existingColumns {
-			sameKind := ec.Kind == ic.Kind
-			if sameKind && ec.OrdinalInKind == ic.OrdinalInKind {
-				continue
-			}
-			cloned := protoutil.Clone(ec).(*scpb.IndexColumn)
-			if sameKind && ec.OrdinalInKind > ic.OrdinalInKind {
-				cloned.OrdinalInKind--
-			}
-			cloned.IndexID = newIndex.IndexID
-			newColumns = append(newColumns, cloned)
-			b.Add(cloned)
-		}
-		return newColumns
-	})
+	}
+	if dropped == nil {
+		panic(errors.AssertionFailedf("failed to find column"))
+	}
+	if dropped.Kind != scpb.IndexColumn_STORED {
+		panic(errors.AssertionFailedf("can only drop columns which are stored in the primary index, this one is %v ",
+			dropped.Kind))
+	}
+	in, temp := makeSwapPrimaryIndexSpec(b, out, inColumns)
+	out.apply(b.Drop)
+	in.apply(b.Add)
+	temp.apply(b.AddTransient)
+	return in.idx
 }
 
 func handleDropColumnFreshlyAddedPrimaryIndex(
-	b BuildCtx, tbl *scpb.Table, freshlyAdded *scpb.PrimaryIndex, col *scpb.Column,
+	b BuildCtx, freshlyAdded *scpb.PrimaryIndex, col *scpb.Column,
 ) {
 	// We want to find the freshly added index and go ahead and remove this
 	// column from the stored set. That means going through the other
 	// index columns for this index and adjusting their ordinal appropriately.
 	var storedColumns, storedTempColumns []*scpb.IndexColumn
 	var tempIndex *scpb.TemporaryIndex
-	scpb.ForEachTemporaryIndex(b.QueryByID(tbl.TableID), func(
+	scpb.ForEachTemporaryIndex(b.QueryByID(freshlyAdded.TableID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex,
 	) {
 		if e.IndexID == freshlyAdded.TemporaryIndexID {
@@ -317,9 +401,12 @@ func handleDropColumnFreshlyAddedPrimaryIndex(
 	if tempIndex == nil {
 		panic(errors.AssertionFailedf("failed to find temp index %d", freshlyAdded.TemporaryIndexID))
 	}
-	scpb.ForEachIndexColumn(b.QueryByID(tbl.TableID).Filter(publicTargetFilter), func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
+	scpb.ForEachIndexColumn(b.QueryByID(freshlyAdded.TableID), func(
+		_ scpb.Status, targetStatus scpb.TargetStatus, e *scpb.IndexColumn,
 	) {
+		if targetStatus == scpb.ToAbsent {
+			return
+		}
 		if e.Kind != scpb.IndexColumn_STORED {
 			return
 		}
@@ -344,7 +431,7 @@ func handleDropColumnFreshlyAddedPrimaryIndex(
 		}
 	}
 	if n == -1 {
-		panic(errors.AssertionFailedf("failed to find column %d in index %d", col.ColumnID, freshlyAdded.TemporaryIndexID))
+		return
 	}
 	b.Drop(storedColumns[n])
 	b.Drop(storedTempColumns[n])
@@ -353,261 +440,6 @@ func handleDropColumnFreshlyAddedPrimaryIndex(
 		b.Add(storedColumns[i])
 		storedTempColumns[i].OrdinalInKind--
 		b.Add(storedTempColumns[i])
-	}
-}
-
-func handleDropColumnUniqueWithoutIndexConstraints(
-	b BuildCtx, col *scpb.Column, n tree.NodeFormatter,
-) {
-	publicTargets := b.QueryByID(col.TableID).Filter(publicTargetFilter)
-	var constraints []*scpb.UniqueWithoutIndexConstraint
-	scpb.ForEachUniqueWithoutIndexConstraint(publicTargets, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.UniqueWithoutIndexConstraint,
-	) {
-		if descpb.ColumnIDs(e.ColumnIDs).Contains(col.ColumnID) {
-			constraints = append(constraints, e)
-		}
-	})
-	if len(constraints) == 0 {
-		return
-	}
-	// TODO(ajwerner): Support dropping UNIQUE WITHOUT INDEX constraints.
-	panic(errors.Wrap(scerrors.NotImplementedError(n),
-		"dropping of UNIQUE WITHOUT INDEX constraints not supported"))
-}
-
-func handleDropColumnCheckConstraints(b BuildCtx, col *scpb.Column, n tree.NodeFormatter) {
-	publicTargets := b.QueryByID(col.TableID).Filter(publicTargetFilter)
-	var constraints []*scpb.CheckConstraint
-	scpb.ForEachCheckConstraint(publicTargets, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.CheckConstraint,
-	) {
-		if descpb.ColumnIDs.Contains(e.ReferencedColumnIDs, col.ColumnID) {
-			constraints = append(constraints, e)
-		}
-	})
-	if len(constraints) == 0 {
-		return
-	}
-	// TODO(ajwerner): Support dropping CHECK constraints.
-	panic(errors.Wrap(scerrors.NotImplementedError(n),
-		"dropping of CHECK constraints not supported"))
-}
-
-func handleDropColumnForeignKeyConstraintForwardReferences(
-	b BuildCtx, col *scpb.Column, n tree.NodeFormatter,
-) {
-	publicTargets := b.QueryByID(col.TableID).Filter(publicTargetFilter)
-	var constraints []*scpb.ForeignKeyConstraint
-	scpb.ForEachForeignKeyConstraint(publicTargets, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.ForeignKeyConstraint,
-	) {
-		if descpb.ColumnIDs.Contains(e.ColumnIDs, col.ColumnID) {
-			constraints = append(constraints, e)
-		}
-	})
-	if len(constraints) == 0 {
-		return
-	}
-	// Here we will drop a constraint with or without cascade for outbound
-	// constraints.
-	// TODO(ajwerner): Support dropping FOREIGN KEY constraints.
-	panic(errors.Wrap(scerrors.NotImplementedError(n),
-		"dropping of FOREIGN KEY constraints not supported"))
-}
-
-func handleDropColumnForeignKeyConstraintBackReferences(
-	b BuildCtx,
-	cn *scpb.ColumnName,
-	backrefs ElementResultSet,
-	col *scpb.Column,
-	n tree.NodeFormatter,
-	behavior tree.DropBehavior,
-) {
-	publicTargets := b.QueryByID(col.TableID).Filter(publicTargetFilter)
-	var constraints []*scpb.ForeignKeyConstraint
-	scpb.ForEachForeignKeyConstraint(publicTargets, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.ForeignKeyConstraint,
-	) {
-		if descpb.ColumnIDs.Contains(e.ReferencedColumnIDs, col.ColumnID) {
-			constraints = append(constraints, e)
-		}
-	})
-	scpb.ForEachForeignKeyConstraint(backrefs, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.ForeignKeyConstraint,
-	) {
-		if descpb.ColumnIDs.Contains(e.ReferencedColumnIDs, col.ColumnID) {
-			constraints = append(constraints, e)
-		}
-	})
-	if len(constraints) == 0 {
-		return
-	}
-	if behavior != tree.DropCascade {
-		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-			"cannot drop column %s because other objects depend on it", cn.Name))
-	}
-	// Here we will drop a constraint with or without cascade for outbound
-	// constraints.
-	// TODO(ajwerner): Support dropping FOREIGN KEY constraints.
-	panic(errors.Wrap(scerrors.NotImplementedError(n),
-		"dropping of FOREIGN KEY constraints not supported"))
-}
-
-func handleDropColumnExpressions(b BuildCtx, colElts ElementResultSet, behavior tree.DropBehavior) {
-	publicTargets := colElts.Filter(publicTargetFilter)
-	if _, _, de := scpb.FindColumnDefaultExpression(publicTargets); de != nil {
-		b.Drop(de)
-	}
-	if _, _, ue := scpb.FindColumnOnUpdateExpression(publicTargets); ue != nil {
-		b.Drop(ue)
-	}
-
-	// Find all the sequences owned by this column and drop them either restrict
-	// or cascade. Then, we'll need to check whether these sequences have any
-	// other backreferences which have not yet been dropped. Note that we don't
-	// need to wait for the other commands in this statement; postgres fails on
-	// something like:
-	//
-	//  create table t (i serial);
-	//  alter table t add column j default nextval('t_i_seq'::regclass);
-	//  alter table t drop column i, drop column j;
-	//  2BP01: cannot drop column i of table t because other objects depend on it
-	//
-	var undroppedBackrefsToCheck catalog.DescriptorIDSet
-	scpb.ForEachSequenceOwner(colElts, func(
-		_ scpb.Status, _ scpb.TargetStatus, so *scpb.SequenceOwner,
-	) {
-		if behavior == tree.DropCascade {
-			dropCascadeDescriptor(b, so.SequenceID)
-		} else {
-			dropRestrictDescriptor(b, so.SequenceID)
-			undroppedBackrefsToCheck.Add(so.SequenceID)
-			b.Drop(so)
-		}
-	})
-	// TODO(ajwerner): Track the undropped backrefs to populate a detail
-	// message like postgres does. For example:
-	//
-	//  create table t (i serial);
-	//  create table t2 (i int default nextval('t_i_seq'::regclass));
-	//  drop table t restrict;
-	//  ERROR:  cannot drop table t because other objects depend on it
-	//  DETAIL:  default value for column i of table t2 depends on sequence t_i_seq
-	//  HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-	//
-	var hasUndroppedBackrefs bool
-	undroppedBackrefsToCheck.ForEach(func(seqID descpb.ID) {
-		udr := undroppedBackrefs(b, seqID)
-		if !udr.IsEmpty() {
-			hasUndroppedBackrefs = true
-		}
-	})
-	_, _, cn := scpb.FindColumnName(colElts)
-	if hasUndroppedBackrefs {
-		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-			"cannot drop column %s because other objects depend on it", cn.Name))
-	}
-}
-
-func handleDropColumnViewBackReferences(
-	b BuildCtx,
-	backrefs ElementResultSet,
-	col *scpb.Column,
-	cn *scpb.ColumnName,
-	dropBehavior tree.DropBehavior,
-) {
-	var views []*scpb.View
-	scpb.ForEachView(backrefs, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.View) {
-		for _, ref := range e.ForwardReferences {
-			if ref.ToID == col.TableID &&
-				catalog.MakeTableColSet(ref.ColumnIDs...).Contains(col.ColumnID) {
-				views = append(views, e)
-			}
-		}
-	})
-	if len(views) == 0 {
-		return
-	}
-	if dropBehavior == tree.DropCascade {
-		for _, v := range views {
-			dropCascadeDescriptor(b, v.ViewID)
-		}
-		return
-	}
-	depView := views[0]
-	_, _, ns := scpb.FindNamespace(b.QueryByID(col.TableID))
-	_, _, nsDep := scpb.FindNamespace(b.QueryByID(depView.ViewID))
-	if nsDep.DatabaseID != ns.DatabaseID || nsDep.SchemaID != ns.SchemaID {
-		panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf(
-			"cannot drop column %q because view %q depends on it",
-			cn.Name, qualifiedName(b, depView.ViewID)),
-			"you can drop %s instead.", nsDep.Name))
-	}
-	panic(sqlerrors.NewDependentObjectErrorf(
-		"cannot drop column %q because view %q depends on it",
-		cn.Name, nsDep.Name))
-}
-
-func handleDropColumnIndexes(
-	b BuildCtx, tn *tree.TableName, col *scpb.Column, dropBehavior tree.DropBehavior,
-) {
-	tableElts := b.QueryByID(col.TableID).Filter(publicTargetFilter)
-	var indexIDs catid.IndexSet
-	scpb.ForEachIndexColumn(tableElts, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
-	) {
-		if e.ColumnID == col.ColumnID {
-			indexIDs.Add(e.IndexID)
-		}
-	})
-	scpb.ForEachSecondaryIndexPartial(tableElts, func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndexPartial,
-	) {
-		if descpb.ColumnIDs.Contains(e.ReferencedColumnIDs, col.ColumnID) {
-			indexIDs.Add(e.IndexID)
-		}
-	})
-	var secondaryIndexIDs catid.IndexSet
-	var indexes []*scpb.SecondaryIndex
-	var indexNames []*scpb.IndexName
-	scpb.ForEachSecondaryIndex(tableElts, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex,
-	) {
-		if indexIDs.Contains(e.IndexID) {
-			secondaryIndexIDs.Add(e.IndexID)
-			indexes = append(indexes, e)
-		}
-	})
-	scpb.ForEachIndexName(tableElts, func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName,
-	) {
-		if secondaryIndexIDs.Contains(e.IndexID) {
-			indexNames = append(indexNames, e)
-		}
-	})
-	if len(indexNames) != len(indexes) {
-		panic(errors.AssertionFailedf("indexes %v does not match indexNames %v",
-			indexes, indexNames))
-	}
-	sort.Slice(indexes, func(i, j int) bool {
-		return indexes[i].IndexID < indexes[j].IndexID
-	})
-	sort.Slice(indexNames, func(i, j int) bool {
-		return indexNames[i].IndexID < indexNames[j].IndexID
-	})
-	for i, idx := range indexes {
-		name := tree.TableIndexName{
-			Table: *tn,
-			Index: tree.UnrestrictedName(indexNames[i].Name),
-		}
-		indexElts := tableElts.Filter(func(
-			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
-		) bool {
-			idI, _ := screl.Schema.GetAttribute(screl.IndexID, e)
-			return idI != nil && idI.(catid.IndexID) == idx.IndexID
-		})
-		dropSecondaryIndex(b, &name, dropBehavior, idx, indexElts)
 	}
 }
 

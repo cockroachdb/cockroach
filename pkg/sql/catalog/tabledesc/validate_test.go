@@ -457,9 +457,9 @@ func TestValidateTableDesc(t *testing.T) {
 				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
-					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "bar"},
 				},
-				NextColumnID: 2,
+				NextColumnID: 3,
 			}},
 		{`duplicate column name: "bar"`,
 			descpb.TableDescriptor{
@@ -469,9 +469,9 @@ func TestValidateTableDesc(t *testing.T) {
 				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
-					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "bar"},
 				},
-				NextColumnID: 2,
+				NextColumnID: 3,
 			}},
 		{`column "blah" duplicate ID of column "bar": 1`,
 			descpb.TableDescriptor{
@@ -847,7 +847,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`index "bar" column "bar" should have ID 1, but found ID 2`,
+		{`index "bar" contains key column "bar" with unknown ID 2`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -859,7 +859,10 @@ func TestValidateTableDesc(t *testing.T) {
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
-				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "bar", KeyColumnIDs: []descpb.ColumnID{2},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "bar",
+					KeyColumnIDs:        []descpb.ColumnID{2},
 					KeyColumnNames:      []string{"bar"},
 					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				},
@@ -867,7 +870,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`index "bar" contains unknown column "blah"`,
+		{`index "bar" key column ID 1 should have name "bar", but found name "blah"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -879,7 +882,10 @@ func TestValidateTableDesc(t *testing.T) {
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
-				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "bar", KeyColumnIDs: []descpb.ColumnID{1},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "bar",
+					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnNames:      []string{"blah"},
 					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				},
@@ -1113,7 +1119,9 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 				PrimaryIndex: descpb.IndexDescriptor{
-					ID: 1, Name: "primary",
+					ID:                  1,
+					ConstraintID:        1,
+					Name:                "primary",
 					Unique:              true,
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnNames:      []string{"bar"},
@@ -2049,151 +2057,6 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 }
 
-func TestPrimaryKeyCannotBeVirtualBefore22_1(t *testing.T) {
-	computedExpr := "1 + 1"
-	testData := []struct {
-		err  string
-		desc descpb.TableDescriptor
-	}{
-		{
-			err: `primary index column "c3" cannot be virtual`,
-			desc: descpb.TableDescriptor{
-				ID:            2,
-				ParentID:      1,
-				Name:          "foo",
-				FormatVersion: descpb.InterleavedFormatVersion,
-				Columns: []descpb.ColumnDescriptor{
-					{ID: 1, Name: "c1"},
-					{ID: 2, Name: "c2"},
-					{ID: 3, Name: "c3", ComputeExpr: &computedExpr, Virtual: true},
-				},
-				PrimaryIndex: descpb.IndexDescriptor{
-					ID:                  1,
-					Name:                "primary",
-					Unique:              true,
-					KeyColumnIDs:        []descpb.ColumnID{1, 3},
-					KeyColumnNames:      []string{"c1", "c3"},
-					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
-					Version:             descpb.LatestIndexDescriptorVersion,
-					EncodingType:        descpb.PrimaryIndexEncoding,
-				},
-				Indexes: []descpb.IndexDescriptor{
-					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
-						KeyColumnNames:      []string{"c2"},
-						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
-						KeySuffixColumnIDs:  []descpb.ColumnID{1, 3},
-					},
-				},
-				Families: []descpb.ColumnFamilyDescriptor{
-					{ID: 0, Name: "primary",
-						ColumnIDs:   []descpb.ColumnID{1, 2},
-						ColumnNames: []string{"c1", "c2"},
-					},
-				},
-				Mutations:    []descpb.DescriptorMutation{},
-				NextColumnID: 4,
-				NextFamilyID: 1,
-				NextIndexID:  5,
-			},
-		},
-		{
-			err: `index "sec" cannot store virtual column 3`,
-			desc: descpb.TableDescriptor{
-				ID:            2,
-				ParentID:      1,
-				Name:          "foo",
-				FormatVersion: descpb.InterleavedFormatVersion,
-				Columns: []descpb.ColumnDescriptor{
-					{ID: 1, Name: "c1"},
-					{ID: 2, Name: "c2"},
-					{ID: 3, Name: "c3", ComputeExpr: &computedExpr, Virtual: true},
-				},
-				PrimaryIndex: descpb.IndexDescriptor{
-					ID:                  1,
-					Name:                "primary",
-					Unique:              true,
-					KeyColumnIDs:        []descpb.ColumnID{1},
-					KeyColumnNames:      []string{"c1"},
-					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
-					Version:             descpb.LatestIndexDescriptorVersion,
-					EncodingType:        descpb.PrimaryIndexEncoding,
-				},
-				Indexes: []descpb.IndexDescriptor{
-					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
-						KeyColumnNames:      []string{"c2"},
-						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
-						KeySuffixColumnIDs:  []descpb.ColumnID{1, 3},
-					},
-				},
-				Families: []descpb.ColumnFamilyDescriptor{
-					{ID: 0, Name: "primary",
-						ColumnIDs:   []descpb.ColumnID{1, 2},
-						ColumnNames: []string{"c1", "c2"},
-					},
-				},
-				Mutations: []descpb.DescriptorMutation{
-					{
-						Descriptor_: &descpb.DescriptorMutation_Index{
-							Index: &descpb.IndexDescriptor{
-								ID:                  3,
-								Name:                "new_primary_key",
-								Unique:              true,
-								KeyColumnIDs:        []descpb.ColumnID{1, 3},
-								KeyColumnNames:      []string{"c1", "c3"},
-								KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
-								Version:             descpb.LatestIndexDescriptorVersion,
-								EncodingType:        descpb.PrimaryIndexEncoding,
-							},
-						},
-						Direction: descpb.DescriptorMutation_ADD,
-						State:     descpb.DescriptorMutation_DELETE_ONLY,
-					},
-					{
-						Descriptor_: &descpb.DescriptorMutation_Index{
-							Index: &descpb.IndexDescriptor{
-								ID: 4, Name: "new_sec", KeyColumnIDs: []descpb.ColumnID{2},
-								KeyColumnNames:      []string{"c2"},
-								KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
-								KeySuffixColumnIDs:  []descpb.ColumnID{1, 3},
-							},
-						},
-						Direction: descpb.DescriptorMutation_ADD,
-						State:     descpb.DescriptorMutation_DELETE_ONLY,
-					},
-					{
-						Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{
-							PrimaryKeySwap: &descpb.PrimaryKeySwap{
-								OldPrimaryIndexId: 1,
-								NewPrimaryIndexId: 3,
-								NewIndexes:        []descpb.IndexID{4},
-								OldIndexes:        []descpb.IndexID{2},
-							},
-						},
-						Direction: descpb.DescriptorMutation_ADD,
-						State:     descpb.DescriptorMutation_DELETE_ONLY,
-					},
-				},
-				NextColumnID: 4,
-				NextFamilyID: 1,
-				NextIndexID:  5,
-			},
-		},
-	}
-	for i, d := range testData {
-		t.Run(d.err, func(t *testing.T) {
-			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.RootUserName())
-			desc := NewBuilder(&d.desc).BuildImmutableTable()
-			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			err := validate.Self(clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V21_2)}, desc)
-			if err == nil {
-				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
-			} else if expectedErr != err.Error() {
-				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
-			}
-		})
-	}
-}
-
 func TestValidateCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -2844,7 +2707,7 @@ func TestValidateConstraintID(t *testing.T) {
 		err  string
 		desc descpb.TableDescriptor
 	}{
-		{`constraint id was missing for constraint: PRIMARY KEY with name \"primary\"`,
+		{`constraint ID was missing for constraint: PRIMARY KEY with name \"primary\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -2867,7 +2730,7 @@ func TestValidateConstraintID(t *testing.T) {
 					privilege.List{},
 					username.RootUserName()),
 			}},
-		{`constraint id was missing for constraint: UNIQUE with name \"secondary\"`,
+		{`constraint ID was missing for constraint: UNIQUE with name \"secondary\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -2897,7 +2760,7 @@ func TestValidateConstraintID(t *testing.T) {
 					privilege.List{},
 					username.RootUserName()),
 			}},
-		{`constraint id was missing for constraint: UNIQUE with name \"bad\"`,
+		{`constraint ID was missing for constraint: UNIQUE with name \"bad\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -2923,7 +2786,7 @@ func TestValidateConstraintID(t *testing.T) {
 					privilege.List{},
 					username.RootUserName()),
 			}},
-		{`constraint id was missing for constraint: CHECK with name \"bad\"`,
+		{`constraint ID was missing for constraint: CHECK with name \"bad\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,

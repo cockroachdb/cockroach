@@ -25,8 +25,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   │     rule: "dependents removed before column"
         │   │   │     rule: "column type removed right before column when not dropping relation"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-        │   │         rule: "indexes containing columns reach absent before column"
+        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   │     rule: "indexes containing column reach absent before column"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │         rule: "dependents removed before column"
         │   │
         │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
         │   │     PUBLIC → ABSENT
@@ -40,23 +49,29 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
         │   │     PUBLIC → ABSENT
         │   │
-        │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
-        │   │     PUBLIC → ABSENT
-        │   │
-        │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
-        │   │     PUBLIC → ABSENT
-        │   │
         │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
-        │   │   │     rule: "dependents removed before index"
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
         │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
+        │   │
+        │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
         │   │
         │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
@@ -68,38 +83,22 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │         rule: "dependents removed before index"
         │   │
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-        │   │     PUBLIC → ABSENT
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
         │   │
         │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-        │         PUBLIC → ABSENT
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       └── • skip PUBLIC → ABSENT operations
+        │             rule: "skip index-column removal ops on index removal"
         │
-        └── • 13 Mutation operations
+        └── • 9 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 2
             │     Name: crdb_internal_column_2_name_placeholder
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 1
-            │     IndexID: 2
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 2
-            │     IndexID: 2
-            │     Kind: 2
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 1
-            │     IndexID: 3
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 2
-            │     IndexID: 3
-            │     Kind: 2
             │     TableID: 106
             │
             ├── • CreateGcJobForIndex

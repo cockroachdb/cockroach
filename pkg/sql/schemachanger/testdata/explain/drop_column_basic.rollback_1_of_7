@@ -9,19 +9,17 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 4 elements transitioning toward ABSENT
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
            │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
            ├── 2 elements transitioning toward PUBLIC
            │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104, ColumnID: 2}
            │    └── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
-           └── 11 Mutation operations
+           └── 9 Mutation operations
+                ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
                 ├── MakeColumnPublic {"ColumnID":2,"TableID":104}
                 ├── RefreshStats {"TableID":104}
-                ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
                 ├── CreateGcJobForIndex {"IndexID":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
                 ├── CreateGcJobForIndex {"IndexID":3,"TableID":104}
