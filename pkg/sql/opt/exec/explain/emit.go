@@ -475,10 +475,31 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 						}
 						duration = string(humanizeutil.LongDuration(timeSinceStats))
 					}
+
+					var forecastStr string
+					if s.Forecast {
+						if e.ob.flags.Redact.Has(RedactVolatile) {
+							forecastStr = "; using stats forecast"
+						} else {
+							timeSinceStats := timeutil.Since(s.ForecastAt)
+							if timeSinceStats >= 0 {
+								forecastStr = fmt.Sprintf(
+									"; using stats forecast for %s ago", humanizeutil.LongDuration(timeSinceStats),
+								)
+							} else {
+								timeSinceStats *= -1
+								forecastStr = fmt.Sprintf(
+									"; using stats forecast for %s in the future",
+									humanizeutil.LongDuration(timeSinceStats),
+								)
+							}
+						}
+					}
+
 					e.ob.AddField("estimated row count", fmt.Sprintf(
-						"%s (%s%% of the table; stats collected %s ago)",
+						"%s (%s%% of the table; stats collected %s ago%s)",
 						estimatedRowCountString, percentageStr,
-						duration,
+						duration, forecastStr,
 					))
 				} else {
 					e.ob.AddField("estimated row count", estimatedRowCountString)

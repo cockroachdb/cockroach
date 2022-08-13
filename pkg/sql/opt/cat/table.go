@@ -201,6 +201,9 @@ type TableStatistic interface {
 	// HistogramType returns the type that the histogram was created on. For
 	// inverted index histograms, this will always return types.Bytes.
 	HistogramType() *types.T
+
+	// IsForecast returns true if this statistic is a forecast.
+	IsForecast() bool
 }
 
 // HistogramBucket contains the data for a single histogram bucket. Note
