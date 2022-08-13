@@ -44,6 +44,7 @@ message PingRequest {
   // The address of the client.
   optional string origin_addr = 3 [(gogoproto.nullable) = false];
   // The configured maximum clock offset (in nanoseconds) on the server.
+  // TODO(nvanbenschoten): remove this field in v23.1. It is no longer read.
   optional int64 origin_max_offset_nanos = 4 [(gogoproto.nullable) = false];
   // Cluster ID to prevent connections between nodes in different clusters.
   optional bytes origin_cluster_id = 5 [
