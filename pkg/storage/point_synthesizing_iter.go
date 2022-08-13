@@ -86,7 +86,8 @@ type pointSynthesizingIter struct {
 	rangeKeysEnd int
 
 	// rangeKeysStart contains the start key of the current rangeKeys stack. It is
-	// only used to memoize rangeKeys for adjacent keys.
+	// stored separately, rather than holding the entire MVCCRangeKeyStack, to
+	// avoid cloning the EndKey.
 	rangeKeysStart roachpb.Key
 
 	// atPoint is true if the synthesizing iterator is positioned on a real point
@@ -107,6 +108,11 @@ type pointSynthesizingIter struct {
 
 	// iterErr contains the error from the underlying iterator, if any.
 	iterErr error
+
+	// rangeKeyChanged keeps track of any changes to the underlying iter's range
+	// keys. It is reset to false on every call to updateRangeKeys(), and
+	// accumulates changes during intermediate positioning operations.
+	rangeKeyChanged bool
 }
 
 var _ MVCCIterator = new(pointSynthesizingIter)
@@ -131,6 +137,7 @@ func newPointSynthesizingIter(parent MVCCIterator) *pointSynthesizingIter {
 func newPointSynthesizingIterAtParent(parent MVCCIterator) *pointSynthesizingIter {
 	iter := newPointSynthesizingIter(parent)
 	iter.iterValid = true
+	iter.rangeKeyChanged = true
 	iter.updateSeekGEPosition(parent.UnsafeKey())
 	return iter
 }
@@ -170,9 +177,13 @@ func (i *pointSynthesizingIter) iterPrev() (bool, error) {
 }
 
 // updateValid updates i.iterValid and i.iterErr based on the underlying
-// iterator position, and returns them.
+// iterator position, and returns them. It also keeps track of changes
+// to range keys.
 func (i *pointSynthesizingIter) updateValid() (bool, error) {
 	i.iterValid, i.iterErr = i.iter.Valid()
+	// TODO(erikgrinaker): This doesn't really belong in updateValid(), move it
+	// somewhere more suitable when we clean up the positioning logic.
+	i.rangeKeyChanged = i.rangeKeyChanged || i.iter.RangeKeyChanged()
 	return i.iterValid, i.iterErr
 }
 
@@ -186,16 +197,18 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 	} else {
 		i.rangeKeysPos = append(i.rangeKeysPos[:0], i.iter.UnsafeKey().Key...)
 		if i.prefix {
-			// A prefix iterator will always be at the start bound of the range key,
-			// and never move onto a different range key, so we can omit the cloning
-			// and other processing.
-			i.rangeKeys = i.iter.RangeKeys().Versions
-			i.rangeKeysEnd = len(i.rangeKeys)
+			if i.rangeKeyChanged {
+				// A prefix iterator will always be at the start bound of the range key,
+				// and never move onto a different range key, so we can omit the cloning
+				// and other processing.
+				i.rangeKeys = i.iter.RangeKeys().Versions
+				i.rangeKeysEnd = len(i.rangeKeys)
+			}
 		} else {
-			// TODO(erikgrinaker): Use RangeKeyChanged() to detect this.
-			if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
-				i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
-				i.iter.RangeKeys().Versions.CloneInto(&i.rangeKeysBuf)
+			if i.rangeKeyChanged {
+				rangeKeys := i.iter.RangeKeys()
+				i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeKeys.Bounds.Key...)
+				rangeKeys.Versions.CloneInto(&i.rangeKeysBuf)
 				i.rangeKeys = i.rangeKeysBuf
 			}
 			if i.rangeKeysPos.Equal(i.rangeKeysStart) {
@@ -205,6 +218,7 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 				i.extendRangeKeysEnd()
 			}
 		}
+		i.rangeKeyChanged = false
 		if !i.reverse {
 			i.rangeKeysIdx = 0
 		} else {
