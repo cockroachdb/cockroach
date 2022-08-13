@@ -295,18 +295,6 @@ WHERE id = $max_desc_id;
     }
 }
 
-statement error pq: unimplemented: alter function not supported.*
-ALTER FUNCTION f() IMMUTABLE
-
-statement error pq: unimplemented: alter function rename to not supported.*
-ALTER FUNCTION f() RENAME TO g
-
-statement error pq: unimplemented: alter function owner to not supported.*
-ALTER FUNCTION f() OWNER TO CURRENT_USER
-
-statement error pq: unimplemented: alter function set schema not supported.*
-ALTER FUNCTION f() SET SCHEMA test_sc
-
 statement error pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
 
@@ -1028,6 +1016,9 @@ NULL     udf_test_user  test              public           test_priv_f1_100163  
 NULL     udf_test_user  test              public           test_priv_f2_100164  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100165  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
+statement error pq: cannot drop role/user udf_test_user: grants still exist on.*
+DROP USER udf_test_user;
+
 statement ok
 REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user;
 
@@ -1170,3 +1161,305 @@ grantor  grantee  specific_catalog  specific_schema  specific_name        routin
 NULL     root     test              public           test_priv_f1_100166  test             public          test_priv_f1  EXECUTE         YES
 NULL     root     test              public           test_priv_f2_100169  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100170  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+subtest alter_function_options
+
+statement ok
+CREATE FUNCTION f_test_alter_opt(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+----
+CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement error pq: conflicting or redundant options
+ALTER FUNCTION f_test_alter_opt IMMUTABLE IMMUTABLE
+
+statement ok
+ALTER FUNCTION f_test_alter_opt IMMUTABLE LEAKPROOF STRICT;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+----
+CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+    RETURNS INT8
+    IMMUTABLE
+    LEAKPROOF
+    STRICT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+subtest alter_function_name
+
+statement ok
+CREATE FUNCTION f_test_alter_name(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_alter_name_same_in(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_alter_name_diff_in() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
+----
+CREATE FUNCTION public.f_test_alter_name(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement error pq: function f_test_alter_name\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
+
+statement error pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
+
+statement ok
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
+
+statement error pq: function f_test_alter_name does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+----
+CREATE FUNCTION public.f_test_alter_name_new(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+statement ok
+ALTER FUNCTION f_test_alter_name_new RENAME to f_test_alter_name_diff_in
+
+statement error pq: function f_test_alter_name_new does not exist
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in];
+----
+CREATE FUNCTION public.f_test_alter_name_diff_in()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+subtest alter_function_owner
+
+statement ok
+CREATE USER u_test_owner;
+CREATE FUNCTION f_test_alter_owner() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'f_test_alter_owner';
+----
+root
+
+statement error  pq: role/user "user_not_exists" does not exist
+ALTER FUNCTION f_test_alter_owner OWNER TO user_not_exists
+
+statement ok
+ALTER FUNCTION f_test_alter_owner OWNER TO u_test_owner;
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'f_test_alter_owner';
+----
+u_test_owner
+
+statement ok
+REASSIGN OWNED BY u_test_owner TO root;
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'f_test_alter_owner';
+----
+root
+
+statement ok
+ALTER FUNCTION f_test_alter_owner OWNER TO u_test_owner;
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'f_test_alter_owner';
+----
+u_test_owner
+
+statement error pq: role u_test_owner cannot be dropped because some objects depend on it
+DROP USER u_test_owner;
+
+statement ok
+DROP FUNCTION f_test_alter_owner;
+
+statement ok
+DROP USER u_test_owner;
+
+subtest alter_function_set_schema
+
+statement ok
+CREATE FUNCTION f_test_sc() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f_test_sc(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+CREATE SCHEMA test_alter_sc;
+CREATE FUNCTION test_alter_sc.f_test_sc() RETURNS INT LANGUAGE SQL AS $$ SELECT 3 $$;
+
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc');
+----
+100176  f_test_sc  SELECT 1;
+100177  f_test_sc  SELECT 2;
+100179  f_test_sc  SELECT 3;
+
+query TT
+WITH fns AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+  FROM system.descriptor
+  WHERE id IN (176, 177, 179)
+)
+SELECT
+  fn->'id',
+  fn->'parentSchemaId'
+FROM fns;
+----
+176  105
+177  105
+179  178
+
+statement error pq: cannot move objects into or out of virtual schemas
+ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
+
+statement error pq: function test_alter_sc.f_test_sc\(\) already exists in schema "test_alter_sc"
+ALTER FUNCTION f_test_sc() SET SCHEMA test_alter_sc;
+
+# Make sure moving to same schema has not effects.
+statement ok
+ALTER FUNCTION f_test_sc(INT) SET SCHEMA public;
+
+query TT
+WITH fns AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+  FROM system.descriptor
+  WHERE id IN (176, 177, 179)
+)
+SELECT
+  fn->'id',
+  fn->'parentSchemaId'
+FROM fns;
+----
+176  105
+177  105
+179  178
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
+----
+CREATE FUNCTION public.f_test_sc()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+CREATE FUNCTION public.f_test_sc(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 2;
+$$
+
+# Make sure moving to another schema changes function's parentSchemaId and
+# schema's function list.
+statement ok
+ALTER FUNCTION f_test_sc(INT) SET SCHEMA test_alter_sc;
+
+query TT
+WITH fns AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+  FROM system.descriptor
+  WHERE id IN (176, 177, 179)
+)
+SELECT
+  fn->'id',
+  fn->'parentSchemaId'
+FROM fns;
+----
+176  105
+177  178
+179  178
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
+----
+CREATE FUNCTION public.f_test_sc()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 1;
+$$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc];
+----
+CREATE FUNCTION test_alter_sc.f_test_sc()
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 3;
+$$
+CREATE FUNCTION test_alter_sc.f_test_sc(IN INT8)
+    RETURNS INT8
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 2;
+$$
