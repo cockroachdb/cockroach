@@ -38,7 +38,10 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		desc,
 		false, /* includeOffline */
 		false /*avoidLeased*/)
-	return ret.(catalog.TableDescriptor), err
+	if err != nil {
+		return nil, err
+	}
+	return ret.(catalog.TableDescriptor), nil
 }
 
 // hydrateTypesInDescWithOptions installs user defined type metadata in all
