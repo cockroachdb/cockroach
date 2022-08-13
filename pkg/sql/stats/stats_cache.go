@@ -720,5 +720,8 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 		return nil, err
 	}
 
+	forecasts := ForecastTableStatistics(ctx, statsList)
+	statsList = append(forecasts, statsList...)
+
 	return statsList, nil
 }
