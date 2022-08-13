@@ -41,9 +41,6 @@ import (
 )
 
 const (
-	// LocalityURLParam is the parameter name used when specifying a locality tag
-	// in a locality aware backup/restore.
-	LocalityURLParam = "COCKROACH_LOCALITY"
 	// DefaultLocalityValue is the default locality tag used in a locality aware
 	// backup/restore when an explicit COCKROACH_LOCALITY is not specified.
 	DefaultLocalityValue = "default"
@@ -411,9 +408,9 @@ func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 		return "", "", err
 	}
 	q := parsedURI.Query()
-	localityKV := q.Get(LocalityURLParam)
+	localityKV := q.Get(cloud.LocalityURLParam)
 	// Remove the backup locality parameter.
-	q.Del(LocalityURLParam)
+	q.Del(cloud.LocalityURLParam)
 	parsedURI.RawQuery = q.Encode()
 
 	parsedURI.Path = backuputils.JoinURLPath(parsedURI.Path, appendPath)
@@ -438,7 +435,7 @@ func GetURIsByLocalityKV(
 		}
 		if localityKV != "" && localityKV != DefaultLocalityValue {
 			return "", nil, errors.Errorf("%s %s is invalid for a single BACKUP location",
-				LocalityURLParam, localityKV)
+				cloud.LocalityURLParam, localityKV)
 		}
 		return baseURI, urisByLocalityKV, nil
 	}
@@ -451,7 +448,7 @@ func GetURIsByLocalityKV(
 		if localityKV == "" {
 			return "", nil, errors.Errorf(
 				"multiple URLs are provided for partitioned BACKUP, but %s is not specified",
-				LocalityURLParam,
+				cloud.LocalityURLParam,
 			)
 		}
 		if localityKV == DefaultLocalityValue {

@@ -274,11 +274,11 @@ const (
 	// AddSystemUserIDColumn is the version where the system.users table has
 	// a user_id column for writes only.
 	AddSystemUserIDColumn
-	// UsersHaveIDs is the version where all users in the system.users table
+	// SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
 	// have ids.
-	UsersHaveIDs
-	// SetUserIDNotNull sets the user_id column in system.users to not null.
-	SetUserIDNotNull
+	SystemUsersIDColumnIsBackfilled
+	// SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
+	SetSystemUsersUserIDColumnNotNull
 	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
 	SQLSchemaTelemetryScheduledJobs
@@ -300,6 +300,16 @@ const (
 	//  Cockroach (likely 23.1), a blocking migration will be run to
 	//  rewrite-compact on any remaining marked tables.
 	PebbleFormatPrePebblev1Marked
+	// RoleOptionsTableHasIDColumn is the version where the role options table
+	// has ids.
+	RoleOptionsTableHasIDColumn
+	// RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
+	// table are backfilled.
+	RoleOptionsIDColumnIsBackfilled
+	// SetRoleOptionsUserIDColumnNotNull is the version where the role
+	// options table id column cannot be null. This is the final step
+	// of the system.role_options table migration.
+	SetRoleOptionsUserIDColumnNotNull
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -479,11 +489,11 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 36},
 	},
 	{
-		Key:     UsersHaveIDs,
+		Key:     SystemUsersIDColumnIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 38},
 	},
 	{
-		Key:     SetUserIDNotNull,
+		Key:     SetSystemUsersUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
@@ -501,6 +511,18 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatPrePebblev1Marked,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
+	},
+	{
+		Key:     RoleOptionsTableHasIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
+	},
+	{
+		Key:     RoleOptionsIDColumnIsBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 52},
+	},
+	{
+		Key:     SetRoleOptionsUserIDColumnNotNull,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
