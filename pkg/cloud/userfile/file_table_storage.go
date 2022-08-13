@@ -39,11 +39,14 @@ const (
 	DefaultQualifiedNamespace = "defaultdb.public."
 	// DefaultQualifiedNamePrefix is the default FQN table name prefix.
 	DefaultQualifiedNamePrefix = "userfiles_"
+
+	scheme = "userfile"
 )
 
 func parseUserfileURL(
 	args cloud.ExternalStorageURIContext, uri *url.URL,
 ) (cloudpb.ExternalStorage, error) {
+	userfileURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	qualifiedTableName := uri.Host
 	if args.CurrentUser.Undefined() {
@@ -65,6 +68,13 @@ func parseUserfileURL(
 	conf.FileTableConfig.User = normUser
 	conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 	conf.FileTableConfig.Path = uri.Path
+
+	// Validate that all the passed in parameters are supported.
+	if unknownParams := userfileURL.RemainingQueryParams(); len(unknownParams) > 0 {
+		return cloudpb.ExternalStorage{}, errors.Errorf(
+			`unknown userfile query parameters: %s`, strings.Join(unknownParams, ", "))
+	}
+
 	return conf, nil
 }
 
@@ -306,5 +316,5 @@ func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, er
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_userfile,
-		parseUserfileURL, makeFileTableStorage, cloud.RedactedParams(), "userfile")
+		parseUserfileURL, makeFileTableStorage, cloud.RedactedParams(), scheme)
 }

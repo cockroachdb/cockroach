@@ -1,0 +1,191 @@
+new-server name=s1
+----
+
+subtest basic-backup-userfile
+
+exec-sql
+CREATE EXTERNAL CONNECTION 'conn-foo' AS 'userfile:///foo';
+----
+
+exec-sql
+CREATE DATABASE d;
+CREATE SCHEMA d.schema;
+CREATE TABLE d.schema.foo (id INT PRIMARY KEY);
+INSERT INTO d.schema.foo VALUES (1), (2), (3);
+----
+
+# Cluster backup.
+exec-sql
+BACKUP INTO 'external://conn-foo/cluster';
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN
+'external://conn-foo/cluster'] ORDER BY object_name;
+----
+bank table full
+comments table full
+d database full
+data database full
+database_role_settings table full
+defaultdb database full
+external_connections table full
+foo table full
+locations table full
+postgres database full
+public schema full
+public schema full
+public schema full
+public schema full
+role_id_seq table full
+role_members table full
+role_options table full
+scheduled_jobs table full
+schema schema full
+settings table full
+system database full
+tenant_settings table full
+ui table full
+userfiles_root_upload_files table full
+userfiles_root_upload_payload table full
+users table full
+zones table full
+
+# Database backup.
+exec-sql
+BACKUP DATABASE d INTO 'external://conn-foo/database';
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN
+'external://conn-foo/database'] ORDER BY object_name;
+----
+d database full
+foo table full
+public schema full
+schema schema full
+
+# Table backup.
+exec-sql
+BACKUP TABLE d.schema.foo INTO 'external://conn-foo/table';
+----
+
+exec-sql
+INSERT INTO d.schema.foo VALUES (4), (5), (6);
+----
+
+# Incremental table backup.
+exec-sql
+BACKUP TABLE d.schema.foo INTO LATEST IN 'external://conn-foo/table';
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN
+'external://conn-foo/table'] ORDER BY (object_name, backup_type);
+----
+d database full
+d database incremental
+foo table full
+foo table incremental
+schema schema full
+schema schema incremental
+
+subtest end
+
+subtest basic-restore-userfile
+
+# Database restore.
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'external://conn-foo/database' WITH new_db_name='d2'
+----
+
+query-sql
+SELECT * FROM d2.schema.foo
+----
+1
+2
+3
+
+exec-sql
+DROP DATABASE d2 CASCADE
+----
+
+# Table restore.
+exec-sql
+RESTORE TABLE d.schema.foo FROM LATEST IN 'external://conn-foo/table' WITH into_db = 'defaultdb'
+----
+
+query-sql
+SELECT * FROM defaultdb.schema.foo
+----
+1
+2
+3
+4
+5
+6
+
+subtest end
+
+subtest incremental-location-backup-restore-userfile
+
+switch-server name=s1
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION full AS 'userfile:///full'
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION inc AS 'userfile:///inc'
+----
+
+# Take a full backup.
+exec-sql
+BACKUP DATABASE d INTO 'external://full';
+----
+
+# Take an incremental with an explicit location.
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'external://full' WITH incremental_location = 'external://inc';
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN 'external://full' WITH
+incremental_location = 'external://inc'] ORDER BY (object_name, backup_type);
+----
+d database full
+d database incremental
+foo table full
+foo table incremental
+public schema full
+public schema incremental
+schema schema full
+schema schema incremental
+
+# Ensure you can also specify an incremental location as a path to the same
+# external connection URI.
+exec-sql
+BACKUP DATABASE d INTO 'external://full/nested';
+----
+
+# Take an incremental with an explicit location that is a subdir of the external
+# connection endpoint.
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'external://full/nested' WITH incremental_location = 'external://inc/nested';
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN 'external://full/nested'
+WITH incremental_location = 'external://inc/nested'] ORDER BY (object_name, backup_type);
+----
+d database full
+d database incremental
+foo table full
+foo table incremental
+public schema full
+public schema incremental
+schema schema full
+schema schema incremental
+
+subtest end
