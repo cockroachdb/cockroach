@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -405,6 +406,8 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ 
 				require.False(t, funcExpr.ResolvedOverload().UDFContainsOnlySignature)
 				if tc.expectedFuncOID > 0 {
 					require.Equal(t, tc.expectedFuncOID, int(funcExpr.ResolvedOverload().Oid))
+				} else {
+					require.False(t, funcdesc.IsOIDUserDefinedFunc(funcExpr.ResolvedOverload().Oid))
 				}
 				require.Equal(t, tc.expectedFuncBody, funcExpr.ResolvedOverload().Body)
 			})

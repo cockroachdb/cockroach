@@ -2021,6 +2021,28 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Successes by Action",
+				Metrics: []string{
+					"queue.replicate.addreplica.success",
+					"queue.replicate.removereplica.success",
+					"queue.replicate.replacedeadreplica.success",
+					"queue.replicate.removedeadreplica.success",
+					"queue.replicate.replacedecommissioningreplica.success",
+					"queue.replicate.removedecommissioningreplica.success",
+				},
+			},
+			{
+				Title: "Errors by Action",
+				Metrics: []string{
+					"queue.replicate.addreplica.error",
+					"queue.replicate.removereplica.error",
+					"queue.replicate.replacedeadreplica.error",
+					"queue.replicate.removedeadreplica.error",
+					"queue.replicate.replacedecommissioningreplica.error",
+					"queue.replicate.removedecommissioningreplica.error",
+				},
+			},
+			{
 				Title: "Successes",
 				Metrics: []string{
 					"queue.replicate.process.failure",

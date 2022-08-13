@@ -83,7 +83,7 @@ WHERE relname = 'pg_constraint'
 query OOOO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
-upper  upper  upper  828
+upper  upper  upper  829
 
 query error invalid function name
 SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
@@ -91,7 +91,7 @@ SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
 query OOO
 SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
 ----
-upper  upper  828
+upper  upper  829
 
 query error unknown function: blah\(\)
 SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE

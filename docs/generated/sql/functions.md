@@ -871,6 +871,8 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="trunc"></a><code>trunc(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Truncates the decimal values of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="trunc"></a><code>trunc(val: <a href="decimal.html">decimal</a>, scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Truncate <code>val</code> to <code>scale</code> decimal places</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="trunc"></a><code>trunc(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Truncates the decimal values of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
