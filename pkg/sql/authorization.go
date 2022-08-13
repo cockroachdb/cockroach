@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -812,6 +813,8 @@ func (p *planner) checkCanAlterToNewOwner(
 		objType = "schema"
 	case *dbdesc.Mutable:
 		objType = "database"
+	case *funcdesc.Mutable:
+		objType = "function"
 	default:
 		return errors.AssertionFailedf("unknown object descriptor type %v", desc)
 	}

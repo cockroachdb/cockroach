@@ -447,6 +447,30 @@ func (desc *Mutable) SetFuncBody(v string) {
 	desc.FunctionBody = v
 }
 
+// SetName sets the function name.
+func (desc *Mutable) SetName(n string) {
+	desc.Name = n
+}
+
+// SetParentSchemaID sets function's parent schema id.
+func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
+	desc.ParentSchemaID = id
+}
+
+// ToFuncObj converts the descriptor to a tree.FuncObj.
+func (desc *immutable) ToFuncObj() tree.FuncObj {
+	ret := tree.FuncObj{
+		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		Args:     make(tree.FuncArgs, len(desc.Args)),
+	}
+	for i := range desc.Args {
+		ret.Args[i] = tree.FuncArg{
+			Type: desc.Args[i].Type,
+		}
+	}
+	return ret
+}
+
 // GetObjectType implements the PrivilegeObject interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Function
