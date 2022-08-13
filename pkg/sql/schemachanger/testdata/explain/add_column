@@ -20,7 +20,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
  │         ├── 1 element transitioning toward TRANSIENT_ABSENT
- │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}
+ │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │         └── 11 Mutation operations
  │              ├── MakeAddedColumnDeleteOnly {"Column":{"ColumnID":2,"PgAttributeNum":2,"TableID":106}}
  │              ├── LogEvent {"TargetStatus":2}
@@ -43,7 +43,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── DELETE_ONLY → WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
- │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}
+ │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │    │    └── 4 Mutation operations
  │    │         ├── MakeAddedColumnDeleteAndWriteOnly {"ColumnID":2,"TableID":106}
  │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":3,"TableID":106}
@@ -96,7 +96,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       │    │    ├── VALIDATED  → PUBLIC                PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
       │    │    └── ABSENT     → PUBLIC                IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
       │    ├── 1 element transitioning toward TRANSIENT_ABSENT
-      │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}
+      │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
       │    └── 10 Mutation operations
       │         ├── MakeDroppedPrimaryIndexDeleteAndWriteOnly {"IndexID":1,"TableID":106}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
@@ -119,7 +119,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
            ├── 1 element transitioning toward ABSENT
            │    └── DELETE_ONLY           → ABSENT           PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
            ├── 1 element transitioning toward TRANSIENT_ABSENT
-           │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}
+           │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
            └── 6 Mutation operations
                 ├── CreateGcJobForIndex {"IndexID":3,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}

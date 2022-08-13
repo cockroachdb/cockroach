@@ -151,6 +151,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TemporaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(SourceIndexID, "SourceIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.UniqueWithoutIndexConstraint)(nil)),

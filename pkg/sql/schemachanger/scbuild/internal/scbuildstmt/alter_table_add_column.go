@@ -456,7 +456,7 @@ func createNewPrimaryIndex(
 	replacement.SourceIndexID = existing.IndexID
 	replacementColumns := makeColumnsFn(b, replacement, existingColumns)
 	replacement.TemporaryIndexID = replacement.IndexID + 1
-	replacement.ConstraintID = b.NextTableConstraintID(tbl)
+	replacement.ConstraintID = b.NextTableConstraintID(tbl.TableID)
 	b.Add(replacement)
 	if existingName != nil {
 		updatedName := protoutil.Clone(existingName).(*scpb.IndexName)
@@ -474,7 +474,7 @@ func createNewPrimaryIndex(
 	}
 	temp.TemporaryIndexID = 0
 	temp.IndexID = b.NextTableIndexID(tbl)
-	temp.ConstraintID = b.NextTableConstraintID(tbl)
+	temp.ConstraintID = b.NextTableConstraintID(tbl.TableID)
 	b.AddTransient(temp)
 	if existingPartitioning != nil {
 		updatedPartitioning := protoutil.Clone(existingPartitioning).(*scpb.IndexPartitioning)
@@ -658,6 +658,11 @@ func addSecondaryIndexTargetsForAddColumn(
 	if desc.Sharded.IsSharded {
 		index.Sharding = &desc.Sharded
 	}
+
+	if desc.Unique {
+		index.ConstraintID = b.NextTableConstraintID(tbl.TableID)
+	}
+
 	// If necessary add suffix columns, this would normally be done inside
 	// allocateIndexIDs, but we are going to do it explicitly for the declarative
 	// schema changer.

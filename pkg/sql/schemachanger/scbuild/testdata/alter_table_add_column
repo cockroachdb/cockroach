@@ -39,7 +39,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT NOT NULL DEFAULT 123
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: foo_pkey, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
@@ -72,7 +72,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: foo_pkey, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
@@ -114,7 +114,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: foo_pkey, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
@@ -169,16 +169,16 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 106, temporaryIndexId: 3}
 - [[IndexName:{DescID: 106, Name: t_pkey, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: t_pkey, tableId: 106}
-- [[TemporaryIndex:{DescID: 106, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 106}
 - [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 2, indexId: 3, tableId: 106}
 - [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 3, kind: STORED, tableId: 106}
-- [[SecondaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
-  {constraintId: 3, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 106, temporaryIndexId: 5}
-- [[TemporaryIndex:{DescID: 106, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 4, indexId: 5, isUnique: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 106}
+- [[SecondaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
+  {constraintId: 4, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 106, temporaryIndexId: 5}
+- [[TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 5, indexId: 5, isUnique: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 106}
 - [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 4, tableId: 106}
 - [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
