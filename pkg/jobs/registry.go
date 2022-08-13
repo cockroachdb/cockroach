@@ -781,7 +781,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return errors.WithAssertionFailure(err)
 			}
 			_, err := r.ex.ExecEx(
-				ctx, "expire-sessions", nil,
+				ctx, "expire-sessions", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				removeClaimsQuery,
 				s.ID().UnsafeBytes(),
