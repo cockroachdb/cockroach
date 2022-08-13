@@ -22,6 +22,7 @@ import (
 	"testing/quick"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -457,46 +458,51 @@ func TestMVCCRangeKeyCloneInto(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			clone := tc.target
-			orig.CloneInto(&clone)
-
-			// We don't discard empty byte slices when cloning a nil value, so we have
-			// to normalize these back to nil for the purpose of comparison.
-			for i := range clone.Versions {
-				if orig.Versions[i].Value == nil && len(clone.Versions[i].Value) == 0 {
-					clone.Versions[i].Value = nil
+			testutils.RunTrueAndFalse(t, "cleared", func(t *testing.T, cleared bool) {
+				clone := tc.target
+				if cleared {
+					clone.Clear()
 				}
-			}
-			require.Equal(t, orig, clone)
+				orig.CloneInto(&clone)
 
-			requireSliceIdentity := func(t *testing.T, a, b []byte, expectSame bool) {
-				t.Helper()
-				a, b = a[:cap(a)], b[:cap(b)]
-				if len(a) > 0 {
-					if expectSame {
-						require.Same(t, &a[0], &b[0])
-					} else {
-						require.NotSame(t, &a[0], &b[0])
+				// We don't discard empty byte slices when cloning a nil value, so we have
+				// to normalize these back to nil for the purpose of comparison.
+				for i := range clone.Versions {
+					if orig.Versions[i].Value == nil && len(clone.Versions[i].Value) == 0 {
+						clone.Versions[i].Value = nil
 					}
 				}
-			}
+				require.Equal(t, orig, clone)
 
-			// Assert that slices are actual clones, by asserting the address of the
-			// backing array at [0].
-			requireSliceIdentity(t, orig.Bounds.Key, clone.Bounds.Key, false)
-			requireSliceIdentity(t, orig.Bounds.EndKey, clone.Bounds.EndKey, false)
-			for i := range orig.Versions {
-				requireSliceIdentity(t, orig.Versions[i].Value, clone.Versions[i].Value, false)
-			}
-
-			// Assert whether the clone is reusing byte slices from the target.
-			requireSliceIdentity(t, tc.target.Bounds.Key, clone.Bounds.Key, tc.expectReused)
-			requireSliceIdentity(t, tc.target.Bounds.EndKey, clone.Bounds.EndKey, tc.expectReused)
-			for i := range tc.target.Versions {
-				if i < len(clone.Versions) {
-					requireSliceIdentity(t, tc.target.Versions[i].Value, clone.Versions[i].Value, tc.expectReused)
+				requireSliceIdentity := func(t *testing.T, a, b []byte, expectSame bool) {
+					t.Helper()
+					a, b = a[:cap(a)], b[:cap(b)]
+					if len(a) > 0 {
+						if expectSame {
+							require.Same(t, &a[0], &b[0])
+						} else {
+							require.NotSame(t, &a[0], &b[0])
+						}
+					}
 				}
-			}
+
+				// Assert that slices are actual clones, by asserting the address of the
+				// backing array at [0].
+				requireSliceIdentity(t, orig.Bounds.Key, clone.Bounds.Key, false)
+				requireSliceIdentity(t, orig.Bounds.EndKey, clone.Bounds.EndKey, false)
+				for i := range orig.Versions {
+					requireSliceIdentity(t, orig.Versions[i].Value, clone.Versions[i].Value, false)
+				}
+
+				// Assert whether the clone is reusing byte slices from the target.
+				requireSliceIdentity(t, tc.target.Bounds.Key, clone.Bounds.Key, tc.expectReused)
+				requireSliceIdentity(t, tc.target.Bounds.EndKey, clone.Bounds.EndKey, tc.expectReused)
+				for i := range tc.target.Versions {
+					if i < len(clone.Versions) {
+						requireSliceIdentity(t, tc.target.Versions[i].Value, clone.Versions[i].Value, tc.expectReused)
+					}
+				}
+			})
 		})
 	}
 }

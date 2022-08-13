@@ -664,7 +664,7 @@ func (v MVCCRangeKeyVersions) CloneInto(c *MVCCRangeKeyVersions) {
 	if length, capacity := len(v), cap(*c); length > capacity {
 		// Extend the slice, keeping the existing versions to reuse their Value byte
 		// slices. The compiler optimizes away the intermediate, appended slice.
-		(*c) = append(*c, make(MVCCRangeKeyVersions, length-capacity)...)
+		*c = append((*c)[:capacity], make(MVCCRangeKeyVersions, length-capacity)...)
 	} else {
 		*c = (*c)[:length]
 	}
