@@ -1184,7 +1184,7 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 // iterator was valid when called and returns true if there is no change.
 func (p *pebbleMVCCScanner) maybeEnablePointSynthesis() bool {
 	if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-		p.pointIter = newPointSynthesizingIterAtParent(p.parent, p.isGet)
+		p.pointIter = newPointSynthesizingIterAtParent(p.parent)
 		p.parent = p.pointIter
 		return p.iterValid()
 	}
