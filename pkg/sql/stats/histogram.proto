@@ -20,7 +20,8 @@ import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
 
 // HistogramData encodes the data for a histogram, which captures the
-// distribution of values on a specific column.
+// distribution of values on a specific column. A histogram on an empty table
+// is represented by a non-nil HistogramData with non-nil zero-length Buckets.
 message HistogramData {
   message Bucket {
     // The estimated number of values that are equal to upper_bound.
@@ -53,7 +54,8 @@ message HistogramData {
   sql.sem.types.T column_type = 2;
 
   // Histogram buckets. Note that NULL values are excluded from the
-  // histogram.
+  // histogram. For an empty table (or a table with all NULL values) Buckets
+  // will have zero length.
   repeated Bucket buckets = 1 [(gogoproto.nullable) = false];
 
   // Version of the logic used to construct this histogram. See histogram.go

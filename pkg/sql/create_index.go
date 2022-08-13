@@ -736,12 +736,6 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
-	if n.n.NotVisible {
-		return unimplemented.Newf(
-			"Not Visible Index",
-			"creating a not visible index is not supported yet")
-	}
-
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
 	// Avoid the warning if we have PARTITION ALL BY as all indexes will implicitly

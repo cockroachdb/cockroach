@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -105,12 +104,17 @@ var zeroQuantile = quantile{{p: 0, v: 0}, {p: 1, v: 0}}
 // If you are introducing a new histogram version, please check whether
 // makeQuantile and quantile.toHistogram need to change, and then increase the
 // hard-coded number here.
-const _ uint = 1 - uint(histVersion)
+const _ uint = 2 - uint(histVersion)
 
 // canMakeQuantile returns true if a quantile function can be created for a
-// histogram of the given type.
+// histogram of the given type. Note that by not supporting BYTES we rule out
+// creating quantile functions for histograms of inverted columns.
 // TODO(michae2): Add support for DECIMAL, TIME, TIMETZ, and INTERVAL.
-func canMakeQuantile(colType *types.T) bool {
+func canMakeQuantile(version HistogramVersion, colType *types.T) bool {
+	if version > 2 {
+		return false
+	}
+
 	if colType.UserDefined() {
 		return false
 	}
@@ -234,7 +238,7 @@ func makeQuantile(hist histogram, rowCount float64) (quantile, error) {
 // row count. It returns an error if the conversion fails. The quantile must be
 // well-formed before calling toHistogram.
 func (q quantile) toHistogram(
-	evalCtx *eval.Context, colType *types.T, rowCount float64,
+	compareCtx tree.CompareContext, colType *types.T, rowCount float64,
 ) (histogram, error) {
 	if len(q) < 2 || q[0].p != 0 || q[len(q)-1].p != 1 {
 		return histogram{}, errors.AssertionFailedf("invalid quantile: %v", q)
@@ -242,7 +246,7 @@ func (q quantile) toHistogram(
 
 	// Empty table case.
 	if rowCount < 1 {
-		return histogram{}, nil
+		return histogram{buckets: make([]cat.HistogramBucket, 0)}, nil
 	}
 
 	hist := histogram{buckets: make([]cat.HistogramBucket, 0, len(q)-1)}
@@ -279,6 +283,8 @@ func (q quantile) toHistogram(
 			// Steal from NumRange so that NumEq is at least 1, if it wouldn't make
 			// NumRange 0. This makes the histogram look more like something
 			// EquiDepthHistogram would produce.
+			// TODO(michae2): Consider removing this logic if statistics_builder
+			// doesn't need it.
 			currentBucket.NumRange -= 1 - numEq
 			numEq = 1
 		}
@@ -286,7 +292,7 @@ func (q quantile) toHistogram(
 
 		// Calculate DistinctRange for this bucket now that NumRange is finalized.
 		distinctRange := estimatedDistinctValuesInRange(
-			evalCtx, currentBucket.NumRange, currentLowerBound, currentUpperBound,
+			compareCtx, currentBucket.NumRange, currentLowerBound, currentUpperBound,
 		)
 		if !isValidCount(distinctRange) {
 			return errors.AssertionFailedf("invalid histogram DistinctRange: %v", distinctRange)
@@ -306,7 +312,7 @@ func (q quantile) toHistogram(
 		if err != nil {
 			return histogram{}, err
 		}
-		cmp, err := upperBound.CompareError(evalCtx, currentUpperBound)
+		cmp, err := upperBound.CompareError(compareCtx, currentUpperBound)
 		if err != nil {
 			return histogram{}, err
 		}
@@ -326,7 +332,7 @@ func (q quantile) toHistogram(
 			if !isValidCount(numRange) {
 				return histogram{}, errors.AssertionFailedf("invalid histogram NumRange: %v", numRange)
 			}
-			currentLowerBound = getNextLowerBound(evalCtx, currentUpperBound)
+			currentLowerBound = getNextLowerBound(compareCtx, currentUpperBound)
 			currentUpperBound = upperBound
 			currentBucket = cat.HistogramBucket{
 				NumEq:         0,

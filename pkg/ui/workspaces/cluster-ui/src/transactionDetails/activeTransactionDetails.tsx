@@ -33,6 +33,7 @@ import { executionIdAttr } from "../util";
 import styles from "../statementDetails/statementDetails.module.scss";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { Duration } from "../util/format";
+import { capitalize } from "src/activeExecutions/execTableCommon";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
@@ -53,11 +54,14 @@ export const ActiveTxnInsightsLabels = {
   START_TIME: "Start Time (UTC)",
   ELAPSED_TIME: "Elapsed Time",
   STATUS: "Status",
-  RETRY_COUNT: "Number of Retries",
+  RETRY_COUNT: "Internal Retries",
+  RETRY_REASON: "Last Retry Reason",
   STATEMENT_COUNT: "Number of Statements",
   APPLICATION_NAME: "Application Name",
   LAST_STATEMENT_EXEC_ID: "Most Recent Statement Execution ID",
   SESSION_ID: "Session ID",
+  PRIORITY: "Priority",
+  FULL_SCAN: "Full Scan",
 };
 
 export const RECENT_STATEMENT_NOT_FOUND_MESSAGE =
@@ -135,6 +139,14 @@ export const ActiveTransactionDetails: React.FC<
                         </>
                       }
                     />
+                    <SummaryCardItem
+                      label={ActiveTxnInsightsLabels.PRIORITY}
+                      value={capitalize(transaction.priority)}
+                    />
+                    <SummaryCardItem
+                      label={ActiveTxnInsightsLabels.FULL_SCAN}
+                      value={transaction.isFullScan.toString()}
+                    />
                   </Col>
                 </Row>
               </SummaryCard>
@@ -144,6 +156,10 @@ export const ActiveTransactionDetails: React.FC<
                 <SummaryCardItem
                   label={ActiveTxnInsightsLabels.RETRY_COUNT}
                   value={transaction.retries}
+                />
+                <SummaryCardItem
+                  label={ActiveTxnInsightsLabels.RETRY_REASON}
+                  value={transaction.lastAutoRetryReason || "N/A"}
                 />
                 <SummaryCardItem
                   label={ActiveTxnInsightsLabels.STATEMENT_COUNT}

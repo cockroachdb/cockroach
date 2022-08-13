@@ -1,2 +1,2 @@
 show_stats_stmt ::=
-	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
+	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name opt_with_options

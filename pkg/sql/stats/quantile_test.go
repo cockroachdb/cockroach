@@ -44,7 +44,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	rng, seed := randutil.NewTestRand()
 	for _, colType := range colTypes {
-		if canMakeQuantile(colType) {
+		if canMakeQuantile(histVersion, colType) {
 			for i := 0; i < 5; i++ {
 				t.Run(fmt.Sprintf("%v/%v", colType.Name(), i), func(t *testing.T) {
 					hist, rowCount := randHist(evalCtx, colType, rng)
@@ -70,10 +70,12 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 // randHist makes a random histogram of the specified type, with [1, 200]
 // buckets. Not all types are supported. Every bucket will have NumEq > 0 but
 // could have NumRange == 0.
-func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogram, float64) {
+func randHist(
+	compareCtx tree.CompareContext, colType *types.T, rng *rand.Rand,
+) (histogram, float64) {
 	numBuckets := rng.Intn(200) + 1
 	buckets := make([]cat.HistogramBucket, numBuckets)
-	bounds := randBounds(evalCtx, colType, rng, numBuckets)
+	bounds := randBounds(compareCtx, colType, rng, numBuckets)
 	buckets[0].NumEq = float64(rng.Intn(100) + 1)
 	buckets[0].UpperBound = bounds[0]
 	rowCount := buckets[0].NumEq
@@ -97,9 +99,9 @@ func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogra
 	}
 	// Set DistinctRange in all buckets.
 	for i := 1; i < len(buckets); i++ {
-		lowerBound := getNextLowerBound(evalCtx, buckets[i-1].UpperBound)
+		lowerBound := getNextLowerBound(compareCtx, buckets[i-1].UpperBound)
 		buckets[i].DistinctRange = estimatedDistinctValuesInRange(
-			evalCtx, buckets[i].NumRange, lowerBound, buckets[i].UpperBound,
+			compareCtx, buckets[i].NumRange, lowerBound, buckets[i].UpperBound,
 		)
 	}
 	return histogram{buckets: buckets}, rowCount
@@ -109,7 +111,9 @@ func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogra
 // type. Not all types are supported. This differs from randgen.RandDatum in
 // that it generates no "interesting" Datums, and differs from
 // randgen.RandDatumSimple in that it generates distinct Datums without repeats.
-func randBounds(evalCtx *eval.Context, colType *types.T, rng *rand.Rand, num int) tree.Datums {
+func randBounds(
+	compareCtx tree.CompareContext, colType *types.T, rng *rand.Rand, num int,
+) tree.Datums {
 	datums := make(tree.Datums, num)
 
 	// randInts creates an ordered slice of num distinct random ints in the closed
@@ -437,7 +441,7 @@ func TestQuantileToHistogram(t *testing.T) {
 		{
 			qfun: zeroQuantile,
 			rows: 0,
-			hist: nil,
+			hist: testHistogram{},
 		},
 		{
 			qfun: zeroQuantile,
