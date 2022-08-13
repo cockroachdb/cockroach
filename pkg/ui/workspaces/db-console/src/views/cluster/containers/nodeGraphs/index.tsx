@@ -68,6 +68,8 @@ import {
   TimeWindow,
   TimeScale,
   adjustTimeScale,
+  setTimeScale,
+  selectTimeScale,
 } from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
 import { Anchor, TimeScaleDropdown } from "@cockroachlabs/cluster-ui";
@@ -77,8 +79,6 @@ import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
 } from "src/redux/clusterSettings";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -423,7 +423,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   hoverState: hoverStateSelector(state),
   resolution10sStorageTTL: selectResolution10sStorageTTL(state),
   resolution30mStorageTTL: selectResolution30mStorageTTL(state),
-  timeScale: globalTimeScaleLocalSetting.selector(state),
+  timeScale: selectTimeScale(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
@@ -433,7 +433,7 @@ const mapDispatchToProps: MapDispatchToProps = {
   hoverOn,
   hoverOff,
   setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setGlobalTimeScaleAction,
+  setTimeScale: setTimeScale,
 };
 
 export default compose(

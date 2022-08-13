@@ -603,6 +603,9 @@ function makeStateWithStatementsAndLastReset(
     localSettings: {
       "timeScale/SQLActivity": timeScale,
     },
+    timeScale: {
+      scale: timeScale,
+    },
   });
 
   const [start, end] = toRoundedDateRange(timeScale);
