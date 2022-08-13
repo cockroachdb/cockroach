@@ -439,6 +439,15 @@ func (p *pebbleMVCCScanner) init(
 // get iterates exactly once and adds one KV to the result set.
 func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	p.isGet = true
+
+	// The iterator may already be positioned on a range key, in which
+	// case RangeKeyChanged() wouldn't fire.
+	if ok, _ := p.parent.Valid(); ok {
+		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+			p.enablePointSynthesis()
+		}
+	}
+
 	p.parent.SeekGE(MVCCKey{Key: p.start})
 	if !p.updateCurrent() {
 		return
@@ -456,8 +465,16 @@ func (p *pebbleMVCCScanner) scan(
 	if p.wholeRows && !p.results.lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
-
 	p.isGet = false
+
+	// The iterator may already be positioned on a range key, in which
+	// case RangeKeyChanged() wouldn't fire.
+	if ok, _ := p.parent.Valid(); ok {
+		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+			p.enablePointSynthesis()
+		}
+	}
+
 	if p.reverse {
 		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
 			return nil, 0, 0, p.err
@@ -1153,9 +1170,6 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.maybeEnablePointSynthesis() {
-		return false
-	}
 
 	p.curRawKey = p.parent.UnsafeRawMVCCKey()
 
@@ -1175,20 +1189,31 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 	return true
 }
 
-// maybeEnablePointSynthesis checks if p.parent is on an MVCC range tombstone.
-// If it is, it wraps and replaces p.parent with a pointSynthesizingIter, which
+// enablePointSynthesis wraps p.parent with a pointSynthesizingIter, which
 // synthesizes MVCC point tombstones for MVCC range tombstones and never emits
-// range keys itself.
+// range keys itself. p.parent must be valid.
 //
-// Returns the iterator validity after a switch, and otherwise assumes the
-// iterator was valid when called and returns true if there is no change.
-func (p *pebbleMVCCScanner) maybeEnablePointSynthesis() bool {
-	if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-		p.pointIter = newPointSynthesizingIterAtParent(p.parent)
-		p.parent = p.pointIter
-		return p.iterValid()
+// gcassert:inline
+func (p *pebbleMVCCScanner) enablePointSynthesis() {
+	if util.RaceEnabled {
+		if ok, _ := p.parent.Valid(); !ok {
+			panic(errors.AssertionFailedf("enablePointSynthesis called with invalid iter"))
+		}
+		if _, ok := p.parent.(*pointSynthesizingIter); ok {
+			panic(errors.AssertionFailedf("enablePointSynthesis called when already enabled"))
+		}
+		if _, hasRange := p.parent.HasPointAndRange(); !hasRange {
+			panic(errors.AssertionFailedf("enablePointSynthesis called on non-range-key position %s",
+				p.parent.UnsafeKey()))
+		}
 	}
-	return true
+	p.pointIter = newPointSynthesizingIterAtParent(p.parent)
+	p.parent = p.pointIter
+	if util.RaceEnabled {
+		if ok, _ := p.parent.Valid(); !ok {
+			panic(errors.AssertionFailedf("invalid pointSynthesizingIter with valid iter"))
+		}
+	}
 }
 
 func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
@@ -1225,6 +1250,11 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 			p.err = err
 		}
 		return false
+	}
+	// Since iterValid() is called after every iterator positioning operation, it
+	// is convenient to check for any range keys and enable point synthesis here.
+	if p.parent.RangeKeyChanged() {
+		p.enablePointSynthesis()
 	}
 	return true
 }
@@ -1313,9 +1343,6 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 			// The iterator is now invalid, but note that this case is handled in
 			// both iterNext and iterPrev. In the former case, we'll position the
 			// iterator at the first entry, and in the latter iteration will be done.
-			return nil, false
-		}
-		if !p.maybeEnablePointSynthesis() {
 			return nil, false
 		}
 	} else if !p.iterValid() {
