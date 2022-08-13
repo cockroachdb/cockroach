@@ -466,19 +466,39 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					}
 
 					var duration string
-					if e.ob.flags.Redact.Has(RedactVolatile) {
-						duration = "<hidden>"
-					} else {
-						timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
-						if timeSinceStats < 0 {
-							timeSinceStats = 0
+					if s.Forecast {
+						if e.ob.flags.Redact.Has(RedactVolatile) {
+							duration = "; stats forecast"
+						} else {
+							timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
+							if timeSinceStats >= 0 {
+								duration = fmt.Sprintf(
+									"; stats forecast for %s ago", humanizeutil.LongDuration(timeSinceStats),
+								)
+							} else {
+								timeSinceStats *= -1
+								duration = fmt.Sprintf(
+									"; stats forecast for %s in the future",
+									humanizeutil.LongDuration(timeSinceStats),
+								)
+							}
 						}
-						duration = string(humanizeutil.LongDuration(timeSinceStats))
+					} else {
+						if e.ob.flags.Redact.Has(RedactVolatile) {
+							duration = "; stats collected <hidden> ago"
+						} else {
+							timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
+							if timeSinceStats < 0 {
+								timeSinceStats = 0
+							}
+							duration = fmt.Sprintf(
+								"; stats collected %s ago", humanizeutil.LongDuration(timeSinceStats),
+							)
+						}
 					}
 					e.ob.AddField("estimated row count", fmt.Sprintf(
-						"%s (%s%% of the table; stats collected %s ago)",
-						estimatedRowCountString, percentageStr,
-						duration,
+						"%s (%s%% of the table%s)",
+						estimatedRowCountString, percentageStr, duration,
 					))
 				} else {
 					e.ob.AddField("estimated row count", estimatedRowCountString)

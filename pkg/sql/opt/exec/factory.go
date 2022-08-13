@@ -310,6 +310,9 @@ type EstimatedStats struct {
 	// LimitHint is the "soft limit" of the number of result rows that may be
 	// required. See physical.Required for details.
 	LimitHint float64
+	// Forecast is set only for scans; it is true if the stats for the scan were
+	// forecasted rather than collected.
+	Forecast bool
 }
 
 // ExecutionStats contain statistics about a given operator gathered from the
