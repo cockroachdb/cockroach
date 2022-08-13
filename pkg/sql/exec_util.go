@@ -389,6 +389,21 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+// optUseNotVisibleIndexesClusterMode controls the cluster default for whether
+// not visible indexes can still be chosen by the optimizer for query plans. If
+// enabled, the optimizer will treat not visible indexes as they are visible.
+// Note that not visible indexes remain not visible, but the optimizer will
+// disable not visible index feature. If disabled, optimizer will ignore not
+// visible indexes unless it is explicitly selected with force index or for
+// constraint check.
+var optUseNotVisibleIndexesClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.defaults.optimizer_use_not_visible_indexes.enabled",
+	"default value for optimizer_use_not_visible_indexes session setting; "+
+		"disable usage of not visible indexes in the optimizer by default",
+	false,
+).WithPublic()
+
 // localityOptimizedSearchMode controls the cluster default for the use of
 // locality optimized search. If enabled, the optimizer will try to plan scans
 // and lookup joins in which local nodes (i.e., nodes in the gateway region) are
@@ -3035,6 +3050,10 @@ func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseMultiColStats(val bool) {
 	m.data.OptimizerUseMultiColStats = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseNotVisibleIndexes(val bool) {
+	m.data.OptimizerUseNotVisibleIndexes = val
 }
 
 func (m *sessionDataMutator) SetLocalityOptimizedSearch(val bool) {

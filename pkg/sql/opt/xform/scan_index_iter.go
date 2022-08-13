@@ -228,7 +228,8 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		} else {
 			// If we are not forcing any specific index and not visible index feature is
 			// enabled here, ignore not visible indexes.
-			if index.IsNotVisible() && !it.scanPrivate.Flags.DisableNotVisibleIndex {
+			if index.IsNotVisible() && !it.scanPrivate.Flags.DisableNotVisibleIndex &&
+				!it.evalCtx.SessionData().OptimizerUseNotVisibleIndexes {
 				continue
 			}
 		}
