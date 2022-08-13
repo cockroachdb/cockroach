@@ -87,11 +87,12 @@ export const filterTransactionInsights = (
     filteredTransactions = filteredTransactions.filter(txn => !isInternal(txn));
   }
   if (search) {
+    search = search.toLowerCase();
     filteredTransactions = filteredTransactions.filter(
       txn =>
         !search ||
-        txn.executionID?.includes(search) ||
-        txn.queries?.find(query => query.includes(search)),
+        txn.executionID.toLowerCase()?.includes(search) ||
+        txn.queries?.find(query => query.toLowerCase().includes(search)),
     );
   }
   return filteredTransactions;
