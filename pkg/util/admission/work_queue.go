@@ -1557,6 +1557,51 @@ type StoreWriteWorkInfo struct {
 	// information at proposal time, and may be able to use it fruitfully.
 }
 
+// storeAdmissionStats are stats maintained by a storeRequester. The non-test
+// implementation of storeRequester is StoreWorkQueue. StoreWorkQueue updates
+// all of these when StoreWorkQueue.AdmittedWorkDone is called, so that these
+// cumulative values are mutually consistent.
+type storeAdmissionStats struct {
+	// Total requests that called AdmittedWorkDone or BypassedWorkDone.
+	admittedCount uint64
+	// Sum of StoreWorkDoneInfo.WriteBytes.
+	//
+	// TODO(sumeer): writeAccountedBytes and ingestedAccountedBytes are not
+	// actually comparable, since the former is uncompressed. We may need to fix
+	// this inaccuracy if it turns out to be an issue.
+	writeAccountedBytes uint64
+	// Sum of StoreWorkDoneInfo.IngestedBytes.
+	ingestedAccountedBytes uint64
+	// statsToIgnore represents stats that we should exclude from token
+	// consumption, and estimation of per-work-tokens. Currently, this is
+	// limited to range snapshot ingestion. These are likely to usually land in
+	// levels lower than L0, so may not fit the existing per-work-tokens model
+	// well. Additionally, we do not want large range snapshots to consume a
+	// huge number of tokens (see
+	// https://github.com/cockroachdb/cockroach/pull/80914 for justification --
+	// that PR is closer to the final solution, and this is a step in that
+	// direction).
+	statsToIgnore struct {
+		pebble.IngestOperationStats
+	}
+	// aux represents additional information carried for informational purposes
+	// (e.g. for logging).
+	aux struct {
+		// These bypassed numbers are already included in the corresponding
+		// {admittedCount, writeAccountedBytes, ingestedAccountedBytes}.
+		bypassedCount                  uint64
+		writeBypassedAccountedBytes    uint64
+		ingestedBypassedAccountedBytes uint64
+	}
+}
+
+// storeRequestEstimates are estimates that the storeRequester should use for
+// its future requests.
+type storeRequestEstimates struct {
+	// writeTokens is the tokens to request at admission time. Must be > 0.
+	writeTokens int64
+}
+
 // StoreWorkQueue is responsible for admission to a store.
 type StoreWorkQueue struct {
 	q [numWorkClasses]WorkQueue
