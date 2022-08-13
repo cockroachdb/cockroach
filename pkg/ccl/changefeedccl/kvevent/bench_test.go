@@ -10,6 +10,9 @@ package kvevent_test
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"math/rand"
 	"testing"
 	"time"
@@ -21,72 +24,81 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkMemBuffer(b *testing.B) {
-	rand, _ := randutil.NewTestRand()
+	log.Infof(context.Background(), "b.N=%d", b.N)
+	rng, _ := randutil.NewTestRand()
+	eventPool := make([]kvevent.Event, 64<<10)
+	for i := range eventPool {
+		if i%25 == 0 {
+			eventPool[i] = kvevent.MakeResolvedEvent(generateSpan(b, rng), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE)
+		} else {
+			eventPool[i] = kvevent.MakeKVEvent(makeKV(b, rng), makeKV(b, rng).Value, hlc.Timestamp{})
+		}
+	}
 
-	run := func() {
-		ba, release := getBoundAccountWithBudget(4096)
-		defer release()
+	ba, release := getBoundAccountWithBudget(1 << 30)
+	defer release()
 
-		metrics := kvevent.MakeMetrics(time.Minute)
+	b.ResetTimer()
+	b.ReportAllocs()
 
-		// Arrange for mem buffer to notify us when it waits for resources.
-		waitCh := make(chan struct{}, 1)
-		notifyWait := func(ctx context.Context, poolName string, r quotapool.Request) {
-			select {
-			case waitCh <- struct{}{}:
-			default:
+	metrics := kvevent.MakeMetrics(time.Minute)
+	st := cluster.MakeTestingClusterSettings()
+
+	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics)
+	defer func() {
+		require.NoError(b, buf.CloseWithReason(context.Background(), nil))
+	}()
+
+	addToBuff := func(ctx context.Context) error {
+		for {
+			event := eventPool[rng.Intn(len(eventPool))]
+			err := buf.Add(ctx, event)
+			if err != nil {
+				return err
 			}
 		}
+	}
 
-		st := cluster.MakeTestingClusterSettings()
-		buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics, quotapool.OnWaitStart(notifyWait))
-		defer func() {
-			require.NoError(b, buf.CloseWithReason(context.Background(), nil))
-		}()
-
-		producerCtx, stopProducers := context.WithCancel(context.Background())
-		wg := ctxgroup.WithContext(producerCtx)
-		defer func() {
-			_ = wg.Wait() // Ignore error -- this group returns context cancellation.
-		}()
-
-		numRows := 0
-		wg.GoCtx(func(ctx context.Context) error {
-			for {
-				err := buf.Add(ctx, kvevent.MakeResolvedEvent(generateSpan(b, rand), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE))
-				if err != nil {
-					return err
-				}
-				numRows++
-			}
-		})
-
-		<-waitCh
-		writtenRows := numRows
-
-		for i := 0; i < writtenRows; i++ {
-			e, err := buf.Get(context.Background())
+	consumedN := make(chan struct{})
+	consumeBuf := func(ctx context.Context) error {
+		// <-time.After(5 * time.Second)
+		consumed := 0
+		for {
+			e, err := buf.Get(ctx)
 			if err != nil {
-				b.Fatal("could not read from buffer")
+				return err
 			}
 			a := e.DetachAlloc()
-			a.Release(context.Background())
+			a.Release(ctx)
+			consumed++
+			if consumed == b.N {
+				close(consumedN)
+				return nil
+			}
 		}
-		stopProducers()
 	}
 
-	for i := 0; i < b.N; i++ {
-		run()
+	producerCtx, stopProducers := context.WithCancel(context.Background())
+	wg := ctxgroup.WithContext(producerCtx)
+
+	// During backfill, we start 3*number of nodes producers; Simulate that.
+	for i := 0; i < 32; i++ {
+		wg.GoCtx(addToBuff)
 	}
+	// We only have 1 consumer.
+	wg.GoCtx(consumeBuf)
+
+	<-consumedN
+	b.StopTimer() // Done with this benchmark after we consumed N events.
+	stopProducers()
+	_ = wg.Wait() // Ignore error -- this group returns context cancellation.
+	log.Infof(context.Background(), "in=%d out=%d", metrics.BufferEntriesIn.Count(), metrics.BufferEntriesOut.Count())
 }
 
 func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {

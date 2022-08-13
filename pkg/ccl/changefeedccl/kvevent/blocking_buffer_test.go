@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeKV(t *testing.T, rnd *rand.Rand) roachpb.KeyValue {
+func makeKV(t testing.TB, rnd *rand.Rand) roachpb.KeyValue {
 	const tableID = 42
 
 	key, err := keyside.Encode(
