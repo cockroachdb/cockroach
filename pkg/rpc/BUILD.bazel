@@ -90,7 +90,6 @@ go_test(
     embed = [":rpc"],
     deps = [
         "//pkg/base",
-        "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
