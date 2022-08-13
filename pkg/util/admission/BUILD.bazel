@@ -39,8 +39,11 @@ go_test(
     name = "admission_test",
     srcs = [
         "disk_bandwidth_test.go",
+        "grant_coordinator_test.go",
         "granter_test.go",
+        "io_load_listener_test.go",
         "store_token_estimation_test.go",
+        "tokens_linear_model_test.go",
         "work_queue_test.go",
     ],
     data = glob(["testdata/**"]),
