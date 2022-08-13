@@ -210,8 +210,8 @@ func (sgc *StoreGrantCoordinators) close() {
 }
 
 // GrantCoordinator is the top-level object that coordinates grants across
-// different WorkKinds (for more context see the comment in doc.go, and the
-// comment where WorkKind is declared). Typically there will one
+// different WorkKinds (for more context see the comment in admission.go, and
+// the comment where WorkKind is declared). Typically there will one
 // GrantCoordinator in a node for CPU intensive work, and for nodes that also
 // have the KV layer, one GrantCoordinator per store (these are managed by
 // StoreGrantCoordinators) for KVWork that uses that store. See the
