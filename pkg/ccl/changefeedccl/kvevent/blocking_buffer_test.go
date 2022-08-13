@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeKV(t *testing.T, rnd *rand.Rand) roachpb.KeyValue {
+func makeKV(rnd *rand.Rand, valSize int) roachpb.KeyValue {
 	const tableID = 42
 
 	key, err := keyside.Encode(
@@ -40,12 +40,14 @@ func makeKV(t *testing.T, rnd *rand.Rand) roachpb.KeyValue {
 		randgen.RandDatumSimple(rnd, types.String),
 		encoding.Ascending,
 	)
-	require.NoError(t, err)
+	if err != nil {
+		panic(err)
+	}
 
 	return roachpb.KeyValue{
 		Key: key,
 		Value: roachpb.Value{
-			RawBytes:  randutil.RandBytes(rnd, 256),
+			RawBytes:  randutil.RandBytes(rnd, valSize),
 			Timestamp: hlc.Timestamp{WallTime: 1},
 		},
 	}
@@ -93,7 +95,7 @@ func TestBlockingBuffer(t *testing.T) {
 	wg.GoCtx(func(ctx context.Context) error {
 		rnd, _ := randutil.NewTestRand()
 		for {
-			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(rnd, 256), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
 				return err
 			}
@@ -136,7 +138,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	wg.GoCtx(func(ctx context.Context) error {
 		rnd, _ := randutil.NewTestRand()
 		for {
-			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(rnd, 256), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
 				return err
 			}
