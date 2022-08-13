@@ -171,6 +171,9 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.optimizer_use_multicol_stats.enabled	boolean	true	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
+sql.defaults.optimizer_use_not_visible_indexes.enabled	boolean	false	"default value for optimizer_use_not_visible_indexes session setting; disable usage of not visible indexes in the optimizer by default
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.override_alter_primary_region_in_super_region.enabled	boolean	false	"default value for override_alter_primary_region_in_super_region; allows for altering the primary region even if the primary region is a member of a super region
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"

@@ -177,6 +177,7 @@ var sqlDefaultSettings = map[string]struct{}{
 	"sql.defaults.on_update_rehome_row.enabled":                                 {},
 	"sql.defaults.optimizer_use_histograms.enabled":                             {},
 	"sql.defaults.optimizer_use_multicol_stats.enabled":                         {},
+	"sql.defaults.optimizer_use_not_visible_indexes.enabled":                    {},
 	"sql.defaults.override_alter_primary_region_in_super_region.enabled":        {},
 	"sql.defaults.override_multi_region_zone_config.enabled":                    {},
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled":                          {},
