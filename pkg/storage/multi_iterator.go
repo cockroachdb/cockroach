@@ -110,6 +110,11 @@ func (f *multiIterator) RangeKeys() MVCCRangeKeyStack {
 	panic("not implemented")
 }
 
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (f *multiIterator) RangeKeyChanged() bool {
+	panic("not implemented")
+}
+
 // Next advances the iterator to the next key/value in the iteration. After this
 // call, Valid() will be true if the iterator was not positioned at the last
 // key.

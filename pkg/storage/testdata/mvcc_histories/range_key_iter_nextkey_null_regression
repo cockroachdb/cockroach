@@ -21,7 +21,7 @@ iter_next_key
 iter_next_key
 iter_next_key
 ----
-iter_seek_ge: a{-\x00}/[5.000000000,0=/<empty>]
-iter_next_key: {a\x00-b}/[4.000000000,0=/<empty>]
-iter_next_key: "b"/1.000000000,0=/BYTES/b1
+iter_seek_ge: a{-\x00}/[5.000000000,0=/<empty>] !
+iter_next_key: {a\x00-b}/[4.000000000,0=/<empty>] !
+iter_next_key: "b"/1.000000000,0=/BYTES/b1 !
 iter_next_key: .

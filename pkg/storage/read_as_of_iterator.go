@@ -114,6 +114,11 @@ func (f *ReadAsOfIterator) RangeKeys() MVCCRangeKeyStack {
 	return MVCCRangeKeyStack{}
 }
 
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (f *ReadAsOfIterator) RangeKeyChanged() bool {
+	return false
+}
+
 // updateValid updates i.valid and i.err based on the underlying iterator, and
 // returns true if valid.
 func (f *ReadAsOfIterator) updateValid() bool {
