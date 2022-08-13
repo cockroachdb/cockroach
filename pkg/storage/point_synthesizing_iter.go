@@ -133,6 +133,7 @@ func newPointSynthesizingIter(parent MVCCIterator, emitOnSeekGE bool) *pointSynt
 		iter:         parent,
 		emitOnSeekGE: emitOnSeekGE,
 		// Reuse pooled byte slices.
+		rangeKeys:      iter.rangeKeys,
 		rangeKeysPos:   iter.rangeKeysPos,
 		rangeKeysStart: iter.rangeKeysStart,
 	}
@@ -162,7 +163,8 @@ func (i *pointSynthesizingIter) Close() {
 // release releases the iterator back into the pool.
 func (i *pointSynthesizingIter) release() {
 	*i = pointSynthesizingIter{
-		// Reuse byte slices.
+		// Reuse slices.
+		rangeKeys:      i.rangeKeys[:0],
 		rangeKeysPos:   i.rangeKeysPos[:0],
 		rangeKeysStart: i.rangeKeysStart[:0],
 	}
@@ -200,7 +202,7 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 		i.rangeKeysPos = append(i.rangeKeysPos[:0], i.iter.UnsafeKey().Key...)
 		if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
 			i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
-			i.rangeKeys = i.iter.RangeKeys().Versions.Clone()
+			i.iter.RangeKeys().Versions.CloneInto(&i.rangeKeys)
 		}
 		if i.rangeKeysPos.Equal(i.rangeKeysStart) {
 			i.rangeKeysEnd = len(i.rangeKeys)
