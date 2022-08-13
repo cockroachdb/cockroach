@@ -400,6 +400,18 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 				}
 				val.TableStatsCreatedAt = stat.CreatedAt()
 				val.LimitHint = scan.RequiredPhysical().LimitHint
+				val.Forecast = stat.IsForecast()
+				if val.Forecast {
+					val.ForecastAt = stat.CreatedAt()
+					// Find the first non-forecast stat.
+					for i := 0; i < tab.StatisticCount(); i++ {
+						nextStat := tab.Statistic(i)
+						if !nextStat.IsForecast() {
+							val.TableStatsCreatedAt = nextStat.CreatedAt()
+							break
+						}
+					}
+				}
 			}
 		}
 		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
