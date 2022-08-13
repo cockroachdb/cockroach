@@ -1777,11 +1777,6 @@ func NewTableDesc(
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
-			if d.NotVisible {
-				return nil, unimplemented.Newf(
-					"Not Visible Index",
-					"creating a not visible index is not supported yet")
-			}
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
@@ -1885,11 +1880,6 @@ func NewTableDesc(
 			if d.WithoutIndex {
 				// We will add the unique constraint below.
 				break
-			}
-			if d.NotVisible {
-				return nil, unimplemented.Newf(
-					"Not Visible Index",
-					"creating a not visible index is not supported yet")
 			}
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when

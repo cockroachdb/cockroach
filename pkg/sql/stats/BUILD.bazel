@@ -8,6 +8,7 @@ go_library(
     srcs = [
         "automatic_stats.go",
         "delete_stats.go",
+        "forecast.go",
         "histogram.go",
         "json.go",
         "new_stat.go",
@@ -15,6 +16,7 @@ go_library(
         "row_sampling.go",
         "simple_linear_regression.go",
         "stats_cache.go",
+        "util.go",
     ],
     embed = [":stats_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/stats",
@@ -57,6 +59,7 @@ go_library(
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -68,6 +71,7 @@ go_test(
         "automatic_stats_test.go",
         "create_stats_job_test.go",
         "delete_stats_test.go",
+        "forecast_test.go",
         "histogram_test.go",
         "main_test.go",
         "quantile_test.go",

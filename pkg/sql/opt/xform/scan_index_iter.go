@@ -219,12 +219,19 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			continue
 		}
 
-		// If we are forcing a specific index, ignore all other indexes.
-		if it.scanPrivate.Flags.ForceIndex && ord != it.scanPrivate.Flags.Index {
-			continue
-		}
-
 		index := it.tabMeta.Table.Index(ord)
+		if it.scanPrivate.Flags.ForceIndex {
+			// If we are forcing a specific index, ignore all other indexes.
+			if ord != it.scanPrivate.Flags.Index {
+				continue
+			}
+		} else {
+			// If we are not forcing any specific index and not visible index feature is
+			// enabled here, ignore not visible indexes.
+			if index.IsNotVisible() && !it.scanPrivate.Flags.DisableNotVisibleIndex {
+				continue
+			}
+		}
 
 		// Skip over inverted indexes if rejectInvertedIndexes is set.
 		if it.hasRejectFlags(rejectInvertedIndexes) && index.IsInverted() {

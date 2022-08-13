@@ -57,6 +57,7 @@ const defaultActiveStatement: ActiveStatement = {
   application: "test",
   user: "user",
   clientAddress: "clientAddress",
+  isFullScan: false,
 };
 
 // makeActiveStatement creates an ActiveStatement object with the default active statement above
@@ -83,6 +84,9 @@ function makeActiveTxn(
     query: defaultActiveStatement.query,
     statementID: defaultActiveStatement.statementID,
     retries: 3,
+    lastAutoRetryReason: null,
+    isFullScan: defaultActiveStatement.isFullScan,
+    priority: "Normal",
     statementCount: 5,
     status: "Executing",
     ...props,
