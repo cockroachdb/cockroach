@@ -58,7 +58,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	opc.reset(ctx)
 
 	switch t := stmt.AST.(type) {
-	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
+	case *tree.AlterIndex, *tree.AlterIndexVisible, *tree.AlterTable, *tree.AlterSequence,
 		*tree.Analyze,
 		*tree.BeginTransaction,
 		*tree.CommentOnColumn, *tree.CommentOnConstraint, *tree.CommentOnDatabase, *tree.CommentOnIndex, *tree.CommentOnTable, *tree.CommentOnSchema,

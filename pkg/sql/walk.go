@@ -353,6 +353,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterFunctionSetSchemaNode{}):              "alter function set schema",
 	reflect.TypeOf(&alterFunctionDepExtensionNode{}):           "alter function depends on extension",
 	reflect.TypeOf(&alterIndexNode{}):                          "alter index",
+	reflect.TypeOf(&alterIndexVisibleNode{}):                   "alter index visibility",
 	reflect.TypeOf(&alterSequenceNode{}):                       "alter sequence",
 	reflect.TypeOf(&alterSchemaNode{}):                         "alter schema",
 	reflect.TypeOf(&alterTableNode{}):                          "alter table",

@@ -1515,6 +1515,7 @@ alter_index_stmt ::=
 	| alter_scatter_index_stmt
 	| alter_rename_index_stmt
 	| alter_zone_index_stmt
+	| alter_index_visible_stmt
 
 alter_view_stmt ::=
 	alter_rename_view_stmt
@@ -2052,6 +2053,10 @@ alter_rename_index_stmt ::=
 
 alter_zone_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name set_zone_config
+
+alter_index_visible_stmt ::=
+	'ALTER' 'INDEX' table_index_name alter_index_visible
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_index_name alter_index_visible
 
 alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
@@ -2717,6 +2722,10 @@ locality ::=
 
 alter_index_cmds ::=
 	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
+
+alter_index_visible ::=
+	'NOT' 'VISIBLE'
+	| 'VISIBLE'
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
