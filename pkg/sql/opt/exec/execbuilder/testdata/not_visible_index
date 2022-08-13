@@ -545,7 +545,6 @@ DROP TABLE t1
 statement ok
 DROP TABLE t2
 
-
 ##################################################################################
 # Check Invisible Inverted Index and Partial Inverted Index.
 ##################################################################################
@@ -1155,24 +1154,171 @@ statement ok
 DROP TABLE parent
 
 ############################################################################
-# The following tests check for ALTER INDEX ... VISIBLE | NOT VISIBLE. 
+# The following tests check for ALTER INDEX ... VISIBLE | NOT VISIBLE.
+# - Error when IF EXISTS is not specified
+# - Error when altering primary index to not visible happens
+# - Check alter index visibility using SHOW INDEX and EXPLAIN
 ############################################################################
 subtest alter_index_visibility
 
+# The following tests check error and notices.
 statement ok
-CREATE TABLE t (p INT PRIMARY KEY, INDEX idx (p) VISIBLE)
+CREATE TABLE t1 (c INT PRIMARY KEY, other INT NOT NULL, INDEX idx_visible (other) VISIBLE, INDEX idx_invisible (other) NOT VISIBLE)
 
-query TTB
-SELECT index_name, column_name, visible FROM [SHOW INDEX FROM t] ORDER BY index_name, seq_in_index
+query TTBITTBBB colnames
+SELECT * FROM [SHOW INDEX FROM t1]
 ----
-idx     p  true
-t_pkey  p  true
+table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t1          t1_pkey        false       1             c            ASC        false    false     true
+t1          t1_pkey        false       2             other        N/A        true     false     true
+t1          idx_visible    true        1             other        ASC        false    false     true
+t1          idx_visible    true        2             c            ASC        false    true      true
+t1          idx_invisible  true        1             other        ASC        false    false     false
+t1          idx_invisible  true        2             c            ASC        false    true      false
 
-statement error pq: unimplemented: altering an index to visible or not visible is not supported yet
+# Primary index cannot be invisible.
+statement error pq: primary index cannot be invisible
+ALTER INDEX t1_pkey NOT VISIBLE
+
+# Altering primary index to visible is fine.
+statement ok
+ALTER INDEX t1_pkey VISIBLE
+
+# The following test check ALTER PRIMARY KEY.
+# Changing a column with invisible index to primary key is fine: 1. This will
+# result in a new primary index (visible) on the column and the secondary index
+# on the column stay not visible. 2. The old primary key index now becomes a
+# secondary index, and this secondary index can also be changed invisible.
+statement ok
+ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (other);
+
+# A new primary index t1_pkey is created on the column other. The old primary
+# index becomes a secondary index t1_c_key on c. idx_invisible remains
+# invisible.
+query TTBITTBBB colnames
+SELECT * FROM [SHOW INDEX FROM t1]
+----
+table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t1          t1_pkey        false       1             other        ASC        false    false     true
+t1          t1_pkey        false       2             c            N/A        true     false     true
+t1          t1_c_key       false       1             c            ASC        false    false     true
+t1          t1_c_key       false       2             other        ASC        true     true      true
+t1          idx_visible    true        1             other        ASC        false    false     true
+t1          idx_invisible  true        1             other        ASC        false    false     false
+
+# Changing the old primary key index t1_c_key (secondary index now) to invisible
+# is fine.
+statement ok
+ALTER INDEX t1_c_key NOT VISIBLE
+
+# No error if index does not exist and IF EXISTS is specified.
+statement ok
+ALTER INDEX IF EXISTS nonexistent_idx NOT VISIBLE
+
+# No error if table does not exist and IF EXISTS is specified.
+statement ok
+ALTER INDEX IF EXISTS nonexistent_t@idx NOT VISIBLE
+
+# Error if index does not exist and no IF EXISTS.
+statement error pq: index "nonexistent_idx" does not exist
+ALTER INDEX nonexistent_idx NOT VISIBLE
+
+# Error if table exists but index does not exist and no IF EXISTS.
+statement error pq: index "nonexistent_idx" does not exist
+ALTER INDEX t1@nonexistent_idx NOT VISIBLE
+
+# Error if table does not exist and no IF EXISTS.
+statement error pq: relation "nonexistent_table" does not exist
+ALTER INDEX nonexistent_table@nonexistent_idx NOT VISIBLE
+
+statement ok
+CREATE TABLE t2 (c INT PRIMARY KEY, INDEX idx_invisible (c) NOT VISIBLE)
+
+# Check ambiguous index error.
+statement error pq: index name "idx_invisible" is ambiguous
+ALTER INDEX idx_invisible NOT VISIBLE
+
+statement ok
+DROP TABLE t1
+
+statement ok
+DROP TABLE t2
+
+# The following tests check for ALTER INDEX [VISIBLE | NOT VISIBLE] feature.
+statement ok
+CREATE TABLE t (p INT PRIMARY KEY, other INT, INDEX idx (other) VISIBLE)
+
+# idx is visible.
+query TTTB
+SELECT table_name, index_name, column_name, visible FROM [SHOW INDEX FROM t] ORDER BY table_name, index_name, seq_in_index
+----
+t  idx     other  true
+t  idx     p      true
+t  t_pkey  p      true
+t  t_pkey  other  true
+
+# SELECT chooses idx since it is visible now.
+query T
+EXPLAIN SELECT * FROM t WHERE other > 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@idx
+  spans: [/3 - ]
+
+statement ok
 ALTER INDEX idx NOT VISIBLE
 
-statement error pq: unimplemented: altering an index to visible or not visible is not supported yet
+# idx is not visible now.
+query TTTB
+SELECT table_name, index_name, column_name, visible FROM [SHOW INDEX FROM t] ORDER BY table_name, index_name, seq_in_index
+----
+t  idx     other  false
+t  idx     p      false
+t  t_pkey  p      true
+t  t_pkey  other  true
+
+# SELECT ignores idx since idx is not visible.
+query T
+EXPLAIN SELECT * FROM t WHERE other > 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: other > 2
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
 ALTER INDEX idx VISIBLE
+
+# idx is back to visible now.
+query TTTB
+SELECT table_name, index_name, column_name, visible FROM [SHOW INDEX FROM t] ORDER BY table_name, index_name, seq_in_index
+----
+t  idx     other  true
+t  idx     p      true
+t  t_pkey  p      true
+t  t_pkey  other  true
+
+# SELECT chooses idx after it becomes visible.
+query T
+EXPLAIN SELECT * FROM t WHERE other > 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@idx
+  spans: [/3 - ]
 
 statement ok
 DROP TABLE t
