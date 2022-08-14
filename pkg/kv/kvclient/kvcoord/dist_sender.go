@@ -336,6 +336,11 @@ type DistSender struct {
 	// LatencyFunc is used to estimate the latency to other nodes.
 	latencyFunc LatencyFunc
 
+	// locality is the description of the topography of the server on which the
+	// DistSender is running. It is used to estimate the latency to other nodes
+	// in the absence of a latency function.
+	locality roachpb.Locality
+
 	// If set, the DistSender will try the replicas in the order they appear in
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
@@ -386,6 +391,10 @@ type DistSenderConfig struct {
 	FirstRangeProvider FirstRangeProvider
 	RangeDescriptorDB  rangecache.RangeDescriptorDB
 
+	// Locality is the description of the topography of the server on which the
+	// DistSender is running.
+	Locality roachpb.Locality
+
 	// KVInterceptor is set for tenants; when set, information about all
 	// BatchRequests and BatchResponses are passed through this interceptor, which
 	// can potentially throttle requests.
@@ -405,6 +414,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		nodeDescs:     cfg.NodeDescs,
 		metrics:       makeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
+		locality:      cfg.Locality,
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -545,46 +555,17 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 // getNodeID attempts to return the local node ID. It returns 0 if the DistSender
 // does not have access to the Gossip network.
 func (ds *DistSender) getNodeID() roachpb.NodeID {
-	// TODO(nvanbenschoten): open an issue about the effect of this.
+	// Today, secondary tenants don't run in process with KV instances, so they
+	// don't have access to the Gossip network. The DistSender uses the node ID to
+	// preferentially route requests to a local replica (if one exists). Not
+	// knowing the node ID, and thus not being able to take advantage of this
+	// optimization is okay, given tenants not running in-process with KV
+	// instances have no such optimization to take advantage of to begin with.
 	g, ok := ds.nodeDescs.(*gossip.Gossip)
 	if !ok {
 		return 0
 	}
 	return g.NodeID.Get()
-}
-
-// getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
-// it from the Gossip network if a nil value is found.
-// We must jump through hoops here to get the node descriptor because it's not available
-// until after the node has joined the gossip network and been allowed to initialize
-// its stores.
-func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
-	if desc := atomic.LoadPointer(&ds.nodeDescriptor); desc != nil {
-		return (*roachpb.NodeDescriptor)(desc)
-	}
-	// TODO(nvanbenschoten): open an issue about the effect of this.
-	g, ok := ds.nodeDescs.(*gossip.Gossip)
-	if !ok {
-		return nil
-	}
-
-	ownNodeID := g.NodeID.Get()
-	if ownNodeID > 0 {
-		// TODO(tschottdorf): Consider instead adding the NodeID of the
-		// coordinator to the header, so we can get this from incoming
-		// requests. Just in case we want to mostly eliminate gossip here.
-		nodeDesc := &roachpb.NodeDescriptor{}
-		if err := g.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), nodeDesc); err == nil {
-			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc))
-			return nodeDesc
-		}
-	}
-	if log.V(1) {
-		ctx := ds.AnnotateCtx(context.TODO())
-		log.Infof(ctx, "unable to determine this node's attributes for replica "+
-			"selection; node is most likely bootstrapping")
-	}
-	return nil
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
@@ -1968,7 +1949,7 @@ func (ds *DistSender) sendToReplicas(
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+			replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
 		}
 
 		idx := -1
@@ -1987,7 +1968,7 @@ func (ds *DistSender) sendToReplicas(
 	case roachpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+		replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)

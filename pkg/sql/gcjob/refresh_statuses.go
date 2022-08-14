@@ -141,7 +141,7 @@ func updateStatusForGCElements(
 	}); err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			log.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
-			markTableGCed(ctx, tableID, progress)
+			markTableGCed(ctx, tableID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 			return false, true, maxDeadline
 		}
 		log.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)
@@ -167,7 +167,7 @@ func updateTableStatus(
 
 	for i, t := range progress.Tables {
 		droppedTable := &progress.Tables[i]
-		if droppedTable.ID != table.GetID() || droppedTable.Status == jobspb.SchemaChangeGCProgress_DELETED {
+		if droppedTable.ID != table.GetID() || droppedTable.Status == jobspb.SchemaChangeGCProgress_CLEARED {
 			continue
 		}
 
@@ -200,7 +200,7 @@ func updateTableStatus(
 			if log.V(2) {
 				log.Infof(ctx, "detected expired table %d", t.ID)
 			}
-			droppedTable.Status = jobspb.SchemaChangeGCProgress_DELETING
+			droppedTable.Status = jobspb.SchemaChangeGCProgress_CLEARING
 		} else {
 			if log.V(2) {
 				log.Infof(ctx, "table %d still has %+v until GC", t.ID, lifetime)
@@ -231,7 +231,7 @@ func updateIndexesStatus(
 	soonestDeadline = timeutil.Unix(0, int64(math.MaxInt64))
 	for i := 0; i < len(progress.Indexes); i++ {
 		idxProgress := &progress.Indexes[i]
-		if idxProgress.Status == jobspb.SchemaChangeGCProgress_DELETED {
+		if idxProgress.Status == jobspb.SchemaChangeGCProgress_CLEARED {
 			continue
 		}
 
@@ -269,7 +269,7 @@ func updateIndexesStatus(
 			if log.V(2) {
 				log.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.GetID())
 			}
-			idxProgress.Status = jobspb.SchemaChangeGCProgress_DELETING
+			idxProgress.Status = jobspb.SchemaChangeGCProgress_CLEARING
 		} else if deadline.Before(soonestDeadline) {
 			soonestDeadline = deadline
 		}
@@ -454,7 +454,7 @@ func refreshTenant(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, _ time.Time, _ error) {
-	if progress.Tenant.Status != jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
+	if progress.Tenant.Status != jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR {
 		return true, time.Time{}, nil
 	}
 
@@ -488,7 +488,7 @@ func refreshTenant(
 		}
 
 		// At this point, the tenant's keyspace is ready for GC.
-		progress.Tenant.Status = jobspb.SchemaChangeGCProgress_DELETING
+		progress.Tenant.Status = jobspb.SchemaChangeGCProgress_CLEARING
 		return true, deadlineUnix, nil
 	}
 	return false, deadlineUnix, nil

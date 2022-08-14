@@ -94,6 +94,7 @@ func TestDataDriven(t *testing.T) {
 			gcWaiter.L.Unlock()
 			return nil
 		},
+		SkipWaitingForMVCCGC: true,
 	}
 	scKnobs := &spanconfig.TestingKnobs{
 		// Instead of relying on the GC job to wait out TTLs and clear out

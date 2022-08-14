@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -269,6 +270,9 @@ func TestUnsplitRanges(t *testing.T) {
 	run := func(t *testing.T, tc testCase) {
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+		params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+			SkipWaitingForMVCCGC: true,
+		}
 
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 

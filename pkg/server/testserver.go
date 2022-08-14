@@ -658,6 +658,11 @@ func (t *TestTenant) DistSQLServer() interface{} {
 	return t.SQLServer.distSQLServer
 }
 
+// DistSenderI is part of the TestTenantInterface.
+func (t *TestTenant) DistSenderI() interface{} {
+	return t.SQLServer.execCfg.DistSender
+}
+
 // RPCContext is part of TestTenantInterface.
 func (t *TestTenant) RPCContext() *rpc.Context {
 	return t.execCfg.RPCContext
