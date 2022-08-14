@@ -863,6 +863,11 @@ func (p *pebbleIterator) Stats() IteratorStats {
 	}
 }
 
+// IsPrefix implements the MVCCIterator interface.
+func (p *pebbleIterator) IsPrefix() bool {
+	return p.prefix
+}
+
 // SupportsPrev implements the MVCCIterator interface.
 func (p *pebbleIterator) SupportsPrev() bool {
 	return true

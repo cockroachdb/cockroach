@@ -652,6 +652,11 @@ func (i *pointSynthesizingIter) Stats() IteratorStats {
 	return i.iter.Stats()
 }
 
+// IsPrefix implements the MVCCIterator interface.
+func (i *pointSynthesizingIter) IsPrefix() bool {
+	return i.iter.IsPrefix()
+}
+
 // SupportsPrev implements MVCCIterator.
 func (i *pointSynthesizingIter) SupportsPrev() bool {
 	return i.iter.SupportsPrev()
