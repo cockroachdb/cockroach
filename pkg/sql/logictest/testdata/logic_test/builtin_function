@@ -1187,10 +1187,10 @@ SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::floa
 ----
 120 100 0
 
-query RRRR
-SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::decimal, -3), round(123.456::decimal, -200)
+query RRRRR
+SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::decimal, -3), round(123.456::decimal, -200), round(-0.1::decimal)
 ----
-1.2E+2  1E+2  0E+3  0E+200
+1.2E+2  1E+2  0E+3  0E+200  0
 
 query RRRR
 SELECT round('nan'::decimal), round('nan'::decimal, 1), round('nan'::float), round('nan'::float, 1)

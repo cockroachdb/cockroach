@@ -769,6 +769,9 @@ func roundDDecimal(d *tree.DDecimal, scale int32) (tree.Datum, error) {
 func roundDecimal(x *apd.Decimal, scale int32) (tree.Datum, error) {
 	dd := &tree.DDecimal{}
 	_, err := tree.HighPrecisionCtx.Quantize(&dd.Decimal, x, -scale)
+	if dd.IsZero() {
+		dd.Negative = false
+	}
 	return dd, err
 }
 
