@@ -1433,11 +1433,15 @@ func cmdIterNew(e *evalCtx) error {
 	}
 
 	r, closer := metamorphicReader(e)
-	e.iter = &iterWithCloser{r.NewMVCCIterator(kind, opts), closer}
-
+	iter := r.NewMVCCIterator(kind, opts)
 	if e.hasArg("pointSynthesis") {
-		e.iter = newPointSynthesizingIter(e.mvccIter(), e.hasArg("emitOnSeekGE"))
+		iter = newPointSynthesizingIter(iter, e.hasArg("emitOnSeekGE"))
 	}
+	if opts.Prefix != iter.IsPrefix() {
+		return errors.Errorf("prefix iterator returned IsPrefix=false")
+	}
+
+	e.iter = &iterWithCloser{iter, closer}
 	e.iterRangeKeys.Clear()
 	return nil
 }
