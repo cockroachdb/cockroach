@@ -1236,6 +1236,11 @@ func (i *intentInterleavingIter) Stats() IteratorStats {
 	return stats
 }
 
+// IsPrefix implements the MVCCIterator interface.
+func (i *intentInterleavingIter) IsPrefix() bool {
+	return i.prefix
+}
+
 func (i *intentInterleavingIter) SupportsPrev() bool {
 	return true
 }
