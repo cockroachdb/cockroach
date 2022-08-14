@@ -181,6 +181,9 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	if opts.MinTimestampHint.IsSet() && opts.MaxTimestampHint.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
+	if opts.Prefix && opts.RangeKeyMaskingBelow.IsSet() {
+		panic("can't use range key masking with prefix iterators") // very high overhead
+	}
 
 	// If this Pebble database does not support range keys yet, fall back to
 	// only iterating over point keys to avoid panics. This is effectively the
