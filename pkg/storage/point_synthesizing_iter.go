@@ -90,6 +90,11 @@ type pointSynthesizingIter struct {
 	// avoid cloning the EndKey.
 	rangeKeysStart roachpb.Key
 
+	// rangeKeysStartPassed is true if the iterator has moved past the start bound
+	// of the current range key. This allows omitting a key comparison every time
+	// the iterator moves to a new key, but only in the forward direction.
+	rangeKeysStartPassed bool
+
 	// atPoint is true if the synthesizing iterator is positioned on a real point
 	// key in the underlying iterator. See struct comment for details.
 	atPoint bool
@@ -220,12 +225,23 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 				i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeKeys.Bounds.Key...)
 				rangeKeys.Versions.CloneInto(&i.rangeKeysBuf)
 				i.rangeKeys = i.rangeKeysBuf
+				i.rangeKeysStartPassed = false // we'll compare below
 			}
-			if i.rangeKeysPos.Equal(i.rangeKeysStart) {
+
+			// In the forward direction, once we step off rangeKeysStart we won't see
+			// it again until we hit the next range key, so we can omit a key
+			// comparison for all point keys in between. This isn't true in reverse,
+			// unfortunately, where we encounter the start key at the end.
+			if i.rangeKeysStartPassed && !i.reverse {
+				i.rangeKeysEnd = 0
+				i.extendRangeKeysEnd()
+			} else if i.rangeKeysPos.Equal(i.rangeKeysStart) {
 				i.rangeKeysEnd = len(i.rangeKeys)
+				i.rangeKeysStartPassed = false
 			} else {
 				i.rangeKeysEnd = 0
 				i.extendRangeKeysEnd()
+				i.rangeKeysStartPassed = !i.reverse
 			}
 		}
 		i.rangeKeyChanged = false
@@ -314,6 +330,7 @@ func (i *pointSynthesizingIter) clearRangeKeys() {
 		i.rangeKeysStart = i.rangeKeysStart[:0]
 	}
 	i.rangeKeysEnd = 0
+	i.rangeKeysStartPassed = false
 	if !i.reverse {
 		i.rangeKeysIdx = 0
 	} else {
@@ -753,6 +770,9 @@ func (i *pointSynthesizingIter) assertInvariants() error {
 		if len(i.rangeKeysStart) > 0 {
 			return errors.AssertionFailedf("no rangeKeys but rangeKeysStart %s", i.rangeKeysStart)
 		}
+		if i.rangeKeysStartPassed {
+			return errors.AssertionFailedf("no rangeKeys but rangeKeysStartPassed")
+		}
 		return nil
 	}
 
@@ -774,6 +794,20 @@ func (i *pointSynthesizingIter) assertInvariants() error {
 	} else {
 		if len(i.rangeKeysStart) != 0 {
 			return errors.AssertionFailedf("rangeKeysStart set to %s for prefix iterator", i.rangeKeysStart)
+		}
+	}
+
+	// rangeKeysStartPassed must match rangeKeysPos and rangeKeysStart. Note that
+	// it is not always correctly enabled when switching directions on a point key
+	// covered by a range key after rangeKeysStart, since we only update it when
+	// stepping onto a different key.
+	if i.rangeKeysStartPassed {
+		if i.prefix {
+			return errors.AssertionFailedf("rangeKeysStartPassed seen for prefix iterator")
+		}
+		if i.rangeKeysStartPassed && i.rangeKeysPos.Equal(i.rangeKeysStart) {
+			return errors.AssertionFailedf("rangeKeysStartPassed %t, but pos %s and start %s ",
+				i.rangeKeysStartPassed, i.rangeKeysPos, i.rangeKeysStart)
 		}
 	}
 
