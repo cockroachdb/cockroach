@@ -1,0 +1,201 @@
+# LogicTest: local
+
+# Tests that verify we create and use table statistics forecasts correctly.
+
+# Verify that we create and use statistics forecasts for a table that grows at
+# a constant rate.
+
+statement ok
+CREATE TABLE g (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
+
+statement ok
+ALTER TABLE g INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "1988-08-05 00:00:00.000000",
+          "distinct_count": 3,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "1"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "2"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 3
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "1988-08-06 00:00:00.000000",
+          "distinct_count": 6,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "1"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "2"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "3"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "4"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "5"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 6
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "1988-08-07 00:00:00.000000",
+          "distinct_count": 9,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "1"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "2"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "3"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "4"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "5"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "6"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "7"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "8"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 9
+      }
+]'
+
+query TTTIIII
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE g WITH FORECAST]
+ORDER BY created
+----
+__auto__      {a}  1988-08-05 00:00:00 +0000 +0000  3   3   0  1
+__auto__      {a}  1988-08-06 00:00:00 +0000 +0000  6   6   0  1
+__auto__      {a}  1988-08-07 00:00:00 +0000 +0000  9   9   0  1
+__forecast__  {a}  1988-08-08 00:00:00 +0000 +0000  12  12  0  1
+
+query T
+EXPLAIN SELECT * FROM g WHERE a >= 9 AND a < 12
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (25% of the table; stats forecast)
+  table: g@g_pkey
+  spans: [/9 - /11]
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE a >= 0 AND a < 100
+----
+scan g
+ ├── columns: a:1
+ ├── constraint: /1: [/0 - /99]
+ ├── cardinality: [0 - 100]
+ ├── stats: [rows=12, distinct(1)=10, null(1)=0, avgsize(1)=1]
+ │   histogram(1)=  0 1.3333 0 0.66667 0 0.66667 0 1.3333 0 1.3333 0 0.66667 0 0.66667 0 1.3333 0 1.3333 0 0.66667 0 0.66667 0 1.3333
+ │                <---- 0 ------- 1 ------- 2 ------ 3 ------ 4 ------- 5 ------- 6 ------ 7 ------ 8 ------- 9 ------ 10 ------ 11 -
+ ├── cost: 21.13
+ ├── key: (1)
+ └── distribution: test
