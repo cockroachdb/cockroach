@@ -1200,7 +1200,7 @@ func (p *pebbleMVCCScanner) enablePointSynthesis() {
 		if ok, _ := p.parent.Valid(); !ok {
 			panic(errors.AssertionFailedf("enablePointSynthesis called with invalid iter"))
 		}
-		if _, ok := p.parent.(*pointSynthesizingIter); ok {
+		if p.pointIter != nil {
 			panic(errors.AssertionFailedf("enablePointSynthesis called when already enabled"))
 		}
 		if _, hasRange := p.parent.HasPointAndRange(); !hasRange {
@@ -1256,6 +1256,12 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 	// is convenient to check for any range keys and enable point synthesis here.
 	if p.parent.RangeKeyChanged() {
 		p.enablePointSynthesis()
+	}
+	if util.RaceEnabled && p.pointIter == nil {
+		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+			panic(errors.AssertionFailedf("range key did not trigger point synthesis at %s",
+				p.parent.UnsafeKey()))
+		}
 	}
 	return true
 }
