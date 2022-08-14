@@ -1389,11 +1389,17 @@ func (*AdminTransferLeaseRequest) flags() flag  { return isAdmin | isAlone }
 func (*AdminChangeReplicasRequest) flags() flag { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() flag  { return isAdmin | isAlone }
 
-func (*GCRequest) flags() flag {
+func (gcr *GCRequest) flags() flag {
 	// We defensively let GCRequest bypass the circuit breaker because otherwise,
 	// the GC queue might busy loop on an unavailable range, doing lots of work
 	// but never making progress.
-	return isWrite | isRange | bypassesReplicaCircuitBreaker
+	flags := isWrite | isRange | bypassesReplicaCircuitBreaker
+	// For clear range requests that GC entire range we don't want to batch with
+	// anything else.
+	if gcr.ClearRangeKey != nil {
+		flags |= isAlone
+	}
+	return flags
 }
 
 // HeartbeatTxn updates the timestamp cache with transaction records,

@@ -5244,6 +5244,10 @@ func pt(key roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
 	return rangeTestDataItem{point: MVCCKeyValue{Key: mvccVersionKey(key, ts), Value: val}}
 }
 
+// inlineValue constant is used with pt function for readability of created inline
+// values.
+var inlineValue hlc.Timestamp
+
 // txn wraps point update and adds transaction to it for intent creation.
 func txn(d rangeTestDataItem) rangeTestDataItem {
 	ts := d.point.Key.Timestamp
@@ -5880,6 +5884,134 @@ func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 						"expected error '%s' found '%s'", d.error, err)
 				})
 			}
+		})
+	}
+}
+
+// TestMVCCGarbageCollectClearRange checks that basic GCClearRange functionality
+// works. Fine grained tests cases are tested in mvcc_histories_test
+// 'gc_clear_range'. This test could be used when debugging any issues found.
+func TestMVCCGarbageCollectClearRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+	rangeStart := mkKey("")
+	rangeEnd := rangeStart.PrefixEnd()
+
+	// Note we use keys of different lengths so that stats accounting errors
+	// would not obviously cancel out if right and left bounds are used
+	// incorrectly.
+	keyA := mkKey("a")
+	keyB := mkKey("bb")
+	keyD := mkKey("dddd")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	ts2 := mkTs(2)
+	ts4 := mkTs(4)
+	tsGC := mkTs(5)
+	tsMax := mkTs(9)
+
+	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRangeKey {
+		return roachpb.GCRequest_GCClearRangeKey{
+			StartKey: start,
+			EndKey:   end,
+		}
+	}
+
+	before := rangeTestData{
+		pt(keyB, ts2),
+		rng(keyA, keyD, ts4),
+	}
+	request := mkGCReq(keyA, keyD)
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			var ms, diff enginepb.MVCCStats
+			before.populateEngine(t, engine, &ms)
+
+			require.NoError(t,
+				MVCCGarbageCollectWholeRange(ctx, engine, &diff, request.StartKey, request.EndKey, tsGC, ms),
+				"failed to run mvcc range tombstone garbage collect")
+			ms.Add(diff)
+
+			rks := scanRangeKeys(t, engine)
+			require.Empty(t, rks)
+			ks := scanPointKeys(t, engine)
+			require.Empty(t, ks)
+
+			ms.AgeTo(tsMax.WallTime)
+			it := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				LowerBound: rangeStart,
+				UpperBound: rangeEnd,
+			})
+			expMs, err := ComputeStatsForIter(it, tsMax.WallTime)
+			require.NoError(t, err, "failed to compute stats for range")
+			require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
+		})
+	}
+}
+
+func TestMVCCGarbageCollectClearRangeInlinedValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+
+	// Note we use keys of different lengths so that stats accounting errors
+	// would not obviously cancel out if right and left bounds are used
+	// incorrectly.
+	keyA := mkKey("a")
+	keyB := mkKey("b")
+	keyD := mkKey("dddd")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	tsGC := mkTs(5)
+
+	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRangeKey {
+		return roachpb.GCRequest_GCClearRangeKey{
+			StartKey: start,
+			EndKey:   end,
+		}
+	}
+
+	before := rangeTestData{
+		pt(keyB, inlineValue),
+	}
+	request := mkGCReq(keyA, keyD)
+	expectedError := `found key not covered by range tombstone /Table/42/"b"/0,0`
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			var ms, diff enginepb.MVCCStats
+			before.populateEngine(t, engine, &ms)
+			// We are forcing stats to be estimates to bypass quick liveness check
+			// that will prevent actual data checks if there's some live data.
+			ms.ContainsEstimates = 1
+			err := MVCCGarbageCollectWholeRange(ctx, engine, &diff, request.StartKey, request.EndKey,
+				tsGC, ms)
+			ms.Add(diff)
+			require.Errorf(t, err, "expected error '%s' but found none", expectedError)
+			require.True(t, testutils.IsError(err, expectedError),
+				"expected error '%s' found '%s'", expectedError, err)
 		})
 	}
 }

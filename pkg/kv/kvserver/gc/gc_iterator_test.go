@@ -152,7 +152,7 @@ func TestGCIterator(t *testing.T) {
 			ds.setupTest(t, eng, desc)
 			snap := eng.NewSnapshot()
 			defer snap.Close()
-			it := makeGCIterator(&desc, snap, tc.gcThreshold)
+			it := makeGCIterator(&desc, snap, tc.gcThreshold, false)
 			defer it.close()
 			expectations := tc.expectations
 			for i, ex := range expectations {
