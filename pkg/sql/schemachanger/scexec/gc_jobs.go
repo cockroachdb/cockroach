@@ -82,7 +82,7 @@ func (gj *gcJobs) AddNewGCJobForIndex(
 // tables, their IDs will be in dbZoneConfigsToRemove and will not be mentioned
 // in any of the returned job records.
 func (gj gcJobs) makeRecords(
-	mkJobID func() jobspb.JobID,
+	mkJobID func() jobspb.JobID, useLegacyJob bool,
 ) (dbZoneConfigsToRemove catalog.DescriptorIDSet, gcJobRecords []jobs.Record) {
 	type stmts struct {
 		s   []scop.StatementForDropJob
@@ -146,7 +146,9 @@ func (gj gcJobs) makeRecords(
 			addTableToJob(&s, &j, gj.tables[i])
 		}
 		gcJobRecords = append(gcJobRecords,
-			createGCJobRecord(mkJobID(), formatStatements(&s), username.NodeUserName(), j))
+			createGCJobRecord(
+				mkJobID(), formatStatements(&s), username.NodeUserName(), j, useLegacyJob,
+			))
 	}
 	{
 		var j jobspb.SchemaChangeGCDetails
@@ -158,8 +160,9 @@ func (gj gcJobs) makeRecords(
 			addTableToJob(&s, &j, t)
 		}
 		if len(j.Tables) > 0 {
-			gcJobRecords = append(gcJobRecords,
-				createGCJobRecord(mkJobID(), formatStatements(&s), username.NodeUserName(), j))
+			gcJobRecords = append(gcJobRecords, createGCJobRecord(
+				mkJobID(), formatStatements(&s), username.NodeUserName(), j, useLegacyJob,
+			))
 		}
 	}
 	indexes := gj.indexes
@@ -185,8 +188,9 @@ func (gj gcJobs) makeRecords(
 			})
 		}
 		if len(j.Indexes) > 0 {
-			gcJobRecords = append(gcJobRecords,
-				createGCJobRecord(mkJobID(), formatStatements(&s), username.NodeUserName(), j))
+			gcJobRecords = append(gcJobRecords, createGCJobRecord(
+				mkJobID(), formatStatements(&s), username.NodeUserName(), j, useLegacyJob,
+			))
 		}
 	}
 	return dbZoneConfigsToRemove, gcJobRecords
@@ -219,6 +223,7 @@ func createGCJobRecord(
 	description string,
 	userName username.SQLUsername,
 	details jobspb.SchemaChangeGCDetails,
+	useLegacyJob bool,
 ) jobs.Record {
 	descriptorIDs := make([]descpb.ID, 0)
 	if len(details.Indexes) > 0 {
@@ -233,6 +238,10 @@ func createGCJobRecord(
 			descriptorIDs = append(descriptorIDs, details.ParentID)
 		}
 	}
+	runningStatus := jobs.RunningStatus("waiting for MVCC GC")
+	if useLegacyJob {
+		runningStatus = "waiting for GC TTL"
+	}
 	return jobs.Record{
 		JobID:         id,
 		Description:   "GC for " + description,
@@ -240,7 +249,7 @@ func createGCJobRecord(
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
-		RunningStatus: "waiting for GC TTL",
+		RunningStatus: runningStatus,
 		NonCancelable: true,
 	}
 }

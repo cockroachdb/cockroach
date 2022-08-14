@@ -1212,8 +1212,8 @@ func (s *SQLServer) setInstanceID(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.execCfg.DistSQLPlanner.SetGatewaySQLInstanceID(instanceID)
 	s.sqlLivenessSessionID = sessionID
-	s.execCfg.DistSQLPlanner.SetSQLInstanceInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(instanceID)})
 	return nil
 }
 

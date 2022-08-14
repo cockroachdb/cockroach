@@ -153,6 +153,12 @@ var (
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(maxGraphiteInterval),
 	).WithPublic()
+	redactServerTracesForSecondaryTenants = settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"server.secondary_tenants.redact_trace.enabled",
+		"controls if server side traces are redacted for tenant operations",
+		true,
+	).WithPublic()
 )
 
 type nodeMetrics struct {
@@ -407,9 +413,7 @@ func (n *Node) AnnotateCtxWithSpan(
 
 // start starts the node by registering the storage instance for the RPC
 // service "Node" and initializing stores for each specified engine.
-// Launches periodic store gossiping in a goroutine. A callback can
-// be optionally provided that will be invoked once this node's
-// NodeDescriptor is available, to help bootstrapping.
+// Launches periodic store gossiping in a goroutine.
 //
 // addr, sqlAddr, and httpAddr are used to populate the Address,
 // SQLAddress, and HTTPAddress fields respectively of the
@@ -426,7 +430,6 @@ func (n *Node) start(
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
 	localityAddress []roachpb.LocalityAddress,
-	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
 	n.initialStart = initialStart
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
@@ -442,12 +445,6 @@ func (n *Node) start(
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
-	}
-	// Invoke any passed in nodeDescriptorCallback as soon as it's available, to
-	// ensure that other components (currently the DistSQLPlanner) are initialized
-	// before store startup continues.
-	if nodeDescriptorCallback != nil {
-		nodeDescriptorCallback(n.Descriptor)
 	}
 
 	// Gossip the node descriptor to make this node addressable by node ID.
@@ -1097,6 +1094,7 @@ type spanForRequest struct {
 	sp            *tracing.Span
 	needRecording bool
 	tenID         roachpb.TenantID
+	settings      *cluster.Settings
 }
 
 // finish finishes the span. If the span was recording and br is not nil, the
@@ -1114,17 +1112,15 @@ func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse)
 
 	rec = sp.sp.FinishAndGetConfiguredRecording()
 	if rec != nil {
-		// Decide if the trace for this RPC, if any, will need to be redacted. It
-		// needs to be redacted if the response goes to a tenant. In case the request
-		// is local, then the trace might eventually go to a tenant (and tenID might
-		// be set), but it will go to the tenant only indirectly, through the response
-		// of a parent RPC. In that case, that parent RPC is responsible for the
-		// redaction.
+		// Decide if the trace for this RPC, if any, will need to be redacted. In
+		// general, responses sent to a tenant are redacted unless indicated
+		// otherwise by the cluster setting below.
 		//
-		// Tenants get a redacted recording, i.e. with anything
-		// sensitive stripped out of the verbose messages. However,
-		// structured payloads stay untouched.
-		needRedaction := sp.tenID != roachpb.SystemTenantID
+		// Even if the recording sent to a tenant is redacted (anything sensitive
+		// is stripped out of the verbose messages), structured payloads
+		// stay untouched.
+		needRedaction := sp.tenID != roachpb.SystemTenantID &&
+			redactServerTracesForSecondaryTenants.Get(&sp.settings.SV)
 		if needRedaction {
 			if err := redactRecordingForTenant(sp.tenID, rec); err != nil {
 				log.Errorf(ctx, "error redacting trace recording: %s", err)
@@ -1151,11 +1147,15 @@ func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse)
 func (n *Node) setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
 ) (context.Context, spanForRequest) {
-	return setupSpanForIncomingRPC(ctx, tenID, ba, n.storeCfg.AmbientCtx.Tracer)
+	return setupSpanForIncomingRPC(ctx, tenID, ba, n.storeCfg.AmbientCtx.Tracer, n.storeCfg.Settings)
 }
 
 func setupSpanForIncomingRPC(
-	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest, tr *tracing.Tracer,
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	ba *roachpb.BatchRequest,
+	tr *tracing.Tracer,
+	settings *cluster.Settings,
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)
@@ -1199,6 +1199,7 @@ func setupSpanForIncomingRPC(
 		needRecording: needRecordingCollection,
 		tenID:         tenID,
 		sp:            newSpan,
+		settings:      settings,
 	}
 }
 

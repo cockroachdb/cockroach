@@ -175,7 +175,10 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		name string
-		node *roachpb.NodeDescriptor
+		// nodeID of the DistSender.
+		nodeID roachpb.NodeID
+		// locality of the DistSender.
+		locality roachpb.Locality
 		// map from node address (see nodeDesc()) to latency to that node.
 		latencies map[string]time.Duration
 		slice     ReplicaSlice
@@ -186,8 +189,9 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		expOrdered []roachpb.NodeID
 	}{
 		{
-			name: "order by locality matching",
-			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
+			name:     "order by locality matching",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
 			slice: ReplicaSlice{
 				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
@@ -198,8 +202,9 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			expOrdered: []roachpb.NodeID{1, 2, 4, 3},
 		},
 		{
-			name: "order by latency",
-			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
+			name:     "order by latency",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
 			latencies: map[string]time.Duration{
 				"2:26257": time.Hour,
 				"3:26257": time.Minute,
@@ -217,8 +222,9 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			// Test that replicas on the local node sort first, regardless of factors
 			// like their latency measurement (in production they won't have any
 			// latency measurement).
-			name: "local node comes first",
-			node: nodeDesc(t, 1, nil),
+			name:     "local node comes first",
+			nodeID:   1,
+			locality: locality(t, nil),
 			latencies: map[string]time.Duration{
 				"1:26257": 10 * time.Hour,
 				"2:26257": time.Hour,
@@ -246,7 +252,7 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			}
 			// Randomize the input order, as it's not supposed to matter.
 			shuffle.Shuffle(test.slice)
-			test.slice.OptimizeReplicaOrder(test.node, latencyFn)
+			test.slice.OptimizeReplicaOrder(test.nodeID, latencyFn, test.locality)
 			var sortedNodes []roachpb.NodeID
 			sortedNodes = append(sortedNodes, test.slice[0].NodeID)
 			for i := 1; i < len(test.slice); i++ {

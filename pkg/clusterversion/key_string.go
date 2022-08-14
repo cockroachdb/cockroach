@@ -52,11 +52,13 @@ func _() {
 	_ = x[RoleOptionsTableHasIDColumn-41]
 	_ = x[RoleOptionsIDColumnIsBackfilled-42]
 	_ = x[SetRoleOptionsUserIDColumnNotNull-43]
+	_ = x[UseDelRangeInGCJob-44]
+	_ = x[WaitedForDelRangeInGCJob-45]
 }
 
-const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnablePebbleFormatVersionBlockPropertiesEnableLeaseHolderRemovalChangefeedIdlenessRowLevelTTLEnableNewStoreRebalancerClusterLocksVirtualTableAutoStatsTableSettingsSuperRegionsEnableNewChangefeedOptionsV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNull"
+const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnablePebbleFormatVersionBlockPropertiesEnableLeaseHolderRemovalChangefeedIdlenessRowLevelTTLEnableNewStoreRebalancerClusterLocksVirtualTableAutoStatsTableSettingsSuperRegionsEnableNewChangefeedOptionsV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJob"
 
-var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 173, 197, 215, 226, 250, 274, 296, 308, 334, 339, 348, 363, 403, 437, 471, 493, 513, 532, 565, 584, 604, 625, 660, 694, 724, 777, 791, 812, 843, 876, 907, 941, 963, 992, 1019, 1050, 1083}
+var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 173, 197, 215, 226, 250, 274, 296, 308, 334, 339, 348, 363, 403, 437, 471, 493, 513, 532, 565, 584, 604, 625, 660, 694, 724, 777, 791, 812, 843, 876, 907, 941, 963, 992, 1019, 1050, 1083, 1101, 1125}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

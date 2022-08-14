@@ -223,15 +223,22 @@ func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
 	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
 }
 
-// SetSQLInstanceInfo sets the planner's node descriptor.
-// The first call to SetSQLInstanceInfo leads to the construction of the SpanResolver.
-func (dsp *DistSQLPlanner) SetSQLInstanceInfo(desc roachpb.NodeDescriptor) {
-	dsp.gatewaySQLInstanceID = base.SQLInstanceID(desc.NodeID)
-	if dsp.spanResolver == nil {
-		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, desc,
-			dsp.clock, dsp.rpcCtx, ReplicaOraclePolicy)
-		dsp.SetSpanResolver(sr)
+// ConstructAndSetSpanResolver constructs and sets the planner's
+// SpanResolver if it is unset. It's a no-op otherwise.
+func (dsp *DistSQLPlanner) ConstructAndSetSpanResolver(
+	ctx context.Context, nodeID roachpb.NodeID, locality roachpb.Locality,
+) {
+	if dsp.spanResolver != nil {
+		log.Fatal(ctx, "trying to construct and set span resolver when one already exists")
 	}
+	sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, nodeID, locality,
+		dsp.clock, dsp.rpcCtx, ReplicaOraclePolicy)
+	dsp.SetSpanResolver(sr)
+}
+
+// SetGatewaySQLInstanceID sets the planner's SQL instance ID.
+func (dsp *DistSQLPlanner) SetGatewaySQLInstanceID(id base.SQLInstanceID) {
+	dsp.gatewaySQLInstanceID = id
 }
 
 // GatewayID returns the ID of the gateway.

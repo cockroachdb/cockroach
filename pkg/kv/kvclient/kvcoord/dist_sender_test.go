@@ -389,25 +389,15 @@ func TestSendRPCOrder(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			verifyCall = makeVerifier(tc.expReplica)
 
-			{
-				// The local node needs to get its attributes during sendRPC.
-				nd := &roachpb.NodeDescriptor{
-					NodeID:  6,
-					Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:6"),
-					Locality: roachpb.Locality{
-						Tiers: tc.tiers,
-					},
-				}
-				g.NodeID.Reset(nd.NodeID)
-				err := g.SetNodeDescriptor(nd)
-				require.NoError(t, err)
+			g.NodeID.Reset(6)
+			cfg.Locality = roachpb.Locality{
+				Tiers: tc.tiers,
 			}
+			ds := NewDistSender(cfg)
 
 			ds.rangeCache.Clear()
 			var lease roachpb.Lease
@@ -418,9 +408,6 @@ func TestSendRPCOrder(t *testing.T) {
 				Desc:  descriptor,
 				Lease: lease,
 			})
-
-			// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
-			ds.nodeDescriptor = nil
 
 			// Issue the request.
 			header := roachpb.Header{
@@ -2277,39 +2264,6 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 	rng := ds.rangeCache.GetCached(ctx, descriptor.StartKey, false /* inverted */)
 	require.NotNil(t, rng)
 	require.Equal(t, leaseholderStoreID, rng.Lease().Replica.StoreID)
-}
-
-// TestGetNodeDescriptor checks that the Node descriptor automatically gets
-// looked up from Gossip.
-func TestGetNodeDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:              clock,
-		NodeDescs:          g,
-		RPCContext:         rpcContext,
-		FirstRangeProvider: g,
-		Settings:           cluster.MakeTestingClusterSettings(),
-	})
-	g.NodeID.Reset(5)
-	if err := g.SetNodeDescriptor(newNodeDesc(5)); err != nil {
-		t.Fatal(err)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		desc := ds.getNodeDescriptor()
-		if desc != nil && desc.NodeID == 5 {
-			return nil
-		}
-		return errors.Errorf("wanted NodeID 5, got %v", desc)
-	})
 }
 
 func TestMultiRangeGapReverse(t *testing.T) {

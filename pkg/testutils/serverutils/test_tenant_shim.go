@@ -64,6 +64,9 @@ type TestTenantInterface interface {
 	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
+	// DistSenderI returns the *kvcoord.DistSender as an interface{}.
+	DistSenderI() interface{}
+
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 

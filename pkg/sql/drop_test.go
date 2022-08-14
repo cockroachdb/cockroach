@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -111,9 +110,16 @@ func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	ctx, cancel := context.WithCancel(context.Background())
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+		RunBeforeResume: func(jobID jobspb.JobID) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	ctx := context.Background()
+	defer cancel()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -265,6 +271,8 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 85876)
+
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	params, _ := tests.CreateTestServerParams()
@@ -404,21 +412,13 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 85876)
 	const chunkSize = 200
 	params, _ := tests.CreateTestServerParams()
-	emptySpan := true
-	clearIndexAttempt := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
-		},
-		DistSQL: &execinfra.TestingKnobs{
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if clearIndexAttempt && (sp.Key != nil || sp.EndKey != nil) {
-					emptySpan = false
-				}
-				return nil
-			},
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -448,10 +448,6 @@ func TestDropIndex(t *testing.T) {
 	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
-	// Index data hasn't been deleted.
-	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
-	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
-
 	// TODO (lucy): Maybe this test API should use an offset starting
 	// from the most recent job instead.
 	const migrationJobOffset = 0
@@ -476,48 +472,38 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	newIdxSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, newIdx.GetID())
-	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
-	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 4*numRows)
-
-	clearIndexAttempt = true
-	// Add a zone config for the table.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusRunning, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: `DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
 			},
+			RunningStatus: "waiting for MVCC GC",
 		})
 	})
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+		if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: `GC for temporary index used during index backfill`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
 			},
+			RunningStatus: "waiting for MVCC GC",
 		}); err != nil {
 			return err
 		}
 
-		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
 			},
+			RunningStatus: "waiting for MVCC GC",
 		})
 	})
-
-	if !emptySpan {
-		t.Fatalf("tried to clear index with non-empty resume span")
-	}
 
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
 	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
@@ -578,7 +564,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
 		t.Fatal("zone config for index still exists")
 	}
-	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+
 	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
 	// declares column families.
 
@@ -593,10 +579,18 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	params, _ := tests.CreateTestServerParams()
+	ctx, cancel := context.WithCancel(context.Background())
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+		RunBeforeResume: func(jobID jobspb.JobID) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	ctx := context.Background()
+	defer cancel()
 
 	numRows := 2*row.TableTruncateChunkSize + 1
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
@@ -684,6 +678,7 @@ func TestDropTable(t *testing.T) {
 func TestDropTableDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 85876)
 	params, _ := tests.CreateTestServerParams()
 
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
@@ -836,6 +831,8 @@ func writeTableDesc(ctx context.Context, db *kv.DB, tableDesc *tabledesc.Mutable
 func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 85876)
 	ctx := context.Background()
 
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
@@ -1258,6 +1255,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 // entire database.
 func TestDropDatabaseWithForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 85876)
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1408,9 +1406,9 @@ func TestDropLargeDatabaseWithLegacySchemaChanger(t *testing.T) {
 	dropLargeDatabaseGeneric(t,
 		sqltestutils.GenerateViewBasedGraphSchemaParams{
 			SchemaName:         "largedb",
-			NumTablesPerDepth:  5,
-			NumColumnsPerTable: 6,
-			GraphDepth:         4,
+			NumTablesPerDepth:  4,
+			NumColumnsPerTable: 3,
+			GraphDepth:         3,
 		},
 		false)
 }

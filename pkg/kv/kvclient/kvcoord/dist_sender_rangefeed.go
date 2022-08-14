@@ -431,7 +431,7 @@ func (ds *DistSender) singleRangeFeed(
 	if err != nil {
 		return args.Timestamp, err
 	}
-	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
+	replicas.OptimizeReplicaOrder(ds.getNodeID(), latencyFn, ds.locality)
 	// The RangeFeed is not used for system critical traffic so use a DefaultClass
 	// connection regardless of the range.
 	opts := SendOptions{class: connectionClass(&ds.st.SV)}

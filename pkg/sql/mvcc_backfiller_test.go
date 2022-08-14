@@ -128,6 +128,9 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		GCJob: &sql.GCJobTestingKnobs{
+			SkipWaitingForMVCCGC: true,
+		},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -567,6 +570,9 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 			},
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		GCJob: &sql.GCJobTestingKnobs{
+			SkipWaitingForMVCCGC: true,
+		},
 	}
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)

@@ -244,9 +244,7 @@ func startTenantInternal(
 
 	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
 
-	// TODO(asubiotto): remove this. Right now it is needed to initialize the
-	// SpanResolver.
-	s.execCfg.DistSQLPlanner.SetSQLInstanceInfo(roachpb.NodeDescriptor{NodeID: 0})
+	s.execCfg.DistSQLPlanner.ConstructAndSetSpanResolver(ctx, 0 /* NodeID */, s.execCfg.Locality)
 
 	authServer = newAuthenticationServer(baseCfg.Config, s)
 
@@ -417,7 +415,7 @@ func makeTenantSQLServerArgs(
 	})
 
 	var dsKnobs kvcoord.ClientTestingKnobs
-	if dsKnobsP, ok := baseCfg.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
+	if dsKnobsP, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
 		dsKnobs = *dsKnobsP
 	}
 	rpcRetryOptions := base.DefaultRetryOptions()
@@ -455,6 +453,7 @@ func makeTenantSQLServerArgs(
 		RPCContext:        rpcContext,
 		NodeDialer:        nodeDialer,
 		RangeDescriptorDB: tenantConnect,
+		Locality:          baseCfg.Locality,
 		KVInterceptor:     costController,
 		TestingKnobs:      dsKnobs,
 	}

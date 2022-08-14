@@ -522,7 +522,7 @@ func gcTenantJob(
 	progress := jobspb.SchemaChangeGCProgress{}
 	if synchronous {
 		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
-			Status: jobspb.SchemaChangeGCProgress_DELETING,
+			Status: jobspb.SchemaChangeGCProgress_CLEARING,
 		}
 	}
 	gcJobRecord := jobs.Record{
