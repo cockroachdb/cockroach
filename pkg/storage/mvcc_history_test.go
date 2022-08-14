@@ -92,7 +92,7 @@ var (
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey]
 //
-// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis [emitOnSeekGE]] [maskBelow=<int>[,<int>]]
+// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis] [maskBelow=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
 // iter_seek_ge   k=<key> [ts=<int>[,<int>]]
 // iter_seek_lt   k=<key> [ts=<int>[,<int>]]
@@ -1446,11 +1446,15 @@ func cmdIterNew(e *evalCtx) error {
 	}
 
 	r, closer := metamorphicReader(e)
-	e.iter = &iterWithCloser{r.NewMVCCIterator(kind, opts), closer}
-
+	iter := r.NewMVCCIterator(kind, opts)
 	if e.hasArg("pointSynthesis") {
-		e.iter = newPointSynthesizingIter(e.mvccIter(), e.hasArg("emitOnSeekGE"))
+		iter = newPointSynthesizingIter(iter)
 	}
+	if opts.Prefix != iter.IsPrefix() {
+		return errors.Errorf("prefix iterator returned IsPrefix=false")
+	}
+
+	e.iter = &iterWithCloser{iter, closer}
 	e.iterRangeKeys.Clear()
 	return nil
 }

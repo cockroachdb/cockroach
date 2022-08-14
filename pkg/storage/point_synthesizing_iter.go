@@ -31,12 +31,9 @@ var pointSynthesizingIterPool = sync.Pool{
 
 // pointSynthesizingIter wraps an MVCCIterator, and synthesizes MVCC point keys
 // for MVCC range keys above existing point keys (not below), and at the start
-// of range keys (truncated to iterator bounds). If emitOnSeekGE is set, it will
-// also unconditionally synthesize point keys for all MVCC range keys that
-// overlap the seek key.
-//
-// It does not emit MVCC range keys at all, since these would appear to conflict
-// with the synthesized point keys.
+// of range keys (truncated to iterator bounds). It does not emit MVCC range
+// keys at all, since these would appear to conflict with the synthesized point
+// keys.
 //
 // During iteration, any range keys overlapping the current iterator position
 // are kept in rangeKeys. When atPoint is true, the iterator is positioned on a
@@ -71,6 +68,10 @@ type pointSynthesizingIter struct {
 	// position, for which points will be synthesized.
 	rangeKeys MVCCRangeKeyVersions
 
+	// rangeKeysBuf is a reusable buffer for rangeKeys. Non-prefix iterators use
+	// it as a MVCCRangeKeyVersions.CloneInto() target and set rangeKeys to it.
+	rangeKeysBuf MVCCRangeKeyVersions
+
 	// rangeKeysPos is the current key (along the rangeKeys span) that points will
 	// be synthesized for. It is only set if rangeKeys is non-empty, and may
 	// differ from the underlying iterator position.
@@ -92,29 +93,14 @@ type pointSynthesizingIter struct {
 	// key in the underlying iterator. See struct comment for details.
 	atPoint bool
 
+	// If prefix is true, then the underlying iterator is a prefix iterator which
+	// can only be on a single key position. This allows omitting key cloning and
+	// comparisons in many cases.
+	prefix bool
+
 	// reverse is true when the current iterator direction is in reverse, i.e.
 	// following a SeekLT or Prev call.
 	reverse bool
-
-	// emitOnSeekGE will synthesize point keys for all range keys that overlap the
-	// SeekGE seek key, regardless of whether a point key exists there. The
-	// primary use-case is to synthesize point keys for e.g. an MVCCGet that does
-	// not match a point key but overlaps a range key, which is necessary for
-	// conflict checks.
-	//
-	// This is optional, because e.g. pebbleMVCCScanner often uses seeks as an
-	// optimization to skip over old versions of a key, and we don't want to keep
-	// synthesizing point keys every time it skips ahead.
-	//
-	// Note that these synthesized points are not stable: if the iterator leaves
-	// the seek key prefix and then reverses direction, points will be synthesized
-	// according to the normal policy: above existing point keys and at the start
-	// key of range keys. This parameter is primarily for use with prefix
-	// iterators where this is not an issue.
-	//
-	// TODO(erikgrinaker): This could instead check for prefix iterators, or a
-	// separate SeekPrefixGE() method, but we don't currently have APIs for it.
-	emitOnSeekGE bool
 
 	// iterValid is true if the underlying iterator is valid.
 	iterValid bool
@@ -127,12 +113,13 @@ var _ MVCCIterator = new(pointSynthesizingIter)
 
 // newPointSynthesizingIter creates a new pointSynthesizingIter, or gets one
 // from the pool.
-func newPointSynthesizingIter(parent MVCCIterator, emitOnSeekGE bool) *pointSynthesizingIter {
+func newPointSynthesizingIter(parent MVCCIterator) *pointSynthesizingIter {
 	iter := pointSynthesizingIterPool.Get().(*pointSynthesizingIter)
 	*iter = pointSynthesizingIter{
-		iter:         parent,
-		emitOnSeekGE: emitOnSeekGE,
+		iter:   parent,
+		prefix: parent.IsPrefix(),
 		// Reuse pooled byte slices.
+		rangeKeysBuf:   iter.rangeKeysBuf,
 		rangeKeysPos:   iter.rangeKeysPos,
 		rangeKeysStart: iter.rangeKeysStart,
 	}
@@ -141,10 +128,8 @@ func newPointSynthesizingIter(parent MVCCIterator, emitOnSeekGE bool) *pointSynt
 
 // newPointSynthesizingIterAtParent creates a new pointSynthesizingIter and
 // loads the position from the parent iterator (which must be valid).
-func newPointSynthesizingIterAtParent(
-	parent MVCCIterator, emitOnSeekGE bool,
-) *pointSynthesizingIter {
-	iter := newPointSynthesizingIter(parent, emitOnSeekGE)
+func newPointSynthesizingIterAtParent(parent MVCCIterator) *pointSynthesizingIter {
+	iter := newPointSynthesizingIter(parent)
 	iter.iterValid = true
 	iter.updateSeekGEPosition(parent.UnsafeKey())
 	return iter
@@ -162,7 +147,8 @@ func (i *pointSynthesizingIter) Close() {
 // release releases the iterator back into the pool.
 func (i *pointSynthesizingIter) release() {
 	*i = pointSynthesizingIter{
-		// Reuse byte slices.
+		// Reuse slices.
+		rangeKeysBuf:   i.rangeKeysBuf[:0],
 		rangeKeysPos:   i.rangeKeysPos[:0],
 		rangeKeysStart: i.rangeKeysStart[:0],
 	}
@@ -195,26 +181,35 @@ func (i *pointSynthesizingIter) updateValid() (bool, error) {
 func (i *pointSynthesizingIter) updateRangeKeys() {
 	if !i.iterValid {
 		i.clearRangeKeys()
-	} else if _, hasRange := i.iter.HasPointAndRange(); hasRange {
-		// TODO(erikgrinaker): Optimize this.
+	} else if _, hasRange := i.iter.HasPointAndRange(); !hasRange {
+		i.clearRangeKeys()
+	} else {
 		i.rangeKeysPos = append(i.rangeKeysPos[:0], i.iter.UnsafeKey().Key...)
-		if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
-			i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
-			i.rangeKeys = i.iter.RangeKeys().Versions.Clone()
-		}
-		if i.rangeKeysPos.Equal(i.rangeKeysStart) {
+		if i.prefix {
+			// A prefix iterator will always be at the start bound of the range key,
+			// and never move onto a different range key, so we can omit the cloning
+			// and other processing.
+			i.rangeKeys = i.iter.RangeKeys().Versions
 			i.rangeKeysEnd = len(i.rangeKeys)
 		} else {
-			i.rangeKeysEnd = 0
-			i.extendRangeKeysEnd()
+			// TODO(erikgrinaker): Use RangeKeyChanged() to detect this.
+			if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
+				i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
+				i.iter.RangeKeys().Versions.CloneInto(&i.rangeKeysBuf)
+				i.rangeKeys = i.rangeKeysBuf
+			}
+			if i.rangeKeysPos.Equal(i.rangeKeysStart) {
+				i.rangeKeysEnd = len(i.rangeKeys)
+			} else {
+				i.rangeKeysEnd = 0
+				i.extendRangeKeysEnd()
+			}
 		}
 		if !i.reverse {
 			i.rangeKeysIdx = 0
 		} else {
 			i.rangeKeysIdx = i.rangeKeysEnd - 1 // NB: -1 is correct with no range keys
 		}
-	} else {
-		i.clearRangeKeys()
 	}
 }
 
@@ -223,7 +218,8 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 func (i *pointSynthesizingIter) extendRangeKeysEnd() {
 	if i.iterValid {
 		if hasPoint, _ := i.iter.HasPointAndRange(); hasPoint {
-			if p := i.iter.UnsafeKey(); p.Key.Equal(i.rangeKeysPos) && !p.Timestamp.IsEmpty() {
+			p := i.iter.UnsafeKey()
+			if (i.prefix || p.Key.Equal(i.rangeKeysPos)) && !p.Timestamp.IsEmpty() {
 				if end := sort.Search(len(i.rangeKeys), func(idx int) bool {
 					return i.rangeKeys[idx].Timestamp.Less(p.Timestamp)
 				}); end > i.rangeKeysEnd {
@@ -244,7 +240,7 @@ func (i *pointSynthesizingIter) updateAtPoint() {
 		i.atPoint = false
 	} else if len(i.rangeKeys) == 0 {
 		i.atPoint = true
-	} else if point := i.iter.UnsafeKey(); !point.Key.Equal(i.rangeKeysPos) {
+	} else if point := i.iter.UnsafeKey(); !i.prefix && !point.Key.Equal(i.rangeKeysPos) {
 		i.atPoint = false
 	} else if !i.reverse {
 		i.atPoint = i.rangeKeysIdx >= i.rangeKeysEnd || !point.Timestamp.IsSet() ||
@@ -347,8 +343,9 @@ func (i *pointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
 	}
 
 	// If we land in the middle of a bare range key then skip over it to the next
-	// point/range key unless emitOnSeekGE is enabled.
-	if !i.emitOnSeekGE && hasRange && !hasPoint &&
+	// point/range key. If prefix is enabled, we must be at its start key, so we
+	// can omit the comparison.
+	if hasRange && !hasPoint && !i.prefix &&
 		!i.iter.RangeBounds().Key.Equal(i.iter.UnsafeKey().Key) {
 		if ok, _ := i.iterNext(); !ok {
 			i.updatePosition()
@@ -359,10 +356,8 @@ func (i *pointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
 
 	i.updateRangeKeys()
 
-	// If we're now at a bare range key, we must either be at the start of it,
-	// or in the middle with emitOnSeekGE enabled. In either case, we want to
-	// move the iterator ahead to look for a point key with the same key as the
-	// start/seek key in order to interleave it.
+	// If we're still at a bare range key, we must be at its start key. Move the
+	// iterator ahead to look for a point key at the same key.
 	if hasRange && !hasPoint {
 		if _, err := i.iterNext(); err != nil {
 			return
@@ -370,13 +365,9 @@ func (i *pointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
 		i.extendRangeKeysEnd()
 	}
 
-	// If emitOnSeekGE, always expose all range keys at the current position.
-	if hasRange && i.emitOnSeekGE {
-		i.rangeKeysEnd = len(i.rangeKeys)
-	}
-
 	// If we're seeking to a specific version, skip newer range keys.
-	if len(i.rangeKeys) > 0 && seekKey.Timestamp.IsSet() && seekKey.Key.Equal(i.rangeKeysPos) {
+	if len(i.rangeKeys) > 0 && seekKey.Timestamp.IsSet() &&
+		(i.prefix || seekKey.Key.Equal(i.rangeKeysPos)) {
 		i.rangeKeysIdx = sort.Search(i.rangeKeysEnd, func(idx int) bool {
 			return i.rangeKeys[idx].Timestamp.LessEq(seekKey.Timestamp)
 		})
@@ -443,7 +434,7 @@ func (i *pointSynthesizingIter) NextKey() {
 		}
 	}
 	// Don't call NextKey() if the underlying iterator is already on the next key.
-	if i.atPoint || i.rangeKeysPos.Equal(i.iter.UnsafeKey().Key) {
+	if i.atPoint || i.prefix || i.rangeKeysPos.Equal(i.iter.UnsafeKey().Key) {
 		i.iter.NextKey()
 		if _, err := i.updateValid(); err != nil {
 			return
@@ -652,6 +643,11 @@ func (i *pointSynthesizingIter) Stats() IteratorStats {
 	return i.iter.Stats()
 }
 
+// IsPrefix implements the MVCCIterator interface.
+func (i *pointSynthesizingIter) IsPrefix() bool {
+	return i.prefix
+}
+
 // SupportsPrev implements MVCCIterator.
 func (i *pointSynthesizingIter) SupportsPrev() bool {
 	return i.iter.SupportsPrev()
@@ -667,6 +663,11 @@ func (i *pointSynthesizingIter) assertInvariants() error {
 				i.rangeKeysPos)
 		}
 		return nil
+	}
+
+	// In prefix mode, the iterator must never be used in reverse.
+	if i.prefix && i.reverse {
+		return errors.AssertionFailedf("prefix iterator used in reverse")
 	}
 
 	// When atPoint is true, the underlying iterator must be valid and on a point.
@@ -710,14 +711,25 @@ func (i *pointSynthesizingIter) assertInvariants() error {
 		return nil
 	}
 
-	// rangeKeysStart must be set, and rangeKeysPos must be at or after it. This
-	// implies that rangeKeysPos must also be set.
-	if len(i.rangeKeysStart) == 0 {
-		return errors.AssertionFailedf("no rangeKeysStart at %s", i.iter.UnsafeKey())
+	// rangeKeysPos must be set when range keys are present.
+	if len(i.rangeKeysPos) == 0 {
+		return errors.AssertionFailedf("rangeKeysPos not set")
 	}
-	if i.rangeKeysPos.Compare(i.rangeKeysStart) < 0 {
-		return errors.AssertionFailedf("rangeKeysPos %s not after rangeKeysStart %s",
-			i.rangeKeysPos, i.rangeKeysStart)
+
+	// rangeKeysStart must be set, and rangeKeysPos must be at or after it.
+	// prefix iterators do not set rangeKeysStart.
+	if !i.prefix {
+		if len(i.rangeKeysStart) == 0 {
+			return errors.AssertionFailedf("no rangeKeysStart at %s", i.iter.UnsafeKey())
+		}
+		if i.rangeKeysPos.Compare(i.rangeKeysStart) < 0 {
+			return errors.AssertionFailedf("rangeKeysPos %s not after rangeKeysStart %s",
+				i.rangeKeysPos, i.rangeKeysStart)
+		}
+	} else {
+		if len(i.rangeKeysStart) != 0 {
+			return errors.AssertionFailedf("rangeKeysStart set to %s for prefix iterator", i.rangeKeysStart)
+		}
 	}
 
 	// rangeKeysIdx must be valid if we're not on a point.
@@ -732,10 +744,24 @@ func (i *pointSynthesizingIter) assertInvariants() error {
 		return nil
 	}
 
-	// We now have range keys and a non-exhausted iterator. Check their relative
-	// positioning as minimum and maximum iter keys (in MVCC order). We can assume
-	// that overlapping range keys and point keys don't have the same timestamp,
-	// since this is enforced by MVCC mutations.
+	// We now have range keys and a non-exhausted iterator.
+	//
+	// prefix iterators must have range key bounds [key, key.Next), and be
+	// positioned on key.
+	if _, hasRange := i.iter.HasPointAndRange(); i.prefix && hasRange {
+		expect := roachpb.Span{Key: i.rangeKeysPos, EndKey: i.rangeKeysPos.Next()}
+		if bounds := i.iter.RangeBounds(); !bounds.Equal(expect) {
+			return errors.AssertionFailedf("unexpected range bounds %s with prefix, expected %s",
+				bounds, expect)
+
+		} else if key := i.iter.UnsafeKey().Key; !key.Equal(bounds.Key) {
+			return errors.AssertionFailedf("iter not on prefix position %s, got %s", bounds, key)
+		}
+	}
+
+	// Check the relative positioning as minimum and maximum iter keys (in MVCC
+	// order). We can assume that overlapping range keys and point keys don't have
+	// the same timestamp, since this is enforced by MVCC mutations.
 	var minKey, maxKey MVCCKey
 
 	// The iterator should never lag behind the range key position.

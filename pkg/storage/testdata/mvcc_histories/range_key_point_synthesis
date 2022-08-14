@@ -220,7 +220,7 @@ iter_seek_ge: "n"/5.000000000,0=/<empty>
 iter_seek_ge: .
 
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_ge k=a
 iter_seek_ge k=b
 iter_seek_ge k=c
@@ -322,7 +322,7 @@ iter_seek_intent_ge: "n"/5.000000000,0=/<empty>
 iter_seek_intent_ge: .
 
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_intent_ge k=a txn=A
 iter_seek_intent_ge k=b txn=A
 iter_seek_intent_ge k=c txn=A
@@ -560,9 +560,9 @@ iter_seek_ge: .
 iter_seek_ge: .
 iter_seek_ge: .
 
-# Versioned seeks with emitOnSeekGE.
+# Versioned prefix seeks.
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_ge k=e ts=6
 iter_seek_ge k=e ts=5
 iter_seek_ge k=e ts=4
@@ -578,7 +578,7 @@ iter_seek_ge: "e"/1.000000000,0=/<empty>
 iter_seek_ge: "e"/1.000000000,0=/<empty>
 
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_ge k=j ts=8
 iter_seek_ge k=j ts=7
 iter_seek_ge k=j ts=6
@@ -590,27 +590,27 @@ iter_seek_ge: "j"/1.000000000,0=/<empty>
 iter_seek_ge: "j"/1.000000000,0=/<empty>
 
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_ge k=l ts=6
 iter_seek_ge k=l ts=5
 iter_seek_ge k=l ts=4
 ----
 iter_seek_ge: "l"/5.000000000,0=/<empty>
 iter_seek_ge: "l"/5.000000000,0=/<empty>
-iter_seek_ge: "n"/5.000000000,0=/<empty>
+iter_seek_ge: .
 
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_ge k=m ts=6
 iter_seek_ge k=m ts=5
 iter_seek_ge k=m ts=4
 ----
 iter_seek_ge: "m"/5.000000000,0=/<empty>
 iter_seek_ge: "m"/5.000000000,0=/<empty>
-iter_seek_ge: "n"/5.000000000,0=/<empty>
+iter_seek_ge: .
 
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_ge k=n ts=6
 iter_seek_ge k=n ts=5
 iter_seek_ge k=n ts=4
@@ -622,7 +622,7 @@ iter_seek_ge: "n"/3.000000000,0=/<empty>
 iter_seek_ge: "n"/3.000000000,0=/<empty>
 
 run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
+iter_new types=pointsAndRanges pointSynthesis prefix
 iter_seek_ge k=o ts=6
 iter_seek_ge k=o ts=5
 iter_seek_ge k=o ts=4
@@ -630,66 +630,6 @@ iter_seek_ge k=o ts=4
 iter_seek_ge: .
 iter_seek_ge: .
 iter_seek_ge: .
-
-# Next after emitOnSeekGE also emits tombstones below points, but these are not
-# stable following a reversal from a different key prefix.
-run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
-iter_seek_ge k=e
-iter_next
-iter_next
-iter_next
-iter_prev
-iter_prev
-iter_next
-iter_next
-----
-iter_seek_ge: "e"/5.000000000,0=/<empty>
-iter_next: "e"/3.000000000,0=/BYTES/e3
-iter_next: "e"/1.000000000,0=/<empty>
-iter_next: "f"/6.000000000,0=/BYTES/f6
-iter_prev: "e"/3.000000000,0=/BYTES/e3
-iter_prev: "e"/5.000000000,0=/<empty>
-iter_next: "e"/3.000000000,0=/BYTES/e3
-iter_next: "f"/6.000000000,0=/BYTES/f6
-
-run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
-iter_seek_ge k=j
-iter_next
-iter_next
-iter_next
-iter_prev
-iter_prev
-iter_next
-iter_next
-----
-iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_next: "j"/7.000000000,0=/BYTES/j7
-iter_next: "j"/1.000000000,0=/<empty>
-iter_next: "k"/5.000000000,0=/BYTES/k5
-iter_prev: "j"/7.000000000,0=/BYTES/j7
-iter_prev: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_next: "j"/7.000000000,0=/BYTES/j7
-iter_next: "k"/5.000000000,0=/BYTES/k5
-
-run ok
-iter_new types=pointsAndRanges pointSynthesis emitOnSeekGE
-iter_seek_ge k=nnn
-iter_next
-iter_next
-iter_prev
-iter_prev
-iter_next
-iter_next
-----
-iter_seek_ge: "nnn"/5.000000000,0=/<empty>
-iter_next: "nnn"/3.000000000,0=/<empty>
-iter_next: .
-iter_prev: "n"/3.000000000,0=/<empty>
-iter_prev: "n"/5.000000000,0=/<empty>
-iter_next: "n"/3.000000000,0=/<empty>
-iter_next: .
 
 # Versioned reverse seeks.
 run ok

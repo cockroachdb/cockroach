@@ -215,6 +215,11 @@ func (i *MVCCIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
 }
 
+// IsPrefix is part of the storage.MVCCIterator interface.
+func (i *MVCCIterator) IsPrefix() bool {
+	return i.i.IsPrefix()
+}
+
 // SupportsPrev is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) SupportsPrev() bool {
 	return i.i.SupportsPrev()
