@@ -213,7 +213,7 @@ func (rsl StateLoader) SetRangeAppliedState(
 		RaftAppliedIndexTerm: appliedIndexTerm,
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
-	// in ComputeStatsForRange.
+	// in ComputeStats.
 	ms := (*enginepb.MVCCStats)(nil)
 	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(),
 		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, as)

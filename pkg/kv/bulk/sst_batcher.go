@@ -648,7 +648,7 @@ func (b *SSTBatcher) addSSTable(
 	sendStart := timeutil.Now()
 
 	// Currently, the SSTBatcher cannot ingest range keys, so it is safe to
-	// ComputeStatsForRange with an iterator that only surfaces point keys.
+	// ComputeStats with an iterator that only surfaces point keys.
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: start,
