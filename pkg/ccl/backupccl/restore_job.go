@@ -1123,22 +1123,58 @@ func createImportingDescriptors(
 		})
 	}
 
+	_, backupTenantID, err := keys.DecodeTenantPrefix(backupCodec.TenantPrefix())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
+		// Ensure old processors fail if this is a previously unsupported restore of
+		// a tenant backup by the system tenant, which the old rekey processor would
+		// mishandle since it assumed the system tenant always restored tenant keys
+		// to tenant prefixes, i.e. as tenant restore.
+		if backupTenantID != roachpb.SystemTenantID && p.ExecCfg().Codec.ForSystemTenant() {
+			// This empty table rekey acts as a poison-pill, which will be ignored by
+			// a current processor but reliably cause an older processor, which would
+			// otherwise mishandle tenant-made backup keys, to fail as it will be
+			// unable to decode the zero ID table desc.
+			rekeys = append(rekeys, execinfrapb.TableRekey{})
+		}
+	}
+
+	// If, and only if, the backup was made by a system tenant, can it contain
+	// backed up tenants, which the processor needs to know when is rekeying -- if
+	// the backup contains tenants, then a key with a tenant prefix should be
+	// restored if, and only if, we're restoring that tenant, and restored to a
+	// tenant. Otherwise, if this backup was not made by a system tenant, it does
+	// not contain tenants, so the rekey will assume if a key has a tenant prefix,
+	// it is because the tenant produced the backup, and it should be removed to
+	// then decode the remainder of the key. We communicate this distinction to
+	// the processor with a special tenant rekey _into_ the system tenant, which
+	// would never otherwise be valid. It will discard this rekey but it signals
+	// to it that we're rekeying a system-made backup.
+	var tenantRekeys []execinfrapb.TenantRekey
+	if backupTenantID == roachpb.SystemTenantID {
+		tenantRekeys = append(tenantRekeys, isBackupFromSystemTenantRekey)
+	}
+
 	pkIDs := make(map[uint64]bool)
 	for _, tbl := range tables {
 		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
 	}
 
 	dataToPreRestore := &restorationDataBase{
-		spans:       preRestoreSpans,
-		tableRekeys: rekeys,
-		pkIDs:       pkIDs,
+		spans:        preRestoreSpans,
+		tableRekeys:  rekeys,
+		tenantRekeys: tenantRekeys,
+		pkIDs:        pkIDs,
 	}
 
 	dataToRestore := &mainRestorationData{
 		restorationDataBase{
-			spans:       postRestoreSpans,
-			tableRekeys: rekeys,
-			pkIDs:       pkIDs,
+			spans:        postRestoreSpans,
+			tableRekeys:  rekeys,
+			tenantRekeys: tenantRekeys,
+			pkIDs:        pkIDs,
 		},
 	}
 
@@ -1266,13 +1302,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	// backupCodec is the codec that was used to encode the keys in the backup. It
 	// is the tenant in which the backup was taken.
 	backupCodec := keys.SystemSQLCodec
-	backupTenantID := roachpb.SystemTenantID
-
 	if len(sqlDescs) != 0 {
 		if len(latestBackupManifest.Spans) != 0 && !latestBackupManifest.HasTenants() {
 			// If there are no tenant targets, then the entire keyspace covered by
 			// Spans must lie in 1 tenant.
-			_, backupTenantID, err = keys.DecodeTenantPrefix(latestBackupManifest.Spans[0].Key)
+			_, backupTenantID, err := keys.DecodeTenantPrefix(latestBackupManifest.Spans[0].Key)
 			if err != nil {
 				return err
 			}
@@ -1296,37 +1330,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	preData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r)
 	if err != nil {
 		return err
-	}
-
-	if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
-		// Ensure old processors fail if this is a previously unsupported restore of
-		// a tenant backup by the system tenant, which the old rekey processor would
-		// mishandle since it assumed the system tenant always restored tenant keys
-		// to tenant prefixes, i.e. as tenant restore.
-		if backupTenantID != roachpb.SystemTenantID && p.ExecCfg().Codec.ForSystemTenant() {
-			// This empty table rekey acts as a poison-pill, which will be ignored by
-			// a current processor but reliably cause an older processor, which would
-			// otherwise mishandle tenant-made backup keys, to fail as it will be
-			// unable to decode the zero ID table desc.
-			preData.tableRekeys = append(preData.tableRekeys, execinfrapb.TableRekey{})
-			mainData.tableRekeys = append(preData.tableRekeys, execinfrapb.TableRekey{})
-		}
-	}
-
-	// If, and only if, the backup was made by a system tenant, can it contain
-	// backed up tenants, which the processor needs to know when is rekeying -- if
-	// the backup contains tenants, then a key with a tenant prefix should be
-	// restored if, and only if, we're restoring that tenant, and restored to a
-	// tenant. Otherwise, if this backup was not made by a system tenant, it does
-	// not contain tenants, so the rekey will assume if a key has a tenant prefix,
-	// it is because the tenant produced the backup, and it should be removed to
-	// then decode the remainder of the key. We communicate this distinction to
-	// the processor with a special tenant rekey _into_ the system tenant, which
-	// would never otherwise be valid. It will discard this rekey but it signals
-	// to it that we're rekeying a system-made backup.
-	if backupTenantID == roachpb.SystemTenantID {
-		preData.tenantRekeys = append(preData.tenantRekeys, isBackupFromSystemTenantRekey)
-		mainData.tenantRekeys = append(preData.tenantRekeys, isBackupFromSystemTenantRekey)
 	}
 
 	// Refresh the job details since they may have been updated when creating the
