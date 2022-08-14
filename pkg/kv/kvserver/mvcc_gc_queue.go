@@ -530,14 +530,18 @@ func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) e
 }
 
 func (r *replicaGCer) GC(
-	ctx context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+	ctx context.Context,
+	keys []roachpb.GCRequest_GCKey,
+	rangeKeys []roachpb.GCRequest_GCRangeKey,
+	clearRangeKey *roachpb.GCRequest_GCClearRangeKey,
 ) error {
-	if len(keys) == 0 && len(rangeKeys) == 0 {
+	if len(keys) == 0 && len(rangeKeys) == 0 && clearRangeKey == nil {
 		return nil
 	}
 	req := r.template()
 	req.Keys = keys
 	req.RangeKeys = rangeKeys
+	req.ClearRangeKey = clearRangeKey
 	return r.send(ctx, req)
 }
 
@@ -713,6 +717,8 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCAbortSpanGCNum.Inc(int64(info.AbortSpanGCNum))
 	metrics.GCPushTxn.Inc(int64(info.PushTxn))
 	metrics.GCResolveTotal.Inc(int64(info.ResolveTotal))
+	metrics.GCUsedClearRange.Inc(int64(info.ClearRangeKeyOperations))
+	metrics.GCFailedClearRange.Inc(int64(info.ClearRangeKeyFailures))
 }
 
 // timer returns a constant duration to space out GC processing
