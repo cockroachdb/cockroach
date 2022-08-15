@@ -19,10 +19,20 @@ import "src/enzymeInit";
 import { MetricsTimeManagerUnconnected as MetricsTimeManager } from "./";
 import * as timewindow from "src/redux/timeScale";
 
+const sandbox = sinon.createSandbox();
+
 describe("<MetricsTimeManager>", function() {
   let spy: sinon.SinonSpy;
   let state: timewindow.TimeScaleState;
   const now = () => moment("11-12-1955 10:04PM -0800", "MM-DD-YYYY hh:mma Z");
+
+  beforeEach(() => {
+    sandbox.stub(sessionStorage, "getItem").returns(null);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
 
   beforeEach(function() {
     spy = sinon.spy();

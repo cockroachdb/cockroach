@@ -12,8 +12,19 @@ import { assert } from "chai";
 import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
 import * as timeScale from "./timeScale";
 import moment from "moment";
+import sinon from "sinon";
+
+const sandbox = sinon.createSandbox();
 
 describe("time scale reducer", function() {
+  beforeEach(() => {
+    sandbox.stub(sessionStorage, "getItem").returns(null);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
   describe("actions", function() {
     it("should create the correct SET_METRICS_MOVING_WINDOW action to set the current time window", function() {
       const start = moment();
