@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -44,6 +45,7 @@ func ingestionPlanHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+	log.Warningf(ctx, "\n\x1b[31m RUNNING PLAN HOOK FOR STMT (%+v)\x1b[0m\n", stmt)
 
 	// Check if the experimental feature is enabled.
 	if !p.SessionData().EnableStreamReplication {
@@ -65,6 +67,7 @@ func ingestionPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+		log.Warningf(ctx, "\n\x1b[31m RUNNING PLAN FN \x1b[0m\n")
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
@@ -120,6 +123,7 @@ func ingestionPlanHook(
 		}
 
 		// Create a new tenant for the replication stream
+		log.Warningf(ctx, "\n\x1b[31m CHECKING EXISTING TENANT (%+v)\x1b[0m\n", newTenantID)
 		if _, err := sql.GetTenantRecord(ctx, p.ExecCfg(), nil, newTenantID.ToUint64()); err == nil {
 			return errors.Newf("tenant with id %s already exists", newTenantID)
 		}
@@ -129,21 +133,25 @@ func ingestionPlanHook(
 				State: descpb.TenantInfo_ADD,
 			},
 		}
+		log.Warningf(ctx, "\n\x1b[31m CREATING TENANT RECORD (%+v)\x1b[0m\n", newTenantID)
 		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), nil, tenantInfo); err != nil {
 			return err
 		}
 
+		log.Warningf(ctx, "\n\x1b[31m NEW STREAM CLIENT (%+v)\x1b[0m\n", newTenantID)
 		// Create a new stream with stream client.
 		client, err := streamclient.NewStreamClient(ctx, streamAddress)
 		if err != nil {
 			return err
 		}
+		log.Warningf(ctx, "\n\x1b[31m PRODUCER JOB (%+v)\x1b[0m\n", newTenantID)
 		// Create the producer job first for the purpose of observability,
 		// user is able to know the producer job id immediately after executing the RESTORE.
 		streamID, err := client.Create(ctx, oldTenantID)
 		if err != nil {
 			return err
 		}
+		log.Warningf(ctx, "\n\x1b[31m CLOSE CLIENT (%+v)\x1b[0m\n", newTenantID)
 		if err := client.Close(ctx); err != nil {
 			return err
 		}
@@ -156,6 +164,7 @@ func ingestionPlanHook(
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			NewTenantID:   newTenantID,
 		}
+		log.Warningf(ctx, "\n\x1b[31m CREATING JOB DESCRIPTION (%+v)\x1b[0m\n", streamIngestionDetails)
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)
 		if err != nil {
@@ -168,6 +177,7 @@ func ingestionPlanHook(
 			Progress:    jobspb.StreamIngestionProgress{},
 			Details:     streamIngestionDetails,
 		}
+		log.Warningf(ctx, "\n\x1b[31m CREATING JOB (%+v)\x1b[0m\n", jr)
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		sj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr,
@@ -175,6 +185,7 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
+		log.Warningf(ctx, "\n\x1b[31m SENDING RESULT\x1b[0m\n")
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID())), tree.NewDInt(tree.DInt(streamID))}
 		return nil
 	}
