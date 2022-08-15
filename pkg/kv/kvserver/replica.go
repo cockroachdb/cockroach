@@ -636,7 +636,7 @@ type Replica struct {
 		// Followers to which replication traffic is currently dropped.
 		//
 		// Never mutated in place (always replaced wholesale), so can be leaked
-		// outside of the surrounding mutex.
+		// outside the surrounding mutex.
 		pausedFollowers map[roachpb.ReplicaID]struct{}
 	}
 

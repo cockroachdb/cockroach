@@ -646,12 +646,12 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 		return false
 	}
 	livenessMap, _ := s.livenessMap.Load().(liveness.IsLiveMap)
-	storeOverloadMap := s.ioOverloadedStores.Load()
+	ioThresholds := s.ioThresholds.Current()
 
 	start := timeutil.Now()
 	ctx := r.raftCtx
 
-	exists, err := r.tick(ctx, livenessMap, storeOverloadMap)
+	exists, err := r.tick(ctx, livenessMap, ioThresholds)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 	}
@@ -741,7 +741,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			if s.cfg.NodeLiveness != nil {
 				s.updateLivenessMap()
 			}
-			s.updateStoreOverloadMap()
+			s.updateIOThresholdMap()
 
 			s.unquiescedReplicas.Lock()
 			// Why do we bother to ever queue a Replica on the Raft scheduler for
@@ -763,25 +763,19 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	}
 }
 
-var shouldLogStoreOverloadMap = log.Every(10 * time.Second)
-
-func (s *Store) updateStoreOverloadMap() {
-	storeOverloadMap := map[roachpb.StoreID]*admissionpb.IOThreshold{}
-	overloadThresh := pauseReplicationIOThreshold.Get(&s.cfg.Settings.SV)
+func (s *Store) updateIOThresholdMap() {
+	ioThresholdMap := map[roachpb.StoreID]*admissionpb.IOThreshold{}
 	for _, sd := range s.allocator.StorePool.GetStores() {
-		if score, _ := sd.Capacity.IOThreshold.Score(); overloadThresh != 0 && score > overloadThresh {
-			ioThreshold := sd.Capacity.IOThreshold // need a copy
-			storeOverloadMap[sd.StoreID] = &ioThreshold
-		}
+		ioThreshold := sd.Capacity.IOThreshold // need a copy
+		ioThresholdMap[sd.StoreID] = &ioThreshold
 	}
-	old := s.ioOverloadedStores.Swap(storeOverloadMap)
-	// Consider logging if we're going from seeing overloaded stores to seeing no overloaded stores, or when
-	// there are still overloaded stores and we haven't logged for a while.
-	shouldLog := log.V(1) ||
-		(len(old) > 0 && len(storeOverloadMap) == 0) ||
-		(len(storeOverloadMap) > 0 && shouldLogStoreOverloadMap.ShouldLog())
+	threshold := pauseReplicationIOThreshold.Get(&s.cfg.Settings.SV)
+	old, cur := s.ioThresholds.Replace(ioThresholdMap, threshold)
+	// Log whenever the set of overloaded stores changes.
+	shouldLog := log.V(1) || old.seq != cur.seq
 	if shouldLog {
-		log.Infof(s.AnnotateCtx(context.Background()), "IO overloaded stores [threshold %.2f]: %+v (before: %+v)", overloadThresh, storeOverloadMap, old)
+		log.Infof(
+			s.AnnotateCtx(context.Background()), "pausable stores: %+v", cur)
 	}
 }
 
