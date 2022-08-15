@@ -9,6 +9,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
+        "//pkg/settings",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec",
