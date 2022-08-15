@@ -392,7 +392,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 
 		// A structure describing which index partitions are local to the gateway region
-		prefixSorter, _ := tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx)
+		prefixSorter, _ := tabMeta.IndexPartitionLocality(index.Ordinal(), index, c.e.evalCtx)
 
 		// Build Constraints to scan a subset of the table Spans.
 		if partitionFilters, remainingFilters, combinedConstraint, ok =
