@@ -209,6 +209,7 @@ go_library(
         "show_cluster_setting.go",
         "show_create.go",
         "show_create_clauses.go",
+        "show_create_external_connection.go",
         "show_create_schedule.go",
         "show_fingerprints.go",
         "show_histogram.go",

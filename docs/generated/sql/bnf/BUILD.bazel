@@ -211,6 +211,7 @@ FILES = [
     "show_constraints_stmt",
     "show_create_stmt",
     "show_create_schedules_stmt",
+    "show_create_external_connections_stmt",
     "show_databases_stmt",
     "show_default_privileges_stmt",
     "show_enums",

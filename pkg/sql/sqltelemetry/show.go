@@ -60,28 +60,31 @@ const (
 	FullTableScans
 	// SuperRegions represents the SHOW SUPER REGIONS command.
 	SuperRegions
+	// CreateExternalConnection represents the SHOW CREATE EXTERNAL CONNECTION command.
+	CreateExternalConnection
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
-	Ranges:                  "ranges",
-	Partitions:              "partitions",
-	Locality:                "locality",
-	Create:                  "create",
-	CreateSchedule:          "create_schedule",
-	RangeForRow:             "rangeforrow",
-	Regions:                 "regions",
-	RegionsFromCluster:      "regions_from_cluster",
-	RegionsFromDatabase:     "regions_from_database",
-	RegionsFromAllDatabases: "regions_from_all_databases",
-	SurvivalGoal:            "survival_goal",
-	Queries:                 "queries",
-	Indexes:                 "indexes",
-	Constraints:             "constraints",
-	Jobs:                    "jobs",
-	Roles:                   "roles",
-	Schedules:               "schedules",
-	FullTableScans:          "full_table_scans",
-	SuperRegions:            "super_regions",
+	Ranges:                   "ranges",
+	Partitions:               "partitions",
+	Locality:                 "locality",
+	Create:                   "create",
+	CreateSchedule:           "create_schedule",
+	RangeForRow:              "rangeforrow",
+	Regions:                  "regions",
+	RegionsFromCluster:       "regions_from_cluster",
+	RegionsFromDatabase:      "regions_from_database",
+	RegionsFromAllDatabases:  "regions_from_all_databases",
+	SurvivalGoal:             "survival_goal",
+	Queries:                  "queries",
+	Indexes:                  "indexes",
+	Constraints:              "constraints",
+	Jobs:                     "jobs",
+	Roles:                    "roles",
+	Schedules:                "schedules",
+	FullTableScans:           "full_table_scans",
+	SuperRegions:             "super_regions",
+	CreateExternalConnection: "create_external_connection",
 }
 
 func (s ShowTelemetryType) String() string {
