@@ -5414,20 +5414,18 @@ value if you rely on the HLC for accuracy.`,
 			Types: tree.ArgTypes{
 				{"key", types.Bytes},
 			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
+			SpecializedVecBuiltin: tree.CrdbInternalRangeStats,
+			ReturnType:            tree.FixedReturnType(types.Jsonb),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				key := []byte(tree.MustBeDBytes(args[0]))
-				b := &kv.Batch{}
-				b.AddRawRequest(&roachpb.RangeStatsRequest{
-					RequestHeader: roachpb.RequestHeader{
-						Key: key,
-					},
-				})
-				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				resps, err := ctx.RangeStatsFetcher.RangeStats(ctx.Ctx(),
+					roachpb.Key(tree.MustBeDBytes(args[0])))
+				if err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching range stats")
 				}
-				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
-				jsonStr, err := gojson.Marshal(&resp)
+				jsonStr, err := gojson.Marshal(&resps[0].MVCCStats)
 				if err != nil {
 					return nil, err
 				}
