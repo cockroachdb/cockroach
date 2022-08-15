@@ -192,6 +192,9 @@ type ServerConfig struct {
 	// ExternalIORecorder is used to record reads and writes from
 	// external services (such as external storage)
 	ExternalIORecorder multitenant.TenantSideExternalIORecorder
+
+	// RangeStatsFetcher is used to fetch range stats for keys.
+	RangeStatsFetcher eval.RangeStatsFetcher
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
