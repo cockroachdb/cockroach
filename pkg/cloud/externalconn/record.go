@@ -140,6 +140,22 @@ func (e *MutableExternalConnection) SetConnectionDetails(details connectionpb.Co
 	e.markDirty("connection_details")
 }
 
+// ConnectionName returns the connection_name.
+func (e *MutableExternalConnection) ConnectionName() string {
+	return e.rec.ConnectionName
+}
+
+// UnredactedConnectionStatement implements the External Connection interface.
+func (e *MutableExternalConnection) UnredactedConnectionStatement() string {
+	ecNode := &tree.CreateExternalConnection{
+		ConnectionLabelSpec: tree.LabelSpec{
+			Label: tree.NewDString(e.rec.ConnectionName),
+		},
+		As: tree.NewDString(e.rec.ConnectionDetails.UnredactedURI()),
+	}
+	return tree.AsString(ecNode)
+}
+
 // datumToNative is a helper to convert tree.Datum into Go native types.  We
 // only care about types stored in the system.external_connections table.
 func datumToNative(datum tree.Datum) (interface{}, error) {
