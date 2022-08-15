@@ -437,7 +437,7 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 
 		return r.moreResultsNeeded(ctx)
 	}
-	return r.conn.maybeFlush(r.pos, r.bufferingDisabled)
+	return nil
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
