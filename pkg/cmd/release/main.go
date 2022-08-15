@@ -19,6 +19,7 @@ const (
 	envSMTPPassword = "SMTP_PASSWORD"
 	envGithubToken  = "GITHUB_TOKEN"
 	releaseSeries   = "release-series"
+	releaseType     = "release-type"
 	templatesDir    = "template-dir"
 	smtpUser        = "smtp-user"
 	smtpHost        = "smtp-host"

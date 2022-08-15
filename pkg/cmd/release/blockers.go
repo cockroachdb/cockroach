@@ -140,7 +140,8 @@ func cancelReleaseSeriesPublishDate(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.nextPublishDate, dateFormatCommandLine)
 	}
-	nextVersion, err := findNextVersion(blockersFlags.releaseSeries)
+	// TODO(rail): we can use releaseType to guess tne next version for preleases too
+	nextVersion, err := findNextVersion(blockersFlags.releaseSeries, releaseTypeStable)
 	if err != nil {
 		return fmt.Errorf("cannot find next release version: %w", err)
 	}
@@ -202,9 +203,10 @@ func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.publishDate, dateFormatCommandLine)
 	}
+	// TODO(rail): instead of passing an explicit version, we can guess it using reelaseSeries and releaseTypeOpt.
 	if blockersFlags.nextVersion == "" {
 		var err error
-		blockersFlags.nextVersion, err = findNextVersion(blockersFlags.releaseSeries)
+		blockersFlags.nextVersion, err = findNextVersion(blockersFlags.releaseSeries, releaseTypeStable)
 		if err != nil {
 			return fmt.Errorf("cannot find next release version: %w", err)
 		}
