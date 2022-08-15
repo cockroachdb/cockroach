@@ -115,7 +115,3 @@ ALTER TABLE defaultdb.foo PARTITION BY NOTHING
 unimplemented
 ALTER TABLE defaultdb.foo INJECT STATISTICS '[]'
 ----
-
-unimplemented
-ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (l)
-----

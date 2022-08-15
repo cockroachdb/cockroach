@@ -1143,7 +1143,10 @@ statement ok
 create table t1(id integer not null, id2 integer not null, name varchar(32));
 
 query TTT
-select index_name,column_name,direction from [show indexes from t1] where index_name like 'primary%';
+SELECT index_name, column_name, direction
+  FROM [SHOW INDEXES FROM t1]
+  WHERE index_name LIKE 'primary%'
+  ORDER BY 1,2,3;
 ----
 
 statement ok
@@ -1152,21 +1155,19 @@ alter table t1 alter primary key using columns(id, id2);
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
 t1_pkey  id    ASC
 t1_pkey  id2   ASC
 t1_pkey  name  N/A
 
-
 statement ok
 alter table t1 alter primary key using columns(id, id2);
-
 
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
 t1_pkey  id    ASC
 t1_pkey  id2   ASC
@@ -1179,7 +1180,7 @@ alter table t1 drop constraint t1_pkey, alter primary key using columns(id, id2)
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
 t1_pkey  id    ASC
 t1_pkey  id2   ASC
@@ -1191,13 +1192,13 @@ alter table t1 alter primary key using columns(id);
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
 t1_pkey        id    ASC
 t1_pkey        id2   N/A
 t1_pkey        name  N/A
-t1_id_id2_key  id    ASC
-t1_id_id2_key  id2   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1205,14 +1206,14 @@ alter table t1 alter primary key using columns(id desc);
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
+t1_id_key      id    ASC
 t1_pkey        id    DESC
 t1_pkey        id2   N/A
 t1_pkey        name  N/A
-t1_id_key      id    ASC
-t1_id_id2_key  id    ASC
-t1_id_id2_key  id2   ASC
 
 
 statement ok
@@ -1221,14 +1222,14 @@ alter table t1 alter primary key using columns(id desc);
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
+t1_id_key      id    ASC
 t1_pkey        id    DESC
 t1_pkey        id2   N/A
 t1_pkey        name  N/A
-t1_id_key      id    ASC
-t1_id_id2_key  id    ASC
-t1_id_id2_key  id2   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1236,14 +1237,14 @@ alter table t1 alter primary key using columns(id desc);
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
+t1_id_id2_key  id    ASC
+t1_id_id2_key  id2   ASC
+t1_id_key      id    ASC
 t1_pkey        id    DESC
 t1_pkey        id2   N/A
 t1_pkey        name  N/A
-t1_id_key      id    ASC
-t1_id_id2_key  id    ASC
-t1_id_id2_key  id2   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id) USING HASH WITH (bucket_count=10)
@@ -1251,19 +1252,19 @@ alter table t1 alter primary key using columns(id) USING HASH WITH (bucket_count
 # Row ID isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
 query TTT
-select index_name,column_name,direction from [show indexes from t1];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t1] ORDER BY 1,2,3
 ----
+t1_id_id2_key  crdb_internal_id_shard_10  ASC
+t1_id_id2_key  id                         ASC
+t1_id_id2_key  id2                        ASC
+t1_id_key      crdb_internal_id_shard_10  ASC
+t1_id_key      id                         ASC
+t1_id_key1     crdb_internal_id_shard_10  ASC
+t1_id_key1     id                         DESC
 t1_pkey        crdb_internal_id_shard_10  ASC
 t1_pkey        id                         ASC
 t1_pkey        id2                        N/A
 t1_pkey        name                       N/A
-t1_id_key1     id                         DESC
-t1_id_key1     crdb_internal_id_shard_10  ASC
-t1_id_key      id                         ASC
-t1_id_key      crdb_internal_id_shard_10  ASC
-t1_id_id2_key  id                         ASC
-t1_id_id2_key  id2                        ASC
-t1_id_id2_key  crdb_internal_id_shard_10  ASC
 
 statement ok
 CREATE TABLE table_with_virtual_cols (
@@ -1555,7 +1556,7 @@ CREATE TABLE public.t_test_param (
    FAMILY fam_0_a_b (a, b)
 )
 
-subtest pkey-comment-drop
+subtest pkey-comment-carry-over
 
 # Create a table with a primary key and add a comment on it.
 statement ok
@@ -1572,7 +1573,6 @@ statement ok
 COMMENT ON INDEX i2 IS 'idx2';
 COMMENT ON CONSTRAINT i2 ON pkey_comment IS 'idx3';
 
-
 # Comment should exist inside the create statement, so filter it out
 query T
 SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
@@ -1582,18 +1582,18 @@ COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 
-
-# Altering the primary key should clean up the comment.
+# Altering the primary key should carry over the comment.
 statement ok
 ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 
-
 # No comment exists inside the CREATE statement
+skipif config local-legacy-schema-changer
 query T
 SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 ----
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
-COMMENT ON CONSTRAINT pkey_comment_a_b_key ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 
 subtest test-index-deduplication
@@ -1635,14 +1635,14 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
 # even if they both have columns (a, b) in the sense that one enforces uniqueness
 # on only (a) but the other on (a, b).
 query TTTB
-SELECT index_name, column_name, direction, storing FROM [SHOW INDEXES FROM t]
+SELECT index_name, column_name, direction, storing FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3,4;
 ----
-t_pkey     b  ASC  false
-t_pkey     a  N/A  true
 t_a_b_key  a  ASC  false
 t_a_b_key  b  ASC  false
 t_a_key    a  ASC  false
 t_a_key    b  ASC  true
+t_pkey     a  N/A  true
+t_pkey     b  ASC  false
 
 # The following regression test makes sure that when the new PK columns
 # is a (strict) subset of the old PK columns, all existing secondary indexes
@@ -1669,12 +1669,12 @@ statement ok
 ALTER TABLE t DROP COLUMN b
 
 query TTT
-select index_name,column_name,direction from [show indexes from t];
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3
 ----
 t_pkey    a  ASC
 t_pkey    c  N/A
-uniq_idx  c  ASC
 uniq_idx  a  ASC
+uniq_idx  c  ASC
 
 # Alter primary key on a hash-sharded primary key to be non-hash-sharded.
 # This had unexpectedly caused all unique indexes to be dropped silently on v21.2.
@@ -1690,14 +1690,14 @@ CREATE TABLE t (
 
 # Assert that the primary key is hash-sharded and the unique index is created.
 query TTT
-SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3
 ----
-t_pkey      crdb_internal_i_shard_7  ASC
-t_pkey      i                        ASC
-t_pkey      j                        N/A
-t_j_key     j                        ASC
-t_j_key     crdb_internal_i_shard_7  ASC
-t_j_key     i                        ASC
+t_j_key  crdb_internal_i_shard_7  ASC
+t_j_key  i                        ASC
+t_j_key  j                        ASC
+t_pkey   crdb_internal_i_shard_7  ASC
+t_pkey   i                        ASC
+t_pkey   j                        N/A
 
 # Alter the primary key to be no longer hash-sharded.
 statement ok
@@ -1706,12 +1706,12 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i)
 # Now assert that the primary key has been modified to non-hash-sharded,
 # and the unique index still exists.
 query TTT
-SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3
 ----
-t_pkey      i            ASC
-t_pkey      j            N/A
-t_j_key     j            ASC
-t_j_key     i            ASC
+t_j_key  i  ASC
+t_j_key  j  ASC
+t_pkey   i  ASC
+t_pkey   j  N/A
 
 
 subtest alter_primary_key_with_more_than_one_column_families
