@@ -1475,9 +1475,6 @@ func NewTableDesc(
 
 	// Create the TTL automatic column (crdb_internal_expiration) if one does not already exist.
 	if ttl := desc.GetRowLevelTTL(); ttl != nil && ttl.HasDurationExpr() {
-		if err := checkTTLEnabledForCluster(ctx, st); err != nil {
-			return nil, err
-		}
 		hasRowLevelTTLColumn := false
 		for _, def := range n.Defs {
 			switch def := def.(type) {
@@ -2420,16 +2417,6 @@ func newRowLevelTTLScheduledJob(
 		jobspb.ExecutionArguments{Args: any},
 	)
 	return sj, nil
-}
-
-func checkTTLEnabledForCluster(ctx context.Context, st *cluster.Settings) error {
-	if !st.Version.IsActive(ctx, clusterversion.RowLevelTTL) {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"row level TTL is only available once the cluster is fully upgraded",
-		)
-	}
-	return nil
 }
 
 func checkAutoStatsTableSettingsEnabledForCluster(ctx context.Context, st *cluster.Settings) error {
