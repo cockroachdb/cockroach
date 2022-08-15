@@ -329,7 +329,7 @@ func (s *EventsServer) SendEvent(
 	s.buf.mu.Lock()
 	defer s.buf.mu.Unlock()
 	if err := s.buf.maybeDropEventsForSizeLocked(ctx, newEventSize, s.maxBufferSizeBytes); err != nil {
-		log.Warningf(ctx, "%s", err.Error())
+		log.Warningf(ctx, "%v", err)
 		return
 	}
 
@@ -449,7 +449,7 @@ func (sub *subscriber) send(ctx context.Context, events []otel_logs_pb.ScopeLogs
 		// TODO(andrei): Figure out how to tolerate errors; we should put the events
 		// back in the buffer (or not take them out of the buffer in the first
 		// place) in hope that a new subscriber comes along.
-		log.Infof(ctx, "error sending to Observability Service %s: %s", sub.identity, err)
+		log.Infof(ctx, "error sending to Observability Service %s: %v", sub.identity, err)
 		sub.close(err)
 		return err
 	}

@@ -106,6 +106,11 @@ func TestTelemetryLogging(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
 			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
 				getTimeNow:         st.TimeNow,
 				getContentionNanos: sqm.ContentionNanos,
