@@ -309,11 +309,6 @@ func TestUnsplitRanges(t *testing.T) {
 		if _, err := sqlDB.Exec(tc.query); err != nil {
 			t.Fatal(err)
 		}
-		// Push a new zone config for a few tables with TTL=0 so the data
-		// is deleted immediately.
-		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
-			t.Fatal(err)
-		}
 
 		// Check GC worked!
 		testutils.SucceedsSoon(t, func() error {
