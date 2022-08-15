@@ -13450,7 +13450,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 
 	// Round trip another proposal through the replica to ensure that previously
 	// committed entries have been applied.
-	_, _, pErr = tc.repl.sendWithoutRangeID(ctx, &ba)
+	_, _, pErr = tc.repl.sendImpl(ctx, &ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
