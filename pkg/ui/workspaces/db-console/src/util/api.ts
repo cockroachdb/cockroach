@@ -472,7 +472,7 @@ export function getEvents(
   req: EventsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<EventsResponseMessage> {
-  const queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
+  const queryString = propsToQueryString(_.pick(req, ["type"]));
   return timeoutFetch(
     serverpb.EventsResponse,
     `${API_PREFIX}/events?unredacted_events=true&${queryString}`,

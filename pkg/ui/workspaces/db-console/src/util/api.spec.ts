@@ -326,7 +326,6 @@ describe("rest api", function () {
 
     it("correctly requests filtered events", function () {
       const req = new protos.cockroach.server.serverpb.EventsRequest({
-        target_id: Long.fromNumber(1),
         type: "test type",
       });
 
@@ -336,16 +335,12 @@ describe("rest api", function () {
         method: "GET",
         response: (url: string, requestObj: RequestInit) => {
           const params = url.split("?")[1].split("&");
-          expect(params.length).toBe(3);
+          expect(params.length).toBe(2);
           _.each(params, param => {
             let [k, v] = param.split("=");
             k = decodeURIComponent(k);
             v = decodeURIComponent(v);
             switch (k) {
-              case "target_id":
-                expect(req.target_id.toString()).toEqual(v);
-                break;
-
               case "type":
                 expect(req.type).toEqual(v);
                 break;

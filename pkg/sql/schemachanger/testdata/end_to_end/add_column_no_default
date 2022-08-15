@@ -65,7 +65,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+write *eventpb.AlterTable to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -188,7 +188,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
-write *eventpb.FinishSchemaChange to event log for descriptor 106
+write *eventpb.FinishSchemaChange to event log
 adding table for stats refresh: 106
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
