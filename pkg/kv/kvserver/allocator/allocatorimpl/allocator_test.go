@@ -559,6 +559,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 		ctx,
 		simpleSpanConfig,
 		nil /* existingVoters */, nil, /* existingNonVoters */
+		Dead,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
@@ -579,6 +580,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 		ctx,
 		simpleSpanConfig,
 		nil /* existingVoters */, nil, /* existingNonVoters */
+		Dead,
 	)
 	if !roachpb.Empty(result) {
 		t.Errorf("expected nil result: %+v", result)
@@ -594,64 +596,84 @@ func TestAllocatorReadAmpCheck(t *testing.T) {
 
 	ctx := context.Background()
 	type testCase struct {
-		name              string
-		stores            []*roachpb.StoreDescriptor
-		conf              roachpb.SpanConfig
-		expectedAddTarget roachpb.StoreID
-		enforcement       StoreHealthEnforcement
+		name   string
+		stores []*roachpb.StoreDescriptor
+		conf   roachpb.SpanConfig
+		// The expected store to add when replicas are alive. The allocator should
+		// pick one of the best stores, with low range count.
+		expectedTargetIfAlive roachpb.StoreID
+		// The expected store to add when a replica is dead or decommissioning. The
+		// allocator should pick a store that is good enough, ignoring the range
+		// count.
+		expectedTargetIfDead roachpb.StoreID
+		enforcement          StoreHealthEnforcement
 	}
 	tests := []testCase{
 		{
-			name: "ignore read amp on allocation when StoreHealthNoAction enforcement",
+			name:   "ignore read amp on allocation when StoreHealthNoAction enforcement",
+			stores: allStoresHighReadAmp,
+			conf:   emptySpanConfig(),
 			// NB: All stores have high read amp, this should be ignored and
 			// allocate to the store with the lowest range count.
-			stores:            allStoresHighReadAmp,
-			conf:              emptySpanConfig(),
-			expectedAddTarget: roachpb.StoreID(3),
-			enforcement:       StoreHealthNoAction,
+			expectedTargetIfAlive: roachpb.StoreID(3),
+			// Recovery of a dead node can pick any valid store, not necessarily the
+			// one with the lowest range count.
+			expectedTargetIfDead: roachpb.StoreID(2),
+			enforcement:          StoreHealthNoAction,
 		},
 		{
 			name: "ignore read amp on allocation when storeHealthLogOnly enforcement",
 			// NB: All stores have high read amp, this should be ignored and
 			// allocate to the store with the lowest range count.
-			stores:            allStoresHighReadAmp,
-			conf:              emptySpanConfig(),
-			expectedAddTarget: roachpb.StoreID(3),
-			enforcement:       StoreHealthLogOnly,
+			stores:                allStoresHighReadAmp,
+			conf:                  emptySpanConfig(),
+			expectedTargetIfAlive: roachpb.StoreID(3),
+			// Recovery of a dead node can pick any valid store, not necessarily the
+			// one with the lowest range count.
+			expectedTargetIfDead: roachpb.StoreID(2),
+			enforcement:          StoreHealthLogOnly,
 		},
 		{
 			name: "ignore read amp on allocation when StoreHealthBlockRebalanceTo enforcement",
 			// NB: All stores have high read amp, this should be ignored and
 			// allocate to the store with the lowest range count.
-			stores:            allStoresHighReadAmp,
-			conf:              emptySpanConfig(),
-			expectedAddTarget: roachpb.StoreID(3),
-			enforcement:       StoreHealthBlockRebalanceTo,
+			stores:                allStoresHighReadAmp,
+			conf:                  emptySpanConfig(),
+			expectedTargetIfAlive: roachpb.StoreID(3),
+			// Recovery of a dead node can pick any valid store, not necessarily the
+			// one with the lowest range count.
+			expectedTargetIfDead: roachpb.StoreID(2),
+			enforcement:          StoreHealthBlockRebalanceTo,
 		},
 		{
 			name: "don't allocate to stores when all have high read amp and StoreHealthBlockAll",
 			// NB: All stores have high read amp (limit + 1), none are above the watermark, select the lowest range count.
-			stores:            allStoresHighReadAmp,
-			conf:              emptySpanConfig(),
-			expectedAddTarget: roachpb.StoreID(3),
-			enforcement:       StoreHealthBlockAll,
+			stores:                allStoresHighReadAmp,
+			conf:                  emptySpanConfig(),
+			expectedTargetIfAlive: roachpb.StoreID(3),
+			// Recovery of a dead node can pick any valid store, not necessarily the
+			// one with the lowest range count.
+			expectedTargetIfDead: roachpb.StoreID(2),
+			enforcement:          StoreHealthBlockAll,
 		},
 		{
 			name: "allocate to store below the mean when all have high read amp and StoreHealthBlockAll",
 			// NB: All stores have high read amp, however store 1 is below the watermark mean read amp.
-			stores:            allStoresHighReadAmpSkewed,
-			conf:              emptySpanConfig(),
-			expectedAddTarget: roachpb.StoreID(1),
-			enforcement:       StoreHealthBlockAll,
+			stores:                allStoresHighReadAmpSkewed,
+			conf:                  emptySpanConfig(),
+			expectedTargetIfAlive: roachpb.StoreID(1),
+			expectedTargetIfDead:  roachpb.StoreID(1),
+			enforcement:           StoreHealthBlockAll,
 		},
 		{
 			name: "allocate to lowest range count store without high read amp when StoreHealthBlockAll enforcement",
 			// NB: Store 1, 2 and 3 have high read amp and are above the watermark, the lowest range count (4)
 			// should be selected.
-			stores:            threeStoresHighReadAmpAscRangeCount,
-			conf:              emptySpanConfig(),
-			expectedAddTarget: roachpb.StoreID(4),
-			enforcement:       StoreHealthBlockAll,
+			stores:                threeStoresHighReadAmpAscRangeCount,
+			conf:                  emptySpanConfig(),
+			expectedTargetIfAlive: roachpb.StoreID(4),
+			expectedTargetIfDead:  roachpb.StoreID(4),
+			enforcement:           StoreHealthBlockAll,
 		},
 	}
 
@@ -661,22 +683,45 @@ func TestAllocatorReadAmpCheck(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
-			stopper, g, _, a, _ := CreateTestAllocator(ctx, 10, false /* deterministic */)
+			stopper, g, _, a, _ := CreateTestAllocator(ctx, 10, true /* deterministic */)
 			defer stopper.Stop(ctx)
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
 
 			// Enable read disk health checking in candidate exclusion.
 			l0SublevelsThresholdEnforce.Override(ctx, &a.StorePool.St.SV, int64(test.enforcement))
+
+			// Allocate a voter where all replicas are alive (e.g. up-replicating a valid range).
 			add, _, err := a.AllocateVoter(
 				ctx,
 				test.conf,
 				nil,
 				nil,
+				Alive,
 			)
 			require.NoError(t, err)
 			require.Truef(t,
-				chk(add, test.expectedAddTarget),
+				chk(add, test.expectedTargetIfAlive),
+				"the addition target %+v from AllocateVoter doesn't match expectation",
+				add)
+
+			// Allocate a voter where we have a dead (or decommissioning) replica.
+			add, _, err = a.AllocateVoter(
+				ctx,
+				test.conf,
+				nil,
+				nil,
+				// Dead and Decommissioning should behave the same here, use either.
+				func() ReplicaStatus {
+					if i%2 == 0 {
+						return Dead
+					}
+					return Decommissioning
+				}(),
+			)
+			require.NoError(t, err)
+			require.Truef(t,
+				chk(add, test.expectedTargetIfDead),
 				"the addition target %+v from AllocateVoter doesn't match expectation",
 				add)
 		})
@@ -695,6 +740,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		ctx,
 		multiDCConfigSSD,
 		nil /* existingVoters */, nil, /* existingNonVoters */
+		Dead,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
@@ -706,6 +752,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			NodeID:  result1.NodeID,
 			StoreID: result1.StoreID,
 		}}, nil, /* existingNonVoters */
+		Dead,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
@@ -729,6 +776,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 				StoreID: result2.StoreID,
 			},
 		}, nil, /* existingNonVoters */
+		Dead,
 	)
 	if err == nil {
 		t.Errorf("expected error on allocation without available stores: %+v", result3)
@@ -762,6 +810,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 				StoreID: 2,
 			},
 		}, nil, /* existingNonVoters */
+		Dead,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
@@ -865,6 +914,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 		{
 			result, _, err := a.AllocateVoter(
 				ctx, emptySpanConfig(), tc.existing, nil,
+				Dead,
 			)
 			if e, a := tc.expectTargetAllocate, !roachpb.Empty(result); e != a {
 				t.Errorf(
@@ -2920,7 +2970,7 @@ func TestAllocatorConstraintsAndVoterConstraints(t *testing.T) {
 			// Allocate the voting replica first, before the non-voter. This is the
 			// order in which we'd expect the allocator to repair a given range. See
 			// TestAllocatorComputeAction.
-			voterTarget, _, err := a.AllocateVoter(ctx, test.conf, test.existingVoters, test.existingNonVoters)
+			voterTarget, _, err := a.AllocateVoter(ctx, test.conf, test.existingVoters, test.existingNonVoters, Dead)
 			if test.shouldVoterAllocFail {
 				require.Errorf(t, err, "expected voter allocation to fail; got %v as a valid target instead", voterTarget)
 			} else {
@@ -2929,7 +2979,7 @@ func TestAllocatorConstraintsAndVoterConstraints(t *testing.T) {
 				test.existingVoters = append(test.existingVoters, replicas(voterTarget.StoreID)...)
 			}
 
-			nonVoterTarget, _, err := a.AllocateNonVoter(ctx, test.conf, test.existingVoters, test.existingNonVoters)
+			nonVoterTarget, _, err := a.AllocateNonVoter(ctx, test.conf, test.existingVoters, test.existingNonVoters, Dead)
 			if test.shouldNonVoterAllocFail {
 				require.Errorf(t, err, "expected non-voter allocation to fail; got %v as a valid target instead", nonVoterTarget)
 			} else {
@@ -3003,7 +3053,7 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 				StoreID: storeID,
 			}
 		}
-		targetStore, details, err := a.AllocateVoter(ctx, emptySpanConfig(), existingRepls, nil)
+		targetStore, details, err := a.AllocateVoter(ctx, emptySpanConfig(), existingRepls, nil, Dead)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3469,7 +3519,7 @@ func TestAllocatorNonVoterAllocationExcludesVoterNodes(t *testing.T) {
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
 
-			result, _, err := a.AllocateNonVoter(ctx, test.conf, test.existingVoters, test.existingNonVoters)
+			result, _, err := a.AllocateNonVoter(ctx, test.conf, test.existingVoters, test.existingNonVoters, Dead)
 			if test.shouldFail {
 				require.Error(t, err)
 				require.Regexp(t, test.expError, err)
