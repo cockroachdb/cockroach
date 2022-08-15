@@ -72,13 +72,6 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestLogic_row_level_ttl_mixed_21_2_22_1(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "row_level_ttl_mixed_21.2_22.1")
-}
-
 func TestLogic_super_regions_mixed_version(
 	t *testing.T,
 ) {
