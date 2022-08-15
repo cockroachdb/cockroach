@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -394,6 +396,29 @@ var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+var eventLogSyncWritesToSystemTableEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"server.eventlog.sync_writes.enabled",
+	"if set, writes to system.eventlog are synchronous in the issuing transaction",
+	true,
+)
+
+var eventLogAsyncWritesMaxAttempts = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.eventlog.async_writes.max_attempts",
+	"the maximum number of attempts to write an eventlog entry",
+	10,
+	settings.PositiveInt,
+)
+
+var eventLogAsyncWritesAttemptTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"server.eventlog.async_writes.attempt_timeout",
+	"the maximum amount of time to wait on each eventlog write attempt",
+	5*time.Second,
+	settings.NonNegativeDuration,
+)
+
 // LogEventDestination indicates for InsertEventRecords where the
 // event should be directed to.
 type LogEventDestination int
@@ -425,20 +450,19 @@ const (
 // This converts to a call to insertEventRecords() with just 1 entry.
 func InsertEventRecords(
 	ctx context.Context, execCfg *ExecutorConfig, dst LogEventDestination, info ...logpb.EventPayload,
-) error {
+) {
 	if len(info) == 0 {
-		return nil
+		return
 	}
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
-	return execCfg.DB.Txn(ctx,
-		func(ctx context.Context, txn *kv.Txn) error {
-			return insertEventRecords(ctx, execCfg, txn,
-				1, /* depth: use this function */
-				eventLogOptions{dst: dst},
-				info...)
-		})
+	//
+	// NB: insertEventRecords never returns an error when provided a nil txn.
+	_ = insertEventRecords(ctx, execCfg, nil, /* txn */
+		1, /* depth: use this function */
+		eventLogOptions{dst: dst},
+		info...)
 }
 
 // insertEventRecords inserts one or more event into the event log as
@@ -448,6 +472,13 @@ func InsertEventRecords(
 // event payload and all the other per-payload specific fields. This
 // function only takes care of populating the EventType field based on
 // the run-time type of the event payload.
+//
+// If the txn field is non-nil and the cluster setting
+// server.eventlog.sync_writes.enabled is set, the write is performed
+// on the given txn object. Otherwise, an asynchronous task is spawned
+// to do the write.
+// If txn is nil, the event is written asynchronously.
+// In this case, no error is returned.
 func insertEventRecords(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
@@ -500,9 +531,10 @@ func insertEventRecords(
 		return nil
 	}
 
-	// When logging to the system table, ensure that the external
-	// logging only sees the event when the transaction commits.
-	if opts.dst.hasFlag(LogExternally) {
+	// When logging to the system table and there is a txn open already,
+	// ensure that the external logging only sees the event when the
+	// transaction commits.
+	if txn != nil && opts.dst.hasFlag(LogExternally) {
 		txn.AddCommitTrigger(func(ctx context.Context) {
 			for i := range entries {
 				log.StructuredEvent(ctx, entries[i])
@@ -510,6 +542,62 @@ func insertEventRecords(
 		})
 	}
 
+	// Are we doing synchronous writes?
+	if txn != nil && eventLogSyncWritesToSystemTableEnabled.Get(&execCfg.Settings.SV) {
+		// Yes, do it now.
+		return synchronousWriteToSystemEventsTable(ctx, execCfg, txn, entries)
+	}
+	// No: do them async.
+	txn.AddCommitTrigger(func(ctx context.Context) {
+		asyncWriteToSystemEventsTable(ctx, execCfg, entries)
+	})
+	return nil
+}
+
+func asyncWriteToSystemEventsTable(
+	ctx context.Context, execCfg *ExecutorConfig, entries []logpb.EventPayload,
+) {
+	timeout := eventLogAsyncWritesAttemptTimeout.Get(&execCfg.Settings.SV)
+	maxAttempts := eventLogAsyncWritesMaxAttempts.Get(&execCfg.Settings.SV)
+	stopper := execCfg.RPCContext.Stopper
+	return stopper.RunAsyncTask(
+		context.Background(), "record-events", func(bgCtx context.Context) {
+			ctx, span := execCfg.AmbientCtx.AnnotateCtxWithSpan(bgCtx, "record-events")
+			defer span.Finish()
+
+			// Stop writing the event when the server shuts down.
+			stopCtx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
+			defer stopCancel()
+
+			// We use a retry loop in case there are transient
+			// non-retriable errors on the cluster.
+			// (retriable errors are already processed automatically
+			// by db.Txn)
+			retryOpts := base.DefaultRetryOptions()
+			retryOpts.Closer = stopCtx.Done()
+			retryOpts.MaxRetries = int(maxAttempts)
+			for r := retry.Start(retryOpts); r.Next(); {
+				func() {
+					// Don't try too long to write if the system table is unavailable.
+					timeoutCtx, timeoutCancel := context.WithTimeout(stopCtx, timeout)
+					defer timeoutCancel()
+
+					if err := execCfg.DB.Txn(timeoutCtx,
+						func(ctx context.Context, txn *kv.Txn) error {
+							return synchronousWriteToSystemEventsTable(ctx, execCfg, txn, entries)
+						}); err != nil {
+						for _, entry := range entries {
+							log.Ops.Warningf(ctx, "unable to save log entry to system.eventlog: %v\n%v", err, entry)
+						}
+					}
+				}()
+			}
+		})
+}
+
+func synchronousWriteToSystemEventsTable(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, entries []logpb.EventPayload,
+) error {
 	// The function below this point is specialized to write to the
 	// system table.
 
@@ -570,7 +658,7 @@ VALUES($1, $2, $3, $4, 0)`
 		return err
 	}
 	if rows != len(entries) {
-		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, len(entries))
+		return errors.AssertionFailedf("%d rows affected by log insertion; expected %d rows affected", rows, len(entries))
 	}
 	return nil
 }
