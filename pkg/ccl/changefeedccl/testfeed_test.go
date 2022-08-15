@@ -1087,13 +1087,20 @@ func newTeeGroup() *teeGroup {
 }
 
 // tee reads incoming messages from input channel and sends them out to one or more output channels.
-func (tg *teeGroup) tee(in <-chan *sarama.ProducerMessage, out ...chan<- *sarama.ProducerMessage) {
+func (tg *teeGroup) tee(
+	interceptor func(*sarama.ProducerMessage) bool,
+	in <-chan *sarama.ProducerMessage,
+	out ...chan<- *sarama.ProducerMessage,
+) {
 	tg.g.Go(func() error {
 		for {
 			select {
 			case <-tg.done:
 				return nil
 			case m := <-in:
+				if interceptor != nil && interceptor(m) {
+					continue
+				}
 				for i := range out {
 					select {
 					case <-tg.done:
@@ -1136,12 +1143,19 @@ func (p *ignoreCloseProducer) Close() error {
 	return nil
 }
 
+// sinkKnobs override behavior for the simulated sink.
+type sinkKnobs struct {
+	allMessagesAreTooBig bool
+	batchesAreTooBig     bool
+}
+
 // fakeKafkaSink is a sink that arranges for fake kafka client and producer
 // to be used.
 type fakeKafkaSink struct {
 	Sink
 	tg     *teeGroup
 	feedCh chan *sarama.ProducerMessage
+	knobs  *sinkKnobs
 }
 
 var _ Sink = (*fakeKafkaSink)(nil)
@@ -1149,19 +1163,28 @@ var _ Sink = (*fakeKafkaSink)(nil)
 // Dial implements Sink interface
 func (s *fakeKafkaSink) Dial() error {
 	kafka := s.Sink.(*kafkaSink)
-	kafka.client = &fakeKafkaClient{}
-	// The producer we give to kafka sink ignores close call.
-	// This is because normally, kafka sinks owns the producer and so it closes it.
-	// But in this case, if we let the sink close this producer, the test will panic
-	// because we will attempt to send acknowledgements on a closed channel.
-	producer := &ignoreCloseProducer{newAsyncProducerMock(unbuffered)}
+	kafka.knobs.OverrideClientInit = func(config *sarama.Config) error {
+		kafka.clientMu.client = &fakeKafkaClient{}
+		// The producer we give to kafka sink ignores close call.
+		// This is because normally, kafka sinks owns the producer and so it closes it.
+		// But in this case, if we let the sink close this producer, the test will panic
+		// because we will attempt to send acknowledgements on a closed channel.
+		producer := &ignoreCloseProducer{newAsyncProducerMock(100)}
 
-	// TODO(yevgeniy): Support error injection either by acknowledging on the "errors"
-	//  channel, or by injecting error message into sarama.ProducerMessage.Metadata.
-	s.tg.tee(producer.inputCh, s.feedCh, producer.successesCh)
-	kafka.producer = producer
-	kafka.start()
-	return nil
+		interceptor := func(m *sarama.ProducerMessage) bool {
+			rejectBatch := config.Producer.Flush.MaxMessages != 1 && s.knobs.batchesAreTooBig
+			if rejectBatch || s.knobs.allMessagesAreTooBig {
+				producer.errorsCh <- &sarama.ProducerError{Msg: m, Err: sarama.ErrMessageSizeTooLarge}
+				return true
+			}
+			return false
+		}
+
+		s.tg.tee(interceptor, producer.inputCh, s.feedCh, producer.successesCh)
+		kafka.clientMu.producer = producer
+		return nil
+	}
+	return kafka.Dial()
 }
 
 func (s *fakeKafkaSink) Topics() []string {
@@ -1173,6 +1196,7 @@ func (s *fakeKafkaSink) Topics() []string {
 
 type kafkaFeedFactory struct {
 	enterpriseFeedFactory
+	knobs *sinkKnobs
 }
 
 var _ cdctest.TestFeedFactory = (*kafkaFeedFactory)(nil)
@@ -1182,6 +1206,7 @@ func makeKafkaFeedFactory(
 	srv serverutils.TestTenantInterface, db *gosql.DB,
 ) cdctest.TestFeedFactory {
 	return &kafkaFeedFactory{
+		knobs: &sinkKnobs{},
 		enterpriseFeedFactory: enterpriseFeedFactory{
 			s:  srv,
 			db: db,
@@ -1269,6 +1294,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 			Sink:   s,
 			tg:     tg,
 			feedCh: feedCh,
+			knobs:  k.knobs,
 		}
 	}
 
