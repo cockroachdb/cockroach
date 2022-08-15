@@ -49,9 +49,7 @@ import (
 //  for "special" statements that
 //  have structured logging, e.g. CREATE, DROP etc
 //    |
-//  (produces pair(s) of descID (optional) and eventpb.EventPayload)
-//    |
-//  (pair(s) optionally packaged as an eventLogEntry{})
+//  (produces pair(s) of descID (optional) and logpb.EventPayload)
 //    |
 //    v
 //  logEvent(descID, payload) / logEvents(eventEntries...)
@@ -124,13 +122,6 @@ import (
 //
 //
 
-// eventLogEntry represents a SQL-level event to be sent to logging
-// outputs(s).
-type eventLogEntry struct {
-	// event is the main event payload.
-	event logpb.EventPayload
-}
-
 // logEvent emits a cluster event in the context of a regular SQL
 // statement.
 func (p *planner) logEvent(ctx context.Context, descID descpb.ID, event logpb.EventPayload) error {
@@ -140,14 +131,14 @@ func (p *planner) logEvent(ctx context.Context, descID descpb.ID, event logpb.Ev
 	return p.logEventsWithOptions(ctx,
 		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{event: event})
+		event)
 }
 
 // logEvents is like logEvent, except that it can write multiple
 // events simultaneously. This is advantageous for SQL statements
 // that produce multiple events, e.g. GRANT, as they will
 // processed using only one write batch (and thus lower latency).
-func (p *planner) logEvents(ctx context.Context, entries ...eventLogEntry) error {
+func (p *planner) logEvents(ctx context.Context, entries ...logpb.EventPayload) error {
 	return p.logEventsWithOptions(ctx,
 		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
@@ -215,7 +206,7 @@ func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonS
 // If opts.dst does not include LogToSystemTable, this function is
 // guaranteed to not return an error.
 func (p *planner) logEventsWithOptions(
-	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
+	ctx context.Context, depth int, opts eventLogOptions, entries ...logpb.EventPayload,
 ) error {
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
@@ -256,7 +247,7 @@ func logEventInternalForSchemaChanges(
 		txn,
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{event: event},
+		event,
 	)
 }
 
@@ -278,11 +269,10 @@ func logEventInternalForSQLStatements(
 	depth int,
 	opts eventLogOptions,
 	commonSQLEventDetails eventpb.CommonSQLEventDetails,
-	entries ...eventLogEntry,
+	entries ...logpb.EventPayload,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
-	injectCommonFields := func(entry eventLogEntry) error {
-		event := entry.event
+	injectCommonFields := func(event logpb.EventPayload) error {
 		event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
@@ -327,9 +317,9 @@ func logEventInternalForSQLStatements(
 		ctx,
 		execCfg.InternalExecutor, execCfg.EventsExporter,
 		txn,
-		1+depth,    /* depth */
-		opts,       /* eventLogOptions */
-		entries..., /* ...eventLogEntry */
+		1+depth, /* depth */
+		opts,    /* eventLogOptions */
+		entries...,
 	)
 }
 
@@ -356,14 +346,13 @@ func NewSchemaChangerEventLogger(
 func (l schemaChangerEventLogger) LogEvent(
 	ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 ) error {
-	entry := eventLogEntry{event: event}
 	return logEventInternalForSQLStatements(ctx,
 		l.execCfg,
 		l.txn,
 		l.depth,
 		eventLogOptions{dst: LogEverywhere},
 		details,
-		entry)
+		event)
 }
 
 func (l schemaChangerEventLogger) LogEventForSchemaChange(
@@ -380,7 +369,7 @@ func (l schemaChangerEventLogger) LogEventForSchemaChange(
 		l.txn,
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{event: event},
+		event,
 	)
 }
 
@@ -420,7 +409,7 @@ func LogEventForJobs(
 		txn,
 		1, /* depth: use this function for vmodule filtering */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{event: event},
+		event,
 	)
 }
 
@@ -471,17 +460,13 @@ func InsertEventRecords(
 	if len(info) == 0 {
 		return nil
 	}
-	entries := make([]eventLogEntry, len(info))
-	for i, ev := range info {
-		entries[i].event = ev
-	}
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(ctx, ex, eventsExporter, txn,
 		1, /* depth: use this function */
 		eventLogOptions{dst: dst},
-		entries...)
+		info...)
 }
 
 // insertEventRecords inserts one or more event into the event log as
@@ -498,12 +483,12 @@ func insertEventRecords(
 	txn *kv.Txn,
 	depth int,
 	opts eventLogOptions,
-	entries ...eventLogEntry,
+	entries ...logpb.EventPayload,
 ) error {
 	// Finish populating the entries.
 	for i := range entries {
 		// Ensure the type field is populated.
-		event := entries[i].event
+		event := entries[i]
 		eventType := logpb.GetEventTypeName(event)
 		event.CommonDetails().EventType = eventType
 
@@ -526,7 +511,7 @@ func insertEventRecords(
 			// The VDepth() call ensures that we are matching the vmodule
 			// setting to where the depth is equal to 1 in the caller stack.
 			for i := range entries {
-				log.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i].event)
+				log.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
 			}
 		}
 	}
@@ -537,15 +522,14 @@ func insertEventRecords(
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {
 			for i := range entries {
-				log.StructuredEvent(ctx, entries[i].event)
+				log.StructuredEvent(ctx, entries[i])
 			}
 		}
 		// Not writing to system table: shortcut.
 		return nil
 	}
 
-	// Write to the system.eventlog table, to the event log, and to the Obs
-	// Service.
+	// Send to logs and the OpenTelemetry exporter.
 
 	reportingID := ex.s.cfg.NodeInfo.NodeID.SQLInstanceID()
 	const colsPerEvent = 5
@@ -567,8 +551,7 @@ VALUES($1, $2, $3, $4, 0)`
 		binary.LittleEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
 	}
 	for i := 0; i < len(entries); i++ {
-		entry := entries[i]
-		event := entry.event
+		event := entries[i]
 
 		infoBytes := redact.RedactableBytes("{")
 		_, infoBytes = event.AppendJSONFields(false /* printComma */, infoBytes)
@@ -602,7 +585,7 @@ VALUES($1, $2, $3, $4, 0)`
 	if opts.dst.hasFlag(LogExternally) {
 		txn.AddCommitTrigger(func(ctx context.Context) {
 			for i := range entries {
-				log.StructuredEvent(ctx, entries[i].event)
+				log.StructuredEvent(ctx, entries[i])
 			}
 		})
 	}

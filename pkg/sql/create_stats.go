@@ -683,10 +683,8 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 				PlaceholderValues: []string{}, /* no placeholders known at this point */
 				DescriptorID:      uint32(details.Table.ID),
 			},
-			eventLogEntry{
-				event: &eventpb.CreateStatistics{
-					TableName: details.FQTableName,
-				},
+			&eventpb.CreateStatistics{
+				TableName: details.FQTableName,
 			},
 		)
 	})
