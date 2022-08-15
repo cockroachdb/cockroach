@@ -1623,7 +1623,7 @@ type StreamingTestingKnobs struct {
 
 	// BeforeClientSubscribe allows observation of parameters about to be passed
 	// to a streaming client
-	BeforeClientSubscribe func(token string, startTime hlc.Timestamp)
+	BeforeClientSubscribe func(addr string, token string, startTime hlc.Timestamp)
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

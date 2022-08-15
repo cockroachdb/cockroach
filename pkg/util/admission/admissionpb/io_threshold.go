@@ -31,8 +31,8 @@ import (
 // to compactions falling behind (though that may change if we increase the
 // max number of compactions). And we will need to incorporate overload due to
 // disk bandwidth bottleneck.
-func (iot IOThreshold) Score() (float64, bool) {
-	if iot == (IOThreshold{}) {
+func (iot *IOThreshold) Score() (float64, bool) {
+	if iot == nil {
 		return 0, false
 	}
 	f := math.Max(
@@ -43,8 +43,8 @@ func (iot IOThreshold) Score() (float64, bool) {
 }
 
 // SafeFormat implements redact.SafeFormatter.
-func (iot IOThreshold) SafeFormat(s interfaces.SafePrinter, _ rune) {
-	if iot == (IOThreshold{}) {
+func (iot *IOThreshold) SafeFormat(s interfaces.SafePrinter, _ rune) {
+	if iot == nil {
 		s.Printf("N/A")
 		return
 	}
@@ -55,6 +55,6 @@ func (iot IOThreshold) SafeFormat(s interfaces.SafePrinter, _ rune) {
 	}
 }
 
-func (iot IOThreshold) String() string {
+func (iot *IOThreshold) String() string {
 	return redact.StringWithoutMarkers(iot)
 }

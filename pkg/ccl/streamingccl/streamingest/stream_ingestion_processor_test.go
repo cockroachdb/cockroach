@@ -286,7 +286,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 
 		lastClientStart := make(map[string]hlc.Timestamp)
-		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(token string, clientStartTime hlc.Timestamp) {
+		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
 			lastClientStart[token] = clientStartTime
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,

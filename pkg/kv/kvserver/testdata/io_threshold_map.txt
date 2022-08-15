@@ -1,0 +1,6 @@
+# Note that the [L0-overload] triggers on a threshold of 1.0; IO overload
+# is different from being considered pausable. We generally want followers
+# to be paused before they hit IO overload.
+echo
+----
+s1: 0.700, s7: 0.900, s9: 1.100[L0-overload] [pausable-threshold=0.80]

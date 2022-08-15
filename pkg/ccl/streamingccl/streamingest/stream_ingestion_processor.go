@@ -328,7 +328,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(string(token), startTime)
+				streamingKnobs.BeforeClientSubscribe(addr, string(token), startTime)
 			}
 		}
 

@@ -932,10 +932,10 @@ type Store struct {
 	// liveness. It is updated periodically in raftTickLoop()
 	// and reactively in nodeIsLiveCallback() on liveness updates.
 	livenessMap atomic.Value
-	// ioOverloadedStores is analogous to livenessMap, but stores a
-	// map[StoreID]*IOThreshold. It is gossip-backed but is not updated
+	// ioThresholds is analogous to livenessMap, but stores the *IOThresholds for
+	// the stores in the cluster . It is gossip-backed but is not updated
 	// reactively, i.e. will refresh on each tick loop iteration only.
-	ioOverloadedStores overloadedStoresMap
+	ioThresholds *ioThresholds
 
 	// cachedCapacity caches information on store capacity to prevent
 	// expensive recomputations in case leases or replicas are rapidly
@@ -1177,13 +1177,16 @@ func NewStore(
 	if !cfg.Valid() {
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
+	iot := ioThresholds{}
+	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
-		ctSender: cfg.ClosedTimestampSender,
+		cfg:          cfg,
+		db:           cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:       eng,
+		nodeDesc:     nodeDesc,
+		metrics:      newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender:     cfg.ClosedTimestampSender,
+		ioThresholds: &iot,
 	}
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
 	if cfg.RPCContext != nil {

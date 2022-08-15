@@ -296,6 +296,26 @@ var queries = [...]benchQuery{
 		`,
 		args: []interface{}{1, 2, 3},
 	},
+
+	// Query that initializes column IDs as high as ~320.
+	{
+		name: "many-columns-and-indexes-c",
+		query: `
+			SELECT * FROM
+				k k1, k k2, k k3, k k4, k k5, k k6, k k7, k k8, k k9, k k10, k k11
+			WHERE
+				k1.x = $1 AND k2.y = $2 AND k3.z = $3 AND
+				k1.a = k2.a AND
+				k2.a = k3.a AND
+				k3.a = k4.a AND
+				k5.a = k6.a AND
+				k6.z = k7.z AND
+				k7.z = k8.z AND
+				k8.m = k9.m AND
+				k10.m = k11.m
+		`,
+		args: []interface{}{1, 2, 3},
+	},
 }
 
 func init() {
