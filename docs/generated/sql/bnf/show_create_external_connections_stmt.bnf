@@ -1,0 +1,3 @@
+show_create_external_connections_stmt ::=
+	'SHOW' 'CREATE' 'ALL' 'EXTERNAL' 'CONNECTIONS'
+	| 'SHOW' 'CREATE' 'EXTERNAL' 'CONNECTION' string_or_placeholder
