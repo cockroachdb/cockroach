@@ -1,0 +1,232 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import React, { useCallback, useState } from "react";
+import { Modal } from "../modal";
+import { Text, TextTypes } from "../text";
+import { InsightType } from "../insightsTable/insightsTable";
+import { Button } from "../button";
+import { executeIndexRecAction, IndexActionResponse } from "../api";
+import { createIndex, dropIndex, onlineSchemaChanges } from "../util";
+import { Anchor } from "../anchor";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+import styles from "./indexActionBtn.module.scss";
+
+const cx = classNames.bind(styles);
+
+interface idxRecProps {
+  actionQuery: string;
+  actionType: InsightType;
+  database: string;
+}
+
+const IdxRecAction = (props: idxRecProps): React.ReactElement => {
+  const [visible, setVisible] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [btnOkLabel, setBtnOkLabel] = useState("Apply");
+  const [error, setError] = useState("");
+  const query = addIdxName(props.actionQuery);
+  const onOkHandler = useCallback(() => {
+    setError("");
+    setBtnOkLabel("Applying");
+    setApplying(true);
+    executeIndexRecAction(query, props.database).then(
+      (r: IndexActionResponse) => {
+        setBtnOkLabel("Apply");
+        setApplying(false);
+        let foundError = false;
+        for (let i = 0; i < r.length; i++) {
+          if (r[i].status == "FAILED") {
+            foundError = true;
+            setError(r[i].error);
+            break;
+          }
+        }
+        if (!foundError) {
+          setVisible(false);
+        }
+      },
+    );
+  }, [props.database, query]);
+
+  const showModal = (): void => {
+    setError("");
+    setVisible(true);
+  };
+
+  const onCancelHandler = useCallback(() => setVisible(false), []);
+  let title = "Update index";
+  let btnLAbel = "Update Index";
+  let descriptionDocs = <></>;
+  switch (props.actionType) {
+    case "CREATE_INDEX":
+      title = "create a new index";
+      btnLAbel = "Create Index";
+      descriptionDocs = (
+        <>
+          a{" "}
+          <Anchor href={createIndex} target="_blank">
+            CREATE INDEX
+          </Anchor>
+        </>
+      );
+      break;
+    case "DROP_INDEX":
+      title = "drop the unused index";
+      btnLAbel = "Drop Index";
+      descriptionDocs = (
+        <>
+          a{" "}
+          <Anchor href={dropIndex} target="_blank">
+            DROP INDEX
+          </Anchor>
+        </>
+      );
+      break;
+    case "REPLACE_INDEX":
+      title = "replace the index";
+      btnLAbel = "Replace Index";
+      descriptionDocs = (
+        <>
+          {" "}
+          <Anchor href={createIndex} target="_blank">
+            CREATE INDEX
+          </Anchor>
+          {" and "}
+          <Anchor href={dropIndex} target="_blank">
+            DROP INDEX
+          </Anchor>
+        </>
+      );
+      break;
+  }
+
+  return (
+    <>
+      <Button onClick={showModal} type="secondary" size="small">
+        {btnLAbel}
+      </Button>
+      <Modal
+        visible={visible}
+        onOk={onOkHandler}
+        onCancel={onCancelHandler}
+        okText={btnOkLabel}
+        cancelText="Cancel"
+        title={`Do you want to ${title}?`}
+        okLoading={applying}
+      >
+        <Text>
+          This action will apply the single-statement index recommendation by
+          executing {descriptionDocs} statements. Schema changes consume
+          additional resources and can potentially negatively impact workload
+          responsiveness.{" "}
+          <Anchor href={onlineSchemaChanges} target="_blank">
+            Learn more
+          </Anchor>
+        </Text>
+        <Text textType={TextTypes.Code} className={"code-area"}>
+          {query}
+        </Text>
+        {error.length > 0 && (
+          <InlineAlert
+            intent="danger"
+            className={cx("alert-area")}
+            title={`Fail to execute recommendation. ${error}`}
+          />
+        )}
+      </Modal>
+    </>
+  );
+};
+
+function addIdxName(statement: string): string {
+  if (!statement.toUpperCase().includes("CREATE INDEX ON")) {
+    return statement;
+  }
+  let result = "";
+  const statements = statement.split(";");
+  for (let i = 0; i < statements.length; i++) {
+    if (statements[i].toUpperCase().startsWith("CREATE INDEX ON ")) {
+      result = `${result}${createIdxName(statements[i])};`;
+    } else if (statements[i].length != 0) {
+      result = `${result}${statements[i]};`;
+    }
+  }
+  return result;
+}
+
+// createIdxName creates an index name, roughly following
+// Postgres's conventions for naming anonymous indexes.
+// For example:
+//
+//   CREATE INDEX ON t (a)
+//   => t_a_rec_idx
+//
+//   CREATE INDEX ON t ((a + b), c, lower(d))
+//   => t_expr_c_expr1_rec_idx
+//
+// Adding an extra _rec to the name, so we can identify statistics on indexes
+// that were creating using this feature.
+export function createIdxName(statement: string): string {
+  let idxName = "";
+  let info = statement.toLowerCase().replace("create index on ", "");
+
+  idxName += info.substring(0, info.indexOf("(")).trim(); // Add the table name.
+  info = info.substring(info.indexOf("(") + 1);
+
+  let parenthesis = 1;
+  let i = 0;
+  while (parenthesis > 0 && i < info.length) {
+    if (info[i] == "(") {
+      parenthesis++;
+    }
+    if (info[i] == ")") {
+      parenthesis--;
+    }
+    i++;
+  }
+  info = info.substring(0, i - 1);
+
+  const variables = info.split(",");
+  let expressions = 0;
+  let value;
+  for (let i = 0; i < variables.length; i++) {
+    value = variables[i].trim();
+    if (isExpression(value)) {
+      idxName += "_expr";
+      if (expressions > 0) {
+        idxName += expressions;
+      }
+      expressions++;
+    } else {
+      idxName += "_" + value;
+    }
+  }
+
+  idxName += "_rec_idx";
+
+  return statement.replace(
+    "CREATE INDEX ON ",
+    `CREATE INDEX IF NOT EXISTS ${idxName} ON `,
+  );
+}
+
+function isExpression(value: string): boolean {
+  const expElements = ["(", "+", "-", "*", "/", "%"];
+  for (let i = 0; i < expElements.length; i++) {
+    if (value.includes(expElements[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export default IdxRecAction;
