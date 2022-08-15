@@ -836,9 +836,9 @@ func (cl candidateList) betterThan(c candidate) candidateList {
 	return cl
 }
 
-// selectGood randomly chooses a good candidate store from a sorted (by score
-// reversed) candidate list using the provided random generator.
-func (cl candidateList) selectGood(randGen allocatorRand) *candidate {
+// selectBest randomly chooses one of the best candidate stores from a sorted
+// (by score reversed) candidate list using the provided random generator.
+func (cl candidateList) selectBest(randGen allocatorRand) *candidate {
 	cl = cl.best()
 	if len(cl) == 0 {
 		return nil
@@ -1570,7 +1570,7 @@ func bestRebalanceTarget(
 		if len(option.candidates) == 0 {
 			continue
 		}
-		target := option.candidates.selectGood(randGen)
+		target := option.candidates.selectBest(randGen)
 		if target == nil {
 			continue
 		}
