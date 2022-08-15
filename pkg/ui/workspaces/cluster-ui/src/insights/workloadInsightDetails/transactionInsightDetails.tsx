@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React from "react";
+import React, { useContext } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { ArrowLeft } from "@cockroachlabs/icons";
@@ -44,6 +44,7 @@ import { WorkloadInsightsError } from "../workloadInsights/util";
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
+import { CockroachCloudContext } from "../../contexts";
 
 const tableCx = classNames.bind(insightTableStyles);
 
@@ -96,7 +97,8 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
         }
       })
       .toString();
-    const insightsColumns = makeInsightsColumns();
+    const isCockroachCloud = useContext(CockroachCloudContext);
+    const insightsColumns = makeInsightsColumns(isCockroachCloud);
     function insightsTableData(): InsightRecommendation[] {
       const recs = [];
       let rec: InsightRecommendation;
