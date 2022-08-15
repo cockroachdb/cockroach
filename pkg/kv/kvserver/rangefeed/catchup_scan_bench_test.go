@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
+func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numEvents int) {
 	eng, _ := setupData(context.Background(), b, emk, opts.dataOpts)
 	defer eng.Close()
 	startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
@@ -60,8 +60,17 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
 			if counter < 1 {
 				b.Fatalf("didn't emit any events!")
 			}
+			if numEvents == 0 {
+				// Preserve number of events so that caller can compare it between
+				// different invocations that it knows should not affect number of
+				// events.
+				numEvents = counter
+			}
+			// Number of events can't change between iterations.
+			require.Equal(b, numEvents, counter)
 		}()
 	}
+	return numEvents
 }
 
 func BenchmarkCatchUpScan(b *testing.B) {
@@ -141,11 +150,18 @@ func BenchmarkCatchUpScan(b *testing.B) {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 									do := do
 									do.numRangeKeys = numRangeKeys
-									runCatchUpBenchmark(b, setupMVCCPebble, benchOptions{
+									n := runCatchUpBenchmark(b, setupMVCCPebble, benchOptions{
 										dataOpts: do,
 										ts:       ts,
 										withDiff: withDiff,
 									})
+									// We shouldn't be seeing the range deletions returned in this
+									// benchmark since they are at timestamp 1 and we catch up at
+									// a timestamp >= 5 (which corresponds to tsExcludePercent ==
+									// 0). Note that the oldest key is always excluded, since the
+									// floor for wallTime is 5 and that's the oldest key's
+									// timestamp but the start timestamp is exclusive.
+									require.EqualValues(b, int64(numKeys)-wallTime/5, n)
 								})
 							}
 						})

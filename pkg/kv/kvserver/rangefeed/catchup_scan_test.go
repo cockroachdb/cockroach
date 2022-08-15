@@ -31,6 +31,13 @@ import (
 // https://github.com/cockroachdb/cockroach/issues/82715
 //
 // For now, see rangefeed_external_test.go for rudimentary range key tests.
+//
+// To invoke and compare on the numRangeKeys dimension:
+//
+//     go test ./pkg/kv/kvserver/rangefeed/ -run - -count 10 -bench BenchmarkCatchUpScan 2>&1 | tee bench.txt
+//     for flavor in numRangeKeys=0 numRangeKeys=1 numRangeKeys=100; do grep -E "${flavor}[^0-9]+" bench.txt | sed -E "s/${flavor}+/X/" > $flavor.txt; done
+//     benchstat numRangeKeys\={0,1}.txt
+//     benchstat numRangeKeys\={0,100}.txt
 func TestCatchupScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
