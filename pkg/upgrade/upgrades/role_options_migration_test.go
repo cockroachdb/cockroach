@@ -102,7 +102,11 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 	}
 
 	if numUsers > 100 {
-		id := uint32(100)
+		var id uint32
+		// We're not guaranteed that the ID of the first created
+		// user is 100.
+		idRow := tdb.QueryRow(t, `SELECT last_value - 1 FROM system.role_id_seq`)
+		idRow.Scan(&id)
 		var wg sync.WaitGroup
 		wg.Add(100)
 		// Parallelize user creation.
