@@ -121,6 +121,7 @@ CREATE TABLE system.lease (
   version    INT8,
   "nodeID"   INT8,
   expiration TIMESTAMP,
+  "sessionID" BYTES NULL,
   CONSTRAINT "primary" PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
@@ -1111,9 +1112,11 @@ var (
 				{Name: "version", ID: 2, Type: types.Int},
 				{Name: "nodeID", ID: 3, Type: types.Int},
 				{Name: "expiration", ID: 4, Type: types.Timestamp},
+				{Name: "sessionID", ID: 5, Type: types.Bytes, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []descpb.ColumnID{1, 2, 3, 4}},
+				{Name: "fam_5_sessionID", ID: 5, ColumnNames: []string{"sessionID"}, ColumnIDs: []descpb.ColumnID{5}, DefaultColumnID: 5},
 			},
 			descpb.IndexDescriptor{
 				Name:                "primary",

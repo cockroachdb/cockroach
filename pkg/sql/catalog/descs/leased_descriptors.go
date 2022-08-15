@@ -64,15 +64,17 @@ func (m maxTimestampBoundDeadlineHolder) UpdateDeadline(
 
 func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 	return leasedDescriptors{
-		lm: lm,
+		lm:         lm,
+		sessionIDs: make(map[sqlliveness.SessionID]struct{}),
 	}
 }
 
 // leasedDescriptors holds references to all the descriptors leased in the
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
-	lm    leaseManager
-	cache nstree.Map
+	lm         leaseManager
+	cache      nstree.Map
+	sessionIDs map[sqlliveness.SessionID]struct{}
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
@@ -178,38 +180,25 @@ func (ld *leasedDescriptors) getResult(
 		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", ldesc.GetName(), ldesc.Underlying())
 	}
 
+	// Track sessions used for leased. In a multi-tenant environment, a
+	// transaction initiated by a SQL instance must rely on a single SQLLiveness
+	// session.
+	ld.sessionIDs[ldesc.SessionID()] = struct{}{}
+
 	// If the descriptor we just acquired expires before the txn's deadline,
 	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
 	// timestamp, so we need to set a deadline on the transaction to prevent it
 	// from committing beyond the version's expiration time.
 	if setDeadline {
-		if err := ld.maybeUpdateDeadline(ctx, txn, nil); err != nil {
+		if err := ld.maybeUpdateDeadline(ctx, txn); err != nil {
 			return nil, false, err
 		}
 	}
 	return ldesc.Underlying(), false, nil
 }
 
-func (ld *leasedDescriptors) maybeUpdateDeadline(
-	ctx context.Context, txn deadlineHolder, session sqlliveness.Session,
-) error {
-	// Set the transaction deadline to the minimum of the leased descriptor deadline
-	// and session expiration. The sqlliveness.Session will only be set in the
-	// multi-tenant environment for controlling transactions associated with ephemeral
-	// SQL pods.
+func (ld *leasedDescriptors) maybeUpdateDeadline(ctx context.Context, txn deadlineHolder) error {
 	var deadline hlc.Timestamp
-	if session != nil {
-		if expiration, txnTS := session.Expiration(), txn.ReadTimestamp(); txnTS.Less(expiration) {
-			deadline = expiration
-		} else {
-			// If the session has expired relative to this transaction, propagate
-			// a clear error that that's what is going on.
-			return errors.Errorf(
-				"liveness session expired %s before transaction",
-				txnTS.GoTime().Sub(expiration.GoTime()),
-			)
-		}
-	}
 	if leaseDeadline, ok := ld.getDeadline(); ok && (deadline.IsEmpty() || leaseDeadline.Less(deadline)) {
 		// Set the deadline to the lease deadline if session expiration is empty
 		// or lease deadline is less than the session expiration.
@@ -240,6 +229,7 @@ func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
 		return nil
 	})
 	ld.cache.Clear()
+	ld.sessionIDs = make(map[sqlliveness.SessionID]struct{})
 }
 
 func (ld *leasedDescriptors) release(ctx context.Context, descs []lease.IDVersion) {

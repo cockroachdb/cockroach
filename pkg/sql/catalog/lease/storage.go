@@ -13,22 +13,18 @@ package lease
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +44,7 @@ import (
 // they're only used by the manager and not by the store itself.
 type storage struct {
 	nodeIDContainer  *base.SQLIDContainer
+	instance         sqlliveness.Instance
 	db               *kv.DB
 	clock            *hlc.Clock
 	internalExecutor sqlutil.InternalExecutor
@@ -61,34 +59,15 @@ type storage struct {
 	testingKnobs      StorageTestingKnobs
 }
 
-// LeaseRenewalDuration controls the default time before a lease expires when
-// acquisition to renew the lease begins.
-var LeaseRenewalDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"sql.catalog.descriptor_lease_renewal_fraction",
-	"controls the default time before a lease expires when acquisition to renew the lease begins",
-	base.DefaultDescriptorLeaseRenewalTimeout)
-
-func (s storage) leaseRenewalTimeout() time.Duration {
-	return LeaseRenewalDuration.Get(&s.settings.SV)
-}
-
-// jitteredLeaseDuration returns a randomly jittered duration from the interval
-// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
-func (s storage) jitteredLeaseDuration() time.Duration {
-	leaseDuration := LeaseDuration.Get(&s.settings.SV)
-	jitterFraction := LeaseJitterFraction.Get(&s.settings.SV)
-	return time.Duration(float64(leaseDuration) * (1 - jitterFraction +
-		2*jitterFraction*rand.Float64()))
-}
+var sqllivenessRetryError = errors.Errorf("sqlliveness session invalid for transaction")
 
 // acquire a lease on the most recent version of a descriptor. If the lease
 // cannot be obtained because the descriptor is in the process of being dropped
 // or offline (currently only applicable to tables), the error will be of type
 // inactiveTableError. The expiration time set for the lease > minExpiration.
 func (s storage) acquire(
-	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
-) (desc catalog.Descriptor, expiration hlc.Timestamp, _ error) {
+	ctx context.Context, id descpb.ID,
+) (desc catalog.Descriptor, session sqlliveness.Session, _ error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	acquireInTxn := func(ctx context.Context, txn *kv.Txn) (err error) {
 
@@ -105,32 +84,17 @@ func (s storage) acquire(
 		if instanceID == 0 {
 			panic("SQL instance ID not set")
 		}
-		// If there was a previous iteration of the loop, we'd know because the
-		// desc and expiration is non-empty. In this case, we may have successfully
-		// written a value to the database, which we'd leak if we did not delete it.
-		// Note that the expiration is part of the primary key in the table, so we
-		// would not overwrite the old entry if we just were to do another insert.
-		if !expiration.IsEmpty() && desc != nil {
-			prevExpirationTS := storedLeaseExpiration(expiration)
-			deleteLease := fmt.Sprintf(
-				`DELETE FROM system.public.lease WHERE "descID" = %d AND version = %d AND "nodeID" = %d AND expiration = %s`,
-				desc.GetID(), desc.GetVersion(), instanceID, &prevExpirationTS,
-			)
-			if _, err := s.internalExecutor.Exec(
-				ctx, "lease-delete-after-ambiguous", txn, deleteLease,
-			); err != nil {
-				return errors.Wrap(err, "deleting ambiguously created lease")
-			}
-		}
 
-		expiration = txn.ReadTimestamp().Add(int64(s.jitteredLeaseDuration()), 0)
-		if expiration.LessEq(minExpiration) {
-			// In the rare circumstances where expiration <= minExpiration
-			// use an expiration based on the minExpiration to guarantee
-			// a monotonically increasing expiration.
-			expiration = minExpiration.Add(int64(time.Millisecond), 0)
+		session, err = s.instance.Session(ctx)
+		if err != nil {
+			return err
 		}
-
+		if txn.ProvisionalCommitTimestamp().Less(session.Start()) {
+			return sqllivenessRetryError
+		}
+		if err = txn.UpdateDeadline(ctx, session.Expiration()); err != nil {
+			return sqllivenessRetryError
+		}
 		version := s.settings.Version.ActiveVersion(ctx)
 		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
 		if err != nil {
@@ -141,7 +105,7 @@ func (s storage) acquire(
 		); err != nil {
 			return err
 		}
-		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)
+		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, session.Expiration())
 
 		// We use string interpolation here, instead of passing the arguments to
 		// InternalExecutor.Exec() because we don't want to pay for preparing the
@@ -149,10 +113,10 @@ func (s storage) acquire(
 		// general cost of preparing, preparing this statement always requires a
 		// read from the database for the special descriptor of a system table
 		// (#23937).
-		ts := storedLeaseExpiration(expiration)
+		ts := tree.DTimestamp{Time: timeutil.Unix(0, 0)}
 		insertLease := fmt.Sprintf(
-			`INSERT INTO system.public.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
-			desc.GetID(), desc.GetVersion(), instanceID, &ts,
+			`UPSERT INTO system.public.lease ("descID", version, "nodeID", expiration, "sessionID") VALUES (%d, %d, %d, %s, '\x%s')`,
+			desc.GetID(), desc.GetVersion(), instanceID, &ts, session.ID(),
 		)
 		count, err := s.internalExecutor.Exec(ctx, "lease-insert", txn, insertLease)
 		if err != nil {
@@ -173,21 +137,19 @@ func (s storage) acquire(
 		case errors.As(err, &pErr):
 			log.Infof(ctx, "ambiguous error occurred during lease acquisition for %v, retrying: %v", id, err)
 			continue
-		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
-			log.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
-				" removal for %v, retrying: %v", id, err)
+		case errors.Is(err, sqllivenessRetryError):
 			continue
 		case err != nil:
-			return nil, hlc.Timestamp{}, err
+			return nil, nil, err
 		}
-		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, expiration)
+		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, session.Expiration())
 		if s.testingKnobs.LeaseAcquiredEvent != nil {
 			s.testingKnobs.LeaseAcquiredEvent(desc, err)
 		}
 		s.outstandingLeases.Inc(1)
-		return desc, expiration, nil
+		return desc, session, nil
 	}
-	return nil, hlc.Timestamp{}, ctx.Err()
+	return nil, nil, ctx.Err()
 }
 
 // Release a previously acquired descriptor. Never let this method
@@ -208,13 +170,13 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 			panic("SQL instance ID not set")
 		}
 		const deleteLease = `DELETE FROM system.public.lease ` +
-			`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
+			`WHERE ("descID", version, "nodeID", "sessionID") = ($1, $2, $3, $4)`
 		count, err := s.internalExecutor.Exec(
 			ctx,
 			"lease-release",
 			nil, /* txn */
 			deleteLease,
-			lease.id, lease.version, instanceID, &lease.expiration,
+			lease.id, lease.version, instanceID, lease.sessionID.UnsafeBytes(),
 		)
 		if err != nil {
 			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)

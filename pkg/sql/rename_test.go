@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -189,7 +189,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 
 	var foundLease bool
 	s.LeaseManager().(*lease.Manager).VisitLeases(func(
-		desc catalog.Descriptor, dropped bool, refCount int, expiration tree.DTimestamp,
+		desc catalog.Descriptor, dropped bool, refCount int, _ sqlliveness.SessionID,
 	) (wantMore bool) {
 		if desc.GetID() == tableDesc.GetID() && desc.GetName() == "t" {
 			foundLease = true

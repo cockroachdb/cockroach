@@ -13,26 +13,24 @@ package lease
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // A lease stored in system.lease.
 type storedLease struct {
-	id         descpb.ID
-	version    int
-	expiration tree.DTimestamp
+	id        descpb.ID
+	version   int
+	sessionID sqlliveness.SessionID
 }
 
 func (s *storedLease) String() string {
-	return fmt.Sprintf("ID = %d ver=%d expiration=%s", s.id, s.version, s.expiration)
+	return fmt.Sprintf("ID = %d ver=%d session=%s", s.id, s.version, s.sessionID)
 }
 
 // descriptorVersionState holds the state for a descriptor version. This
@@ -45,17 +43,11 @@ type descriptorVersionState struct {
 	// Care must be taken to not modify it.
 	catalog.Descriptor
 
+	// TOOD(jchan):
+	session sqlliveness.Session
+
 	mu struct {
 		syncutil.Mutex
-
-		// The expiration time for the descriptor version. A transaction with
-		// timestamp T can use this descriptor version iff
-		// Descriptor.GetDescriptorModificationTime() <= T < expiration
-		//
-		// The expiration time is either the expiration time of the lease when a lease
-		// is associated with the version, or the ModificationTime of the next version
-		// when the version isn't associated with a lease.
-		expiration hlc.Timestamp
 
 		refcount int
 		// Set if the node has a lease on this descriptor version.
@@ -80,10 +72,14 @@ func (s *descriptorVersionState) Expiration() hlc.Timestamp {
 	return s.getExpiration()
 }
 
+func (s *descriptorVersionState) SessionID() sqlliveness.SessionID {
+	return s.session.ID()
+}
+
 func (s *descriptorVersionState) SafeMessage() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fmt.Sprintf("%d ver=%d:%s, refcount=%d", s.GetID(), s.GetVersion(), s.mu.expiration, s.mu.refcount)
+	return fmt.Sprintf("%d ver=%d:%s, refcount=%d", s.GetID(), s.GetVersion(), s.getExpiration(), s.mu.refcount)
 }
 
 func (s *descriptorVersionState) String() string {
@@ -94,7 +90,7 @@ func (s *descriptorVersionState) String() string {
 
 // stringLocked reads mu.refcount and thus needs to have mu held.
 func (s *descriptorVersionState) stringLocked() string {
-	return fmt.Sprintf("%d(%q) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), s.GetVersion(), s.mu.expiration, s.mu.refcount)
+	return fmt.Sprintf("%d(%q) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), s.GetVersion(), s.getExpiration(), s.mu.refcount)
 }
 
 // hasExpired checks if the descriptor is too old to be used (by a txn
@@ -108,7 +104,7 @@ func (s *descriptorVersionState) hasExpired(timestamp hlc.Timestamp) bool {
 // hasExpired checks if the descriptor is too old to be used (by a txn
 // operating) at the given timestamp.
 func (s *descriptorVersionState) hasExpiredLocked(timestamp hlc.Timestamp) bool {
-	return s.mu.expiration.LessEq(timestamp)
+	return s.getExpiration().LessEq(timestamp)
 }
 
 func (s *descriptorVersionState) incRefCount(ctx context.Context, expensiveLogEnabled bool) {
@@ -125,15 +121,9 @@ func (s *descriptorVersionState) incRefCountLocked(ctx context.Context, expensiv
 }
 
 func (s *descriptorVersionState) getExpiration() hlc.Timestamp {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.expiration
+	return s.session.Expiration()
 }
 
-// The lease expiration stored in the database is of a different type.
-// We've decided that it's too much work to change the type to
-// hlc.Timestamp, so we're using this method to give us the stored
-// type: tree.DTimestamp.
-func storedLeaseExpiration(expiration hlc.Timestamp) tree.DTimestamp {
-	return tree.DTimestamp{Time: timeutil.Unix(0, expiration.WallTime).Round(time.Microsecond)}
+func (s *descriptorVersionState) GetName() string {
+	return s.Descriptor.GetName()
 }
