@@ -29,3 +29,15 @@ query T
 SELECT ARRAY(SELECT a FROM ab ORDER BY b)
 ----
 {1,2,1}
+
+# Regression test for distributing a query which involves a subquery resulting
+# in an OID type (#86075).
+statement ok
+CREATE TABLE t86075 (k INT PRIMARY KEY, c REGPROCEDURE);
+INSERT INTO t86075 VALUES (1, 1);
+
+statement ok
+ALTER TABLE t86075 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
+
+statement ok
+SELECT (SELECT c FROM t86075) FROM t86075

@@ -273,6 +273,16 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 	case *tree.DOid:
 		v.err = newQueryNotSupportedError("OID expressions are not supported by distsql")
 		return false, expr
+	case *tree.Subquery:
+		if t.ResolvedType().Family() == types.OidFamily {
+			// If a subquery results in a DOid datum, the datum will get a type
+			// annotation (because DOids are ambiguous) when serializing the
+			// render expression involving the result of the subquery. As a
+			// result, we might need to perform a cast on a remote node which
+			// might fail, thus we prohibit the distribution of the main query.
+			v.err = newQueryNotSupportedError("OID expressions are not supported by distsql")
+			return false, expr
+		}
 	case *tree.CastExpr:
 		// TODO (rohany): I'm not sure why this CastExpr doesn't have a type
 		//  annotation at this stage of processing...
