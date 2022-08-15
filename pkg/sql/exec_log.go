@@ -335,8 +335,10 @@ func (p *planner) maybeLogStatementInternal(
 				}
 			}
 			entries[i] = eventLogEntry{
-				targetID: int32(ev.desc.GetID()),
 				event: &eventpb.SensitiveTableAccess{
+					CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+						DescriptorID: uint32(ev.desc.GetID()),
+					},
 					CommonSQLExecDetails: execDetails,
 					TableName:            tableName,
 					AccessMode:           mode,

@@ -98,7 +98,7 @@ import (
 //    |  |   |
 //    |  |   |      ,-------- node-level events outside of SQL
 //    |  |   |     /          (e.g. cluster membership)
-//    |  |   |    /           TargetID = ID of node affected
+//    |  |   |    /
 //    v  v   v   v
 //  (expectation: per-type event structs
 //   fully populated at this point.
@@ -122,11 +122,6 @@ import (
 // eventLogEntry represents a SQL-level event to be sent to logging
 // outputs(s).
 type eventLogEntry struct {
-	// targetID is the main object affected by this event.
-	// For DDL statements, this is typically the ID of
-	// the affected descriptor.
-	targetID int32
-
 	// event is the main event payload.
 	event logpb.EventPayload
 }
@@ -134,10 +129,13 @@ type eventLogEntry struct {
 // logEvent emits a cluster event in the context of a regular SQL
 // statement.
 func (p *planner) logEvent(ctx context.Context, descID descpb.ID, event logpb.EventPayload) error {
+	if sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload); ok {
+		sqlCommon.CommonSQLDetails().DescriptorID = uint32(descID)
+	}
 	return p.logEventsWithOptions(ctx,
 		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{targetID: int32(descID), event: event})
+		eventLogEntry{event: event})
 }
 
 // logEvents is like logEvent, except that it can write multiple
@@ -251,13 +249,9 @@ func logEventInternalForSchemaChanges(
 	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
-		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{
-			targetID: int32(descID),
-			event:    event,
-		},
+		eventLogEntry{event: event},
 	)
 }
 
@@ -287,8 +281,13 @@ func logEventInternalForSQLStatements(
 			return errors.AssertionFailedf("unknown event type: %T", event)
 		}
 		m := sqlCommon.CommonSQLDetails()
+		prevDescID := m.DescriptorID
 		*m = commonSQLEventDetails
-		m.DescriptorID = uint32(entry.targetID)
+		if m.DescriptorID == 0 {
+			// We're coming here via logEvent(), which pre-populates the
+			// DescriptorID and expects it to be preserved.
+			m.DescriptorID = prevDescID
+		}
 		return nil
 	}
 
@@ -302,7 +301,6 @@ func logEventInternalForSQLStatements(
 		ctx,
 		execCfg.InternalExecutor,
 		txn,
-		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1+depth,    /* depth */
 		opts,       /* eventLogOptions */
 		entries..., /* ...eventLogEntry */
@@ -330,12 +328,9 @@ func NewSchemaChangerEventLogger(
 
 // LogEvent implements the scexec.EventLogger interface.
 func (l schemaChangerEventLogger) LogEvent(
-	ctx context.Context,
-	descID descpb.ID,
-	details eventpb.CommonSQLEventDetails,
-	event logpb.EventPayload,
+	ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 ) error {
-	entry := eventLogEntry{targetID: int32(descID), event: event}
+	entry := eventLogEntry{event: event}
 	return logEventInternalForSQLStatements(ctx,
 		l.execCfg,
 		l.txn,
@@ -346,7 +341,7 @@ func (l schemaChangerEventLogger) LogEvent(
 }
 
 func (l schemaChangerEventLogger) LogEventForSchemaChange(
-	ctx context.Context, descID descpb.ID, event logpb.EventPayload,
+	ctx context.Context, event logpb.EventPayload,
 ) error {
 	event.CommonDetails().Timestamp = l.txn.ReadTimestamp().WallTime
 	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
@@ -357,13 +352,9 @@ func (l schemaChangerEventLogger) LogEventForSchemaChange(
 	return insertEventRecords(
 		ctx, l.execCfg.InternalExecutor,
 		l.txn,
-		int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{
-			targetID: int32(descID),
-			event:    event,
-		},
+		eventLogEntry{event: event},
 	)
 }
 
@@ -401,7 +392,6 @@ func LogEventForJobs(
 	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
-		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function for vmodule filtering */
 		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{event: event},
@@ -448,9 +438,7 @@ func InsertEventRecords(
 	ctx context.Context,
 	ex *InternalExecutor,
 	txn *kv.Txn,
-	reportingID int32,
 	dst LogEventDestination,
-	targetID int32,
 	info ...logpb.EventPayload,
 ) error {
 	if len(info) == 0 {
@@ -458,13 +446,12 @@ func InsertEventRecords(
 	}
 	entries := make([]eventLogEntry, len(info))
 	for i, ev := range info {
-		entries[i].targetID = targetID
 		entries[i].event = ev
 	}
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
-	return insertEventRecords(ctx, ex, txn, reportingID,
+	return insertEventRecords(ctx, ex, txn,
 		1, /* depth: use this function */
 		eventLogOptions{dst: dst},
 		entries...)
@@ -477,14 +464,10 @@ func InsertEventRecords(
 // event payload and all the other per-payload specific fields. This
 // function only takes care of populating the EventType field based on
 // the run-time type of the event payload.
-//
-// Note: the targetID and reportingID columns are deprecated and
-// should be removed after v21.1 is released.
 func insertEventRecords(
 	ctx context.Context,
 	ex *InternalExecutor,
 	txn *kv.Txn,
-	reportingID int32,
 	depth int,
 	opts eventLogOptions,
 	entries ...eventLogEntry,
@@ -515,7 +498,7 @@ func insertEventRecords(
 			// The VDepth() call ensures that we are matching the vmodule
 			// setting to where the depth is equal to 1 in the caller stack.
 			for i := range entries {
-				log.InfofDepth(ctx, depth, "SQL event: target %d, payload %+v", entries[i].targetID, entries[i].event)
+				log.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i].event)
 			}
 		}
 	}
@@ -546,14 +529,17 @@ func insertEventRecords(
 	// The function below this point is specialized to write to the
 	// system table.
 
+	reportingID := ex.s.cfg.NodeInfo.NodeID.SQLInstanceID()
 	const colsPerEvent = 5
+	// Note: we insert the alue zero as targetID because sadly this
+	// now-deprecated coolumn has a NOT NULL constraint.
 	const baseQuery = `
 INSERT INTO system.eventlog (
-  timestamp, "eventType", "targetID", "reportingID", info
+  timestamp, "eventType", "reportingID", info, "targetID"
 )
-VALUES($1, $2, $3, $4, $5)`
+VALUES($1, $2, $3, $4, 0)`
 	args := make([]interface{}, 0, len(entries)*colsPerEvent)
-	constructArgs := func(reportingID int32, entry eventLogEntry) error {
+	constructArgs := func(entry eventLogEntry) error {
 		event := entry.event
 		infoBytes := redact.RedactableBytes("{")
 		_, infoBytes = event.AppendJSONFields(false /* printComma */, infoBytes)
@@ -566,7 +552,6 @@ VALUES($1, $2, $3, $4, $5)`
 			args,
 			timeutil.Unix(0, event.CommonDetails().Timestamp),
 			eventType,
-			entry.targetID,
 			reportingID,
 			string(infoBytes),
 		)
@@ -577,7 +562,7 @@ VALUES($1, $2, $3, $4, $5)`
 	// the extra heap allocation and buffer operations of the loop
 	// below. This is an optimization.
 	query := baseQuery
-	if err := constructArgs(reportingID, entries[0]); err != nil {
+	if err := constructArgs(entries[0]); err != nil {
 		return err
 	}
 	if len(entries) > 1 {
@@ -588,11 +573,11 @@ VALUES($1, $2, $3, $4, $5)`
 
 		for _, extraEntry := range entries[1:] {
 			placeholderNum := 1 + len(args)
-			if err := constructArgs(reportingID, extraEntry); err != nil {
+			if err := constructArgs(extraEntry); err != nil {
 				return err
 			}
-			fmt.Fprintf(&completeQuery, ", ($%d, $%d, $%d, $%d, $%d)",
-				placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3, placeholderNum+4)
+			fmt.Fprintf(&completeQuery, ", ($%d, $%d, $%d, $%d, 0)",
+				placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3)
 		}
 		query = completeQuery.String()
 	}
