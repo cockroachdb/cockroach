@@ -909,6 +909,8 @@ type logicTest struct {
 	// lifetime of the test and we should create all clusters with the same
 	// arguments.
 	clusterOpts []clusterOpt
+	// knobOpts are the options used to create testing knobs.
+	knobOpts []knobOpt
 	// tenantClusterSettingOverrideOpts are the options used by the host cluster
 	// to configure tenant setting overrides  during setup. They're persisted here
 	// because a cluster can be recreated throughout the lifetime of a test, and
@@ -1164,6 +1166,7 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 func (t *logicTest) newCluster(
 	serverArgs TestServerArgs,
 	clusterOpts []clusterOpt,
+	knobOpts []knobOpt,
 	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
 ) {
 	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
@@ -1245,7 +1248,12 @@ func (t *logicTest) newCluster(
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = make(chan struct{})
 	}
 	for _, opt := range clusterOpts {
+		t.rootT.Logf("apply cluster opt %T", opt)
 		opt.apply(&params.ServerArgs)
+	}
+	for _, opt := range knobOpts {
+		t.rootT.Logf("apply knob opt %T", opt)
+		opt.apply(&params.ServerArgs.Knobs)
 	}
 
 	paramsPerNode := map[int]base.TestServerArgs{}
@@ -1336,6 +1344,11 @@ func (t *logicTest) newCluster(
 				TracingDefault:    params.ServerArgs.TracingDefault,
 				// Give every tenant its own ExternalIO directory.
 				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
+			}
+
+			for _, opt := range knobOpts {
+				t.rootT.Logf("apply knob opt %T to tenant", opt)
+				opt.apply(&tenantArgs.TestingKnobs)
 			}
 
 			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
@@ -1617,7 +1630,7 @@ func (t *logicTest) resetCluster() {
 		t.Fatal("resetting the cluster before server args were set")
 	}
 	serverArgs := *t.serverArgs
-	t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
 }
 
 // setup creates the initial cluster for the logic test and populates the
@@ -1628,12 +1641,14 @@ func (t *logicTest) setup(
 	cfg logictestbase.TestClusterConfig,
 	serverArgs TestServerArgs,
 	clusterOpts []clusterOpt,
+	knobOpts []knobOpt,
 	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
 ) {
 	t.cfg = cfg
 	t.serverArgs = &serverArgs
 	t.serverArgs.DeclarativeCorpusCollection = cfg.DeclarativeCorpusCollection
 	t.clusterOpts = clusterOpts[:]
+	t.knobOpts = knobOpts[:]
 	t.tenantClusterSettingOverrideOpts = tenantClusterSettingOverrideOpts[:]
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
@@ -1641,7 +1656,7 @@ func (t *logicTest) setup(
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
-	t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
 
 	// Only create the test database on the initial cluster, since cluster restore
 	// expects an empty cluster.
@@ -1747,6 +1762,27 @@ func (c clusterOptTracingOff) apply(args *base.TestServerArgs) {
 	args.TracingDefault = tracing.TracingModeOnDemand
 }
 
+// knobOpt is implemented by options for configuring the testing knobs
+// for the cluster under which a test will run.
+type knobOpt interface {
+	apply(args *base.TestingKnobs)
+}
+
+// knobOptSynchronousEventLog corresponds to the sync write
+// event log testing knob.
+type knobOptSynchronousEventLog struct{}
+
+var _ knobOpt = knobOptSynchronousEventLog{}
+
+// apply implements the clusterOpt interface.
+func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
+	_, ok := args.EventLog.(*sql.EventLogTestingKnobs)
+	if !ok {
+		args.EventLog = &sql.EventLogTestingKnobs{}
+	}
+	args.EventLog.(*sql.EventLogTestingKnobs).SyncWrites = true
+}
+
 // clusterOptIgnoreStrictGCForTenants corresponds to the
 // ignore-tenant-strict-gc-enforcement directive.
 type clusterOptIgnoreStrictGCForTenants struct{}
@@ -1762,14 +1798,14 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
 }
 
-// clusterOptDisableCorpusGeneration disables corpus generation for declarative
+// knobOptDisableCorpusGeneration disables corpus generation for declarative
 // schema changer.
-type clusterOptDisableCorpusGeneration struct{}
+type knobOptDisableCorpusGeneration struct{}
 
-var _ clusterOpt = clusterOptDisableCorpusGeneration{}
+var _ knobOpt = knobOptDisableCorpusGeneration{}
 
-func (c clusterOptDisableCorpusGeneration) apply(args *base.TestServerArgs) {
-	args.Knobs.SQLDeclarativeSchemaChanger = nil
+func (c knobOptDisableCorpusGeneration) apply(args *base.TestingKnobs) {
+	args.SQLDeclarativeSchemaChanger = nil
 }
 
 // parseDirectiveOptions looks around the beginning of the file for a line
@@ -1779,7 +1815,7 @@ func (c clusterOptDisableCorpusGeneration) apply(args *base.TestServerArgs) {
 // invoked with each option.
 func parseDirectiveOptions(t *testing.T, path string, directiveName string, f func(opt string)) {
 	switch directiveName {
-	case "cluster-opt", "tenant-cluster-setting-override-opt":
+	case "knob-opt", "cluster-opt", "tenant-cluster-setting-override-opt":
 		// Fallthrough.
 	default:
 		t.Fatalf("cannot parse unknown directive %s", directiveName)
@@ -1855,6 +1891,25 @@ func readTenantClusterSettingOverrideArgs(
 	return res
 }
 
+// readKnobOptions looks around the beginning of the file for a line looking like:
+// # knob-opt: opt1 opt2 ...
+// and parses that line into a set of knobOpts that need to be applied to the
+// TestServerArgs.Knobs before the cluster is started for the respective test file.
+func readKnobOptions(t *testing.T, path string) []knobOpt {
+	var res []knobOpt
+	parseDirectiveOptions(t, path, "knob-opt", func(opt string) {
+		switch opt {
+		case "disable-corpus-generation":
+			res = append(res, knobOptDisableCorpusGeneration{})
+		case "sync-event-log":
+			res = append(res, knobOptSynchronousEventLog{})
+		default:
+			t.Fatalf("unrecognized knob option: %s", opt)
+		}
+	})
+	return res
+}
+
 // readClusterOptions looks around the beginning of the file for a line looking like:
 // # cluster-opt: opt1 opt2 ...
 // and parses that line into a set of clusterOpts that need to be applied to the
@@ -1869,8 +1924,6 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
-		case "disable-corpus-generation":
-			res = append(res, clusterOptDisableCorpusGeneration{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
@@ -3817,7 +3870,7 @@ func RunLogicTest(
 	serverArgsCopy := serverArgs
 	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || onlyNonMetamorphic
 	lt.setup(
-		config, serverArgsCopy, readClusterOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
+		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
 	)
 	lt.runFile(path, config)
 
