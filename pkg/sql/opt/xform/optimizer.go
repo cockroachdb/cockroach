@@ -1003,6 +1003,9 @@ func (o *Optimizer) disableRules(probability float64) {
 		// appearing consecutively in ordering columns, which can cause
 		// incorrect results until #84191 is addressed.
 		int(opt.SimplifyRootOrdering),
+		// Needed to prevent rule cycles that lead to timeouts and OOMs.
+		int(opt.EliminateProject),
+		int(opt.EliminateSelect),
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
