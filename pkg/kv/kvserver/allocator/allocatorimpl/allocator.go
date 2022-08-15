@@ -1101,7 +1101,7 @@ func (a Allocator) RemoveTarget(
 	)
 
 	log.VEventf(ctx, 3, "remove %s: %s", targetType, rankedCandidates)
-	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
+	if bad := rankedCandidates.selectWorst(a.randGen); bad != nil {
 		for _, exist := range existingReplicas {
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)
