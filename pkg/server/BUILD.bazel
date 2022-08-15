@@ -233,7 +233,6 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
-        "//pkg/util/errorutil",
         "//pkg/util/goschedstats",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",

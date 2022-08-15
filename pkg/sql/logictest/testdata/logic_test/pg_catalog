@@ -4650,7 +4650,7 @@ FROM pg_proc p
 JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
-2012  array_in  array_in
+2013  array_in  array_in
 
 ## #16285
 ## int2vectors should be 0-indexed
@@ -4688,7 +4688,7 @@ SELECT cur_max_builtin_oid FROM [SELECT max(oid) as cur_max_builtin_oid FROM pg_
 query TT
 SELECT proname, oid FROM pg_catalog.pg_proc WHERE oid = $cur_max_builtin_oid
 ----
-to_regtype  2032
+to_regtype  2033
 
 ## Ensure that unnest works with oid wrapper arrays
 

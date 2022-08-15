@@ -8,7 +8,6 @@ go_library(
     name = "kvserver",
     srcs = [
         "addressing.go",
-        "compact_span_client.go",
         "consistency_queue.go",
         "debug_print.go",
         "doc.go",
@@ -79,6 +78,7 @@ go_library(
         "split_delay_helper.go",
         "split_queue.go",
         "split_trigger_helper.go",
+        "storage_engine_client.go",
         "store.go",
         "store_create_replica.go",
         "store_init.go",

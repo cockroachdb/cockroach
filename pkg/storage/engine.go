@@ -945,6 +945,10 @@ type Engine interface {
 	// calls to this method. Hence, this should be used with care, with only one
 	// caller, which is currently the admission control subsystem.
 	GetInternalIntervalMetrics() *pebble.InternalIntervalMetrics
+
+	// SetCompactionConcurrency is used to set the engine's compaction
+	// concurrency. It returns the previous compaction concurrency.
+	SetCompactionConcurrency(n uint64) uint64
 }
 
 // Batch is the interface for batch specific operations.
