@@ -148,7 +148,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log for descriptor #104: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
+write *eventpb.AlterTable to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -884,7 +884,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "14"
   +  version: "15"
-write *eventpb.FinishSchemaChange to event log for descriptor 104
+write *eventpb.FinishSchemaChange to event log
 create job #3 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (a)"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"

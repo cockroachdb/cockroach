@@ -371,7 +371,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.FinishSchemaChange to event log for descriptor 106
+write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for "
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"

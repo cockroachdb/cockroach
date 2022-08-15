@@ -332,8 +332,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
-					targetID: int32(d.ID),
 					event: &eventpb.ChangeDatabasePrivilege{
+						CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+							DescriptorID: uint32(d.ID),
+						},
 						CommonSQLPrivilegeEventDetails: privs,
 						DatabaseName:                   (*tree.Name)(&d.Name).String(),
 					}})
@@ -358,8 +360,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
-					targetID: int32(d.ID),
 					event: &eventpb.ChangeTablePrivilege{
+						CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+							DescriptorID: uint32(d.ID),
+						},
 						CommonSQLPrivilegeEventDetails: privs,
 						TableName:                      d.Name, // FIXME
 					}})
@@ -373,8 +377,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
-					targetID: int32(d.ID),
 					event: &eventpb.ChangeTypePrivilege{
+						CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+							DescriptorID: uint32(d.ID),
+						},
 						CommonSQLPrivilegeEventDetails: privs,
 						TypeName:                       d.Name, // FIXME
 					}})
@@ -391,8 +397,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
-					targetID: int32(d.ID),
 					event: &eventpb.ChangeSchemaPrivilege{
+						CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+							DescriptorID: uint32(d.ID),
+						},
 						CommonSQLPrivilegeEventDetails: privs,
 						SchemaName:                     d.Name, // FIXME
 					}})
@@ -405,8 +413,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
 				events = append(events, eventLogEntry{
-					targetID: int32(d.ID),
 					event: &eventpb.ChangeFunctionPrivilege{
+						CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+							DescriptorID: uint32(d.ID),
+						},
 						CommonSQLPrivilegeEventDetails: privs,
 						FuncName:                       d.Name, // FIXME
 					}})

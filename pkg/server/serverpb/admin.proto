@@ -106,8 +106,6 @@ message DatabaseDetailsResponse {
   // or dots will be surrounded with double quotes, such as "naughty schema".table.
   repeated string table_names = 2;
   // descriptor_id is an identifier used to uniquely identify this database.
-  // It can be used to find events pertaining to this database by filtering on
-  // the 'target_id' field of events.
   int64 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID"];
   // The zone configuration in effect for this database.
   cockroach.config.zonepb.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
@@ -206,8 +204,6 @@ message TableDetailsResponse {
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 7;
   // descriptor_id is an identifier used to uniquely identify this table.
-  // It can be used to find events pertaining to this table by filtering on
-  // the 'target_id' field of events.
   int64 descriptor_id = 8 [(gogoproto.customname) = "DescriptorID"];
   // configure_zone_statement is the output of "SHOW ZONE CONFIGURATION FOR TABLE"
   // for this table. It is a SQL statement that would re-configure the table's current
@@ -307,10 +303,10 @@ message UsersResponse {
 }
 
 // EventsRequest is a request for event log entries, optionally filtered
-// by the specified event type and/or target_id.
+// by the specified event type.
 message EventsRequest {
   string type = 1;
-  int64 target_id = 2;
+  reserved 2;
   // limit is the total number of results that are retrieved by the query. If
   // this is omitted or set to 0, the default maximum number of results are
   // returned. When set to > 0, at most only that number of results are
@@ -334,8 +330,7 @@ message EventsResponse {
     // event_type is the type of the event (e.g. "create_table", "drop_table".
     string event_type = 2;
 
-    // target_id is the target for this event.
-    int64 target_id = 3 [(gogoproto.customname) = "TargetID"];
+    reserved 3;
 
     // reporting_id is the reporting ID for this event.
     int64 reporting_id = 4 [(gogoproto.customname) = "ReportingID"];
@@ -901,8 +896,6 @@ service Admin {
   // - /_admin/v1/events?limit=100
   // - /_admin/v1/events?type=create_table
   // - /_admin/v1/events?type=create_table&limit=100
-  // - /_admin/v1/events?type=drop_table&target_id=4
-  // - /_admin/v1/events?type=drop_table&target_id=4&limit=100
   rpc Events(EventsRequest) returns (EventsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/events"

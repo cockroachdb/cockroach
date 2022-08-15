@@ -221,6 +221,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 				eventDetails.RevokedPrivileges = privileges.SortedNames()
 			}
 			event := eventpb.AlterDefaultPrivileges{
+				CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+					DescriptorID: uint32(n.dbDesc.GetID()),
+				},
 				CommonSQLPrivilegeEventDetails: eventDetails,
 				SchemaName:                     schemaDesc.GetName(),
 			}
@@ -231,8 +234,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 			}
 
 			events = append(events, eventLogEntry{
-				targetID: int32(n.dbDesc.GetID()),
-				event:    &event,
+				event: &event,
 			})
 
 			if err := params.p.writeSchemaDescChange(
@@ -300,6 +302,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 			eventDetails.RevokedPrivileges = privileges.SortedNames()
 		}
 		event := eventpb.AlterDefaultPrivileges{
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+				DescriptorID: uint32(n.dbDesc.GetID()),
+			},
 			CommonSQLPrivilegeEventDetails: eventDetails,
 			DatabaseName:                   n.dbDesc.GetName(),
 		}
@@ -310,8 +315,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 		}
 
 		events = append(events, eventLogEntry{
-			targetID: int32(n.dbDesc.GetID()),
-			event:    &event,
+			event: &event,
 		})
 	}
 

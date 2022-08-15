@@ -140,7 +140,7 @@ upsert descriptor #104
   -  version: "4"
   +  version: "5"
 delete descriptor #106
-write *eventpb.DropSchema to event log for descriptor #106: DROP SCHEMA ‹db›.‹sc›
+write *eventpb.DropSchema to event log: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1: "all stages completed"
 commit transaction #4
 # end PostCommitPhase

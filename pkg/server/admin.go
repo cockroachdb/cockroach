@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -1415,14 +1415,11 @@ func (s *adminServer) eventsHelper(
 ) (_ *serverpb.EventsResponse, retErr error) {
 	// Execute the query.
 	q := makeSQLQuery()
-	q.Append(`SELECT timestamp, "eventType", "targetID", "reportingID", info, "uniqueID" `)
+	q.Append(`SELECT timestamp, "eventType", "reportingID", info, "uniqueID" `)
 	q.Append("FROM system.eventlog ")
 	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
 	if len(req.Type) > 0 {
 		q.Append(`AND "eventType" = $ `, req.Type)
-	}
-	if req.TargetId > 0 {
-		q.Append(`AND "targetID" = $ `, req.TargetId)
 	}
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
@@ -1467,13 +1464,10 @@ func (s *adminServer) eventsHelper(
 		if err := scanner.ScanIndex(row, 1, &event.EventType); err != nil {
 			return nil, err
 		}
-		if err := scanner.ScanIndex(row, 2, &event.TargetID); err != nil {
+		if err := scanner.ScanIndex(row, 2, &event.ReportingID); err != nil {
 			return nil, err
 		}
-		if err := scanner.ScanIndex(row, 3, &event.ReportingID); err != nil {
-			return nil, err
-		}
-		if err := scanner.ScanIndex(row, 4, &event.Info); err != nil {
+		if err := scanner.ScanIndex(row, 3, &event.Info); err != nil {
 			return nil, err
 		}
 		if event.EventType == eventSetClusterSettingName {
@@ -1481,7 +1475,7 @@ func (s *adminServer) eventsHelper(
 				event.Info = redactSettingsChange(event.Info)
 			}
 		}
-		if err := scanner.ScanIndex(row, 5, &event.UniqueID); err != nil {
+		if err := scanner.ScanIndex(row, 4, &event.UniqueID); err != nil {
 			return nil, err
 		}
 		if redactEvents {
