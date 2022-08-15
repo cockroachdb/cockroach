@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -133,4 +134,52 @@ func TestCatchupScan(t *testing.T) {
 			checkEquality(kv2_5_3, kv2_2_2, events[3])
 		})
 	})
+}
+
+func TestCatchupScanSeesOldIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Regression test for [#85886]. When with-diff is specified, the iterator may
+	// be positioned on an intent that is outside the time bounds. When we read
+	// the intent and want to load the version, we must make sure to ignore time
+	// bounds, or we'll see a wholly unrelated version.
+	//
+	// [#85886]: https://github.com/cockroachdb/cockroach/issues/85886
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// b -> version @ 1100 (visible)
+	// d -> intent @ 990   (iterator will be positioned here because of with-diff option)
+	// e -> version @ 1100
+	tsCutoff := hlc.Timestamp{WallTime: 1000} // the lower bound of the catch-up scan
+	tsIntent := tsCutoff.Add(-10, 0)          // the intent is below the lower bound
+	tsVersionInWindow := tsCutoff.Add(10, 0)  // an unrelated version is above the lower bound
+
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("b"),
+		tsVersionInWindow, roachpb.MakeValueFromString("foo"), nil))
+
+	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), roachpb.NormalUserPriority, tsIntent, 100, 0)
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("d"),
+		tsIntent, roachpb.MakeValueFromString("intent"), &txn))
+
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("e"),
+		tsVersionInWindow, roachpb.MakeValueFromString("bar"), nil))
+
+	// Run a catchup scan across the span and watch it succeed.
+	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
+	args := &roachpb.RangeFeedRequest{Span: span, WithDiff: true}
+	args.Timestamp = tsCutoff
+	iter := NewCatchUpIterator(eng, args, true /* useTBI */, nil)
+	defer iter.Close()
+
+	keys := map[string]struct{}{}
+	require.NoError(t, iter.CatchUpScan(storage.MVCCKey{Key: span.Key}, storage.MVCCKey{Key: span.EndKey}, tsCutoff, true /* withDiff */, func(e *roachpb.RangeFeedEvent) error {
+		keys[string(e.Val.Key)] = struct{}{}
+		return nil
+	}))
+	require.Equal(t, map[string]struct{}{
+		"b": {},
+		"e": {},
+	}, keys)
 }

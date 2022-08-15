@@ -163,15 +163,19 @@ func (i *CatchUpIterator) CatchUpScan(
 			if err := protoutil.Unmarshal(unsafeVal, &meta); err != nil {
 				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
 			}
+
 			if !meta.IsInline() {
 				// This is an MVCCMetadata key for an intent. The catchUp scan
 				// only cares about committed values, so ignore this and skip past
 				// the corresponding provisional key-value. To do this, iterate to
 				// the provisional key-value, validate its timestamp, then iterate
-				// again. When using MVCCIncrementalIterator we know that the
-				// provisional value will also be within the time bounds so we use
-				// Next.
-				i.Next()
+				// again. If we arrived here with a preceding call to NextIgnoringTime
+				// (in the with-diff case), it's possible that the intent is not within
+				// the time bounds. Using `NextIgnoringTime` on the next line makes sure
+				// that we are guaranteed to validate the version that belongs to the
+				// intent.
+				i.NextIgnoringTime()
+
 				if ok, err := i.Valid(); err != nil {
 					return errors.Wrap(err, "iterating to provisional value for intent")
 				} else if !ok {
@@ -181,6 +185,11 @@ func (i *CatchUpIterator) CatchUpScan(
 					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
 						meta.Timestamp, i.UnsafeKey().Timestamp)
 				}
+				// Now move to the next key of interest. Note that if in the last
+				// iteration of the loop we called `NextIgnoringTime`, the fact that we
+				// hit an intent proves that there wasn't a previous value, so we can
+				// (in fact, have to, to avoid surfacing unwanted keys) unconditionally
+				// enforce time bounds.
 				i.Next()
 				continue
 			}
