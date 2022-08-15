@@ -16,9 +16,19 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+)
+
+type releaseTypeOpt string
+
+const (
+	releaseTypeAlpha  = releaseTypeOpt("alpha")
+	releaseTypeBeta   = releaseTypeOpt("beta")
+	releaseTypeRC     = releaseTypeOpt("rc")
+	releaseTypeStable = releaseTypeOpt("stable")
 )
 
 type releaseInfo struct {
@@ -32,12 +42,12 @@ type releaseInfo struct {
 }
 
 // findNextVersion returns the next release version for given releaseSeries.
-func findNextVersion(releaseSeries string) (string, error) {
+func findNextVersion(releaseSeries string, releaseType releaseTypeOpt) (string, error) {
 	prevReleaseVersion, err := findPreviousRelease(releaseSeries, false)
 	if err != nil {
 		return "", fmt.Errorf("cannot find previous release: %w", err)
 	}
-	nextReleaseVersion, err := bumpVersion(prevReleaseVersion)
+	nextReleaseVersion, err := bumpVersion(prevReleaseVersion, releaseType)
 	if err != nil {
 		return "", fmt.Errorf("cannot bump version: %w", err)
 	}
@@ -45,12 +55,12 @@ func findNextVersion(releaseSeries string) (string, error) {
 }
 
 // findNextRelease finds all required information for the next release.
-func findNextRelease(releaseSeries string) (releaseInfo, error) {
+func findNextRelease(releaseSeries string, releaseType releaseTypeOpt) (releaseInfo, error) {
 	prevReleaseVersion, err := findPreviousRelease(releaseSeries, false)
 	if err != nil {
 		return releaseInfo{}, fmt.Errorf("cannot find previous release: %w", err)
 	}
-	nextReleaseVersion, err := bumpVersion(prevReleaseVersion)
+	nextReleaseVersion, err := bumpVersion(prevReleaseVersion, releaseType)
 	if err != nil {
 		return releaseInfo{}, fmt.Errorf("cannot bump version: %w", err)
 	}
@@ -99,9 +109,9 @@ func findVersions(text string) []*semver.Version {
 		if trimmedLine == "" {
 			continue
 		}
-		// Skip builds before alpha.1
-		if strings.Contains(trimmedLine, "-alpha.0000") {
-			continue
+		// Semantic version doesn't support multiple zeros
+		if strings.HasSuffix(trimmedLine, "-alpha.00000000") {
+			trimmedLine = strings.ReplaceAll(trimmedLine, "-alpha.00000000", "-alpha.0")
 		}
 		version, err := semver.NewVersion(trimmedLine)
 		if err != nil {
@@ -114,7 +124,6 @@ func findVersions(text string) []*semver.Version {
 }
 
 // findPreviousRelease finds the latest version tag for a particular release series.
-// It ignores non-semantic versions and tags with the alpha.0* suffix.
 // if ignorePrereleases is set to true, only stable versions are returned.
 func findPreviousRelease(releaseSeries string, ignorePrereleases bool) (string, error) {
 	// TODO: filter version using semantic version, not a git pattern
@@ -144,13 +153,55 @@ func findPreviousRelease(releaseSeries string, ignorePrereleases bool) (string, 
 	return versions[len(versions)-1].Original(), nil
 }
 
+// bumpPrelease increases the prerelease number part. For example, given beta.2 it returns beta.3.
+func bumpPrerelease(prerelease string) (string, error) {
+	fields := strings.SplitN(prerelease, ".", 2)
+	if len(fields) != 2 {
+		return "", fmt.Errorf("prerelease part should contain 2 fields: %s", prerelease)
+	}
+	prereleaseNumber, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return "", fmt.Errorf("prerelease second part is not numeric: %s", prerelease)
+	}
+	prereleaseNumber++
+	return fmt.Sprintf("%s.%d", fields[0], prereleaseNumber), nil
+}
+
 // bumpVersion increases the patch release version (the last digit) of a given version
-func bumpVersion(version string) (string, error) {
+func bumpVersion(version string, releaseType releaseTypeOpt) (string, error) {
 	semanticVersion, err := semver.NewVersion(version)
 	if err != nil {
 		return "", fmt.Errorf("cannot parse version: %w", err)
 	}
-	nextVersion := semanticVersion.IncPatch()
+	if releaseType == releaseTypeStable {
+		nextVersion := semanticVersion.IncPatch()
+		return nextVersion.Original(), nil
+	}
+	prerelease := semanticVersion.Prerelease()
+	if prerelease == "" {
+		return "", fmt.Errorf("cannot create a prerelease version from stable %s", semanticVersion.Original())
+	}
+	// betas can be derived from alphas or other betas only
+	if releaseType == releaseTypeBeta && strings.HasPrefix(prerelease, string(releaseTypeRC)) {
+		return "", fmt.Errorf("cannot create a beta version from rc %s", semanticVersion.Original())
+	}
+	// alphas cn be created from alphas only
+	if releaseType == releaseTypeAlpha && !strings.HasPrefix(prerelease, string(releaseTypeAlpha)) {
+		return "", fmt.Errorf("cannot create an alpha version from non-alpha %s", semanticVersion.Original())
+	}
+	if !strings.HasPrefix(prerelease, string(releaseType)) {
+		// The case we switch alpha -> beta -> rc
+		prerelease = fmt.Sprintf("%s.0", releaseType)
+	}
+	nextPrerelease, err := bumpPrerelease(prerelease)
+	if err != nil {
+		return "", fmt.Errorf("cannot bump to next prerelease version from %s: %w", semanticVersion.Original(), err)
+	}
+	nextVersion, err := semver.NewVersion(fmt.Sprintf("v%d.%d.%d-%s", semanticVersion.Major(), semanticVersion.Minor(),
+		semanticVersion.Patch(), nextPrerelease))
+	if err != nil {
+		return "", fmt.Errorf("cannot set prerelease: %w", err)
+	}
 	return nextVersion.Original(), nil
 }
 
@@ -189,9 +240,22 @@ func getCommonBaseRef(fromRef, toRef string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+func branchExists(branch string) bool {
+	cmd := exec.Command("git", "rev-parse", "--quiet", "--verify", "origin/"+branch)
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return true
+}
+
 // findCandidateCommits finds all potential merge commits that can be used for the current release.
 // It includes all merge commits since previous release.
 func findCandidateCommits(prevRelease string, releaseSeries string) ([]string, error) {
+	// TODO: for prereleases allow to use master. aplha.1 is a special case,
+	// where we go back in history until we find an appropriate green build. Also,
+	// the "changes since last" release should be empty?
+	// We may need to use some kind of iterator instead of a list of merges in between.
+	// For alpha.1 we should use a common base between master and the previous release branch?
 	releaseBranch := fmt.Sprintf("origin/release-%s", releaseSeries)
 	commonBaseRef, err := getCommonBaseRef(prevRelease, releaseBranch)
 	if err != nil {

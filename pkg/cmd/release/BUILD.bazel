@@ -42,6 +42,7 @@ go_test(
     name = "release_test",
     srcs = [
         "blockers_test.go",
+        "git_test.go",
         "sender_test.go",
         "versionmap_test.go",
     ],

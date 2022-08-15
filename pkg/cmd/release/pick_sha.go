@@ -32,6 +32,7 @@ var pickSHAFlags = struct {
 	releaseBucket       string
 	releaseObjectPrefix string
 	releaseSeries       string
+	releaseType         string
 	templatesDir        string
 	smtpUser            string
 	smtpHost            string
@@ -39,6 +40,18 @@ var pickSHAFlags = struct {
 	emailAddresses      []string
 	dryRun              bool
 }{}
+
+var releaseTypeOptions = []releaseTypeOpt{releaseTypeAlpha, releaseTypeBeta, releaseTypeRC, releaseTypeStable}
+
+func releaseTypePrep(releaseType string) (option releaseTypeOpt, ok bool) {
+	for _, v := range releaseTypeOptions {
+		d := releaseTypeOpt(releaseType)
+		if d == v {
+			return d, true
+		}
+	}
+	return "", false
+}
 
 var pickSHACmd = &cobra.Command{
 	Use:   "pick-sha",
@@ -56,6 +69,7 @@ func init() {
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseBucket, releaseBucket, "", "release candidates metadata GCS bucket")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseObjectPrefix, releaseObjectPrefix, "", "release candidate object prefix")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseSeries, releaseSeries, "", "major release series")
+	pickSHACmd.Flags().StringVar(&pickSHAFlags.releaseType, releaseType, "", "release type, e.g. stable, alpha, beta, rc")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.templatesDir, templatesDir, "", "templates directory")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.smtpUser, smtpUser, os.Getenv(envSMTPUser), "SMTP user name")
 	pickSHACmd.Flags().StringVar(&pickSHAFlags.smtpHost, smtpHost, "", "SMTP host")
@@ -69,6 +83,7 @@ func init() {
 		releaseBucket,
 		releaseObjectPrefix,
 		releaseSeries,
+		releaseType,
 		smtpUser,
 		smtpHost,
 		smtpPort,
@@ -95,7 +110,11 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("JIRA_TOKEN environment variable should be set")
 	}
 
-	nextRelease, err := findNextRelease(pickSHAFlags.releaseSeries)
+	releaseTypeVal, ok := releaseTypePrep(pickSHAFlags.releaseType)
+	if !ok {
+		return fmt.Errorf("%s must be one of: %s", releaseType, releaseTypeOptions)
+	}
+	nextRelease, err := findNextRelease(pickSHAFlags.releaseSeries, releaseTypeVal)
 	if err != nil {
 		return fmt.Errorf("cannot find next release: %w", err)
 	}
