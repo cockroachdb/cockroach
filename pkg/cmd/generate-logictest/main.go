@@ -24,11 +24,16 @@ import (
 )
 
 type testFileTemplateConfig struct {
-	LogicTest, CclLogicTest, ExecBuildLogicTest, SqliteLogicTest bool
-	Ccl, ForceProductionValues                                   bool
-	Package, TestRuleName, RelDir                                string
-	ConfigIdx                                                    int
-	TestCount                                                    int
+	LogicTest                     bool
+	CclLogicTest                  bool
+	ExecBuildLogicTest            bool
+	SqliteLogicTest               bool
+	Ccl                           bool
+	ForceProductionValues         bool
+	Package, TestRuleName, RelDir string
+	ConfigIdx                     int
+	TestCount                     int
+	NumCPU                        int
 }
 
 var outDir = flag.String("out-dir", "", "path to the root of the cockroach workspace")
@@ -155,6 +160,10 @@ func (t *testdir) dump() error {
 		tplCfg.Package = strings.ReplaceAll(strings.ReplaceAll(cfg.Name, "-", "_"), ".", "")
 		tplCfg.RelDir = t.relPathToParent
 		tplCfg.TestCount = testCount
+		// The NumCPU calculation is a guess pulled out of thin air to
+		// allocate the tests which use 3-node clusters 2 vCPUs, and
+		// the ones which use more a bit more.
+		tplCfg.NumCPU = (cfg.NumNodes / 2) + 1
 		subdir := filepath.Join(t.dir, cfg.Name)
 		f, buildF, cleanup, err := openTestSubdir(subdir)
 		if err != nil {

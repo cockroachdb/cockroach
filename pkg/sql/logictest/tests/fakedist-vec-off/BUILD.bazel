@@ -10,6 +10,7 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep
     ],
     shard_count = 16,
+    tags = ["cpu:2"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/security/securityassets",

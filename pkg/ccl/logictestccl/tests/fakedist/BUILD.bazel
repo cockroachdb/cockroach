@@ -10,6 +10,7 @@ go_test(
         "//pkg/ccl/logictestccl:testdata",  # keep
     ],
     shard_count = 4,
+    tags = ["cpu:2"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/ccl",
