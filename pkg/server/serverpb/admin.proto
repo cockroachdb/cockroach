@@ -307,10 +307,10 @@ message UsersResponse {
 }
 
 // EventsRequest is a request for event log entries, optionally filtered
-// by the specified event type and/or target_id.
+// by the specified event type.
 message EventsRequest {
   string type = 1;
-  int64 target_id = 2;
+  reserved 2;
   // limit is the total number of results that are retrieved by the query. If
   // this is omitted or set to 0, the default maximum number of results are
   // returned. When set to > 0, at most only that number of results are
@@ -334,8 +334,7 @@ message EventsResponse {
     // event_type is the type of the event (e.g. "create_table", "drop_table".
     string event_type = 2;
 
-    // target_id is the target for this event.
-    int64 target_id = 3 [(gogoproto.customname) = "TargetID"];
+    reserved 3;
 
     // reporting_id is the reporting ID for this event.
     int64 reporting_id = 4 [(gogoproto.customname) = "ReportingID"];
