@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	benchTimeFlag = "bench-time"
-	benchMemFlag  = "bench-mem"
+	benchTimeFlag  = "bench-time"
+	benchMemFlag   = "bench-mem"
+	crdbTestOnFlag = "crdb-test-on"
 )
 
 // makeBenchCmd constructs the subcommand used to run the specified benchmarks.
@@ -49,6 +50,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	benchCmd.Flags().Bool(benchMemFlag, false, "print memory allocations for benchmarks")
 	benchCmd.Flags().Bool(streamOutputFlag, false, "stream bench output during run")
 	benchCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
+	benchCmd.Flags().Bool(crdbTestOnFlag, false, "run the benchmarks with crdb_test tag on")
 
 	return benchCmd
 }
@@ -68,6 +70,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		benchMem     = mustGetFlagBool(cmd, benchMemFlag)
 		streamOutput = mustGetFlagBool(cmd, streamOutputFlag)
 		testArgs     = mustGetFlagString(cmd, testArgsFlag)
+		crdbTestOn   = mustGetFlagBool(cmd, crdbTestOnFlag)
 	)
 
 	// Enumerate all benches to run.
@@ -153,8 +156,12 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, goTestArgs...)
 	}
+	if !crdbTestOn {
+		args = append(args, "--crdb_test_off")
+	}
 	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
+	args = append(args)
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
