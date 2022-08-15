@@ -7205,6 +7205,50 @@ that has execution latency greater than the 'minExecutionLatency'. If the
 expires until the statement bundle is collected`,
 		},
 	),
+
+	"crdb_internal.set_compaction_concurrency": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"node_id", types.Int},
+				{"store_id", types.Int},
+				{"compaction_concurrency", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+				nodeID := int32(tree.MustBeDInt(args[0]))
+				storeID := int32(tree.MustBeDInt(args[1]))
+				compactionConcurrency := tree.MustBeDInt(args[2])
+				if compactionConcurrency <= 0 {
+					return nil, errors.AssertionFailedf("compaction_concurrency must be > 0")
+				}
+				if err = ctx.SetCompactionConcurrency(
+					ctx.Context, nodeID, storeID, uint64(compactionConcurrency)); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: "This function can be used to temporarily change the compaction concurrency of a " +
+				"given node and store. " +
+				"To change the compaction concurrency of a store one can do: " +
+				"SELECT crdb_internal.set_compaction_concurrency(<node_id>, <store_id>, <compaction_concurrency>). " +
+				"The store's compaction concurrency will change until the sql command is cancelled. Once cancelled " +
+				"the store's compaction concurrency will return to what it was previously. This command isn't safe " +
+				"for concurrent use.",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
