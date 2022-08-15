@@ -25,6 +25,7 @@ Query {"String": "COPY t FROM STDIN"}
 CopyData {"Data": "1\tblah\n"}
 CopyData {"Data": "2\t\n"}
 CopyData {"Data": "3\t\\N\n"}
+CopyData {"Data": "4\t\"\"\n"}
 CopyData {"Data": "\\.\n"}
 CopyDone
 Query {"String": "SELECT * FROM t ORDER BY i"}
@@ -38,12 +39,13 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"DELETE 0"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
-{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"CommandComplete","CommandTag":"COPY 4"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"blah"}]}
 {"Type":"DataRow","Values":[{"text":"2"},null]}
 {"Type":"DataRow","Values":[{"text":"3"},null]}
-{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"DataRow","Values":[{"text":"4"},{"text":"\"\""}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 4"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Extra fields.
@@ -581,6 +583,53 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 2"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Test that we distinguish an empty column from a quoted empty string.
+# By default, an empty column is NULL.
+# If We specify another NULL token, then the empty column does get interpreted
+# as an empty string.
+
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN WITH CSV"}
+CopyData {"Data": "1,cat\n"}
+CopyData {"Data": "2,\"\"\n"}
+CopyData {"Data": "3,\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "COPY t FROM STDIN WITH CSV NULL 'N'"}
+CopyData {"Data": "4,\"\"\n"}
+CopyData {"Data": "5,\n"}
+CopyData {"Data": "6,N\n"}
+CopyData {"Data": "7,\"N\"\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "SELECT i, length(t) FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 4"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"3"},null]}
+{"Type":"DataRow","Values":[{"text":"4"},{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"5"},{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"6"},null]}
+{"Type":"DataRow","Values":[{"text":"7"},{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 7"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Verify that COPY CSV input can be split up at arbitrary points.
 send
 Query {"String": "DELETE FROM t"}
@@ -608,7 +657,7 @@ ReadyForQuery
 ReadyForQuery
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"DELETE 2"}
+{"Type":"CommandComplete","CommandTag":"DELETE 7"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
 {"Type":"CommandComplete","CommandTag":"COPY 9"}
@@ -742,15 +791,19 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
+Query {"String": "SET TIME ZONE UTC"}
 Query {"String": "COPY t FROM STDIN CSV"}
 CopyData {"Data": "1,2021-09-20T06:05:04\n"}
 CopyData {"Data": "\\.\n"}
 CopyDone
 ----
 
-until ignore=RowDescription
+until ignore=RowDescription ignore=ParameterStatus
+ReadyForQuery
 ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
 {"Type":"CommandComplete","CommandTag":"COPY 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -764,12 +817,11 @@ CopyDone
 Query {"String": "SELECT i, t FROM t ORDER BY i"}
 ----
 
-until ignore=RowDescription
+until ignore=RowDescription ignore=ParameterStatus
 ReadyForQuery
 ReadyForQuery
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/Chicago"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}

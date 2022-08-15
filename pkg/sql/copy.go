@@ -474,7 +474,7 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 	record, err := c.csvReader.Read()
 	// Look for end of data before checking for errors, since a field count
 	// error will still return record data.
-	if len(record) == 1 && record[0] == endOfData && c.buf.Len() == 0 {
+	if len(record) == 1 && !record[0].Quoted && record[0].Val == endOfData && c.buf.Len() == 0 {
 		return true, nil
 	}
 	if err != nil {
@@ -485,7 +485,7 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 	return false, err
 }
 
-func (c *copyMachine) maybeIgnoreHiddenColumnsStr(in []string) []string {
+func (c *copyMachine) maybeIgnoreHiddenColumnsStr(in []csv.Record) []csv.Record {
 	if len(c.expectedHiddenColumnIdxs) == 0 {
 		return in
 	}
@@ -499,7 +499,7 @@ func (c *copyMachine) maybeIgnoreHiddenColumnsStr(in []string) []string {
 	return ret
 }
 
-func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
+func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) error {
 	if expected := len(c.resultColumns) + len(c.expectedHiddenColumnIdxs); expected != len(record) {
 		return pgerror.Newf(pgcode.BadCopyFileFormat,
 			"expected %d values, got %d", expected, len(record))
@@ -507,11 +507,13 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
 	record = c.maybeIgnoreHiddenColumnsStr(record)
 	exprs := make(tree.Exprs, len(record))
 	for i, s := range record {
-		if s == c.null {
+		// NB: When we implement FORCE_NULL, then quoted values also are allowed
+		// to be treated as NULL.
+		if !s.Quoted && s.Val == c.null {
 			exprs[i] = tree.DNull
 			continue
 		}
-		d, _, err := tree.ParseAndRequireString(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		d, _, err := tree.ParseAndRequireString(c.resultColumns[i].Typ, s.Val, c.parsingEvalCtx)
 		if err != nil {
 			return err
 		}
