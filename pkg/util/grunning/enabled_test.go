@@ -20,12 +20,10 @@ package grunning_test
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,13 +44,7 @@ func TestEnabled(t *testing.T) {
 func TestEquivalentGoroutines(t *testing.T) {
 	skip.UnderStress(t, "not applicable")
 
-	mu := struct {
-		syncutil.Mutex
-		nanos map[int]int64
-	}{}
-	mu.nanos = make(map[int]int64)
-
-	f := func(wg *sync.WaitGroup, id int) {
+	f := func(wg *sync.WaitGroup, result *int64) {
 		defer wg.Done()
 
 		var sum int
@@ -64,31 +56,27 @@ func TestEquivalentGoroutines(t *testing.T) {
 		}
 
 		nanos := grunning.Time().Nanoseconds()
-		mu.Lock()
-		mu.nanos[id] = nanos
-		mu.Unlock()
+		*result = nanos
 	}
 
 	const threads = 10
 	var wg sync.WaitGroup
+	results := make([]int64, threads)
 	for i := 0; i < threads; i++ {
 		i := i // copy loop variable
 		wg.Add(1)
-		go f(&wg, i)
+		go f(&wg, &results[i])
 	}
 	wg.Wait()
 
-	mu.Lock()
-	defer mu.Unlock()
-
 	total := int64(0)
-	for _, nanos := range mu.nanos {
-		total += nanos
+	for _, result := range results {
+		total += result
 	}
 
 	exp := 1.0 / threads
-	for i, nanos := range mu.nanos {
-		got := float64(nanos) / float64(total)
+	for i, result := range results {
+		got := float64(result) / float64(total)
 
 		t.Logf("thread=%02d expected≈%5.2f%% got=%5.2f%% of on-cpu time",
 			i+1, exp*100, got*100)
@@ -112,7 +100,7 @@ func TestProportionalGoroutines(t *testing.T) {
 		}
 
 		nanos := grunning.Time().Nanoseconds()
-		atomic.AddInt64(result, nanos)
+		*result = nanos
 	}
 
 	results := make([]int64, 10)
@@ -144,7 +132,9 @@ func TestProportionalGoroutines(t *testing.T) {
 }
 
 // TestPingPongHog is adapted from a benchmark in the Go runtime, forcing the
-// scheduler to continually schedule goroutines.
+// scheduler to continually schedule goroutines. It demonstrates that if two
+// goroutines alternately cycle between running and waiting, they will get
+// similar running times.
 func TestPingPongHog(t *testing.T) {
 	skip.UnderStress(t, "not applicable")
 
@@ -183,9 +173,9 @@ func TestPingPongHog(t *testing.T) {
 		done <- true
 	}()
 	ping <- true // start ping-pong
-	<-stop
-	<-ping // let last ponger exit
-	<-done // make sure goroutines exit
+	<-stop       // wait for the pinger to finish
+	<-ping       // wait for the ponger to finish
+	<-done       // make sure goroutines exit
 	<-done
 	<-done
 
@@ -194,7 +184,13 @@ func TestPingPongHog(t *testing.T) {
 }
 
 // BenchmarkGRunningTime measures how costly it is to read the current
-// goroutine's running time.
+// goroutine's running time. Results:
+//
+//	  goos: linux
+//	  goarch: amd64
+//	  cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+//	  BenchmarkGRunningTime
+//	  BenchmarkGRunningTime-24        38336452                31.59 ns/op
 func BenchmarkGRunningTime(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		_ = grunning.Time()
