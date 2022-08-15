@@ -6,6 +6,13 @@
 
 # Verify information_schema database handles mutation statements correctly.
 
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
+
 query error database "information_schema" does not exist
 ALTER DATABASE information_schema RENAME TO not_information_schema
 

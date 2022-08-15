@@ -1,3 +1,9 @@
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
 # Test all feature flags when set to off in SQL package.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE;

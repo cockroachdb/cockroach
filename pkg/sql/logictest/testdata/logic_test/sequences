@@ -1,5 +1,12 @@
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
+
 # USING THE `lastval` FUNCTION
 # (at the top because it requires a session in which `lastval` has never been called)
 

@@ -1,5 +1,12 @@
 # LogicTest: !metamorphic
 
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
+
 # Disable automatic stats
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false

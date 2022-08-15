@@ -1,3 +1,9 @@
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
 # Test that sequences are encoded and decoded/printed properly.
 subtest show_sequences
 

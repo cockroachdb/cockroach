@@ -2,6 +2,13 @@
 # turn on the setting that gates setting zone configs for system tenants.
 # tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
 
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
+
 # Check that we can alter the default zone config.
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1

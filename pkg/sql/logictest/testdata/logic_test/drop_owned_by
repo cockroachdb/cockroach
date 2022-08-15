@@ -1,5 +1,12 @@
 # LogicTest: !local-legacy-schema-changer
 
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
+
 # Test dropping nothing.
 statement ok
 DROP OWNED BY testuser

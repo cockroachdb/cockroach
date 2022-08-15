@@ -1,5 +1,12 @@
 # LogicTest: local
 
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
+
 # Set the distsql_workmem to the default production value because of a problem
 # with losing 'name' attribute when spilling to disk (#78547).
 statement ok

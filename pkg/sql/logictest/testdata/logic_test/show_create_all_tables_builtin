@@ -1,3 +1,9 @@
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
 statement error pq: crdb_internal.show_create_all_tables: database "d" does not exist
 SELECT crdb_internal.show_create_all_tables('d')
 

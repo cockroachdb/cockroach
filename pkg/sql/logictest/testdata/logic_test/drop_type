@@ -1,3 +1,9 @@
+# The following tests are broken with this cluster setting disabled
+# due to this issue:
+# https://github.com/cockroachdb/cockroach/issues/86132
+statement OK
+SET CLUSTER SETTING server.eventlog.enabled = true
+
 statement ok
 SET sql_safe_updates = false;
 SET enable_experimental_alter_column_type_general = true;
