@@ -75,10 +75,11 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 
 		annotateErrorWithoutCode := true
 		var nie *notInternalError
-		if errors.As(err, &nie) {
-			// A notInternalError was not caused by the vectorized engine and
-			// represents an error that we don't want to annotate in case it
-			// doesn't have a valid PG code.
+		if errors.Is(err, context.Canceled) || errors.As(err, &nie) {
+			// We don't want to annotate the context cancellation and
+			// notInternalError errors in case they don't have a valid PG code
+			// so that the sentry report is not sent (errors with failed
+			// assertions get sentry reports).
 			annotateErrorWithoutCode = false
 		}
 		if code := pgerror.GetPGCode(err); annotateErrorWithoutCode && code == pgcode.Uncategorized {
