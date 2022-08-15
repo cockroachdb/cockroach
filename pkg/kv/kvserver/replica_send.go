@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"reflect"
+	"runtime/pprof"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -95,36 +97,15 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //                         to commit the command, then signaling proposer and
 //                         applying the command)
 func (r *Replica) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, req roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	return r.sendWithoutRangeID(ctx, &ba)
-}
-
-// sendWithoutRangeID used to be called sendWithRangeID, accepted a `_forStacks
-// roachpb.RangeID` argument, and had the description below. Ever since Go
-// switched to the register-based calling convention though, this stopped
-// working, giving essentially random numbers in the goroutine dumps that were
-// misleading. It has thus been "disarmed" until Go produces useful values
-// again.
-//
-// See (internal): https://cockroachlabs.slack.com/archives/G01G8LK77DK/p1641478596004700
-//
-// sendWithRangeID takes an unused rangeID argument so that the range
-// ID will be accessible in stack traces (both in panics and when
-// sampling goroutines from a live server). This line is subject to
-// the whims of the compiler and it can be difficult to find the right
-// value, but as of this writing the following example shows a stack
-// while processing range 21 (0x15) (the first occurrence of that
-// number is the rangeID argument, the second is within the encoded
-// BatchRequest, although we don't want to rely on that occurring
-// within the portion printed in the stack trace):
-//
-// github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
-func (r *Replica) sendWithoutRangeID(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
-	var br *roachpb.BatchResponse
-
+	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+		defer pprof.SetGoroutineLabels(ctx)
+		// Note: the defer statement captured the previous context.
+		ctx = pprof.WithLabels(ctx, pprof.Labels("range_str", r.rangeStr.String()))
+		pprof.SetGoroutineLabels(ctx)
+	}
+	ba := &req
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
 		r.leaseholderStats.recordCount(r.getBatchRequestQPS(ctx, ba), ba.Header.GatewayNodeID)
 	}
@@ -163,6 +144,7 @@ func (r *Replica) sendWithoutRangeID(
 	}
 
 	// Differentiate between read-write, read-only, and admin.
+	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
 	if isReadOnly {
 		log.Event(ctx, "read-only path")
