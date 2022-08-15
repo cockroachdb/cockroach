@@ -218,12 +218,6 @@
           },
           {
             "type": "integer",
-            "description": "Filter for events with this targetID. Only one targetID can be specified at a time.",
-            "name": "targetID",
-            "in": "query"
-          },
-          {
-            "type": "integer",
             "description": "Maximum number of results to return in this call.",
             "name": "limit",
             "in": "query"
@@ -998,12 +992,6 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ReportingID"
-        },
-        "target_id": {
-          "description": "target_id is the target for this event.",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "TargetID"
         },
         "timestamp": {
           "description": "timestamp is the time at which the event occurred.",
