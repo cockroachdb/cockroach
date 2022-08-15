@@ -283,3 +283,124 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		nonSensitiveCols: NonSensitiveColumns{"id", "tags", "startts", "diff", "node_id", "range_id", "created", "range_start", "range_end", "resolved", "last_event_utc"},
 	},
 }
+
+/**
+ * NB: The following system tables explicitly forbidden:
+ * 	- system.users: avoid downloading passwords.
+ * 	- system.web_sessions: avoid downloading active session tokens.
+ * 	- system.join_tokens: avoid downloading secret join keys.
+ * 	- system.comments: avoid downloading noise from SQL schema.
+ * 	- system.ui: avoid downloading noise from UI customizations.
+ * 	- system.zones: the contents of crdb_internal.zones is easier to use.
+ * 	- system.statement_bundle_chunks: avoid downloading a large table that's hard to interpret currently.
+ * 	- system.statement_statistics: historical data, usually too much to download.
+ * 	- system.transaction_statistics: ditto
+ *
+ * A test makes this assertion in pkg/cli/zip_table_registry.go:TestNoForbiddenSystemTablesInDebugZip
+ */
+var zipSystemTables = DebugZipTableRegistry{
+	"system.database_role_settings": {
+		nonSensitiveCols: NonSensitiveColumns{"database_id", "role_name", "settings"},
+	},
+	"system.descriptor": {
+		// `descriptor` column can contain customer-supplied default values for columns, e.g. `column_name STRING DEFAULT 'some value'`
+		nonSensitiveCols:      NonSensitiveColumns{"id"},
+		customQueryUnredacted: `SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor`,
+	},
+	"system.eventlog": {
+		nonSensitiveCols: NonSensitiveColumns{"timestamp", "eventType", "targetID", "reportingID", "uniqueID"},
+	},
+	"system.external_connections": {
+		// `connection_details` column may contain customer infra IP addresses, URI params containing access keys, etc.
+		nonSensitiveCols: NonSensitiveColumns{"connection_name", "created", "updated", "connection_type"},
+	},
+	"system.jobs": {
+		// `payload` column may contain customer info, such as URI params containing access keys, encryption salts, etc.
+		nonSensitiveCols:      NonSensitiveColumns{"id", "status", "created", "progress", "created_by_type", "created_by_id", "claim_session_id", "claim_instance_id", "num_runs", "last_run"},
+		customQueryUnredacted: `SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs`,
+	},
+	"system.lease": {
+		nonSensitiveCols: NonSensitiveColumns{"descID", "version", "nodeID", "expiration"},
+	},
+	"system.locations": {
+		nonSensitiveCols: NonSensitiveColumns{"localityKey", "localityValue", "latitude", "longitude"},
+	},
+	"system.migrations": {
+		nonSensitiveCols: NonSensitiveColumns{"major", "minor", "patch", "internal", "completed_at"},
+	},
+	"system.namespace": {
+		nonSensitiveCols: NonSensitiveColumns{"parentID", "parentSchemaID", "name", "id"},
+	},
+	"system.privileges": {
+		nonSensitiveCols: NonSensitiveColumns{"username", "path", "privileges", "grant_options"},
+	},
+	"system.protected_ts_meta": {
+		nonSensitiveCols: NonSensitiveColumns{"singleton", "version", "num_records", "num_spans", "total_bytes"},
+	},
+	"system.protected_ts_records": {
+		nonSensitiveCols: NonSensitiveColumns{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target"},
+	},
+	"system.rangelog": {
+		nonSensitiveCols: NonSensitiveColumns{"timestamp", "rangeID", "storeID", "eventType", "otherRangeID", "info", "uniqueID"},
+	},
+	"system.replication_constraint_stats": {
+		nonSensitiveCols: NonSensitiveColumns{"zone_id", "subzone_id", "type", "config", "report_id", "violation_start", "violating_ranges"},
+	},
+	"system.replication_critical_localities": {
+		nonSensitiveCols: NonSensitiveColumns{"zone_id", "subzone_id", "locality", "report_id", "at_risk_ranges"},
+	},
+	"system.replication_stats": {
+		nonSensitiveCols: NonSensitiveColumns{"zone_id", "subzone_id", "report_id", "total_ranges", "unavailable_ranges", "under_replicated_ranges", "over_replicated_ranges"},
+	},
+	"system.reports_meta": {
+		nonSensitiveCols: NonSensitiveColumns{"id", "generated"},
+	},
+	"system.role_id_seq": {
+		nonSensitiveCols: NonSensitiveColumns{"last_value", "log_cnt", "is_called"},
+	},
+	"system.role_members": {
+		nonSensitiveCols: NonSensitiveColumns{"role", "member", "isAdmin"},
+	},
+	"system.role_options": {
+		nonSensitiveCols: NonSensitiveColumns{"username", "option", "value"},
+	},
+	"system.scheduled_jobs": {
+		// `execution_args` column contains BACKUP statements which can contain sensitive URI params, such as AWS keys.
+		nonSensitiveCols: NonSensitiveColumns{"schedule_id", "schedule_name", "created", "owner", "next_run", "schedule_state", "schedule_expr", "schedule_details", "executor_type"},
+	},
+	"system.settings": {
+		// TODO(abarganier): Identify specific sensitive settings and create an allow-list for the rest.
+		// `value` column may contain sensitive customer data, depending on the setting.
+		nonSensitiveCols:      NonSensitiveColumns{"name", "lastUpdated", "valueType"},
+		customQueryUnredacted: `SELECT *, to_hex(value) as hex_value FROM system.settings`,
+	},
+	"system.span_configurations": {
+		nonSensitiveCols: NonSensitiveColumns{"config", "start_key", "end_key"},
+	},
+	"system.sql_instances": {
+		nonSensitiveCols: NonSensitiveColumns{"id", "addr", "session_id", "locality"},
+	},
+	"system.sqlliveness": {
+		nonSensitiveCols: NonSensitiveColumns{"session_id", "expiration"},
+	},
+	"system.statement_diagnostics": {
+		// `bundle_chunks` column contains diagnostic bundle bytes, which contain unredacted information such as SQL
+		//  arguments and unredacted trace logs.
+		nonSensitiveCols: NonSensitiveColumns{"id", "statement_fingerprint", "collected_at", "statement", "error"},
+	},
+	"system.statement_diagnostics_requests": {
+		nonSensitiveCols: NonSensitiveColumns{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability"},
+	},
+	"system.table_statistics": {
+		nonSensitiveCols: NonSensitiveColumns{"tableID", "statisticID", "name", "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", "histogram", "avgSize"},
+	},
+	"system.tenant_settings": {
+		nonSensitiveCols: NonSensitiveColumns{"tenant_id", "name", "value", "last_updated", "value_type", "reason"},
+	},
+	"system.tenant_usage": {
+		nonSensitiveCols: NonSensitiveColumns{"tenant_id", "instance_id", "next_instance_id", "last_update", "ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum", "total_consumption", "instance_seq", "instance_shares", "instance_lease"},
+	},
+	"system.tenants": {
+		nonSensitiveCols: NonSensitiveColumns{"id", "active", "info"},
+	},
+}

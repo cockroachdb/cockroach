@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -78,4 +79,25 @@ func TestQueryForTable(t *testing.T) {
 		assert.Contains(t, err.Error(), "no non-sensitive columns defined")
 		assert.Empty(t, actual)
 	})
+}
+
+func TestNoForbiddenSystemTablesInDebugZip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	forbiddenSysTables := []string{
+		"system.users",
+		"system.web_sessions",
+		"system.join_tokens",
+		"system.comments",
+		"system.ui",
+		"system.zones",
+		"system.statement_bundle_chunks",
+		"system.statement_statistics",
+		"system.transaction_statistics",
+	}
+	for _, forbiddenTable := range forbiddenSysTables {
+		query, err := zipSystemTables.QueryForTable(forbiddenTable, false /* redact */)
+		assert.Equal(t, "", query)
+		assert.Error(t, err)
+		assert.Equal(t, fmt.Sprintf("no entry found in table registry for: %s", forbiddenTable), err.Error())
+	}
 }

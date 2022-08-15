@@ -42,14 +42,6 @@ type zipRequest struct {
 	pathName string
 }
 
-// Override for the default SELECT * FROM table when dumping one of the tables
-// in `debugZipTablesPerNode` or `debugZipTablesPerCluster`
-var customQuery = map[string]string{
-	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
-	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
-	"system.settings":   "SELECT *, to_hex(value) as hex_value FROM system.settings",
-}
-
 type debugZipContext struct {
 	z              *zipper
 	clusterPrinter *zipReporter
@@ -362,7 +354,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			return sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, ioutil.Discard, stderr, clisqlclient.MakeQuery(query))
 		}()
 		if sqlErr != nil {
-			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
+			if cErr := zc.z.createError(s, name, errors.CombineErrors(sqlErr, errors.Newf("query: %s", query))); cErr != nil {
 				return cErr
 			}
 			var pgErr = (*pgconn.PgError)(nil)

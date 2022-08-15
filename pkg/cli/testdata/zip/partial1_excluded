@@ -36,8 +36,6 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
 [cluster] retrieving SQL data for crdb_internal.transaction_contention_events... writing output: debug/crdb_internal.transaction_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.zones... writing output: debug/crdb_internal.zones.txt... done
-[cluster] retrieving list of system tables... done
-[cluster] 40 system tables found
 [cluster] retrieving SQL data for system.database_role_settings... writing output: debug/system.database_role_settings.txt... done
 [cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
 [cluster] retrieving SQL data for system.eventlog... writing output: debug/system.eventlog.txt... done
