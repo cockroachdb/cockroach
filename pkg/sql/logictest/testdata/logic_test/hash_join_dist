@@ -88,3 +88,37 @@ LEFT JOIN b AS b2 ON (a.id = b2.a_id AND b2.status = 2)
 WHERE (a.id IN ('3f90e30a-c87a-4017-b9a0-8f964b91c4af', '3adaf3da-0368-461a-8437-ee448724b78d', 'd0c13b06-5368-4522-8126-105b0a9513cd'))
 ORDER BY id DESC
 LIMIT 2;
+
+# Some tests with OID types in the equality columns.
+
+statement ok
+CREATE TABLE t86075 (k INT PRIMARY KEY, c REGPROCEDURE, a REGPROCEDURE[]);
+INSERT INTO t86075 VALUES (1, 1, ARRAY[1]), (2, 2, ARRAY[2]), (3, 3, ARRAY[3]);
+CREATE TABLE t86075_2 (k INT PRIMARY KEY, c REGPROCEDURE, a REGPROCEDURE[]);
+INSERT INTO t86075_2 VALUES (1, 1, ARRAY[1]), (2, 2, ARRAY[2]), (3, 3, ARRAY[3]);
+
+statement ok
+ALTER TABLE t86075 SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE t86075 SCATTER
+
+statement ok
+ALTER TABLE t86075_2 SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE t86075_2 SCATTER
+
+query I rowsort
+SELECT t1.k FROM t86075 AS t1, t86075_2 AS t2 WHERE t1.c = t2.c
+----
+1
+2
+3
+
+query I rowsort
+SELECT t1.k FROM t86075 AS t1, t86075_2 AS t2 WHERE t1.a = t2.a
+----
+1
+2
+3

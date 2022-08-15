@@ -950,6 +950,14 @@ type Subquery struct {
 	typeAnnotation
 }
 
+// ResolvedType implements the TypedExpr interface.
+func (node *Subquery) ResolvedType() *types.T {
+	if node.typ == nil {
+		return types.Any
+	}
+	return node.typ
+}
+
 // SetType forces the type annotation on the Subquery node.
 func (node *Subquery) SetType(t *types.T) {
 	node.typ = t
