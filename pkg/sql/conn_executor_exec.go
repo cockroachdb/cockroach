@@ -2095,6 +2095,10 @@ func (ex *connExecutor) handleAutoCommit(
 	if err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
+	if err = ex.state.mu.txn.Step(ctx); err != nil {
+		log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
+		return ex.makeErrEvent(err, stmt)
+	}
 	ev, payload := ex.commitSQLTransaction(ctx, stmt, ex.commitSQLTransactionInternal)
 	if perr, ok := payload.(payloadWithError); ok {
 		err = perr.errorCause()
