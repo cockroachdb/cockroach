@@ -778,6 +778,23 @@ func (cl candidateList) best() candidateList {
 	return cl
 }
 
+// good returns all the elements in a sorted (by score reversed) candidate list
+// that share the highest diversity score and are valid.
+func (cl candidateList) good() candidateList {
+	cl = cl.onlyValidAndHealthyDisk()
+	if len(cl) <= 1 {
+		return cl
+	}
+	for i := 1; i < len(cl); i++ {
+		if cl[i].necessary == cl[0].necessary &&
+			scoresAlmostEqual(cl[i].diversityScore, cl[0].diversityScore) {
+			continue
+		}
+		return cl[:i]
+	}
+	return cl
+}
+
 // worst returns all the elements in a sorted (by score reversed) candidate list
 // that share the lowest constraint score (for instance, the set of candidates
 // that result in the lowest diversity score for the range, or the set of
@@ -858,9 +875,26 @@ func (cl candidateList) selectBest(randGen allocatorRand) *candidate {
 	return best
 }
 
-// selectBad randomly chooses a bad candidate store from a sorted (by score
+// selectGood randomly chooses a good candidate store from a sorted (by score
 // reversed) candidate list using the provided random generator.
-func (cl candidateList) selectBad(randGen allocatorRand) *candidate {
+func (cl candidateList) selectGood(randGen allocatorRand) *candidate {
+	cl = cl.good()
+	if len(cl) == 0 {
+		return nil
+	}
+	if len(cl) == 1 {
+		return &cl[0]
+	}
+	randGen.Lock()
+	r := randGen.Intn(len(cl))
+	randGen.Unlock()
+	c := &cl[r]
+	return c
+}
+
+// selectWorst randomly chooses one of the worst candidate stores from a sorted
+// (by score reversed) candidate list using the provided random generator.
+func (cl candidateList) selectWorst(randGen allocatorRand) *candidate {
 	cl = cl.worst()
 	if len(cl) == 0 {
 		return nil

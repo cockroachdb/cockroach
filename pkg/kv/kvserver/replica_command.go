@@ -3226,6 +3226,7 @@ func (r *Replica) relocateOne(
 			existingVoters,
 			existingNonVoters,
 			r.store.allocator.ScorerOptions(ctx),
+			r.store.allocator.NewBestCandidateSelector(),
 			// NB: Allow the allocator to return target stores that might be on the
 			// same node as an existing replica. This is to ensure that relocations
 			// that require "lateral" movement of replicas within a node can succeed.
