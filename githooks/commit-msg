@@ -140,7 +140,6 @@ else
                     "cli change") ;;
                     "ops change") ;;
                     "sql change") ;;
-                    "api change") ;;
                     "ui change") ;;
                     "general change") ;;
                     "build change") ;;
@@ -157,8 +156,6 @@ else
                         hint "Try 'Release note ($lcat)' -> 'Release note (security update)'" ;;
                     sql*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
-                    api*)
-                        hint "Try 'Release note ($lcat)' -> 'Release note (api change)'" ;;
                     "admin ui"*|"admin-ui"*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (ui change)'" ;;
                     "backwards-incompatible"*|"backward incompatible"*)
