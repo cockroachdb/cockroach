@@ -23,6 +23,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/server/status",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/skip",

@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1693,6 +1695,64 @@ func (tc *TestCluster) GetStatusClient(
 		return nil, errors.Wrap(err, "failed to create a status client")
 	}
 	return serverpb.NewStatusClient(cc), nil
+}
+
+// SplitTable implements TestClusterInterface.
+func (tc *TestCluster) SplitTable(
+	t *testing.T, desc catalog.TableDescriptor, sps []serverutils.SplitPoint,
+) {
+	if tc.ReplicationMode() != base.ReplicationManual {
+		t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
+	}
+
+	rkts := make(map[roachpb.RangeID]rangeAndKT)
+	for _, sp := range sps {
+		pik, err := randgen.TestingMakePrimaryIndexKey(desc, sp.Vals...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, rightRange, err := tc.Server(0).SplitRange(pik)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rightRangeStartKey := rightRange.StartKey.AsRawKey()
+		target := tc.Target(sp.TargetNodeIdx)
+
+		rkts[rightRange.RangeID] = rangeAndKT{
+			rightRange,
+			serverutils.KeyAndTargets{StartKey: rightRangeStartKey, Targets: []roachpb.ReplicationTarget{target}}}
+	}
+
+	var kts []serverutils.KeyAndTargets
+	for _, rkt := range rkts {
+		kts = append(kts, rkt.kt)
+	}
+	descs, errs := tc.AddVotersMulti(kts...)
+	for _, err := range errs {
+		if err != nil && !testutils.IsError(err, "is already present") {
+			t.Fatal(err)
+		}
+	}
+
+	for _, desc := range descs {
+		rkt, ok := rkts[desc.RangeID]
+		if !ok {
+			continue
+		}
+
+		for _, target := range rkt.kt.Targets {
+			if err := tc.TransferRangeLease(desc, target); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+type rangeAndKT struct {
+	rangeDesc roachpb.RangeDescriptor
+	kt        serverutils.KeyAndTargets
 }
 
 type testClusterFactoryImpl struct{}

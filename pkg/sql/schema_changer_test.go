@@ -625,11 +625,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	var sps []sql.SplitPoint
+	var sps []serverutils.SplitPoint
 	for i := 1; i <= numNodes-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
-	sql.SplitTable(t, tc, tableDesc, sps)
+	tc.SplitTable(t, tableDesc, sps)
 
 	ctx := context.Background()
 
@@ -814,11 +814,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Split the table into multiple ranges.
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	var sps []sql.SplitPoint
+	var sps []serverutils.SplitPoint
 	for i := 1; i <= numNodes-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
-	sql.SplitTable(t, tc, tableDesc, sps)
+	tc.SplitTable(t, tableDesc, sps)
 
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
@@ -928,11 +928,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Split the table into multiple ranges.
-	var sps []sql.SplitPoint
+	var sps []serverutils.SplitPoint
 	for i := 1; i <= numNodes-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
-	sql.SplitTable(t, tc, tableDesc, sps)
+	tc.SplitTable(t, tableDesc, sps)
 
 	ctx := context.Background()
 
@@ -3884,11 +3884,11 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 
 	// Split the table into multiple ranges.
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	var sps []sql.SplitPoint
+	var sps []serverutils.SplitPoint
 	for i := 1; i <= numNodes-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
-	sql.SplitTable(t, tc, tableDesc, sps)
+	tc.SplitTable(t, tableDesc, sps)
 
 	// Run some schema changes.
 	testCases := []struct {
@@ -4185,11 +4185,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Split the table into multiple ranges.
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	var sps []sql.SplitPoint
+	var sps []serverutils.SplitPoint
 	for i := 1; i <= numNodes-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
 	}
-	sql.SplitTable(t, tc, tableDesc, sps)
+	tc.SplitTable(t, tableDesc, sps)
 
 	testCases := []struct {
 		sql    string
@@ -4899,12 +4899,12 @@ func TestCancelSchemaChange(t *testing.T) {
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	// Split the table into multiple ranges.
-	var sps []sql.SplitPoint
+	var sps []serverutils.SplitPoint
 	const numSplits = numNodes * 2
 	for i := 1; i <= numSplits-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i % numNodes, Vals: []interface{}{maxValue / numSplits * i}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i % numNodes, Vals: []interface{}{maxValue / numSplits * i}})
 	}
-	sql.SplitTable(t, tc, tableDesc, sps)
+	tc.SplitTable(t, tableDesc, sps)
 
 	ctx := context.Background()
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
@@ -5984,11 +5984,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	var sps []sql.SplitPoint
+	var sps []serverutils.SplitPoint
 	for i := 1; i < numNodes-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / 2}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / 2}})
 	}
-	sql.SplitTable(t, tc, tableDesc, sps)
+	tc.SplitTable(t, tableDesc, sps)
 
 	bg := ctxgroup.WithContext(ctx)
 	bg.Go(func() error {
