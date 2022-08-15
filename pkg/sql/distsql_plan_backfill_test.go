@@ -77,12 +77,12 @@ func TestDistBackfill(t *testing.T) {
 	)
 	// Split the table into multiple ranges.
 	descNumToStr := desctestutils.TestingGetPublicTableDescriptor(cdb, keys.SystemSQLCodec, "test", "numtostr")
-	var sps []SplitPoint
-	//for i := 1; i <= numNodes-1; i++ {
+	var sps []serverutils.SplitPoint
+	// for i := 1; i <= numNodes-1; i++ {
 	for i := numNodes - 1; i > 0; i-- {
-		sps = append(sps, SplitPoint{i, []interface{}{n * n / numNodes * i}})
+		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{n * n / numNodes * i}})
 	}
-	SplitTable(t, tc, descNumToStr, sps)
+	tc.SplitTable(t, descNumToStr, sps)
 
 	db := tc.ServerConn(0)
 	db.SetMaxOpenConns(1)
