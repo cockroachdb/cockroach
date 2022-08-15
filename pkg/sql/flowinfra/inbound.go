@@ -192,7 +192,7 @@ func processProducerMessage(
 	draining *bool,
 	msg *execinfrapb.ProducerMessage,
 ) processMessageResult {
-	err := sd.AddMessage(ctx, msg, &flowBase.FlowCtx)
+	err := sd.AddMessage(ctx, msg)
 	if err != nil {
 		return processMessageResult{
 			err: errors.Wrapf(err, "%s",
