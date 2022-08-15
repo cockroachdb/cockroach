@@ -570,7 +570,7 @@ VALUES($1, $2, $3, $4, $5)`
 		// In the system.eventlog table, we do not use redaction markers.
 		// (compatibility with previous versions of CockroachDB.)
 		infoBytes = infoBytes.StripMarkers()
-		eventType := logpb.GetEventTypeName(event)
+		eventType := event.CommonDetails().EventType
 		args = append(
 			args,
 			timeutil.Unix(0, event.CommonDetails().Timestamp),
