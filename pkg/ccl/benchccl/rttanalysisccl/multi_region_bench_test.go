@@ -27,7 +27,12 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		tb, numNodes, knobs,
 	)
-	return cluster.ServerConn(0), cleanup
+	db := cluster.ServerConn(0)
+	// Eventlog is async, and introduces jitter in the benchmark.
+	if _, err := db.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {
+		tb.Fatal(err)
+	}
+	return db, cleanup
 }))
 
 func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t) }
