@@ -386,7 +386,7 @@ delete descriptor #104
 delete descriptor #105
 delete descriptor #106
 delete descriptor #107
-write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
+write *eventpb.DropDatabase to event log: DROP DATABASE ‹multi_region_test_db› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [108 104]
 update progress of schema change job #1: "all stages completed"

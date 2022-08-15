@@ -73,14 +73,13 @@ type EventLogger interface {
 	// LogEvent writes to the event log.
 	LogEvent(
 		ctx context.Context,
-		descID descpb.ID,
 		details eventpb.CommonSQLEventDetails,
 		event logpb.EventPayload,
 	) error
 
 	// LogEventForSchemaChange write a schema change event entry into the event log.
 	LogEventForSchemaChange(
-		ctx context.Context, descID descpb.ID, event logpb.EventPayload,
+		ctx context.Context, event logpb.EventPayload,
 	) error
 }
 

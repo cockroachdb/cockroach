@@ -266,7 +266,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 106
   -  version: "3"
   +  version: "4"
-write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
+write *eventpb.DropTable to event log: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
 update progress of schema change job #1: "all stages completed"
