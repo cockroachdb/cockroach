@@ -218,12 +218,6 @@
           },
           {
             "type": "integer",
-            "description": "Filter for events with this targetID. Only one targetID can be specified at a time.",
-            "name": "targetID",
-            "in": "query"
-          },
-          {
-            "type": "integer",
             "description": "Maximum number of results to return in this call.",
             "name": "limit",
             "in": "query"
@@ -999,12 +993,6 @@
           "format": "int64",
           "x-go-name": "ReportingID"
         },
-        "target_id": {
-          "description": "target_id is the target for this event.",
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "TargetID"
-        },
         "timestamp": {
           "description": "timestamp is the time at which the event occurred.",
           "type": "string",
@@ -1542,7 +1530,7 @@
           "x-go-name": "DataTotalBytes"
         },
         "descriptor_id": {
-          "description": "descriptor_id is an identifier used to uniquely identify this table.\nIt can be used to find events pertaining to this table by filtering on\nthe 'target_id' field of events.",
+          "description": "descriptor_id is an identifier used to uniquely identify this table.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "DescriptorID"
@@ -1998,7 +1986,7 @@
       "title": "Response for databaseDetails.",
       "properties": {
         "descriptor_id": {
-          "description": "DescriptorID is an identifier used to uniquely identify this database.\nIt can be used to find events pertaining to this database by filtering on\nthe 'target_id' field of events.",
+          "description": "DescriptorID is an identifier used to uniquely identify this database.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "DescriptorID"

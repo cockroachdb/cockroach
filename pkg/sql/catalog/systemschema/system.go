@@ -131,9 +131,13 @@ CREATE TABLE system.lease (
 	// This data is also exported to the Observability Service. This table might
 	// go away in the future.
 	//
-	// TODO(knz): targetID and reportingID are deprecated and should
-	// be removed after v21.1 is released. Their content is now
-	// available inside the info payload, which is a JSON blob.
+	// The "reportingID" column is the SQL instance ID of the
+	// server that reported the event. For node events, this
+	// value is also equal to the node ID.
+	//
+	// Note: the column "targetID" was deprecated in v21.1 and
+	// is not populated any more as of v22.2 (its value remains zero).
+	// TODO(knz): Implement a migration to remove it.
 	EventLogTableSchema = `
 CREATE TABLE system.eventlog (
   timestamp     TIMESTAMP  NOT NULL,
