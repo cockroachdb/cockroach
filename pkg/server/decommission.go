@@ -194,9 +194,7 @@ func (s *Server) Decommission(
 					ctx,
 					s.sqlServer.execCfg.InternalExecutor,
 					txn,
-					int32(s.NodeID()), /* reporting ID: the node where the event is logged */
 					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* we already call log.StructuredEvent above */
-					int32(nodeID), /* target ID: the node that we wee a membership change for */
 					event,
 				)
 			}); err != nil {

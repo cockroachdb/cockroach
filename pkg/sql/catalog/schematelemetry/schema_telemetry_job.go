@@ -66,9 +66,7 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 			ctx,
 			p.ExecCfg().InternalExecutor,
 			txn,
-			int32(p.ExecCfg().NodeInfo.NodeID.SQLInstanceID()), /* reportingID */
 			sql.LogExternally,
-			0, /* targetID */
 			events...,
 		)
 	})
