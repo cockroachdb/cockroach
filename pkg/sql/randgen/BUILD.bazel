@@ -61,8 +61,8 @@ go_test(
         "mutator_test.go",
         "schema_test.go",
     ],
-    embed = [":randgen"],
     deps = [
+        ":randgen",
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/utilccl",
