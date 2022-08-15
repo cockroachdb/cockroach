@@ -236,7 +236,7 @@ func logEventInternalForSchemaChanges(
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
-		ctx, execCfg.InternalExecutor,
+		ctx, execCfg,
 		txn,
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
@@ -312,7 +312,7 @@ func logEventInternalForSQLStatements(
 
 	return insertEventRecords(
 		ctx,
-		execCfg.InternalExecutor,
+		execCfg,
 		txn,
 		1+depth, /* depth */
 		opts,    /* eventLogOptions */
@@ -362,7 +362,7 @@ func (l schemaChangerEventLogger) LogEventForSchemaChange(
 	}
 	scCommon.CommonSchemaChangeDetails().InstanceID = int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID())
 	return insertEventRecords(
-		ctx, l.execCfg.InternalExecutor,
+		ctx, l.execCfg,
 		l.txn,
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
@@ -402,7 +402,7 @@ func LogEventForJobs(
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
-		ctx, execCfg.InternalExecutor,
+		ctx, execCfg,
 		txn,
 		1, /* depth: use this function for vmodule filtering */
 		eventLogOptions{dst: LogEverywhere},
@@ -447,11 +447,7 @@ const (
 //
 // This converts to a call to insertEventRecords() with just 1 entry.
 func InsertEventRecords(
-	ctx context.Context,
-	ex *InternalExecutor,
-	txn *kv.Txn,
-	dst LogEventDestination,
-	info ...logpb.EventPayload,
+	ctx context.Context, execCfg *ExecutorConfig, dst LogEventDestination, info ...logpb.EventPayload,
 ) error {
 	if len(info) == 0 {
 		return nil
@@ -459,10 +455,13 @@ func InsertEventRecords(
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
-	return insertEventRecords(ctx, ex, txn,
-		1, /* depth: use this function */
-		eventLogOptions{dst: dst},
-		info...)
+	return execCfg.DB.Txn(ctx,
+		func(ctx context.Context, txn *kv.Txn) error {
+			return insertEventRecords(ctx, execCfg, txn,
+				1, /* depth: use this function */
+				eventLogOptions{dst: dst},
+				info...)
+		})
 }
 
 // insertEventRecords inserts one or more event into the event log as
@@ -474,7 +473,7 @@ func InsertEventRecords(
 // the run-time type of the event payload.
 func insertEventRecords(
 	ctx context.Context,
-	ex *InternalExecutor,
+	execCfg *ExecutorConfig,
 	txn *kv.Txn,
 	depth int,
 	opts eventLogOptions,
@@ -512,7 +511,7 @@ func insertEventRecords(
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&ex.s.cfg.Settings.SV)
+	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&execCfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {
@@ -537,7 +536,7 @@ func insertEventRecords(
 	// The function below this point is specialized to write to the
 	// system table.
 
-	reportingID := ex.s.cfg.NodeInfo.NodeID.SQLInstanceID()
+	reportingID := execCfg.NodeInfo.NodeID.SQLInstanceID()
 	const colsPerEvent = 5
 	// Note: we insert the value zero as targetID because sadly this
 	// now-deprecated column has a NOT NULL constraint.
@@ -590,7 +589,7 @@ VALUES($1, $2, $3, $4, 0)`
 		query = completeQuery.String()
 	}
 
-	rows, err := ex.Exec(ctx, "log-event", txn, query, args...)
+	rows, err := execCfg.InternalExecutor.Exec(ctx, "log-event", txn, query, args...)
 	if err != nil {
 		return err
 	}
