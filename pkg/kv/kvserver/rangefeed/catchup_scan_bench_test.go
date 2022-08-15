@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 )
 
 func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
@@ -136,11 +137,17 @@ func BenchmarkCatchUpScan(b *testing.B) {
 						wallTime := int64((5 * (float64(numKeys)*tsExcludePercent + 1)))
 						ts := hlc.Timestamp{WallTime: wallTime}
 						b.Run(fmt.Sprintf("perc=%2.2f", tsExcludePercent*100), func(b *testing.B) {
-							runCatchUpBenchmark(b, setupMVCCPebble, benchOptions{
-								dataOpts: do,
-								ts:       ts,
-								withDiff: withDiff,
-							})
+							for _, numRangeKeys := range []int{0, 1, 100} {
+								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+									do := do
+									do.numRangeKeys = numRangeKeys
+									runCatchUpBenchmark(b, setupMVCCPebble, benchOptions{
+										dataOpts: do,
+										ts:       ts,
+										withDiff: withDiff,
+									})
+								})
+							}
 						})
 					}
 				})
@@ -155,6 +162,7 @@ type benchDataOptions struct {
 	randomKeyOrder bool
 	readOnlyEngine bool
 	lBaseMaxBytes  int64
+	numRangeKeys   int
 }
 
 type benchOptions struct {
@@ -212,8 +220,8 @@ func setupData(
 	if opts.readOnlyEngine {
 		readOnlyStr = "_readonly"
 	}
-	loc := fmt.Sprintf("rangefeed_bench_data_%s%s_%d_%d_%d",
-		orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes)
+	loc := fmt.Sprintf("rangefeed_bench_data_%s%s_%d_%d_%d_%d",
+		orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes, opts.numRangeKeys)
 	exists := true
 	if _, err := os.Stat(loc); oserror.IsNotExist(err) {
 		exists = false
@@ -244,6 +252,30 @@ func setupData(
 			order[i], order[j] = order[j], order[i]
 		})
 	}
+
+	writeRangeKeys := func(b testing.TB, wallTime int) {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		for i := 0; i < opts.numRangeKeys; i++ {
+			// NB: regular keys are written at ts 5+, so this is below any of the
+			// regular writes and thus won't delete anything.
+			ts := hlc.Timestamp{WallTime: int64(wallTime), Logical: int32(i + 1)}
+			start := rng.Intn(opts.numKeys)
+			end := start + rng.Intn(opts.numKeys-start) + 1
+			// As a special case, if we're only writing one range key, write it across
+			// the entire span.
+			if opts.numRangeKeys == 1 {
+				start = 0
+				end = opts.numKeys + 1
+			}
+			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
+			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
+			require.NoError(b, storage.MVCCDeleteRangeUsingTombstone(
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+		}
+		require.NoError(b, batch.Commit(false /* sync */))
+	}
+	writeRangeKeys(b, 1 /* wallTime */)
 
 	writeKey := func(batch storage.Batch, idx int, pos int) {
 		key := keys[idx]
