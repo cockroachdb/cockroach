@@ -1362,6 +1362,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 	}
 
 	const maxValue = 2000
+	ctx, cancel := context.WithCancel(context.Background())
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			WriteCheckpointInterval:          time.Nanosecond,
@@ -1379,10 +1380,17 @@ func TestSchemaChangeRetry(t *testing.T) {
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		GCJob: &sql.GCJobTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	defer cancel()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
