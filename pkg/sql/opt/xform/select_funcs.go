@@ -117,6 +117,12 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 			return
 		}
 
+		// Otherwise, try to construct an IndexJoin operator that provides the
+		// columns missing from the index.
+		if scanPrivate.Flags.NoIndexJoin {
+			return
+		}
+
 		// Calculate the PK columns once.
 		if pkCols.Empty() {
 			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
@@ -789,6 +795,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead
+
+		if scanPrivate.Flags.NoIndexJoin {
+			return
+		}
 
 		// Calculate the PK columns once.
 		if pkCols.Empty() {

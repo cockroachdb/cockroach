@@ -68,7 +68,7 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 	if scanPrivate.IsVirtualTable(md) && !required.Any() {
 		return false
 	}
-	ok, _ := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
+	ok, _ := ordering.ScanPrivateCanProvide(md, scanPrivate, &required)
 	return ok
 }
 
