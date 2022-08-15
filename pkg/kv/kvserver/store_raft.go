@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"time"
 	"unsafe"
 
@@ -770,6 +771,9 @@ func (s *Store) updateIOThresholdMap() {
 		ioThresholdMap[sd.StoreID] = &ioThreshold
 	}
 	threshold := pauseReplicationIOThreshold.Get(&s.cfg.Settings.SV)
+	if threshold <= 0 {
+		threshold = math.MaxFloat64
+	}
 	old, cur := s.ioThresholds.Replace(ioThresholdMap, threshold)
 	// Log whenever the set of overloaded stores changes.
 	shouldLog := log.V(1) || old.seq != cur.seq
