@@ -63,7 +63,11 @@ func getStreamIngestionStats(
 	if err != nil {
 		return nil, err
 	}
-	details := j.Details().(jobspb.StreamIngestionDetails)
+	details, ok := j.Details().(jobspb.StreamIngestionDetails)
+	if !ok {
+		return nil, errors.Errorf("job with id %d is not a stream ingestion job", ingestionJobID)
+	}
+
 	progress := j.Progress()
 	stats := &streampb.StreamIngestionStats{
 		IngestionDetails:  &details,
