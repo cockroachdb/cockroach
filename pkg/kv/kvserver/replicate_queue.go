@@ -1011,7 +1011,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	// we're removing it (i.e. dead or decommissioning). If we left the replica in
 	// the slice, the allocator would not be guaranteed to pick a replica that
 	// fills the gap removeRepl leaves once it's gone.
-	newVoter, details, err := rq.allocator.AllocateVoter(ctx, conf, remainingLiveVoters, remainingLiveNonVoters)
+	newVoter, details, err := rq.allocator.AllocateVoter(ctx, conf, remainingLiveVoters, remainingLiveNonVoters, replicaStatus)
 	if err != nil {
 		return false, err
 	}
@@ -1043,7 +1043,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 			oldPlusNewReplicas,
 			roachpb.ReplicaDescriptor{NodeID: newVoter.NodeID, StoreID: newVoter.StoreID},
 		)
-		_, _, err := rq.allocator.AllocateVoter(ctx, conf, oldPlusNewReplicas, remainingLiveNonVoters)
+		_, _, err := rq.allocator.AllocateVoter(ctx, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
 		if err != nil {
 			// It does not seem possible to go to the next odd replica state. Note
 			// that AllocateVoter returns an allocatorError (a PurgatoryError)
@@ -1126,7 +1126,7 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 	desc, conf := repl.DescAndSpanConfig()
 	existingNonVoters := desc.Replicas().NonVoterDescriptors()
 
-	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, conf, liveVoterReplicas, liveNonVoterReplicas)
+	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, conf, liveVoterReplicas, liveNonVoterReplicas, replicaStatus)
 	if err != nil {
 		return false, err
 	}
