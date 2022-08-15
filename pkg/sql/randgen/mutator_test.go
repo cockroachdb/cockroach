@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package randgen
+package randgen_test
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -32,7 +33,7 @@ func TestPostgresMutator(t *testing.T) {
 
 	rng, _ := randutil.NewTestRand()
 	{
-		mutated, changed := ApplyString(rng, q, PostgresMutator)
+		mutated, changed := randgen.ApplyString(rng, q, randgen.PostgresMutator)
 		if !changed {
 			t.Fatal("expected changed")
 		}
@@ -43,7 +44,7 @@ func TestPostgresMutator(t *testing.T) {
 		}
 	}
 	{
-		mutated, changed := ApplyString(rng, q, PostgresCreateTableMutator, PostgresMutator)
+		mutated, changed := randgen.ApplyString(rng, q, randgen.PostgresCreateTableMutator, randgen.PostgresMutator)
 		if !changed {
 			t.Fatal("expected changed")
 		}
