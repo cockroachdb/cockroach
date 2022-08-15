@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -259,7 +260,9 @@ func TestDescriptorRepair(t *testing.T) {
 
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		args := base.TestServerArgs{}
+		args.Knobs.EventLog = &sql.EventLogTestingKnobs{SyncWrites: true}
+		s, db, _ := serverutils.StartServer(t, args)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -497,6 +500,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			s, db, cleanup := setup(t)
 			now := s.Clock().Now().GoTime()
 			defer cleanup()
+
 			tdb := sqlutils.MakeSQLRunner(db)
 			descs.ValidateOnWriteEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 			for _, op := range tc.before {

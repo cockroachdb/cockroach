@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -950,22 +949,11 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 		return
 	}
 
-	_ = n.stopper.RunAsyncTask(ctx, "record-join", func(bgCtx context.Context) {
-		ctx, span := n.AnnotateCtxWithSpan(bgCtx, "record-join-event")
-		defer span.Finish()
-		retryOpts := base.DefaultRetryOptions()
-		retryOpts.Closer = n.stopper.ShouldQuiesce()
-		for r := retry.Start(retryOpts); r.Next(); {
-			if err := sql.InsertEventRecords(ctx, n.execCfg,
-				sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
-				event,
-			); err != nil {
-				log.Warningf(ctx, "%s: unable to log event %v: %v", n, event, err)
-			} else {
-				return
-			}
-		}
-	})
+	// InsertEventRecord processes the event asynchronously.
+	sql.InsertEventRecords(ctx, n.execCfg,
+		sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
+		event,
+	)
 }
 
 // If we receive a (proto-marshaled) roachpb.BatchRequest whose Requests contain
