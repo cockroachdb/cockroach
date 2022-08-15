@@ -145,24 +145,34 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 
 		// Emit any new MVCC range tombstones when their start key is encountered.
 		// Range keys can currently only be MVCC range tombstones.
+		// We need to verify that the range tombstone is visible at the catch-up
+		// timestamp, since we might have come here after a call to NextIgnoringTime.
 		//
 		// TODO(erikgrinaker): Find a faster/better way to detect range key changes
 		// that doesn't involve constant comparisons. Pebble probably already knows,
 		// we just need a way to ask it.
+		// Note that byte slice comparison in Go is smart enough to immediately bail
+		// if lengths are different. However, it isn't smart enough to compare from
+		// the end, which would really help since our keys share prefixes.
 		if hasRange {
 			if rangeBounds := i.RangeBounds(); !rangeBounds.Key.Equal(rangeKeysStart) {
 				rangeKeysStart = append(rangeKeysStart[:0], rangeBounds.Key...)
 
 				// Emit events for these MVCC range tombstones, in chronological order.
 				versions := i.RangeKeys().Versions
-				for i := len(versions) - 1; i >= 0; i-- {
+				for j := len(versions) - 1; j >= 0; j-- {
+					if !i.startTime.LessEq(versions[j].Timestamp) {
+						// This range tombstone isn't visible by this catch-up scan.
+						continue
+					}
+
 					var span roachpb.Span
 					a, span.Key = a.Copy(rangeBounds.Key, 0)
 					a, span.EndKey = a.Copy(rangeBounds.EndKey, 0)
 					err := outputFn(&roachpb.RangeFeedEvent{
 						DeleteRange: &roachpb.RangeFeedDeleteRange{
 							Span:      span,
-							Timestamp: versions[i].Timestamp,
+							Timestamp: versions[j].Timestamp,
 						},
 					})
 					if err != nil {
