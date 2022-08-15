@@ -124,7 +124,8 @@ func (m *metaTestRunner) init() {
 
 	var err error
 	m.engine, err = m.engineSeq.configs[0].create(m.path, m.engineFS)
-	m.printComment(fmt.Sprintf("engine options: %s", m.engineSeq.configs[0].opts.String()))
+	m.printComment(fmt.Sprintf("name: %s", m.engineSeq.configs[0].name))
+	m.printComment(fmt.Sprintf("engine options:\n%s", m.engineSeq.configs[0].opts.String()))
 	if err != nil {
 		m.engine = nil
 		m.t.Fatal(err)
