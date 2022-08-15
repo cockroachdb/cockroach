@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
-        "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv",
@@ -20,7 +19,6 @@ go_library(
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
@@ -60,6 +58,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

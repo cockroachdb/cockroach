@@ -440,7 +440,9 @@ func (p *pebbleMVCCScanner) init(
 func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	p.isGet = true
 
-	// The iterator may already be positioned on a range key, in which
+	p.parent.SeekGE(MVCCKey{Key: p.start})
+
+	// The iterator may already have been positioned on a range key, in which
 	// case RangeKeyChanged() wouldn't fire.
 	if ok, _ := p.parent.Valid(); ok {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
@@ -448,7 +450,6 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 		}
 	}
 
-	p.parent.SeekGE(MVCCKey{Key: p.start})
 	if !p.updateCurrent() {
 		return
 	}
