@@ -850,7 +850,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONNECTION CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
+%token <str> CONFLICT CONNECTION CONNECTIONS CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
 %token <str> CONVERSION CONVERT COPY COST COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -1176,6 +1176,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_create_schedules_stmt
+%type <tree.Statement> show_create_external_connections_stmt
 %type <tree.Statement> show_csettings_stmt show_local_or_tenant_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_default_privileges_stmt
@@ -6091,13 +6092,15 @@ zone_value:
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
-// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
+// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS,
+// SHOW CREATE EXTERNAL CONNECTIONS
 show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
 | show_constraints_stmt      // EXTEND WITH HELP: SHOW CONSTRAINTS
 | show_create_stmt           // EXTEND WITH HELP: SHOW CREATE
 | show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
+| show_create_external_connections_stmt // EXTEND WITH HELP: SHOW CREATE EXTERNAL CONNECTIONS
 | show_local_or_tenant_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
@@ -7207,6 +7210,23 @@ show_create_schedules_stmt:
     $$.val = &tree.ShowCreateSchedules{ScheduleID: $4.expr()}
   }
 | SHOW CREATE SCHEDULE error // SHOW HELP: SHOW CREATE SCHEDULES
+
+// %Help: SHOW CREATE EXTERNAL CONNECTIONS - list CREATE statements for external connections
+// %Category: DDL
+// %Text:
+// SHOW CREATE ALL EXTERNAL CONNECTIONS
+// SHOW CREATE EXTERNAL CONNECTION <connection_name>
+show_create_external_connections_stmt:
+  SHOW CREATE ALL EXTERNAL CONNECTIONS
+  {
+    $$.val = &tree.ShowCreateExternalConnections{}
+  }
+| SHOW CREATE ALL EXTERNAL CONNECTIONS error // SHOW HELP: SHOW CREATE EXTERNAL CONNECTIONS
+| SHOW CREATE EXTERNAL CONNECTION string_or_placeholder
+ {
+   $$.val = &tree.ShowCreateExternalConnections{ConnectionLabel: $5.expr()}
+ }
+| SHOW CREATE EXTERNAL CONNECTION error // SHOW HELP: SHOW CREATE EXTERNAL CONNECTIONS
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv
@@ -14937,6 +14957,7 @@ unreserved_keyword:
 | CONFIGURATIONS
 | CONFIGURE
 | CONNECTION
+| CONNECTIONS
 | CONSTRAINTS
 | CONTROLCHANGEFEED
 | CONTROLJOB

@@ -21,6 +21,15 @@ import (
 // an External Connection object. This interface should expose read-only
 // methods that are required to interact with the External Connection object.
 type ExternalConnection interface {
+	// CreateConnectionStatement returns a `CREATE EXTERNAL CONNECTION` statement
+	// that is functionally equivalent to the statement that created the external
+	// connection in the first place.
+	//
+	// NB: The returned string will contain unredacted secrets and should not be
+	// persisted.
+	CreateConnectionStatement() string
+	// ConnectionName returns the label of the connection.
+	ConnectionName() string
 	// ConnectionType returns the type of the connection.
 	ConnectionType() connectionpb.ConnectionType
 	// ConnectionProto returns an in-memory representation of the
