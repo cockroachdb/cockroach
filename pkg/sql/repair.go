@@ -17,6 +17,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -780,17 +781,22 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 	}
 
 	prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(id))
-	tableSpans := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	tableSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	requestHeader := roachpb.RequestHeader{
+		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
+	}
 	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    tableSpans.Key,
-			EndKey: tableSpans.EndKey,
-		},
-	})
-
-	err = p.txn.DB().Run(ctx, b)
-	if err != nil {
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+		b.AddRawRequest(&roachpb.DeleteRangeRequest{
+			RequestHeader:     requestHeader,
+			UseRangeTombstone: true,
+		})
+	} else {
+		b.AddRawRequest(&roachpb.ClearRangeRequest{
+			RequestHeader: requestHeader,
+		})
+	}
+	if err := p.txn.DB().Run(ctx, b); err != nil {
 		return err
 	}
 
