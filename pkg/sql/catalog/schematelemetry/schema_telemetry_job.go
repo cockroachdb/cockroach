@@ -60,12 +60,13 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 		return err
 	}
 
-	return sql.InsertEventRecords(
+	sql.InsertEventRecords(
 		ctx,
 		p.ExecCfg(),
 		sql.LogExternally,
 		events...,
 	)
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
