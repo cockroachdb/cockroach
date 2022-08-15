@@ -38,6 +38,10 @@ type kafkaLogAdapter struct {
 	ctx context.Context
 }
 
+type kafkaSinkKnobs struct {
+	OverrideClientInit func(config *sarama.Config) error
+}
+
 var _ sarama.StdLogger = (*kafkaLogAdapter)(nil)
 
 func (l *kafkaLogAdapter) Print(v ...interface{}) {
@@ -82,25 +86,51 @@ type kafkaSink struct {
 	ctx            context.Context
 	bootstrapAddrs string
 	kafkaCfg       *sarama.Config
-	client         kafkaClient
-	producer       sarama.AsyncProducer
 	topics         *TopicNamer
 
 	lastMetadataRefresh time.Time
 
-	stopWorkerCh chan struct{}
-	worker       sync.WaitGroup
-	scratch      bufalloc.ByteAllocator
-	metrics      metricsRecorder
+	worker  sync.WaitGroup
+	scratch bufalloc.ByteAllocator
+	metrics metricsRecorder
+
+	knobs kafkaSinkKnobs
 
 	stats kafkaStats
+
+	clientMu struct {
+		syncutil.Mutex
+		client       kafkaClient
+		producer     sarama.AsyncProducer
+		stopWorkerCh chan struct{}
+	}
+
+	stopRetryWorkerCh chan struct{}
+	retryWorker       sync.WaitGroup
+	signalRetry       chan struct{}
 
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
 		syncutil.Mutex
+
 		inflight int64
 		flushErr error
 		flushCh  chan struct{}
+
+		// retrySignalCh is non-nil during a retry process and is closed upon
+		// completion
+		retrySignalCh chan struct{}
+
+		// When a message is to be retried, all errored messages that were in-flight
+		// at the time are buffered in retryBuf.
+		retryBuf []*sarama.ProducerMessage
+		// isBufferingRetries is true from the beginning of the retry process to the
+		// moment all messages to be retried have been buffered
+		isBufferingRetries bool
+
+		// retryFlushCh is non-nil while there remains non-internally-retried
+		// messages in flight
+		retryFlushCh chan struct{}
 	}
 }
 
@@ -167,39 +197,83 @@ func defaultSaramaConfig() *saramaConfig {
 	return config
 }
 
-func (s *kafkaSink) start() {
-	s.stopWorkerCh = make(chan struct{})
-	s.worker.Add(1)
-	go s.workerLoop()
-}
-
 // Dial implements the Sink interface.
 func (s *kafkaSink) Dial() error {
-	client, err := sarama.NewClient(strings.Split(s.bootstrapAddrs, `,`), s.kafkaCfg)
-	if err != nil {
-		return pgerror.Wrapf(err, pgcode.CannotConnectNow,
-			`connecting to kafka: %s`, s.bootstrapAddrs)
+	if s.stopRetryWorkerCh == nil {
+		s.stopRetryWorkerCh = make(chan struct{})
+		s.signalRetry = make(chan struct{})
+		s.retryWorker.Add(1)
+		go s.retryWorkerLoop()
 	}
-	s.producer, err = sarama.NewAsyncProducerFromClient(client)
-	if err != nil {
-		return pgerror.Wrapf(err, pgcode.CannotConnectNow,
-			`connecting to kafka: %s`, s.bootstrapAddrs)
+	return s.resetClient(s.kafkaCfg)
+}
+
+func (s *kafkaSink) maybeCloseClient() error {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	if s.clientMu.producer != nil {
+		// Ignore errors related to outstanding messages since we're either shutting
+		// down or beginning to retry regardless
+		_ = s.clientMu.producer.Close()
 	}
-	s.client = client
-	s.start()
+	// s.client is only nil in tests.
+	if s.clientMu.client != nil {
+		return s.clientMu.client.Close()
+	}
+	return nil
+}
+
+func (s *kafkaSink) resetClient(config *sarama.Config) error {
+	// Close the client for the old config if it exists
+	if err := s.maybeCloseClient(); err != nil {
+		return err
+	}
+
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+
+	// Initialize client and producer
+	if s.knobs.OverrideClientInit != nil {
+		if err := s.knobs.OverrideClientInit(config); err != nil {
+			return err
+		}
+	} else {
+		client, err := sarama.NewClient(strings.Split(s.bootstrapAddrs, `,`), config)
+		if err != nil {
+			return pgerror.Wrapf(err, pgcode.CannotConnectNow,
+				`connecting to kafka: %s`, s.bootstrapAddrs)
+		}
+		s.clientMu.producer, err = sarama.NewAsyncProducerFromClient(client)
+		if err != nil {
+			return pgerror.Wrapf(err, pgcode.CannotConnectNow,
+				`connecting to kafka: %s`, s.bootstrapAddrs)
+		}
+		s.clientMu.client = client
+	}
+
+	// Start the worker
+	if s.clientMu.stopWorkerCh != nil {
+		close(s.clientMu.stopWorkerCh)
+	}
+	s.clientMu.stopWorkerCh = make(chan struct{})
+	s.worker.Add(1)
+	go s.workerLoop()
+
 	return nil
 }
 
 // Close implements the Sink interface.
 func (s *kafkaSink) Close() error {
-	close(s.stopWorkerCh)
+	close(s.stopRetryWorkerCh)
+	s.retryWorker.Wait()
+
+	s.clientMu.Lock()
+	close(s.clientMu.stopWorkerCh)
+	s.clientMu.Unlock()
 	s.worker.Wait()
-	// If we're shutting down, we don't care what happens to the outstanding
-	// messages, so ignore this error.
-	_ = s.producer.Close()
-	// s.client is only nil in tests.
-	if s.client != nil {
-		return s.client.Close()
+
+	if err := s.maybeCloseClient(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -218,6 +292,7 @@ func (s *kafkaSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
+	s.maybeWaitOnRetry(ctx)
 
 	topic, err := s.topics.Name(topicDescr)
 	if err != nil {
@@ -239,6 +314,11 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	defer s.metrics.recordResolvedCallback()()
+	s.maybeWaitOnRetry(ctx)
+
+	s.clientMu.Lock()
+	client := s.clientMu.client
+	s.clientMu.Unlock()
 
 	// Periodically ping sarama to refresh its metadata. This means talking to
 	// zookeeper, so it shouldn't be done too often, but beyond that this
@@ -249,7 +329,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 	// actively working on stability. At the same time, revisit this tuning.
 	const metadataRefreshMinDuration = time.Minute
 	if timeutil.Since(s.lastMetadataRefresh) > metadataRefreshMinDuration {
-		if err := s.client.RefreshMetadata(s.topics.DisplayNamesSlice()...); err != nil {
+		if err := client.RefreshMetadata(s.topics.DisplayNamesSlice()...); err != nil {
 			return err
 		}
 		s.lastMetadataRefresh = timeutil.Now()
@@ -266,7 +346,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 		// metadata above. Staleness here does not impact correctness. Some new
 		// partitions will miss this resolved timestamp, but they'll eventually
 		// be picked up and get later ones.
-		partitions, err := s.client.Partitions(topic)
+		partitions, err := client.Partitions(topic)
 		if err != nil {
 			return err
 		}
@@ -331,18 +411,46 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 	return nil
 }
 
+func (s *kafkaSink) maybeWaitOnRetry(ctx context.Context) {
+	s.mu.Lock()
+	inflight := s.mu.inflight
+	retryCh := s.mu.retrySignalCh
+	s.mu.Unlock()
+	if retryCh != nil {
+		log.Infof(ctx, "waiting for retry (%d messages inflight)", inflight)
+		select {
+		case <-ctx.Done():
+			return
+		case <-retryCh:
+			log.Infof(ctx, "finished waiting for retry", inflight)
+		}
+	}
+}
+
 func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
 	if err := s.startInflightMessage(ctx); err != nil {
 		return err
 	}
 
+	s.clientMu.Lock()
+	producer := s.clientMu.producer
+	s.clientMu.Unlock()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case s.producer.Input() <- msg:
+	case producer.Input() <- msg:
 	}
 
 	return nil
+}
+
+// isInternallyRetryable returns true if the sink should attempt to re-emit the
+// messages with a non-batching config first rather than surfacing the error to
+// the overarching feed.
+func isInternalRetryable(err error) bool {
+	var kError sarama.KError
+	return err != nil && errors.As(err, &kError) && kError == sarama.ErrMessageSizeTooLarge
 }
 
 func (s *kafkaSink) workerLoop() {
@@ -351,13 +459,17 @@ func (s *kafkaSink) workerLoop() {
 	for {
 		var ackMsg *sarama.ProducerMessage
 		var ackError error
+		s.clientMu.Lock()
+		producer := s.clientMu.producer
+		stopWorkerCh := s.clientMu.stopWorkerCh
+		s.clientMu.Unlock()
 
 		select {
-		case <-s.stopWorkerCh:
+		case <-stopWorkerCh:
 			return
-		case m := <-s.producer.Successes():
+		case m := <-producer.Successes():
 			ackMsg = m
-		case err := <-s.producer.Errors():
+		case err := <-producer.Errors():
 			ackMsg, ackError = err.Msg, err.Err
 			if ackError != nil {
 				// Msg should never be nil but we're being defensive around a vendor library.
@@ -371,25 +483,119 @@ func (s *kafkaSink) workerLoop() {
 			}
 		}
 
-		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
-			if ackError == nil {
-				sz := ackMsg.Key.Length() + ackMsg.Value.Length()
-				s.stats.finishMessage(int64(sz))
-				m.updateMetrics(m.mvcc, sz, sinkDoesNotCompress)
-			}
-			m.alloc.Release(s.ctx)
-		}
-
 		s.mu.Lock()
 		s.mu.inflight--
-		if s.mu.flushErr == nil && ackError != nil {
-			s.mu.flushErr = ackError
+
+		// If we're not in a retry already, check for internal retryable errors.
+		// Note that errors seen for the re-emitted messages are not retried a
+		// second time and are surfaced just like any other sink error.
+		if s.mu.retrySignalCh == nil && isInternalRetryable(ackError) {
+			s.mu.retrySignalCh = make(chan struct{}, 1)
+			s.mu.isBufferingRetries = true
 		}
 
-		if s.mu.inflight == 0 && s.mu.flushCh != nil {
-			s.mu.flushCh <- struct{}{}
-			s.mu.flushCh = nil
+		// If the message is to be buffered to resend just add it to the buffer
+		// rather than clean it up or surface its error.
+		if s.mu.isBufferingRetries && ackError != nil {
+			s.mu.retryBuf = append(s.mu.retryBuf, ackMsg)
+		} else {
+			if m, ok := ackMsg.Metadata.(messageMetadata); ok {
+				if ackError == nil {
+					sz := ackMsg.Key.Length() + ackMsg.Value.Length()
+					s.stats.finishMessage(int64(sz))
+					m.updateMetrics(m.mvcc, sz, sinkDoesNotCompress)
+				}
+				m.alloc.Release(s.ctx)
+			}
+			if s.mu.flushErr == nil && ackError != nil {
+				s.mu.flushErr = ackError
+			}
 		}
+
+		// If no more messages are are inflight while buffering for retry, signal to
+		// begin the re-emitting of those messages
+		if s.mu.isBufferingRetries && s.mu.inflight == 0 {
+			s.mu.isBufferingRetries = false
+			s.signalRetry <- struct{}{}
+		} else if s.mu.inflight == 0 {
+			// Otherwise notify any threads waiting for a flush.
+			if s.mu.retryFlushCh != nil {
+				s.mu.retryFlushCh <- struct{}{}
+				s.mu.retryFlushCh = nil
+			}
+			if s.mu.flushCh != nil {
+				s.mu.flushCh <- struct{}{}
+				s.mu.flushCh = nil
+			}
+		}
+
+		s.mu.Unlock()
+	}
+}
+
+func disableBatching(c *sarama.Config) *sarama.Config {
+	newConfig := *c
+	newConfig.Producer.Flush.Messages = 0
+	newConfig.Producer.Flush.MaxMessages = 1
+	newConfig.Producer.Flush.Frequency = time.Duration(jsonDuration(0))
+	newConfig.Producer.Flush.Bytes = 0
+	return &newConfig
+}
+
+func (s *kafkaSink) retryWorkerLoop() {
+	defer s.retryWorker.Done()
+	for {
+		select {
+		case <-s.stopRetryWorkerCh:
+			return
+		case <-s.signalRetry:
+		}
+		log.Infof(s.ctx, "retryWorker received retry signal, disabling batching")
+
+		// Switch to sending messages one by one
+		cfg := disableBatching(s.kafkaCfg)
+		if s.resetClient(cfg) != nil {
+			return
+		}
+
+		retryFlushCh := make(chan struct{}, 1)
+		s.mu.Lock()
+		inflight := s.mu.inflight
+		// This will be notified upon moving from 1 to 0 in-flight messages
+		s.mu.retryFlushCh = retryFlushCh
+		msgBuf := s.mu.retryBuf
+		s.mu.Unlock()
+
+		if inflight != 0 {
+			log.Errorf(s.ctx, "retryWorker handling retry while messages still in flight")
+		}
+
+		log.Infof(s.ctx, "retryWorker re-emitting %d buffered messages", len(msgBuf))
+		// Re-emit all messages into the new client
+		for _, msg := range msgBuf {
+			if s.emitMessage(s.ctx, msg) != nil {
+				return
+			}
+		}
+
+		// Wait for the emitted messages to flush
+		select {
+		case <-s.stopRetryWorkerCh:
+			return
+		case <-s.ctx.Done():
+			return
+		case <-retryFlushCh:
+			log.Infof(s.ctx, "retryWorker done waiting for retry flush")
+		}
+
+		// Return to the old client and complete the retry process
+		log.Infof(s.ctx, "retryWorker resetting client to original config")
+		if s.resetClient(s.kafkaCfg) != nil {
+			return
+		}
+		s.mu.Lock()
+		close(s.mu.retrySignalCh)
+		s.mu.retrySignalCh = nil
 		s.mu.Unlock()
 	}
 }

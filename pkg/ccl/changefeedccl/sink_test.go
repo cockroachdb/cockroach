@@ -201,12 +201,13 @@ func makeTestKafkaSink(
 	require.NoError(t, err)
 
 	s = &kafkaSink{
-		ctx:      context.Background(),
-		topics:   topics,
-		producer: p,
-		metrics:  (*sliMetrics)(nil),
+		ctx:     context.Background(),
+		topics:  topics,
+		metrics: (*sliMetrics)(nil),
 	}
-	s.start()
+	s.clientMu.producer = p
+	err = s.Dial()
+	require.NoError(t, err)
 
 	return s, func() {
 		require.NoError(t, s.Close())
