@@ -30,6 +30,9 @@ export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
 export const resumeJob = docsURL("resume-job.html");
 export const cancelJob = docsURL("cancel-job.html");
+export const pauseSchedules = docsURL("pause-schedules.html");
+export const resumeSchedules = docsURL("resume-schedules.html");
+export const dropSchedules = docsURL("drop-schedules.html");
 export const enableNodeMap = docsURL("enable-node-map.html");
 export const configureReplicationZones = docsURL(
   "configure-replication-zones.html",
