@@ -254,7 +254,19 @@ func makeDropColumn(s *Smither) (tree.Statement, bool) {
 	if !ok {
 		return nil, false
 	}
-	col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
+	// Pick a random column to drop while ignoring the system columns since
+	// those cannot be dropped.
+	var col *tree.ColumnTableDef
+	for {
+		col = tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
+		var isSystemCol bool
+		for _, systemColDesc := range colinfo.AllSystemColumnDescs {
+			isSystemCol = isSystemCol || string(col.Name) == systemColDesc.Name
+		}
+		if !isSystemCol {
+			break
+		}
+	}
 
 	return &tree.AlterTable{
 		Table: tableRef.TableName.ToUnresolvedObjectName(),
