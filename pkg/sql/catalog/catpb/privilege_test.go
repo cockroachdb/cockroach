@@ -344,9 +344,6 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 	}
 }
 
-// TestSystemPrivilegeValidate exercises validation for system config
-// descriptors. We use a dummy system table installed for testing
-// purposes.
 func TestSystemPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
