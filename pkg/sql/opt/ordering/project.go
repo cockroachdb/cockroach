@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/errors"
 )
 
 func projectCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
@@ -74,13 +75,24 @@ func projectOrderingToInput(
 }
 
 func projectBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	p := expr.(*memo.ProjectExpr)
+	// Ensure that the child provided ordering only refers to columns from the
+	// required ordering choice. This is necessary because there may be cases
+	// where the input of the Project has undergone transformations that allow it
+	// to "see" more functional dependencies than the original memo group. This
+	// can cause the child to provide an ordering that is equivalent to the
+	// required ordering, but which the parent Project cannot prove is equivalent
+	// because its FDs have less information. This can lead to a panic later on.
+	ordCols := required.ColSet()
+	if !ordCols.SubsetOf(expr.Relational().OutputCols) {
+		panic(errors.AssertionFailedf("expected required columns to be a subset of output columns"))
+	}
 	// Project can only satisfy required orderings that refer to projected
 	// columns; it should always be possible to remap the columns in the input's
 	// provided ordering.
+	p := expr.(*memo.ProjectExpr)
 	return remapProvided(
 		p.Input.ProvidedPhysical().Ordering,
 		p.InternalFDs(),
-		p.Relational().OutputCols,
+		ordCols,
 	)
 }
