@@ -1,0 +1,167 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/logpb/event.proto";
+
+// Category: Storage telemetry events
+// Channel: TELEMETRY
+
+// StoreStats contains per store stats.
+//
+// Note that because stats are scoped to the lifetime of the process, counters
+// (and certain gauges) will be reset across node restarts.
+message StoreStats {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // node_id is the ID of the node.
+  int32 node_id = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // store_id is the ID of the store.
+  int32 store_id = 3 [(gogoproto.jsontag) = ",omitempty"];
+
+  // levels is a nested message containing per-level statistics.
+  repeated LevelStats levels = 4 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ""];
+
+  // Cache metrics.
+
+  // cache_size is the size of the cache for the store, in bytes (gauge).
+  int64 cache_size = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // cache_count is the number of items in the cache (gauge).
+  int64 cache_count = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // cache_hits is the number of cache hits (counter).
+  int64 cache_hits = 7 [(gogoproto.jsontag) = ",omitempty"];
+  // cache_misses is the number of cache misses (counter).
+  int64 cache_misses = 8 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Compaction stats.
+
+  // compaction_count_default is the count of default compactions (counter).
+  int64 compaction_count_default = 9 [(gogoproto.jsontag) = ",omitempty"];
+  // compaction_count_delete_only is the count of delete-only compactions
+  // (counter).
+  int64 compaction_count_delete_only = 10 [(gogoproto.jsontag) = ",omitempty"];
+  // compaction_count_elision_only is the count of elision-only compactions
+  // (counter).
+  int64 compaction_count_elision_only = 11 [(gogoproto.jsontag) = ",omitempty"];
+  // compaction_count_move is the count of move-compactions (counter).
+  int64 compaction_count_move = 12 [(gogoproto.jsontag) = ",omitempty"];
+  // compaction_count_read is the count of read-compactions (counter).
+  int64 compaction_count_read = 13 [(gogoproto.jsontag) = ",omitempty"];
+  // compaction_count_rewrite is the count of rewrite-compactions (counter).
+  int64 compaction_count_rewrite = 14 [(gogoproto.jsontag) = ",omitempty"];
+  // compactions_num_in_progress is the number of compactions in progress
+  // (gauge).
+  int64 compaction_num_in_progress = 15 [(gogoproto.jsontag) = ",omitempty"];
+  // compaction_marked_files is the count of files marked for compaction
+  // (gauge).
+  int64 compaction_marked_files = 16 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Flush stats.
+
+  // flush_count is the number of flushes (counter).
+  int64 flush_count = 17 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Memtable stats.
+
+  // memtable_size is the total size allocated to all memtables and (large)
+  // batches, in bytes (gauge).
+  uint64 memtable_size = 18 [(gogoproto.jsontag) = ",omitempty"];
+  // memtable_count is the count of memtables (gauge).
+  int64 memtable_count = 19 [(gogoproto.jsontag) = ",omitempty"];
+  // memtable_zombie_count is the count of memtables no longer referenced by the
+  // current DB state, but still in use by an iterator (gauge).
+  int64 memtable_zombie_count = 20 [(gogoproto.jsontag) = ",omitempty"];
+  // memtable_zombie_size is the size, in bytes, of all zombie memtables
+  // (gauge).
+  uint64 memtable_zombie_size = 21 [(gogoproto.jsontag) = ",omitempty"];
+
+  // WAL stats.
+
+  // wal_live_count is the count of live WAL files (gauge).
+  int64 wal_live_count = 22 [(gogoproto.jsontag) = ",omitempty"];
+  // wal_live_size is the size, in bytes, of live data in WAL files. With WAL
+  // recycling, this value is less than the actual on-disk size of the WAL
+  // files (gauge).
+  uint64 wal_live_size = 23 [(gogoproto.jsontag) = ",omitempty"];
+  // wal_obsolete_count is the count of obsolete WAL files (gauge).
+  int64 wal_obsolete_count = 24 [(gogoproto.jsontag) = ",omitempty"];
+  // wal_obsolete_size is the size of obsolete WAL files, in bytes (gauge).
+  uint64 wal_obsolete_size = 25 [(gogoproto.jsontag) = ",omitempty"];
+  // wal_physical_size is the size, in bytes, of the WAL files on disk (gauge).
+  uint64 wal_physical_size = 26 [(gogoproto.jsontag) = ",omitempty"];
+  // wal_bytes_in is the number of logical bytes written to the WAL (counter).
+  uint64 wal_bytes_in = 27 [(gogoproto.jsontag) = ",omitempty"];
+  // wal_bytes_written is the number of bytes written to the WAL (counter).
+  uint64 wal_bytes_written = 28 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Table stats.
+
+  // table_obsolete_count is the number of tables which are no longer referenced
+  // by the current DB state or any open iterators (gauge).
+  int64 table_obsolete_count = 29 [(gogoproto.jsontag) = ",omitempty"];
+  // table_obsolete_size is the size, in bytes, of obsolete tables (gauge).
+  uint64 table_obsolete_size = 30 [(gogoproto.jsontag) = ",omitempty"];
+  // table_zombie_count is the number of tables no longer referenced by the
+  // current DB state, but are still in use by an open iterator (gauge).
+  int64 table_zombie_count = 31 [(gogoproto.jsontag) = ",omitempty"];
+  // table_zombie_size is the size, in bytes, of zombie tables (gauge).
+  uint64 table_zombie_size = 32 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Keys.
+
+  // range_key_sets_count is the approximate count of internal range key sets in
+  // the store.
+  uint64 range_key_sets_count = 33 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// LevelStats contains per-level statistics for an LSM.
+message LevelStats {
+  // level is the level ID in a LSM (e.g. level(L0) == 0, etc.)
+  uint32 level = 1 [(gogoproto.jsontag) = ",includeempty"];
+  // num_files is the number of files in the level (gauge).
+  int64 num_files = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // size_bytes is the size of the level, in bytes (gauge).
+  int64 size_bytes = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // score is the compaction score of the level (gauge).
+  float score = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // bytes_in is the number of bytes written to this level (counter).
+  uint64 bytes_in = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // bytes_ingested is the number of bytes ingested into this level (counter).
+  uint64 bytes_ingested = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // bytes_moved is the number of bytes moved into this level via a
+  // move-compaction (counter).
+  uint64 bytes_moved = 7 [(gogoproto.jsontag) = ",omitempty"];
+  // bytes_read is the number of bytes read from this level, during compactions
+  // (counter).
+  uint64 bytes_read = 8 [(gogoproto.jsontag) = ",omitempty"];
+  // bytes_compacted is the number of bytes written to this level during
+  // compactions (counter).
+  uint64 bytes_compacted = 9 [(gogoproto.jsontag) = ",omitempty"];
+  // bytes flushed is the number of bytes flushed to this level. This value is
+  // always zero for levels other than L0 (counter).
+  uint64 bytes_flushed = 10 [(gogoproto.jsontag) = ",omitempty"];
+  // tables_compacted is the count of tables compacted into this level
+  // (counter).
+  uint64 tables_compacted = 11 [(gogoproto.jsontag) = ",omitempty"];
+  // tables_flushed is the count of tables flushed into this level (counter).
+  uint64 tables_flushed = 12 [(gogoproto.jsontag) = ",omitempty"];
+  // tables_ingested is the count of tables ingested into this level (counter).
+  uint64 tables_ingested = 13 [(gogoproto.jsontag) = ",omitempty"];
+  // tables_moved is the count of tables moved into this level via
+  // move-compactions (counter).
+  uint64 tables_moved = 14 [(gogoproto.jsontag) = ",omitempty"];
+  // num_sublevel is the count of sublevels for the level. This value is always
+  // zero for levels other than L0 (gauge).
+  int32 num_sublevels = 15 [(gogoproto.jsontag) = ",omitempty"];
+}

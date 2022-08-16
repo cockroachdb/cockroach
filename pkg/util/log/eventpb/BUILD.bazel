@@ -59,6 +59,7 @@ proto_library(
         "role_events.proto",
         "session_events.proto",
         "sql_audit_events.proto",
+        "storage_events.proto",
         "telemetry.proto",
         "zone_events.proto",
     ],
