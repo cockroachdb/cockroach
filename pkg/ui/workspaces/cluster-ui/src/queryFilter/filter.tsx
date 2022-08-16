@@ -29,6 +29,7 @@ import {
 } from "./filterClasses";
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { syncHistory } from "../util";
+import {InsightType} from "../insightsTable/insightsTable";
 
 interface QueryFilter {
   onSubmitFilters: (filters: Filters) => void;
@@ -39,11 +40,13 @@ interface QueryFilter {
   dbNames?: string[];
   usernames?: string[];
   sessionStatuses?: string[];
+  schemaInsightTypes?: string[];
   regions?: string[];
   nodes?: string[];
   showDB?: boolean;
   showUsername?: boolean;
   showSessionStatus?: boolean;
+  showSchemaInsightTypes?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
   showRegions?: boolean;
@@ -71,6 +74,7 @@ export interface Filters extends Record<string, string | boolean> {
   nodes?: string;
   username?: string;
   sessionStatus?: string;
+  schemaInsightType?: string;
 }
 
 const timeUnit = [
@@ -90,6 +94,7 @@ export const defaultFilters: Required<Filters> = {
   nodes: "",
   username: "",
   sessionStatus: "",
+  schemaInsightType: "",
 };
 
 // getFullFiltersObject returns Filters with every field defined as
@@ -383,6 +388,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       dbNames,
       usernames,
       sessionStatuses,
+      schemaInsightTypes,
       regions,
       nodes,
       activeFilters,
@@ -394,6 +400,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       timeLabel,
       showUsername,
       showSessionStatus,
+      showSchemaInsightTypes
     } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
@@ -522,6 +529,31 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
+    const schemaInsightTypeOptions = showSchemaInsightTypes
+      ? schemaInsightTypes.map(schemaInsight => ({
+        label: schemaInsight,
+        value: schemaInsight,
+        isSelected: this.isOptionSelected(
+          schemaInsight,
+          filters.schemaInsightType
+        ),
+      })) : [];
+    const schemaInsightTypeValue = schemaInsightTypeOptions.filter(option => {
+      return filters.schemaInsightType.split(",").includes(option.label);
+    });
+    const schemaInsightTypeFilter = (
+      <div>
+        <div className={filterLabel.margin}>Schema Insight Type</div>
+        <MultiSelectCheckbox
+          options={schemaInsightTypeOptions}
+          placeholder="All"
+          field="schemaInsightType"
+          parent={this}
+          value={schemaInsightTypeValue}
+        />
+      </div>
+    );
+
     const regionsOptions = showRegions
       ? regions.map(region => ({
           label: region,
@@ -637,6 +669,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             {showDB ? dbFilter : ""}
             {showUsername ? usernameFilter : ""}
             {showSessionStatus ? sessionStatusFilter : ""}
+            {showSchemaInsightTypes? schemaInsightTypeFilter: ""}
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}

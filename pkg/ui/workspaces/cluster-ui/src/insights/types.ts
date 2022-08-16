@@ -11,6 +11,7 @@
 import { Moment } from "moment";
 import { HIGH_WAIT_CONTENTION_THRESHOLD } from "../api";
 import { Filters } from "../queryFilter";
+import {InsightType} from "../insightsTable/insightsTable";
 
 export enum InsightNameEnum {
   highWaitTime = "highWaitTime",
@@ -66,6 +67,19 @@ export const InsightExecOptions = [
 export type InsightEventFilters = Omit<
   Filters,
   | "database"
+  | "sqlType"
+  | "fullScan"
+  | "distributed"
+  | "regions"
+  | "nodes"
+  | "username"
+  | "sessionStatus"
+  | "timeNumber"
+  | "timeUnit"
+>;
+
+export type SchemaInsightEventFilters = Omit<
+  Filters,
   | "sqlType"
   | "fullScan"
   | "distributed"

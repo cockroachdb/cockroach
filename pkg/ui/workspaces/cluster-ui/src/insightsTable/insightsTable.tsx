@@ -14,6 +14,10 @@ import { ColumnDescriptor, SortedTable } from "../sortedtable";
 import classNames from "classnames/bind";
 import styles from "./insightsTable.module.scss";
 import { StatementLink } from "../statementsTable";
+import {Link} from "react-router-dom";
+import {Search as IndexIcon} from "@cockroachlabs/icons";
+import {Anchor} from "../anchor";
+import {performanceTuningRecipes} from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -22,10 +26,16 @@ export type InsightType = "DROP_INDEX" | "CREATE_INDEX" | "REPLACE_INDEX";
 export interface InsightRecommendation {
   type: InsightType;
   database: string;
+  query?: string;
+  lastUsed?: string;
+  indexDetails?: indexDetails;
+  execution?: executionDetails;
+}
+
+export interface indexDetails {
   table: string;
-  index_id: number;
-  query: string;
-  execution: executionDetails;
+  indexID: number;
+  indexName: string;
 }
 
 export interface executionDetails {
@@ -114,7 +124,26 @@ function descriptionCell(
         </>
       );
     case "DROP_INDEX":
-      return <>{`Index ${insightRec.index_id}`}</>;
+      return (
+        <>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Index: </span>{" "}
+            <Link
+              to={`database/${insightRec.database}/table/${insightRec.indexDetails.table}/index/${insightRec.indexDetails.indexName}`}
+              className={cx("table-link")}
+            >
+              {insightRec.indexDetails.indexName}
+            </Link>
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.lastUsed}{" Learn more about "}
+            <Anchor href={performanceTuningRecipes} target="_blank" className={cx("table-link")}>
+              unused indexes
+            </Anchor>{"."}
+          </div>
+        </>
+      );
     default:
       return <>{insightRec.query}</>;
   }

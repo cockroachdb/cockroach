@@ -42,9 +42,9 @@ import {
 import {
   EmptyInsightsTablePlaceholder,
   DropDownSelect,
-  WorkloadInsightsError,
 } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
+import {InsightsError} from "../../insightsErrorComponent";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -221,7 +221,7 @@ export const TransactionInsightsView: React.FC<
           page="transaction insights"
           error={transactionsError}
           renderError={() =>
-            WorkloadInsightsError({
+            InsightsError({
               execType: "transaction insights",
             })
           }

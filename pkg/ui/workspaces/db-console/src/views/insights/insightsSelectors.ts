@@ -39,3 +39,27 @@ export const selectInsights = createSelector(
     return adminUiState.insights.data;
   },
 );
+
+export const schemaInsightsFiltersLocalSetting = new LocalSetting<
+  AdminUIState,
+  InsightEventFilters
+  >("filters/SchemaInsightsPage", (state: AdminUIState) => state.localSettings, {
+    // TODO(thomas): remove ?
+  app: defaultFilters.app,
+});
+
+export const schemaInsightsSortLocalSetting = new LocalSetting<
+  AdminUIState,
+  SortSetting
+  >("sortSetting/SchemaInsightsPage", (state: AdminUIState) => state.localSettings, {
+  ascending: false,
+  columnTitle: "insights",
+});
+
+export const selectSchemaInsights = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  adminUiState => {
+    if (!adminUiState.schemaInsights) return [];
+    return adminUiState.schemaInsights.data;
+  }
+)

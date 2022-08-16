@@ -16,7 +16,9 @@ import {
   InsightTypes,
   InsightEvent,
   InsightEventFilters,
+  SchemaInsightEventFilters,
 } from "./types";
+import {InsightRecommendation} from "../insightsTable/insightsTable";
 
 export const getInsights = (eventState: InsightEventState): Insight[] => {
   const insights: Insight[] = [];
@@ -115,3 +117,49 @@ export function getAppsFromTransactionInsights(
 
   return Array.from(uniqueAppNames).sort();
 }
+
+export const filterSchemaInsights = (
+  schemaInsights: InsightRecommendation[],
+  filters: SchemaInsightEventFilters,
+  search?: string,
+): InsightRecommendation[] => {
+  if (schemaInsights == null) return [];
+
+  let filteredSchemaInsights = schemaInsights;
+
+  if (filters.database) {
+    const databases =
+      filters.database.toString().length > 0 ? filters.database.toString().split(",") : [];
+    if (databases.includes(unset)) {
+      databases.push("");
+    }
+    filteredSchemaInsights = filteredSchemaInsights.filter(
+      schemaInsight =>
+        databases.length === 0 || databases.includes(schemaInsight.database),
+    )
+  }
+
+  if (filters.schemaInsightType) {
+    const schemaInsightTypes =
+      filters.schemaInsightType.toString().length > 0 ? filters.schemaInsightType.toString().split(",") : [];
+    if (schemaInsightTypes.includes(unset)) {
+      schemaInsightTypes.push("");
+    }
+    filteredSchemaInsights = filteredSchemaInsights.filter(
+      schemaInsight => schemaInsightTypes.length === 0 || schemaInsightTypes.includes(schemaInsight.type),
+    )
+  }
+
+  if (search) {
+    search = search.toLowerCase();
+    filteredSchemaInsights = filteredSchemaInsights.filter(
+      schemaInsight =>
+        schemaInsight.query?.includes(search) ||
+        schemaInsight.lastUsed?.includes(search) ||
+        schemaInsight.execution?.statement.includes(search) ||
+        schemaInsight.execution?.summary.includes(search) ||
+        schemaInsight.execution?.fingerprintID.includes(search)
+    );
+  }
+  return filteredSchemaInsights;
+};
