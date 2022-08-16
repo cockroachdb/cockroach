@@ -39,20 +39,31 @@ const (
 	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
 	// AzureEnvironmentKeyParam is the query parameter for the environment name in an azure URI.
 	AzureEnvironmentKeyParam = "AZURE_ENVIRONMENT"
+
+	scheme                   = "azure"
+	externalConnectionScheme = "azure-storage"
 )
 
 func parseAzureURL(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
 ) (cloudpb.ExternalStorage, error) {
+	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
 	conf.AzureConfig = &cloudpb.ExternalStorage_Azure{
 		Container:   uri.Host,
 		Prefix:      uri.Path,
-		AccountName: uri.Query().Get(AzureAccountNameParam),
-		AccountKey:  uri.Query().Get(AzureAccountKeyParam),
-		Environment: uri.Query().Get(AzureEnvironmentKeyParam),
+		AccountName: azureURL.ConsumeParam(AzureAccountNameParam),
+		AccountKey:  azureURL.ConsumeParam(AzureAccountKeyParam),
+		Environment: azureURL.ConsumeParam(AzureEnvironmentKeyParam),
 	}
+
+	// Validate that all the passed in parameters are supported.
+	if unknownParams := azureURL.RemainingQueryParams(); len(unknownParams) > 0 {
+		return cloudpb.ExternalStorage{}, errors.Errorf(
+			`unknown azure query parameters: %s`, strings.Join(unknownParams, ", "))
+	}
+
 	if conf.AzureConfig.AccountName == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
@@ -256,5 +267,5 @@ func (s *azureStorage) Close() error {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_azure,
-		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), "azure")
+		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), scheme, externalConnectionScheme)
 }
