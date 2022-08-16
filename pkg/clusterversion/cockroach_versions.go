@@ -318,6 +318,10 @@ const (
 	// WaitedForDelRangeInGCJob corresponds to the migration which waits for
 	// the GC jobs to adopt the use of DelRange with tombstones.
 	WaitedForDelRangeInGCJob
+	// UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
+	// ids in sequences' back references and attempts a best-effort-based matching
+	// to update those column IDs.
+	UpdateInvalidColumnIDsInSequenceBackReferences
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -535,6 +539,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
+	},
+	{
+		Key:     UpdateInvalidColumnIDsInSequenceBackReferences,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
