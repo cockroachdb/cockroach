@@ -26,6 +26,10 @@ message Target {
 enum Status {
   UNKNOWN = 0;
 
+  // OFFLINE exists only as a part of decomposition to detect importing
+  // descriptors.
+  OFFLINE = 15;
+
   // Target states are ABSENT, PUBLIC or TRANSIENT_ABSENT.
   // These are the desired final end states of a schema change.
   ABSENT = 1;
@@ -35,9 +39,8 @@ enum Status {
   TRANSIENT_ABSENT = 3;
 
   // Intermediate states on the descriptor dropping path.
-  reserved 4; // Formerly TXN_DROPPED.
+  TXN_DROPPED = 4;
   DROPPED = 5;
-  OFFLINE = 15;
 
   // Intermediate states on the column and index dropping and adding paths.
   WRITE_ONLY = 6;
