@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       ├── • 6 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Table:{DescID: 108}
-│       │   │     PUBLIC → OFFLINE
+│       │   │     PUBLIC → TXN_DROPPED
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 1}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -50,9 +50,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │
 │       └── • 1 Mutation operation
 │           │
-│           └── • MarkDescriptorAsOffline
+│           └── • MarkDescriptorAsSyntheticallyDropped
 │                 DescID: 108
-│                 Reason: DROP TABLE multi_region_test_db.public.table_regional_by_row
 │
 ├── • PreCommitPhase
 │   │
@@ -127,7 +126,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
     │   │   ├── • Table:{DescID: 108}
-    │   │   │     OFFLINE → DROPPED
+    │   │   │     TXN_DROPPED → DROPPED
     │   │   │
     │   │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 106}
     │   │   │   │ PUBLIC → ABSENT

@@ -117,4 +117,6 @@ type MutationVisitorStateUpdater interface {
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
+	MarkDescriptorSynthetic(id descpb.ID)
+	//	MarkDescriptorSynthetic(id descpb.ID)
 }
