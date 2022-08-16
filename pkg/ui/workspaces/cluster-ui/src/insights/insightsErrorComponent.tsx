@@ -10,7 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "./workloadInsights.module.scss";
+import styles from "./workloadInsights/util/workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);
 
@@ -18,7 +18,7 @@ type SQLInsightsErrorProps = {
   execType: string;
 };
 
-export const WorkloadInsightsError = (
+export const InsightsError = (
   props: SQLInsightsErrorProps,
 ): React.ReactElement => {
   return (
