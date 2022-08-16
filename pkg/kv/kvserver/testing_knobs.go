@@ -407,14 +407,6 @@ type StoreTestingKnobs struct {
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
 	// enforcement.
 	IgnoreStrictGCEnforcement bool
-	// ThrottleEmptySnapshots includes empty snapshots for throttling.
-	ThrottleEmptySnapshots bool
-	// BeforeSendSnapshotThrottle intercepts replicas before entering send
-	// snapshot throttling.
-	BeforeSendSnapshotThrottle func()
-	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
-	// send snapshot semaphore.
-	AfterSendSnapshotThrottle func()
 
 	// This method, if set, gets to see (and mutate, if desired) any local
 	// StoreDescriptor before it is being sent out on the Gossip network.

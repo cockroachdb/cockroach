@@ -180,18 +180,6 @@ func (h *testClusterStoreRaftMessageHandler) HandleSnapshot(
 	return store.HandleSnapshot(ctx, header, respStream)
 }
 
-func (h *testClusterStoreRaftMessageHandler) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream kvserver.DelegateSnapshotResponseStream,
-) error {
-	store, err := h.getStore()
-	if err != nil {
-		return err
-	}
-	return store.HandleDelegatedSnapshot(ctx, req, stream)
-}
-
 // testClusterPartitionedRange is a convenient abstraction to create a range on a node
 // in a multiTestContext which can be partitioned and unpartitioned.
 type testClusterPartitionedRange struct {

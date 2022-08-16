@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -150,49 +149,6 @@ func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
 		q.Delete()
 		qs.m.Delete(int64(rangeID))
 	}
-}
-
-// HandleDelegatedSnapshot reads the incoming delegated snapshot message and
-// throttles sending snapshots before passing the request to the sender replica.
-func (s *Store) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream DelegateSnapshotResponseStream,
-) error {
-	ctx = s.AnnotateCtx(ctx)
-
-	if fn := s.cfg.TestingKnobs.SendSnapshot; fn != nil {
-		fn()
-	}
-
-	sender, err := s.GetReplica(req.RangeID)
-	if err != nil {
-		return err
-	}
-
-	sp := tracing.SpanFromContext(ctx)
-	// Pass the request to the sender replica.
-	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream); err != nil {
-		return stream.Send(
-			&kvserverpb.DelegateSnapshotResponse{
-				SnapResponse: &kvserverpb.SnapshotResponse{
-					Status:  kvserverpb.SnapshotResponse_ERROR,
-					Message: err.Error(),
-				},
-				CollectedSpans: sp.GetConfiguredRecording(),
-			},
-		)
-	}
-
-	resp := &kvserverpb.DelegateSnapshotResponse{
-		SnapResponse: &kvserverpb.SnapshotResponse{
-			Status:  kvserverpb.SnapshotResponse_APPLIED,
-			Message: "Snapshot successfully applied by recipient",
-		},
-		CollectedSpans: sp.GetConfiguredRecording(),
-	}
-	// Send a final response that snapshot sending is completed.
-	return stream.Send(resp)
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if

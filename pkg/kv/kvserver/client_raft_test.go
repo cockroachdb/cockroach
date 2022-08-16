@@ -3441,14 +3441,6 @@ func (errorChannelTestHandler) HandleSnapshot(
 	panic("unimplemented")
 }
 
-func (errorChannelTestHandler) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream kvserver.DelegateSnapshotResponseStream,
-) error {
-	panic("unimplemented")
-}
-
 // This test simulates a scenario where one replica has been removed from the
 // range's Raft group but it is unaware of the fact. We check that this replica
 // coming back from the dead cannot cause elections.
