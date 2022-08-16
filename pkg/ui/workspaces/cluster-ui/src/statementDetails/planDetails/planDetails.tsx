@@ -22,14 +22,13 @@ import { SortSetting } from "../../sortedtable";
 import { Row } from "antd";
 import "antd/lib/row/style";
 import {
-  InsightRecommendation,
   InsightsSortedTable,
-  InsightType,
   makeInsightsColumns,
 } from "../../insightsTable/insightsTable";
 import classNames from "classnames/bind";
 import styles from "../statementDetails.module.scss";
 import { CockroachCloudContext } from "../../contexts";
+import { InsightRecommendation, InsightType } from "../../insights";
 
 const cx = classNames.bind(styles);
 

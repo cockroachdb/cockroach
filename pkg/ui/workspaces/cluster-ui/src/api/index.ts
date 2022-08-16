@@ -16,3 +16,4 @@ export * from "./nodesApi";
 export * from "./clusterLocksApi";
 export * from "./insightsApi";
 export * from "./indexActionsApi";
+export * from "./schemaInsightsApi";
