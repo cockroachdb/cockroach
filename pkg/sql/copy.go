@@ -100,7 +100,7 @@ type copyMachine struct {
 
 	// p is the planner used to plan inserts. preparePlanner() needs to be called
 	// before preparing each new statement.
-	p planner
+	p *planner
 
 	// parsingEvalCtx is an EvalContext used for the very limited needs to strings
 	// parsing. Is it not correctly initialized with timestamps, transactions and
@@ -115,8 +115,8 @@ func newCopyMachine(
 	ctx context.Context,
 	conn pgwirebase.Conn,
 	n *tree.CopyFrom,
+	p *planner,
 	txnOpt copyTxnOpt,
-	execCfg *ExecutorConfig,
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
@@ -129,7 +129,7 @@ func newCopyMachine(
 		txnOpt:          txnOpt,
 		csvExpectHeader: n.Options.Header,
 		// The planner will be prepared before use.
-		p:              planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}},
+		p:              p,
 		execInsertPlan: execInsertPlan,
 	}
 
@@ -213,7 +213,7 @@ func newCopyMachine(
 	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
-	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, flags)
+	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, c.p, &n.Table, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +755,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	}
 
 	var res streamingCommandResult
-	err := c.execInsertPlan(ctx, &c.p, &res)
+	err := c.execInsertPlan(ctx, c.p, &res)
 	if err != nil {
 		return err
 	}

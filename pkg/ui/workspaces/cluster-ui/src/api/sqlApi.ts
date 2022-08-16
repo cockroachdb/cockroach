@@ -15,7 +15,7 @@ export type SqlExecutionRequest = {
   execute?: boolean;
   timeout?: string; // Default 5s
   application_name?: string; // Defaults to '$ api-v2-sql'
-  database_name?: string; // Defaults to defaultDb
+  database?: string; // Defaults to defaultDb
   max_result_size?: number; // Default 10kib
 };
 

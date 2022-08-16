@@ -2335,7 +2335,7 @@ func isCopyToExternalStorage(cmd CopyIn) bool {
 // We handle the CopyFrom statement by creating a copyMachine and handing it
 // control over the connection until the copying is done. The contract is that,
 // when this is called, the pgwire.conn is not reading from the network
-// connection any more until this returns. The copyMachine will to the reading
+// connection any more until this returns. The copyMachine will do the reading
 // and writing up to the CommandComplete message.
 func (ex *connExecutor) execCopyIn(
 	ctx context.Context, cmd CopyIn,
@@ -2415,8 +2415,9 @@ func (ex *connExecutor) execCopyIn(
 	if isCopyToExternalStorage(cmd) {
 		cm, err = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg)
 	} else {
+		p := planner{execCfg: ex.server.cfg, alloc: &tree.DatumAlloc{}}
 		cm, err = newCopyMachine(
-			ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
+			ctx, cmd.Conn, cmd.Stmt, &p, txnOpt,
 			// execInsertPlan
 			func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
 				_, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, DistributionTypeNone, nil /* progressAtomic */)

@@ -1,0 +1,208 @@
+# LogicTest: !3node-tenant
+subtest basic
+
+statement ok
+CREATE TABLE t (a int)
+
+# builtins not allowed
+copy-error
+COPY t FROM STDIN
+
+random()
+----
+could not parse "random()" as type int: strconv.ParseInt: parsing "random()": invalid syntax
+
+copy
+COPY t FROM STDIN
+
+----
+0
+
+copy
+COPY t FROM STDIN
+
+1
+----
+1
+
+copy
+COPY t FROM STDIN
+
+1
+2
+----
+2
+
+query I rowsort
+SELECT * FROM t
+----
+1
+1
+2
+
+subtest types
+
+statement ok
+CREATE TABLE t2 (i INT, d DATE, dec DECIMAL, t TIMESTAMP)
+
+copy
+COPY t2 FROM STDIN
+
+1	1996-03-13	12.123	2016-01-25 10:10:10.555555
+----
+1
+
+query I rowsort
+SELECT * FROM t
+----
+1
+1
+2
+
+copy-error
+COPY t2 FROM STDIN
+
+a	1996-03-13	12.123	2016-01-25 10:10:10.555555
+----
+could not parse "a" as type int: strconv.ParseInt: parsing "a": invalid syntax
+
+copy-error
+COPY t2 FROM STDIN
+
+1	2	12.123	2016-01-25 10:10:10.555555
+----
+parsing as type date: missing required date fields
+
+copy-error
+COPY t2 FROM STDIN
+
+1	1996-03-13	not a decimal	2016-01-25 10:10:10.555555
+----
+could not parse "not a decimal" as type decimal: parse exponent: cimal: strconv.ParseInt: parsing "cimal": invalid syntax
+
+copy-error
+COPY t2 FROM STDIN
+
+1	1996-03-13	12.123	not a timestamp
+----
+parsing as type timestamp: could not parse "not a timestamp"
+
+copy-error
+COPY t2 FROM STDIN
+
+1	1996-03-13	12.123
+----
+expected 4 values, got 3
+
+copy-error
+COPY t2 FROM STDIN
+
+1	1996-03-13	12.123	2016-01-25 10:10:10.555555	extra col
+----
+expected 4 values, got 5
+
+# now is allowed
+copy
+COPY t2 FROM STDIN
+
+2	1996-03-13	12.123	now
+----
+1
+
+# now is allowed
+copy
+COPY t2 FROM STDIN
+
+3	1996-03-13	12.123	now()
+----
+1
+
+# expressions are not allowed
+copy-error
+COPY t2 FROM STDIN
+
+2	1996-03-13	12.123	now()-1
+----
+parsing as type timestamp: could not parse "now()-1"
+
+query I
+SELECT count(t) FROM t2 WHERE t > now()
+----
+0
+
+copy
+COPY t2 FROM STDIN
+
+\N	\N	\N	\N
+----
+1
+
+
+subtest constraints
+
+statement ok
+CREATE TABLE t3 (i INT CHECK (i > 0))
+
+copy-error
+COPY t3 FROM STDIN
+
+0
+----
+failed to satisfy CHECK constraint (i > 0:::INT8)
+
+
+# Foreign key checks happen
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY);
+CREATE TABLE child (k INT PRIMARY KEY REFERENCES parent)
+
+copy-error
+COPY child FROM STDIN
+
+1
+----
+insert on table "child" violates foreign key constraint "child_k_fkey"
+
+statement ok
+CREATE TABLE t4 (i INT UNIQUE)
+
+copy-error
+COPY t4 FROM STDIN
+
+1
+1
+----
+duplicate key value violates unique constraint "t4_i_key"
+subtest defaults
+# Default column values tests
+
+statement ok
+CREATE table tdefaults (i INT PRIMARY KEY DEFAULT unique_rowid(), d INT NOT NULL DEFAULT -1, x INT)
+
+copy
+COPY tdefaults(x) FROM STDIN
+
+1
+----
+1
+
+copy
+COPY tdefaults(x,d) FROM STDIN
+
+1	2
+----
+1
+
+copy
+COPY tdefaults FROM STDIN
+
+1	1	1
+----
+1
+
+query II rowsort
+SELECT d,x FROM tdefaults
+----
+1   1
+-1  1
+2   1
