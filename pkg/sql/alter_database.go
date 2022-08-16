@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1330,9 +1329,6 @@ type alterDatabaseAddSuperRegion struct {
 func (p *planner) AlterDatabaseAddSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddSuperRegion,
 ) (planNode, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SuperRegions) {
-		return nil, errors.Newf("super regions are not supported until upgrade to version %s is finalized", clusterversion.SuperRegions.String())
-	}
 	if err := p.isSuperRegionEnabled(); err != nil {
 		return nil, err
 	}
@@ -1429,10 +1425,6 @@ type alterDatabaseDropSuperRegion struct {
 func (p *planner) AlterDatabaseDropSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropSuperRegion,
 ) (planNode, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SuperRegions) {
-		return nil, errors.Newf("super regions are not supported until upgrade to version %s is finalized", clusterversion.SuperRegions.String())
-	}
-
 	if err := p.isSuperRegionEnabled(); err != nil {
 		return nil, err
 	}
@@ -1561,9 +1553,6 @@ func (n *alterDatabaseAlterSuperRegion) Close(context.Context)        {}
 func (p *planner) AlterDatabaseAlterSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAlterSuperRegion,
 ) (planNode, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SuperRegions) {
-		return nil, errors.Newf("super regions are not supported until upgrade to version %s is finalized", clusterversion.SuperRegions.String())
-	}
 	if err := p.isSuperRegionEnabled(); err != nil {
 		return nil, err
 	}
