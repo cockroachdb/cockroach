@@ -1337,6 +1337,18 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Batching",
+				Metrics: []string{
+					"changefeed.batch_reduction_count",
+				},
+			},
+			{
+				Title: "Internal Retries",
+				Metrics: []string{
+					"changefeed.internal_retry_message_count",
+				},
+			},
+			{
 				Title: "Min High Water",
 				Metrics: []string{
 					"changefeed.min_high_water",

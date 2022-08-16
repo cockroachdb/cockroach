@@ -203,3 +203,11 @@ var ActiveProtectedTimestampsEnabled = settings.RegisterBoolSetting(
 	"if set, rather than only protecting changefeed targets from garbage collection during backfills, data will always be protected up to the changefeed's frontier",
 	true,
 )
+
+// BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
+var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.batch_reduction_retry_enabled",
+	"if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
+	true,
+)
