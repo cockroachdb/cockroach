@@ -54,7 +54,7 @@ type TestState struct {
 	// change statement will probably alter the contents of uncommitted and these
 	// will not be reflected in committed until the transaction commits, i.e. the
 	// WithTxn method returns.
-	committed, uncommitted nstree.MutableCatalog
+	committed, uncommitted, synthetic nstree.MutableCatalog
 
 	comments                map[descmetadata.CommentKey]string
 	zoneConfigs             map[catid.DescID]*zonepb.ZoneConfig
@@ -114,7 +114,8 @@ func (s *TestState) WithTxn(fn func(s *TestState)) {
 	s.txnCounter++
 	defer func() {
 		u := s.uncommitted
-		s.committed, s.uncommitted = nstree.MutableCatalog{}, nstree.MutableCatalog{}
+		s.committed, s.uncommitted, s.synthetic = nstree.MutableCatalog{},
+			nstree.MutableCatalog{}, nstree.MutableCatalog{}
 		_ = u.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
 			s.committed.UpsertNamespaceEntry(e, e.GetID())
 			s.uncommitted.UpsertNamespaceEntry(e, e.GetID())

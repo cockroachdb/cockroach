@@ -20,7 +20,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -62,9 +62,8 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
       TableID: 107
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 108
-      Reason: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
     *scop.MakeAddedIndexBackfilling
       Index:
         ConstraintID: 3
@@ -234,7 +233,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -856,7 +855,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -876,9 +875,8 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
       TableID: 107
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 108
-      Reason: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
     *scop.MakeAddedIndexBackfilling
       Index:
         ConstraintID: 3
@@ -1082,7 +1080,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT

@@ -19,94 +19,11 @@ begin transaction #1
 checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
-upsert descriptor #104
-   database:
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: multi_region_test_db
-  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
-     privileges:
-       ownerProto: root
-  ...
-       public:
-         id: 106
-  -  version: "1"
-  +  state: OFFLINE
-  +  version: "2"
-upsert descriptor #105
-  ...
-     id: 105
-     kind: MULTIREGION_ENUM
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: crdb_internal_region
-  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
-     parentId: 104
-     parentSchemaId: 106
-  ...
-       primaryRegion: us-east1
-       zoneConfigExtensions: {}
-  -  version: "2"
-  +  state: OFFLINE
-  +  version: "3"
-upsert descriptor #106
-   schema:
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: public
-  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
-     parentId: 104
-     privileges:
-  ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: OFFLINE
-  +  version: "2"
-upsert descriptor #107
-  ...
-     id: 107
-     kind: ALIAS
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: _crdb_internal_region
-  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
-     parentId: 104
-     parentSchemaId: 106
-  ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: OFFLINE
-  +  version: "2"
-upsert descriptor #108
-  ...
-       regionalByTable:
-         region: us-east2
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: table_regional_by_table
-     nextColumnId: 2
-  ...
-     nextIndexId: 2
-     nextMutationId: 1
-  +  offlineReason: DROP DATABASE multi_region_test_db CASCADE
-     parentId: 104
-     primaryIndex:
-  ...
-     replacementOf:
-       time: {}
-  +  state: OFFLINE
-     unexposedParentSchemaId: 106
-  -  version: "1"
-  +  version: "2"
+added synthetic descriptor: name:"multi_region_test_db" id:104 modification_time:<> version:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:2048 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > schemas:<key:"public" value:<id:106 > > state:DROP offline_reason:"" region_config:<survival_goal:REGION_FAILURE primary_region:"us-east1" region_enum_id:105 placement:DEFAULT secondary_region:"" > 
+added synthetic descriptor: name:"crdb_internal_region" id:105 version:3 modification_time:<> privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:512 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > parent_id:104 parent_schema_id:106 array_type_id:107 state:DROP offline_reason:"" kind:MULTIREGION_ENUM referencing_descriptor_ids:108 enum_members:<physical_representation:"@" logical_representation:"us-east1" capability:ALL direction:NONE > enum_members:<physical_representation:"\200" logical_representation:"us-east2" capability:ALL direction:NONE > enum_members:<physical_representation:"\300" logical_representation:"us-east3" capability:ALL direction:NONE > region_config:<primary_region:"us-east1" zone_config_extensions:<> secondary_region:"" > 
+added synthetic descriptor: name:"public" id:106 state:DROP offline_reason:"" modification_time:<> version:2 parent_id:104 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:516 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"admin" version:2 > 
+added synthetic descriptor: name:"_crdb_internal_region" id:107 version:2 modification_time:<> privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:512 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > parent_id:104 parent_schema_id:106 array_type_id:0 state:DROP offline_reason:"" kind:ALIAS alias:<family: ArrayFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100107 array_contents: <   family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100105 time_precision_is_set: false udt_metadata: <   array_type_oid: 100107 > > time_precision_is_set: false > 
+added synthetic descriptor: name:"table_regional_by_table" id:108 version:2 modification_time:<> parent_id:104 unexposed_parent_schema_id:106 columns:<name:"a" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:2 families:<name:"primary" id:0 column_names:"a" column_ids:1 default_column_id:0 > next_family_id:1 primary_index:<name:"table_regional_by_table_pkey" id:1 unique:true version:4 key_column_names:"a" key_column_directions:ASC key_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:1640995200000000000 constraint_id:1 not_visible:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<wall_time:1640995200000000000 > temporary:false locality_config:<regional_by_table:<region:"us-east2" > > partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 import_start_wall_time:0 
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 6 MutationType ops
@@ -125,12 +42,12 @@ upsert descriptor #104
   +    targetRanks: <redacted>
   +    targets: <redacted>
      id: 104
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: multi_region_test_db
-     offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     modificationTime: {}
   ...
+       public:
+         id: 106
+  -  state: DROP
+     version: "2"
 upsert descriptor #105
    type:
      arrayTypeId: 107
@@ -149,14 +66,10 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     id: 105
-     kind: MULTIREGION_ENUM
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: crdb_internal_region
-     offlineReason: DROP DATABASE multi_region_test_db CASCADE
-  ...
+       primaryRegion: us-east1
+       zoneConfigExtensions: {}
+  -  state: DROP
+     version: "3"
 upsert descriptor #106
    schema:
   +  declarativeSchemaChangerState:
@@ -172,12 +85,12 @@ upsert descriptor #106
   +    targetRanks: <redacted>
   +    targets: <redacted>
      id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: public
-     offlineReason: DROP DATABASE multi_region_test_db CASCADE
+     modificationTime: {}
   ...
+         withGrantOption: 2
+       version: 2
+  -  state: DROP
+     version: "2"
 upsert descriptor #107
   ...
        family: ArrayFamily
@@ -196,12 +109,11 @@ upsert descriptor #107
   +    targets: <redacted>
      id: 107
      kind: ALIAS
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: _crdb_internal_region
-     offlineReason: DROP DATABASE multi_region_test_db CASCADE
   ...
+         withGrantOption: 2
+       version: 2
+  -  state: DROP
+     version: "2"
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -221,14 +133,11 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-       regionalByTable:
-         region: us-east2
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: table_regional_by_table
-     nextColumnId: 2
-  ...
+     replacementOf:
+       time: {}
+  -  state: DROP
+     unexposedParentSchemaId: 106
+     version: "2"
 create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [104 105 106 107 108]
 # end PreCommitPhase
@@ -252,13 +161,10 @@ upsert descriptor #104
   -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: multi_region_test_db
-  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      privileges:
-       ownerProto: root
   ...
        public:
          id: 106
-  -  state: OFFLINE
   -  version: "2"
   +  state: DROP
   +  version: "3"
@@ -270,13 +176,10 @@ upsert descriptor #105
   -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: crdb_internal_region
-  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      parentId: 104
-     parentSchemaId: 106
   ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
-  -  state: OFFLINE
   -  version: "3"
   +  state: DROP
   +  version: "4"
@@ -288,13 +191,10 @@ upsert descriptor #106
   -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: public
-  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      parentId: 104
-     privileges:
   ...
          withGrantOption: 2
        version: 2
-  -  state: OFFLINE
   -  version: "2"
   +  state: DROP
   +  version: "3"
@@ -306,13 +206,10 @@ upsert descriptor #107
   -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: _crdb_internal_region
-  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
      parentId: 104
-     parentSchemaId: 106
   ...
          withGrantOption: 2
        version: 2
-  -  state: OFFLINE
   -  version: "2"
   +  state: DROP
   +  version: "3"
@@ -332,15 +229,8 @@ upsert descriptor #108
      name: table_regional_by_table
      nextColumnId: 2
   ...
-     nextIndexId: 2
-     nextMutationId: 1
-  -  offlineReason: DROP DATABASE multi_region_test_db CASCADE
-     parentId: 104
-     primaryIndex:
-  ...
      replacementOf:
        time: {}
-  -  state: OFFLINE
   +  state: DROP
      unexposedParentSchemaId: 106
   -  version: "2"

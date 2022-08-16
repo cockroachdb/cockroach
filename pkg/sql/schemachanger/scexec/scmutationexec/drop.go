@@ -71,14 +71,15 @@ func (m *visitor) MarkDescriptorAsPublic(
 	return nil
 }
 
-func (m *visitor) MarkDescriptorAsOffline(
-	ctx context.Context, op scop.MarkDescriptorAsOffline,
+func (m *visitor) MarkDescriptorAsSyntheticallyDropped(
+	ctx context.Context, op scop.MarkDescriptorAsSyntheticallyDropped,
 ) error {
 	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
 	if err != nil {
 		return err
 	}
-	desc.SetOffline(op.Reason)
+	desc.SetDropped()
+	m.s.MarkDescriptorSynthetic(desc.GetID())
 	return nil
 }
 
