@@ -2,12 +2,9 @@
 
 statement ok
 CREATE TABLE ab (
-  a INT PRIMARY KEY,
-  b INT
+a INT PRIMARY KEY,
+b INT
 )
-
-statement error pq: unimplemented: replacing function
-CREATE OR REPLACE FUNCTION f(a int) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
 statement error pq: cannot create leakproof function with non-immutable volatility: STABLE
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
@@ -61,153 +58,50 @@ statement error pq: return type mismatch in function declared to return int\nDET
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
 
 statement ok
-CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
+CREATE FUNCTION f_star() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
 
 statement ok
-CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+CREATE FUNCTION f_by_cols() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
 
-let $max_desc_id
-SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
-
-# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
-# function resolution in place.
 query T
-SELECT jsonb_pretty(
- crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
-)::string
-FROM system.descriptor
-WHERE id = $max_desc_id;
+SELECT @2 FROM [SHOW CREATE FUNCTION f_by_cols];
 ----
-{
-    "function": {
-        "dependsOn": [
-            112,
-            112
-        ],
-        "functionBody": "SELECT a, b FROM test.public.t_implicit_type;",
-        "id": 114,
-        "lang": "SQL",
-        "modificationTime": {},
-        "name": "f",
-        "nullInputBehavior": "CALLED_ON_NULL_INPUT",
-        "parentId": 104,
-        "parentSchemaId": 105,
-        "privileges": {
-            "ownerProto": "root",
-            "users": [
-                {
-                    "privileges": 2,
-                    "userProto": "admin",
-                    "withGrantOption": 2
-                },
-                {
-                    "privileges": 2,
-                    "userProto": "root",
-                    "withGrantOption": 2
-                }
-            ],
-            "version": 2
-        },
-        "returnType": {
-            "type": {
-                "family": "TupleFamily",
-                "oid": 100112,
-                "tupleContents": [
-                    {
-                        "family": "IntFamily",
-                        "oid": 20,
-                        "width": 64
-                    },
-                    {
-                        "family": "StringFamily",
-                        "oid": 25
-                    }
-                ],
-                "tupleLabels": [
-                    "a",
-                    "b"
-                ]
-            }
-        },
-        "version": "1",
-        "volatility": "IMMUTABLE"
-    }
-}
+CREATE FUNCTION public.f_by_cols()
+  RETURNS T_IMPLICIT_TYPE
+  IMMUTABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT a, b FROM test.public.t_implicit_type;
+$$
 
 # Create function with no references.
 statement ok
-CREATE FUNCTION f(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
+CREATE FUNCTION f_no_ref(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
 
-let $max_desc_id
-SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
-
-# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
-# function resolution in place.
 query T
-SELECT jsonb_pretty(
- crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
-)::string
-FROM system.descriptor
-WHERE id = $max_desc_id;
+SELECT @2 FROM [SHOW CREATE FUNCTION f_no_ref];
 ----
-{
-    "function": {
-        "args": [
-            {
-                "class": "IN",
-                "name": "a",
-                "type": {
-                    "family": "IntFamily",
-                    "oid": 20,
-                    "width": 64
-                }
-            }
-        ],
-        "functionBody": "SELECT 1;",
-        "id": 115,
-        "lang": "SQL",
-        "modificationTime": {},
-        "name": "f",
-        "nullInputBehavior": "CALLED_ON_NULL_INPUT",
-        "parentId": 104,
-        "parentSchemaId": 105,
-        "privileges": {
-            "ownerProto": "root",
-            "users": [
-                {
-                    "privileges": 2,
-                    "userProto": "admin",
-                    "withGrantOption": 2
-                },
-                {
-                    "privileges": 2,
-                    "userProto": "root",
-                    "withGrantOption": 2
-                }
-            ],
-            "version": 2
-        },
-        "returnType": {
-            "type": {
-                "family": "IntFamily",
-                "oid": 20,
-                "width": 64
-            }
-        },
-        "version": "1",
-        "volatility": "IMMUTABLE"
-    }
-}
+CREATE FUNCTION public.f_no_ref(IN a INT8)
+  RETURNS INT8
+  IMMUTABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
 
 # Make sure that names are qualified, references are tracked and sequence
 # expression is rewritten.
 statement ok
 CREATE TABLE t(
-  a INT PRIMARY KEY,
-  b INT,
-  C INT,
-  INDEX t_idx_b(b),
-  INDEX t_idx_c(c)
+a INT PRIMARY KEY,
+b INT,
+C INT,
+INDEX t_idx_b(b),
+INDEX t_idx_c(c)
 );
 
 statement ok
@@ -218,82 +112,27 @@ CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 
 statement ok
 CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
- SELECT a FROM t;
- SELECT b FROM t@t_idx_b;
- SELECT c FROM t@t_idx_c;
- SELECT nextval('sq1');
+SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT nextval('sq1');
 $$
 
-let $max_desc_id
-SELECT max_desc_id FROM [SELECT max(id) as max_desc_id FROM system.descriptor];
-
-# TODO (Chengxiong) replace this test with `SHOW CREATE FUNCTION` when we have
-# function resolution in place.
 query T
-SELECT jsonb_pretty(
-  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)
-)::string
-FROM system.descriptor
-WHERE id = $max_desc_id;
+SELECT @2 FROM [SHOW CREATE FUNCTION f];
 ----
-{
-    "function": {
-        "args": [
-            {
-                "class": "IN",
-                "name": "a",
-                "type": {
-                    "family": "EnumFamily",
-                    "oid": 100118,
-                    "udtMetadata": {
-                        "arrayTypeOid": 100119
-                    }
-                }
-            }
-        ],
-        "dependsOn": [
-            116,
-            117
-        ],
-        "dependsOnTypes": [
-            118,
-            119
-        ],
-        "functionBody": "SELECT a FROM test.public.t;\nSELECT b FROM test.public.t@t_idx_b;\nSELECT c FROM test.public.t@t_idx_c;\nSELECT nextval(117:::REGCLASS);",
-        "id": 120,
-        "lang": "SQL",
-        "modificationTime": {},
-        "name": "f",
-        "nullInputBehavior": "CALLED_ON_NULL_INPUT",
-        "parentId": 104,
-        "parentSchemaId": 105,
-        "privileges": {
-            "ownerProto": "root",
-            "users": [
-                {
-                    "privileges": 2,
-                    "userProto": "admin",
-                    "withGrantOption": 2
-                },
-                {
-                    "privileges": 2,
-                    "userProto": "root",
-                    "withGrantOption": 2
-                }
-            ],
-            "version": 2
-        },
-        "returnType": {
-            "type": {
-                "family": "IntFamily",
-                "oid": 20,
-                "width": 64
-            }
-        },
-        "version": "1",
-        "volatility": "IMMUTABLE"
-    }
-}
+CREATE FUNCTION public.f(IN a test.public.notmyworkday)
+  RETURNS INT8
+  IMMUTABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT a FROM test.public.t;
+  SELECT b FROM test.public.t@t_idx_b;
+  SELECT c FROM test.public.t@t_idx_c;
+  SELECT nextval(117:::REGCLASS);
+$$
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
@@ -333,31 +172,31 @@ WHERE function_name IN ('proc_f', 'proc_f_2')
 ORDER BY function_name;
 ----
 CREATE FUNCTION public.proc_f(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$  104  test  105  public  121  proc_f
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-    RETURNS SETOF STRING
-    IMMUTABLE
-    LEAKPROOF
-    STRICT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
+  RETURNS SETOF STRING
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
 $$  104  test  105  public  122  proc_f
 CREATE FUNCTION sc.proc_f_2(IN STRING)
-    RETURNS STRING
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
 $$  104  test  124  sc  125  proc_f_2
 
 statement ok
@@ -373,40 +212,40 @@ WHERE function_name IN ('proc_f', 'proc_f_2', 'f_cross_db')
 ORDER BY database_id, function_name;
 ----
 CREATE FUNCTION public.proc_f(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$  104  test  105  public  121  proc_f
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-    RETURNS SETOF STRING
-    IMMUTABLE
-    LEAKPROOF
-    STRICT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
+  RETURNS SETOF STRING
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
 $$  104  test  105  public  122  proc_f
 CREATE FUNCTION sc.proc_f_2(IN STRING)
-    RETURNS STRING
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
 $$  104  test  124  sc  125  proc_f_2
 CREATE FUNCTION public.f_cross_db()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$  126  test_cross_db  127  public  128  f_cross_db
 
 subtest show_create_function
@@ -415,22 +254,22 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION proc_f];
 ----
 CREATE FUNCTION public.proc_f(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-    RETURNS SETOF STRING
-    IMMUTABLE
-    LEAKPROOF
-    STRICT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
+  RETURNS SETOF STRING
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
 $$
 
 statement error pq: unknown function: proc_f_2()
@@ -440,13 +279,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION sc.proc_f_2];
 ----
 CREATE FUNCTION sc.proc_f_2(IN STRING)
-    RETURNS STRING
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
 $$
 
 statement ok
@@ -456,13 +295,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION proc_f_2];
 ----
 CREATE FUNCTION sc.proc_f_2(IN STRING)
-    RETURNS STRING
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
 $$
 
 statement ok
@@ -537,35 +376,35 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
 ----
 CREATE FUNCTION public.f_test_drop()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 CREATE FUNCTION public.f_test_drop(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 query T
 SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 statement error pq: function name \"f_test_drop\" is not unique
@@ -594,26 +433,26 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
 ----
 CREATE FUNCTION public.f_test_drop(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 query T
 SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 # Drop with two identical function signatures should be ok. And only first match
@@ -628,13 +467,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 statement ok
@@ -653,26 +492,26 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
 ----
 CREATE FUNCTION public.f_test_drop()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 query T
 SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 statement ok;
@@ -766,13 +605,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION test_vf_f];
 ----
 CREATE FUNCTION public.test_vf_f()
-    RETURNS STRING
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT lower('hello');
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT lower('hello');
 $$
 
 subtest execution
@@ -816,7 +655,7 @@ a  b
 
 statement ok
 CREATE FUNCTION max_in_values() RETURNS INT LANGUAGE SQL AS $$
-  SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
+SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
 $$
 
 query I
@@ -826,8 +665,8 @@ SELECT max_in_values()
 
 statement ok
 CREATE FUNCTION fetch_one_then_two() RETURNS INT LANGUAGE SQL AS $$
-  SELECT b FROM ab WHERE a = 1;
-  SELECT b FROM ab WHERE a = 2;
+SELECT b FROM ab WHERE a = 1;
+SELECT b FROM ab WHERE a = 2;
 $$
 
 query II
@@ -846,7 +685,7 @@ fetch_one_then_two
 statement ok
 CREATE TABLE empty (e INT);
 CREATE FUNCTION empty_result() RETURNS INT LANGUAGE SQL AS $$
-  SELECT e FROM empty
+SELECT e FROM empty
 $$
 
 query I
@@ -916,7 +755,7 @@ SELECT a * (3 + b - a) + a * b * a, add(mult(a, add(3, sub(b, a))), mult(a, mult
 
 statement ok
 CREATE FUNCTION fetch_b(arg_a INT) RETURNS INT LANGUAGE SQL AS $$
-  SELECT b FROM ab WHERE a = arg_a
+SELECT b FROM ab WHERE a = arg_a
 $$
 
 query II
@@ -948,32 +787,32 @@ statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT);
 INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3);
 CREATE FUNCTION get_l(i INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$
-  SELECT v FROM kv WHERE k = i;
+SELECT v FROM kv WHERE k = i;
 $$;
 CREATE FUNCTION get_i(i INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
-  SELECT v FROM kv WHERE k = i;
+SELECT v FROM kv WHERE k = i;
 $$;
 CREATE FUNCTION get_s(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
-  SELECT v FROM kv WHERE k = i;
+SELECT v FROM kv WHERE k = i;
 $$;
 CREATE FUNCTION get_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
-  SELECT v FROM kv WHERE k = i;
+SELECT v FROM kv WHERE k = i;
 $$;
 CREATE FUNCTION int_identity_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
-  SELECT i;
+SELECT i;
 $$;
 
 # Only the volatile functions should see the changes made by the UPDATE in the
 # CTE.
 query IIIIIIII colnames
 WITH u AS (
-    UPDATE kv SET v = v + 10 RETURNING k
+  UPDATE kv SET v = v + 10 RETURNING k
 )
 SELECT
-  get_l(k) l1, get_l(int_identity_v(k)) l2,
-  get_i(k) i1, get_i(int_identity_v(k)) i2,
-  get_s(k) s1, get_s(int_identity_v(k)) s2,
-  get_v(k) v1, get_v(int_identity_v(k)) v2
+get_l(k) l1, get_l(int_identity_v(k)) l2,
+get_i(k) i1, get_i(int_identity_v(k)) i2,
+get_s(k) s1, get_s(int_identity_v(k)) s2,
+get_v(k) v1, get_v(int_identity_v(k)) v2
 FROM u;
 ----
 l1  l2  i1  i2  s1  s2  v1  v2
@@ -1171,13 +1010,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
 ----
 CREATE FUNCTION public.f_test_alter_opt(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 statement error pq: conflicting or redundant options
@@ -1190,13 +1029,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
 ----
 CREATE FUNCTION public.f_test_alter_opt(IN INT8)
-    RETURNS INT8
-    IMMUTABLE
-    LEAKPROOF
-    STRICT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 subtest alter_function_name
@@ -1214,13 +1053,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
 ----
 CREATE FUNCTION public.f_test_alter_name(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 statement error pq: function f_test_alter_name\(IN INT8\) already exists in schema "public"
@@ -1239,13 +1078,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 ----
 CREATE FUNCTION public.f_test_alter_name_new(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 statement ok
@@ -1258,22 +1097,22 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in];
 ----
 CREATE FUNCTION public.f_test_alter_name_diff_in()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 subtest alter_function_owner
@@ -1349,13 +1188,13 @@ FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc');
 
 query TT
 WITH fns AS (
-  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
-  FROM system.descriptor
-  WHERE id IN (176, 177, 179)
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+FROM system.descriptor
+WHERE id IN (176, 177, 179)
 )
 SELECT
-  fn->'id',
-  fn->'parentSchemaId'
+fn->'id',
+fn->'parentSchemaId'
 FROM fns;
 ----
 176  105
@@ -1374,13 +1213,13 @@ ALTER FUNCTION f_test_sc(INT) SET SCHEMA public;
 
 query TT
 WITH fns AS (
-  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
-  FROM system.descriptor
-  WHERE id IN (176, 177, 179)
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+FROM system.descriptor
+WHERE id IN (176, 177, 179)
 )
 SELECT
-  fn->'id',
-  fn->'parentSchemaId'
+fn->'id',
+fn->'parentSchemaId'
 FROM fns;
 ----
 176  105
@@ -1391,22 +1230,22 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
 ----
 CREATE FUNCTION public.f_test_sc()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 CREATE FUNCTION public.f_test_sc(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 2;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 2;
 $$
 
 # Make sure moving to another schema changes function's parentSchemaId and
@@ -1416,13 +1255,13 @@ ALTER FUNCTION f_test_sc(INT) SET SCHEMA test_alter_sc;
 
 query TT
 WITH fns AS (
-  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
-  FROM system.descriptor
-  WHERE id IN (176, 177, 179)
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS fn
+FROM system.descriptor
+WHERE id IN (176, 177, 179)
 )
 SELECT
-  fn->'id',
-  fn->'parentSchemaId'
+fn->'id',
+fn->'parentSchemaId'
 FROM fns;
 ----
 176  105
@@ -1433,33 +1272,143 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
 ----
 CREATE FUNCTION public.f_test_sc()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
 $$
 
 query T
 SELECT @2 FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc];
 ----
 CREATE FUNCTION test_alter_sc.f_test_sc()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 3;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 3;
 $$
 CREATE FUNCTION test_alter_sc.f_test_sc(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 2;
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 2;
+$$
+
+
+subtest create_or_replace_function
+
+statement error pq: parameter name "a" used more than once
+CREATE FUNCTION f_test_cor(a INT, a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: function "f_test_cor" already exists with same argument types
+CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor_not_exist(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cannot change name of input parameter "b"
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, c INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cannot change return type of existing function
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+statement error pq: cannot change return type of existing function
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cannot create leakproof function with non-immutable volatility: VOLATILE
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+----
+CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+  RETURNS INT8
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+# Make sure volatility, leakproof and null input behavior are default values
+# after replacing with a definition not specifying them.
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+----
+CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 2;
+$$
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 3 $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+----
+CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
+  RETURNS INT8
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 3;
+$$
+
+# Make sure function using implicit type can be replaced properly.
+statement ok
+CREATE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor_implicit];
+----
+CREATE FUNCTION public.f_test_cor_implicit()
+  RETURNS T_IMPLICIT_TYPE
+  IMMUTABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT a, b FROM test.public.t_implicit_type;
+$$
+
+statement error pq: function "f_test_cor_implicit" already exists with same argument types
+CREATE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type STABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor_implicit];
+----
+CREATE FUNCTION public.f_test_cor_implicit()
+  RETURNS T_IMPLICIT_TYPE
+  STABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT a, b FROM test.public.t_implicit_type;
 $$

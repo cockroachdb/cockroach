@@ -59,7 +59,7 @@ func NewMutableFunctionDescriptor(
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-	argNum int,
+	args []descpb.FunctionDescriptor_Argument,
 	returnType *types.T,
 	returnSet bool,
 	privs *catpb.PrivilegeDescriptor,
@@ -71,7 +71,7 @@ func NewMutableFunctionDescriptor(
 				ID:             id,
 				ParentID:       parentID,
 				ParentSchemaID: parentSchemaID,
-				Args:           make([]descpb.FunctionDescriptor_Argument, 0, argNum),
+				Args:           args,
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type:      returnType,
 					ReturnSet: returnSet,
@@ -417,9 +417,9 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 	desc.DeclarativeSchemaChangerState = state
 }
 
-// AddArgument adds a function argument to argument list.
-func (desc *Mutable) AddArgument(arg descpb.FunctionDescriptor_Argument) {
-	desc.Args = append(desc.Args, arg)
+// AddArguments adds function arguments to argument list.
+func (desc *Mutable) AddArguments(args ...descpb.FunctionDescriptor_Argument) {
+	desc.Args = append(desc.Args, args...)
 }
 
 // SetVolatility sets the volatility attribute.

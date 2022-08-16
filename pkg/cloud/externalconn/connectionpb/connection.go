@@ -15,7 +15,7 @@ import "github.com/cockroachdb/errors"
 // Type returns the ConnectionType of the receiver.
 func (d *ConnectionDetails) Type() ConnectionType {
 	switch d.Provider {
-	case ConnectionProvider_nodelocal, ConnectionProvider_s3, ConnectionProvider_userfile:
+	case ConnectionProvider_nodelocal, ConnectionProvider_s3, ConnectionProvider_userfile, ConnectionProvider_gs:
 		return TypeStorage
 	case ConnectionProvider_gcp_kms:
 		return TypeKMS

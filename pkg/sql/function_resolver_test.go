@@ -64,7 +64,7 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 CREATE FUNCTION f() RETURNS VOID IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
-CREATE FUNCTION f() RETURNS t IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b, c FROM t $$;
+CREATE FUNCTION f(INT) RETURNS t IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b, c FROM t $$;
 `)
 
 	var sessionData sessiondatapb.SessionData
@@ -114,7 +114,8 @@ CREATE FUNCTION f() RETURNS t IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b, c FROM t
 		require.Equal(t, 100112, int(funcDef.Overloads[2].Oid))
 		require.True(t, funcDef.Overloads[2].UDFContainsOnlySignature)
 		require.True(t, funcDef.Overloads[2].IsUDF)
-		require.Equal(t, 0, len(funcDef.Overloads[2].Types.Types()))
+		require.Equal(t, 1, len(funcDef.Overloads[2].Types.Types()))
+		require.Equal(t, types.Int, funcDef.Overloads[2].Types.Types()[0])
 		require.Equal(t, types.TupleFamily, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}).Family())
 		require.NotZero(t, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}).TypeMeta)
 
@@ -145,7 +146,8 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 		require.Equal(t, `SELECT a, b, c FROM defaultdb.public.t;`, overload.Body)
 		require.True(t, overload.IsUDF)
 		require.False(t, overload.UDFContainsOnlySignature)
-		require.Equal(t, 0, len(overload.Types.Types()))
+		require.Equal(t, 1, len(overload.Types.Types()))
+		require.Equal(t, types.Int, overload.Types.Types()[0])
 		require.Equal(t, types.TupleFamily, overload.ReturnType([]tree.TypedExpr{}).Family())
 		require.NotZero(t, overload.ReturnType([]tree.TypedExpr{}).TypeMeta)
 
