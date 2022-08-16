@@ -1239,3 +1239,8 @@ message SetTraceRecordingTypeRequest {
 // SetTraceRecordingTypeRequest is the response for SetTraceRecordingType.
 message SetTraceRecordingTypeResponse{}
 
+// FeatureFlags within this struct are used within back-end/front-end code to show/hide features.
+message FeatureFlags {
+  // Whether the server is an instance of the Observability Service
+  bool is_observability_service = 1;
+}

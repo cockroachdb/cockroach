@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -67,6 +68,7 @@ type indexHTMLArgs struct {
 	OIDCAutoLogin        bool
 	OIDCLoginEnabled     bool
 	OIDCButtonText       string
+	FeatureFlags         serverpb.FeatureFlags
 }
 
 // OIDCUIConf is a variable that stores data required by the
@@ -102,6 +104,7 @@ type Config struct {
 	NodeID               *base.NodeIDContainer
 	GetUser              func(ctx context.Context) *string
 	OIDC                 OIDCUI
+	Flags                serverpb.FeatureFlags
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
@@ -141,6 +144,7 @@ func Handler(cfg Config) http.Handler {
 			OIDCAutoLogin:        oidcConf.AutoLogin,
 			OIDCLoginEnabled:     oidcConf.Enabled,
 			OIDCButtonText:       oidcConf.ButtonText,
+			FeatureFlags:         cfg.Flags,
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()
