@@ -22,6 +22,16 @@ import (
 	prometheus "github.com/prometheus/client_model/go"
 )
 
+// ExecutionInsightsCapacity limits the number of execution insights retained in memory.
+// As further insights are had, the oldest ones are evicted.
+var ExecutionInsightsCapacity = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.insights.execution_insights_capacity",
+	"the size of the per-node store of execution insights",
+	1000,
+	settings.NonNegativeInt,
+).WithPublic()
+
 // LatencyThreshold configures the execution time beyond which a statement is
 // considered slow. A LatencyThreshold of 0 (the default) disables this
 // detection.

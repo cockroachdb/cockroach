@@ -20,13 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// maxCacheSize is the number of detected outliers we will retain in memory.
-// We choose a small value for the time being to allow us to iterate without
-// worrying about memory usage. See #79450.
-const (
-	maxCacheSize = 10
-)
-
 // registry is the central object in the outliers subsystem. It observes
 // statement execution to determine which statements are outliers and
 // exposes the set of currently retained outliers.
@@ -49,7 +42,7 @@ func newRegistry(st *cluster.Settings, metrics Metrics) Registry {
 	config := cache.Config{
 		Policy: cache.CacheFIFO,
 		ShouldEvict: func(size int, key, value interface{}) bool {
-			return size > maxCacheSize
+			return int64(size) > ExecutionInsightsCapacity.Get(&st.SV)
 		},
 	}
 	r := &registry{
