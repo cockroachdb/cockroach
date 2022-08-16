@@ -213,6 +213,10 @@ func (d *txnDeps) MustReadMutableDescriptor(
 	return d.descsCollection.GetMutableDescriptorByID(ctx, d.txn, id)
 }
 
+func (d *txnDeps) AddSyntheticDescriptor(desc catalog.MutableDescriptor) error {
+	return d.descsCollection.AddSyntheticDescriptor(desc)
+}
+
 // NewCatalogChangeBatcher implements the scexec.Catalog interface.
 func (d *txnDeps) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
 	return &catalogChangeBatcher{

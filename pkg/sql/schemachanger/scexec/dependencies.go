@@ -66,6 +66,13 @@ type Catalog interface {
 	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
 	// current kv.Txn.
 	NewCatalogChangeBatcher() CatalogChangeBatcher
+
+	// AddSyntheticDescriptor adds a synthetic descriptor to the catalog. It
+	// clears any changes to the descriptor stored in the Catalog such that
+	// subsequent attempts to retrieve the descriptor with the same ID will not
+	// see any side effects which might have been applied to the mutable which
+	// is here stored as a synthetic descriptor.
+	AddSyntheticDescriptor(desc catalog.MutableDescriptor) error
 }
 
 // EventLogger encapsulates the operations for emitting event log entries.

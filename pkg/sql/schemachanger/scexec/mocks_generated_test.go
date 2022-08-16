@@ -39,6 +39,20 @@ func (m *MockCatalog) EXPECT() *MockCatalogMockRecorder {
 	return m.recorder
 }
 
+// AddSyntheticDescriptor mocks base method.
+func (m *MockCatalog) AddSyntheticDescriptor(arg0 catalog.MutableDescriptor) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSyntheticDescriptor", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSyntheticDescriptor indicates an expected call of AddSyntheticDescriptor.
+func (mr *MockCatalogMockRecorder) AddSyntheticDescriptor(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSyntheticDescriptor", reflect.TypeOf((*MockCatalog)(nil).AddSyntheticDescriptor), arg0)
+}
+
 // GetFullyQualifiedName mocks base method.
 func (m *MockCatalog) GetFullyQualifiedName(arg0 context.Context, arg1 catid.DescID) (string, error) {
 	m.ctrl.T.Helper()
