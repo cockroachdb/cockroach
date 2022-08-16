@@ -611,7 +611,7 @@ var specs = []stmtSpec{
 	{
 		name:   "for_locking",
 		stmt:   "for_locking_item",
-		inline: []string{"for_locking_strength", "opt_locked_rels", "opt_nowait_or_skip", "table_name_list"},
+		inline: []string{"for_locking_strength", "opt_locked_rels", "opt_nowait_or_skip"},
 	},
 	{
 		name:   "col_qualification",
@@ -844,7 +844,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "drop_sequence_stmt",
-		inline: []string{"table_name_list", "opt_drop_behavior"},
+		inline: []string{"opt_drop_behavior"},
 		unlink: []string{"sequence_name"},
 	},
 	{
@@ -855,24 +855,23 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "drop_stmt",
-		inline: []string{"table_name_list", "drop_ddl_stmt"},
+		inline: []string{"drop_ddl_stmt"},
 	},
 	{
 		name:   "drop_table",
 		stmt:   "drop_table_stmt",
-		inline: []string{"opt_drop_behavior", "table_name_list"},
+		inline: []string{"opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'TABLE'")},
 	},
 	{
 		name:    "drop_type",
 		stmt:    "drop_type_stmt",
-		inline:  []string{"table_name_list"},
 		replace: map[string]string{"opt_drop_behavior": ""},
 	},
 	{
 		name:    "drop_view",
 		stmt:    "drop_view_stmt",
-		inline:  []string{"opt_drop_behavior", "table_name_list"},
+		inline:  []string{"opt_drop_behavior"},
 		nosplit: true,
 	},
 	{
