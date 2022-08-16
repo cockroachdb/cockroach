@@ -491,14 +491,13 @@ func (p *PinnedLeasesKnob) rejectLeaseIfPinnedElsewhere(r *Replica) *roachpb.Err
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	var pinned *roachpb.ReplicaDescriptor
-	if pinnedRep, ok := r.descRLocked().GetReplicaDescriptor(pinnedStore); ok {
-		pinned = &pinnedRep
-	}
+	pinned, _ := r.descRLocked().GetReplicaDescriptor(pinnedStore)
 	return roachpb.NewError(&roachpb.NotLeaseHolderError{
-		Replica:     repDesc,
-		LeaseHolder: pinned,
-		RangeID:     r.RangeID,
-		CustomMsg:   "injected: lease pinned to another store",
+		Replica: repDesc,
+		Lease: &roachpb.Lease{
+			Replica: pinned,
+		},
+		RangeID:   r.RangeID,
+		CustomMsg: "injected: lease pinned to another store",
 	})
 }

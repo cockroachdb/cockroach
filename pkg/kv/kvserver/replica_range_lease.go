@@ -996,6 +996,31 @@ func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
 	}
 }
 
+// newNotLeaseHolderErrorWithSpeculativeLease returns a NotLeaseHolderError
+// initialized with a speculative lease pointing to the supplied replica.
+// A NotLeaseHolderError may be constructed with a speculative lease if the
+// current lease is not known, but the error is being created by guessing who
+// the leaseholder may be.
+func newNotLeaseHolderErrorWithSpeculativeLease(
+	leaseHolder roachpb.ReplicaDescriptor,
+	proposerStoreID roachpb.StoreID,
+	rangeDesc *roachpb.RangeDescriptor,
+	msg string,
+) *roachpb.NotLeaseHolderError {
+	err := &roachpb.NotLeaseHolderError{
+		RangeID:   rangeDesc.RangeID,
+		RangeDesc: *rangeDesc,
+		CustomMsg: msg,
+		Lease: &roachpb.Lease{
+			Replica: leaseHolder,
+		},
+	}
+	if proposerStoreID != 0 {
+		err.Replica, _ = rangeDesc.GetReplicaDescriptor(proposerStoreID)
+	}
+	return err
+}
+
 // newNotLeaseHolderError returns a NotLeaseHolderError initialized with the
 // replica for the holder (if any) of the given lease.
 //
@@ -1023,7 +1048,6 @@ func newNotLeaseHolderError(
 		if stillMember {
 			err.Lease = new(roachpb.Lease)
 			*err.Lease = l
-			err.LeaseHolder = &err.Lease.Replica
 		}
 	}
 	return err
