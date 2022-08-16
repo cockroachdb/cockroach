@@ -617,13 +617,14 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 	}
 
 	// Add each column that is not in the old primary key as a SUFFIX_KEY column.
+	var ord uint32 = 0
 	for i, keyColIDInNewPrimaryIndex := range newPrimaryIndexKeyColumnIDs {
 		if !descpb.ColumnIDs(oldPrimaryIndexKeyColumnIDs).Contains(keyColIDInNewPrimaryIndex) {
 			b.Add(&scpb.IndexColumn{
 				TableID:       tbl.TableID,
 				IndexID:       newUniqueSecondaryIndexID,
 				ColumnID:      keyColIDInNewPrimaryIndex,
-				OrdinalInKind: uint32(i),
+				OrdinalInKind: ord,
 				Kind:          scpb.IndexColumn_KEY_SUFFIX,
 				Direction:     newPrimaryIndexKeyColumnDirs[i],
 			})
@@ -631,10 +632,11 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 				TableID:       tbl.TableID,
 				IndexID:       temporaryIndexIDForNewUniqueSecondaryIndex,
 				ColumnID:      keyColIDInNewPrimaryIndex,
-				OrdinalInKind: uint32(i),
+				OrdinalInKind: ord,
 				Kind:          scpb.IndexColumn_KEY_SUFFIX,
 				Direction:     newPrimaryIndexKeyColumnDirs[i],
 			})
+			ord++
 		}
 	}
 }
