@@ -146,6 +146,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	if benchMem {
 		args = append(args, "--test_arg", "-test.benchmem")
 	}
+	args = append(args, "--crdb_test_off")
 	if testArgs != "" {
 		goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
 		if err != nil {
