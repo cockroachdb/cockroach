@@ -65,6 +65,10 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 	return result
 }
 
+type hackNewEncoding struct{}
+
+var HackNewEncoding hackNewEncoding = struct{}{}
+
 // prepareInsertOrUpdateBatch constructs a KV batch that inserts or
 // updates a row in KV.
 // - batch is the KV batch where commands should be appended.
@@ -164,7 +168,6 @@ func prepareInsertOrUpdateBatch(
 
 			continue
 		}
-
 		rawValueBuf = rawValueBuf[:0]
 
 		var lastColID descpb.ColumnID
@@ -172,29 +175,75 @@ func prepareInsertOrUpdateBatch(
 		if !ok {
 			return nil, errors.AssertionFailedf("invalid family sorted column id map")
 		}
-		for _, colID := range familySortedColumnIDs {
-			idx, ok := valColIDMapping.Get(colID)
-			if !ok || values[idx] == tree.DNull {
-				// Column not being updated or inserted.
-				continue
-			}
 
-			if skip, err := helper.skipColumnNotInPrimaryIndexValue(colID, values[idx]); err != nil {
-				return nil, err
-			} else if skip {
-				continue
-			}
+		if ctx.Value(HackNewEncoding) != nil {
+			// Encode in new experimental format.
 
-			col := fetchedCols[idx]
-			if lastColID > col.GetID() {
-				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
+			// Pack all fixed-length values to the left.
+			// Encode all fixed-length values in column ID sorted order.
+			//   Don't ignore NULL.
+			//   (False!!!) Don't have to encode column IDs.
+			//   Actually, we do have to encode column IDs, due to schema changes.
+			//   When reading, we skip to where we think the column should be,
+			//   and if it's not there, we read from the front.
+			// Encode all var-length values in column ID sorted order.
+
+			// First, write all fixed-length values to the buffer.
+			for _, colID := range familySortedColumnIDs {
+				idx, ok := valColIDMapping.Get(colID)
+				if !ok {
+					// Column not being updated or inserted.
+					continue
+				}
+
+				if skip, err := helper.skipColumnNotInPrimaryIndexValue(colID, values[idx]); err != nil {
+					return nil, err
+				} else if skip {
+					continue
+				}
+
+				col := fetchedCols[idx]
+				if lastColID > col.GetID() {
+					return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
+				}
+				lastColID = col.GetID()
+				var err error
+				_, isVarLen := tree.DatumTypeSize(values[idx].ResolvedType())
+				if isVarLen {
+					return nil, errors.AssertionFailedf("this is not yet supported")
+				}
+				rawValueBuf, err = valueside.Encode2(rawValueBuf, lastColID, values[idx], nil)
+				if err != nil {
+					return nil, err
+				}
 			}
-			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
-			lastColID = col.GetID()
-			var err error
-			rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDelta, values[idx], nil)
-			if err != nil {
-				return nil, err
+		} else {
+			// Sort the column IDs in a particular column family.
+			// Then, for each column ID, encode the value of the column into the output.
+			for _, colID := range familySortedColumnIDs {
+				idx, ok := valColIDMapping.Get(colID)
+				if !ok || values[idx] == tree.DNull {
+					// Column not being updated or inserted.
+					continue
+				}
+
+				if skip, err := helper.skipColumnNotInPrimaryIndexValue(colID, values[idx]); err != nil {
+					return nil, err
+				} else if skip {
+					continue
+				}
+
+				col := fetchedCols[idx]
+				if lastColID > col.GetID() {
+					return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
+				}
+				colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
+				lastColID = col.GetID()
+				var err error
+				rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDelta, values[idx], nil)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 

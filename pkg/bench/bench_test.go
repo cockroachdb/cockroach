@@ -389,6 +389,8 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkTrackChoices,
 			runBenchmarkUpdate,
 			runBenchmarkUpsert,
+			runBenchmarkSumWideRow,
+			runBenchmarkSumWideRowHack,
 		} {
 			fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
 			fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/bench.runBenchmark")
@@ -602,6 +604,50 @@ func runBenchmarkUpsert(b *testing.B, db *sqlutils.SQLRunner, count int) {
 		key += count
 	}
 	b.StopTimer()
+}
+
+// runBenchmarkUpsert benchmarks upserting count rows in a table.
+func runBenchmarkSumWideRow(b *testing.B, db *sqlutils.SQLRunner, count int) {
+	defer func() {
+		db.Exec(b, `DROP TABLE IF EXISTS bench.widerow`)
+	}()
+
+	db.Exec(b, `CREATE TABLE bench.widerow (a INT PRIMARY KEY,
+b INT, c INT, d INT, e INT, f INT, g INT, h INT, i INT)`)
+
+	db.Exec(b, "INSERT INTO bench.widerow SELECT "+
+		"g,g+1,g+2,g+3,g+4,g+5,g+6,g+7,g+8 FROM generate_series(1,100000) g(g)")
+
+	b.ResetTimer()
+	b.SetBytes(9 * 8 * 100000)
+	for i := 0; i < b.N; i++ {
+		db.Exec(b, "SELECT sum(i) FROM bench.widerow")
+	}
+	b.StopTimer()
+}
+
+// runBenchmarkUpsert benchmarks upserting count rows in a table.
+func runBenchmarkSumWideRowHack(b *testing.B, db *sqlutils.SQLRunner, count int) {
+	defer func() {
+		db.Exec(b, `DROP TABLE IF EXISTS bench.widerow`)
+	}()
+
+	db.Exec(b, `CREATE TABLE bench.widerow (a INT PRIMARY KEY,
+b INT, c INT, d INT, e INT, f INT, g INT, h INT, i INT)`)
+
+	db.Exec(b, "SET hack_new_encoding = true")
+
+	db.Exec(b, "INSERT INTO bench.widerow SELECT "+
+		"g,g+1,g+2,g+3,g+4,g+5,g+6,g+7,g+8 FROM generate_series(1,100000) g(g)")
+
+	b.ResetTimer()
+	b.SetBytes(9 * 8 * 100000)
+	for i := 0; i < b.N; i++ {
+		db.Exec(b, "SELECT sum(i) FROM bench.widerow")
+	}
+	b.StopTimer()
+	db.Exec(b, "SET hack_new_encoding = false")
+
 }
 
 // runBenchmarkDelete benchmarks deleting count rows from a table.

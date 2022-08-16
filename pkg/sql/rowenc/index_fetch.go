@@ -91,6 +91,19 @@ func InitIndexFetchSpec(
 		}
 	}
 
+	storedCols := index.IndexDesc().StoreColumnIDs
+	s.AllColumns = make([]descpb.IndexFetchSpec_Column, 0, len(storedCols))
+	for _, colID := range storedCols {
+		col, err := table.FindColumnWithID(colID)
+		if err != nil {
+			panic(err)
+		}
+		s.AllColumns = append(s.AllColumns, descpb.IndexFetchSpec_Column{
+			ColumnID: colID,
+			Type:     col.GetType(),
+		})
+	}
+
 	// In test builds, verify that we aren't trying to fetch columns that are not
 	// available in the index.
 	if buildutil.CrdbTestBuild && s.IsSecondaryIndex {

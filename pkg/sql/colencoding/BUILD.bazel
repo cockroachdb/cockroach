@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "key_encoding.go",
         "value_encoding.go",
+        "value_encoding2.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colencoding",
     visibility = ["//visibility:public"],

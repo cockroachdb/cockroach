@@ -94,6 +94,8 @@ message SessionData {
   // the query (i.e. collect & emit telemetry data). Troubleshooting mode is
   // disabled by default.
   bool troubleshooting_mode = 21;
+
+  bool hack_new_encoding = 22;
 }
 
 // DataConversionConfig contains the parameters that influence the output
