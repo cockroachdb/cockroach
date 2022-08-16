@@ -253,7 +253,9 @@ func TestSchedulerLoop(t *testing.T) {
 }
 
 // Verify that when we enqueue the same range multiple times for the same
-// reason, it is only processed once.
+// reason, it is only processed once, except the ticking. Ticking is special
+// because it adapts to scheduling delays in order to keep heartbeating delays
+// minimal.
 func TestSchedulerBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -273,8 +275,8 @@ func TestSchedulerBuffering(t *testing.T) {
 	}{
 		{stateRaftReady, "ready=[1:1] request=[] tick=[]"},
 		{stateRaftRequest, "ready=[1:1] request=[1:1] tick=[]"},
-		{stateRaftTick, "ready=[1:1] request=[1:1] tick=[1:1]"},
-		{stateRaftReady | stateRaftRequest | stateRaftTick, "ready=[1:2] request=[1:2] tick=[1:2]"},
+		{stateRaftTick, "ready=[1:1] request=[1:1] tick=[1:5]"},
+		{stateRaftReady | stateRaftRequest | stateRaftTick, "ready=[1:2] request=[1:2] tick=[1:10]"},
 	}
 
 	for _, c := range testCases {
