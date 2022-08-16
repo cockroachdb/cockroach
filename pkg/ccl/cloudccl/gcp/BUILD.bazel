@@ -4,7 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "gcp_test",
     srcs = [
-        "gcp_kms_connection_test.go",
+        "gcp_connection_test.go",
         "main_test.go",
     ],
     deps = [
@@ -30,6 +30,7 @@ go_test(
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
         "@com_google_cloud_go_kms//apiv1",
+        "@com_google_cloud_go_storage//:storage",
         "@org_golang_x_oauth2//google",
     ],
 )

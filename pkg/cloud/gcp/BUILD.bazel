@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "gcp_kms.go",
         "gcp_kms_connection.go",
+        "gcs_connection.go",
         "gcs_retry.go",
         "gcs_storage.go",
     ],

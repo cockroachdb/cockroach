@@ -587,8 +587,7 @@ func registerTPCHVec(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.use_streamer.enabled", /* settingName */
-				// TODO(yuzefovich): reduce the threshold over time.
-				3.0, /* slownessThreshold */
+				1.25,                               /* slownessThreshold */
 			), baseTestRun)
 		},
 	})

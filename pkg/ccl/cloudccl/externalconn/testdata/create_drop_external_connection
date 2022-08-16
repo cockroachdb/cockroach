@@ -269,3 +269,36 @@ DROP EXTERNAL CONNECTION "foo-userfile";
 ----
 
 subtest end
+
+subtest basic-gs
+
+disable-check-external-storage
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-gs" AS 'gs://bucket/path?AUTH=implicit&ASSUME_ROLE=soccer,cricket,football'
+----
+
+# Reject invalid gs external connections.
+exec-sql
+CREATE EXTERNAL CONNECTION "invalid-param-gs" AS 'gs://bucket/path?INVALIDPARAM=baz'
+----
+pq: failed to construct External Connection details: failed to create gs external connection: unknown GS query parameters: INVALIDPARAM
+
+exec-sql
+CREATE EXTERNAL CONNECTION "invalid-creds-gs" AS 'gs://bucket/path?AUTH=specified&CREDENTIALS=123'
+----
+pq: failed to construct External Connection details: failed to create gs external connection: error getting credentials from CREDENTIALS: illegal base64 data at input byte 0
+
+inspect-system-table
+----
+foo-gs STORAGE {"provider": "gs", "simpleUri": {"uri": "gs://bucket/path?AUTH=implicit&ASSUME_ROLE=soccer,cricket,football"}}
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-gs";
+----
+
+enable-check-external-storage
+----
+
+subtest end

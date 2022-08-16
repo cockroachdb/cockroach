@@ -220,3 +220,155 @@ func TestCreateFunctionGating(t *testing.T) {
 		require.Equal(t, "pq: cannot run CREATE FUNCTION before system is fully upgraded to v22.2", err.Error())
 	})
 }
+
+func TestCreateOrReplaceFunctionUpdateReferences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	validateReferences := func(
+		ctx context.Context, txn *kv.Txn, col *descs.Collection, nonEmptyRelID string, emptyRelID string,
+	) {
+		// Make sure columns and indexes has correct back references.
+		tn := tree.MakeTableNameWithSchema("defaultdb", "public", tree.Name("t"+nonEmptyRelID))
+		_, tbl, err := col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t,
+			[]descpb.TableDescriptor_Reference{{ID: 112, IndexID: 2, ColumnIDs: []catid.ColumnID{2}}},
+			tbl.GetDependedOnBy())
+
+		// Make sure sequence has correct back references.
+		sqn := tree.MakeTableNameWithSchema("defaultdb", "public", tree.Name("sq"+nonEmptyRelID))
+		_, seq, err := col.GetImmutableTableByName(ctx, txn, &sqn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, []descpb.TableDescriptor_Reference{{ID: 112, ByID: true}}, seq.GetDependedOnBy())
+
+		// Make sure view has empty back references.
+		vn := tree.MakeTableNameWithSchema("defaultdb", "public", tree.Name("v"+nonEmptyRelID))
+		_, view, err := col.GetImmutableTableByName(ctx, txn, &vn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t,
+			[]descpb.TableDescriptor_Reference{{ID: 112, ColumnIDs: []catid.ColumnID{1}}},
+			view.GetDependedOnBy())
+
+		// Make sure columns and indexes has empty back references.
+		tn = tree.MakeTableNameWithSchema("defaultdb", "public", tree.Name("t"+emptyRelID))
+		_, tbl, err = col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Nil(t, tbl.GetDependedOnBy())
+
+		// Make sure sequence has empty back references.
+		sqn = tree.MakeTableNameWithSchema("defaultdb", "public", tree.Name("sq"+emptyRelID))
+		_, seq, err = col.GetImmutableTableByName(ctx, txn, &sqn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Nil(t, seq.GetDependedOnBy())
+
+		// Make sure view has emtpy back references.
+		vn = tree.MakeTableNameWithSchema("defaultdb", "public", tree.Name("v"+emptyRelID))
+		_, view, err = col.GetImmutableTableByName(ctx, txn, &vn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Nil(t, view.GetDependedOnBy())
+	}
+
+	tDB.Exec(t, `
+CREATE TABLE t1(a INT PRIMARY KEY, b INT, INDEX t1_idx_b(b));
+CREATE TABLE t2(a INT PRIMARY KEY, b INT, INDEX t2_idx_b(b));
+CREATE SEQUENCE sq1;
+CREATE SEQUENCE sq2;
+CREATE VIEW v1 AS SELECT 1;
+CREATE VIEW v2 AS SELECT 2;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT b FROM t1@t1_idx_b;
+  SELECT a FROM v1;
+  SELECT nextval('sq1');
+$$;
+`,
+	)
+
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 112, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, funcDesc.GetName(), "f")
+
+		require.Equal(t,
+			`SELECT b FROM defaultdb.public.t1@t1_idx_b;
+SELECT a FROM defaultdb.public.v1;
+SELECT nextval(106:::REGCLASS);`,
+			funcDesc.GetFunctionBody())
+
+		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
+			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
+		})
+		require.Equal(t, []descpb.ID{104, 106, 108}, funcDesc.GetDependsOn())
+		sort.Slice(funcDesc.GetDependsOnTypes(), func(i, j int) bool {
+			return funcDesc.GetDependsOnTypes()[i] < funcDesc.GetDependsOnTypes()[j]
+		})
+		require.Equal(t, []descpb.ID{110, 111}, funcDesc.GetDependsOnTypes())
+
+		// Make sure type has correct back references.
+		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
+		_, typ, err := col.GetImmutableTypeByName(ctx, txn, &typn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, []descpb.ID{112}, typ.GetReferencingDescriptorIDs())
+
+		// All objects with "1" suffix should have back references to the function,
+		// "2" should have empty references since it's not used yet.
+		validateReferences(ctx, txn, col, "1", "2")
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Replace the function body with another group of objects and make sure
+	// references are modified correctly.
+	tDB.Exec(t, `
+CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT b FROM t2@t2_idx_b;
+  SELECT a FROM v2;
+  SELECT nextval('sq2');
+$$;
+`)
+
+	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		flags := tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			},
+		}
+		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 112, flags)
+		require.NoError(t, err)
+		require.Equal(t, funcDesc.GetName(), "f")
+
+		require.Equal(t,
+			`SELECT b FROM defaultdb.public.t2@t2_idx_b;
+SELECT a FROM defaultdb.public.v2;
+SELECT nextval(107:::REGCLASS);`,
+			funcDesc.GetFunctionBody())
+
+		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
+			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
+		})
+		require.Equal(t, []descpb.ID{105, 107, 109}, funcDesc.GetDependsOn())
+		sort.Slice(funcDesc.GetDependsOnTypes(), func(i, j int) bool {
+			return funcDesc.GetDependsOnTypes()[i] < funcDesc.GetDependsOnTypes()[j]
+		})
+		require.Equal(t, []descpb.ID{110, 111}, funcDesc.GetDependsOnTypes())
+
+		// Make sure type has correct back references.
+		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
+		_, typ, err := col.GetImmutableTypeByName(ctx, txn, &typn, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, []descpb.ID{112}, typ.GetReferencingDescriptorIDs())
+
+		// Now all objects with "2" suffix in name should have back references "1"
+		// had before, and "1" should have empty references.
+		validateReferences(ctx, txn, col, "2", "1")
+		return nil
+	})
+	require.NoError(t, err)
+}
