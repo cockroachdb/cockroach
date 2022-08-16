@@ -39,6 +39,7 @@ import { Badge } from "@cockroachlabs/cluster-ui";
 
 import "./layout.styl";
 import "./layoutPanel.styl";
+import { getDataFromServer } from "src/util/dataFromServer";
 
 export interface LayoutProps {
   clusterName: string;
@@ -92,6 +93,9 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
           <div className="layout-panel__navigation-bar">
             <PageHeader>
               <Text textType={TextTypes.Heading2} noWrap>
+                {getDataFromServer().FeatureFlags.is_observability_service
+                  ? "(Obs Service) "
+                  : ""}
                 {clusterName || `Cluster id: ${clusterId || ""}`}
               </Text>
               <Badge text={clusterVersion} />
