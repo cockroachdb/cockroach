@@ -52,6 +52,7 @@ const LOADING_CLUSTER_STATUS = /Loading cluster status.*/;
 const NODE_LOG_HEADER = /Logs Node.*/;
 const EVENTS_HEADER = "Events";
 const JOBS_HEADER = "Jobs";
+const SCHEDULES_HEADER = "Schedules";
 const DATABASES_HEADER = "Databases";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
 const STATEMENTS_DETAILS_HEADER = "Statement Fingerprint";
@@ -237,6 +238,13 @@ describe("Routing to", () => {
     test("routes to <JobsTable> component", () => {
       navigateToPath("/jobs");
       screen.getByText(JOBS_HEADER, { selector: "h3" });
+    });
+  });
+
+  describe("'/schedules' path", () => {
+    test("routes to <SchedulesTable> component", () => {
+      navigateToPath("/schedules");
+      screen.getByText(SCHEDULES_HEADER, { selector: "h3" });
     });
   });
 

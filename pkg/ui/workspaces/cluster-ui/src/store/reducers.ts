@@ -35,6 +35,8 @@ import {
 } from "./indexStats/indexStats.reducer";
 import { JobsState, reducer as jobs } from "./jobs";
 import { JobState, reducer as job } from "./jobDetails";
+import { SchedulesState, reducer as schedules } from "./schedules";
+import { ScheduleState, reducer as schedule } from "./scheduleDetails";
 import {
   ClusterLocksReqState,
   reducer as clusterLocks,
@@ -54,6 +56,8 @@ export type AdminUiState = {
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
   job: JobState;
+  schedules: SchedulesState;
+  schedule: ScheduleState;
   clusterLocks: ClusterLocksReqState;
   insights: InsightsState;
 };
@@ -76,6 +80,8 @@ export const reducers = combineReducers<AdminUiState>({
   indexStats,
   jobs,
   job,
+  schedules,
+  schedule,
   clusterLocks,
 });
 

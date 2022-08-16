@@ -112,6 +112,16 @@ export type JobsResponseMessage = protos.cockroach.server.serverpb.JobsResponse;
 export type JobRequestMessage = protos.cockroach.server.serverpb.JobRequest;
 export type JobResponseMessage = protos.cockroach.server.serverpb.JobResponse;
 
+export type SchedulesRequestMessage =
+  protos.cockroach.server.serverpb.SchedulesRequest;
+export type SchedulesResponseMessage =
+  protos.cockroach.server.serverpb.SchedulesResponse;
+
+export type ScheduleRequestMessage =
+  protos.cockroach.server.serverpb.ScheduleRequest;
+export type ScheduleResponseMessage =
+  protos.cockroach.server.serverpb.ScheduleResponse;
+
 export type QueryPlanRequestMessage =
   protos.cockroach.server.serverpb.QueryPlanRequest;
 export type QueryPlanResponseMessage =
@@ -570,6 +580,42 @@ export function getJob(
   return timeoutFetch(
     serverpb.JobResponse,
     `${API_PREFIX}/jobs/${req.job_id}`,
+    null,
+    timeout,
+  );
+}
+
+export const schedulesTimeoutErrorMessage =
+  "Unable to retrieve the Schedules table. To reduce the amount of data, try filtering the table.";
+
+export function getSchedules(
+  req: SchedulesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<SchedulesResponseMessage> {
+  const url = `${API_PREFIX}/schedules?status=${req.status}&type=${req.type}&limit=${req.limit}`;
+  return timeoutFetch(serverpb.SchedulesResponse, url, null, timeout).then(
+    (response: SchedulesResponseMessage) => response,
+    (err: Error) => {
+      if (err instanceof TimeoutError) {
+        console.error(
+          `Schedules page time out because attempt to retrieve schedules exceeded ${err.timeout.asMilliseconds()}ms.`,
+          `URL: ${url}. Request: ${JSON.stringify(req)}`,
+        );
+        throw new Error(schedulesTimeoutErrorMessage);
+      } else {
+        throw err;
+      }
+    },
+  );
+}
+
+export function getSchedule(
+  req: ScheduleRequestMessage,
+  timeout?: moment.Duration,
+): Promise<ScheduleResponseMessage> {
+  return timeoutFetch(
+    serverpb.ScheduleResponse,
+    `${API_PREFIX}/schedules/${req.schedule_id}`,
     null,
     timeout,
   );

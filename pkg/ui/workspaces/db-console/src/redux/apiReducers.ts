@@ -211,6 +211,32 @@ const jobReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshJob = jobReducerObj.refresh;
 
+export const schedulesKey = (status: string, limit: number) =>
+  `${encodeURIComponent(status)}/${encodeURIComponent(limit.toString())}`;
+
+const schedulesRequestKey = (req: api.SchedulesRequestMessage): string =>
+  schedulesKey(req.status, req.limit);
+
+const schedulesReducerObj = new KeyedCachedDataReducer(
+  api.getSchedules,
+  "schedules",
+  schedulesRequestKey,
+  moment.duration(10, "s"),
+  moment.duration(1, "minute"),
+);
+export const refreshSchedules = schedulesReducerObj.refresh;
+
+export const scheduleRequestKey = (req: api.ScheduleRequestMessage): string =>
+  `${req.schedule_id}`;
+
+const scheduleReducerObj = new KeyedCachedDataReducer(
+  api.getSchedule,
+  "schedule",
+  scheduleRequestKey,
+  moment.duration(10, "s"),
+);
+export const refreshSchedule = scheduleReducerObj.refresh;
+
 export const queryToID = (req: api.QueryPlanRequestMessage): string =>
   req.query;
 
@@ -421,6 +447,8 @@ export interface APIReducersState {
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
   job: KeyedCachedDataReducerState<api.JobResponseMessage>;
+  schedules: KeyedCachedDataReducerState<api.SchedulesResponseMessage>;
+  schedule: KeyedCachedDataReducerState<api.ScheduleResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
@@ -460,6 +488,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
   [jobReducerObj.actionNamespace]: jobReducerObj.reducer,
+  [schedulesReducerObj.actionNamespace]: schedulesReducerObj.reducer,
+  [scheduleReducerObj.actionNamespace]: scheduleReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,

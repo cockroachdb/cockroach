@@ -6110,6 +6110,128 @@ attempt starting at start and ending at end.
 
 
 
+## Schedules
+
+`GET /_admin/v1/schedules`
+
+Schedules returns the schedule records for all schedules of the given status and type.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+SchedulesRequest requests system job information of the given status and type.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| limit | [int32](#cockroach.server.serverpb.SchedulesRequest-int32) |  |  | [reserved](#support-status) |
+| status | [string](#cockroach.server.serverpb.SchedulesRequest-string) |  |  | [reserved](#support-status) |
+| type | [cockroach.sql.jobs.jobspb.Type](#cockroach.server.serverpb.SchedulesRequest-cockroach.sql.jobs.jobspb.Type) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+SchedulesResponse contains the job record for each matching job.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| schedules | [ScheduleResponse](#cockroach.server.serverpb.SchedulesResponse-cockroach.server.serverpb.ScheduleResponse) | repeated |  | [reserved](#support-status) |
+| earliest_retained_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.SchedulesResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.SchedulesResponse-cockroach.server.serverpb.ScheduleResponse"></a>
+#### ScheduleResponse
+
+ScheduleResponse contains the job record for a job.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.SchedulesResponse-int64) |  |  | [reserved](#support-status) |
+| label | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| schedule_status | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| next_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.SchedulesResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| state | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| recurrence | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| jobs_running | [int64](#cockroach.server.serverpb.SchedulesResponse-int64) |  |  | [reserved](#support-status) |
+| owner | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+| created | [google.protobuf.Timestamp](#cockroach.server.serverpb.SchedulesResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| command | [string](#cockroach.server.serverpb.SchedulesResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## Schedule
+
+`GET /_admin/v1/schedules/{schedule_id}`
+
+Schedule returns the schedule record for the schedule of the given schedule_id.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+ScheduleRequest requests system job information for the given job_id.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| schedule_id | [int64](#cockroach.server.serverpb.ScheduleRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+ScheduleResponse contains the job record for a job.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.ScheduleResponse-int64) |  |  | [reserved](#support-status) |
+| label | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| schedule_status | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| next_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.ScheduleResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| state | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| recurrence | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| jobs_running | [int64](#cockroach.server.serverpb.ScheduleResponse-int64) |  |  | [reserved](#support-status) |
+| owner | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+| created | [google.protobuf.Timestamp](#cockroach.server.serverpb.ScheduleResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| command | [string](#cockroach.server.serverpb.ScheduleResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Locations
 
 `GET /_admin/v1/locations`

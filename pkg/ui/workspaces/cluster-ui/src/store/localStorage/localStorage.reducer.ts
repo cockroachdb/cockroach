@@ -33,6 +33,7 @@ export type LocalStorageState = {
   "sortSetting/SessionsPage": SortSetting;
   "sortSetting/JobsPage": SortSetting;
   "sortSetting/InsightsPage": SortSetting;
+  "sortSetting/SchedulesPage": SortSetting;
   "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
@@ -44,6 +45,8 @@ export type LocalStorageState = {
   "typeSetting/JobsPage": number;
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
+  "statusSetting/SchedulesPage": string;
+  "showSetting/SchedulesPage": string;
 };
 
 type Payload = {
@@ -90,6 +93,15 @@ const defaultJobShowSetting = "0";
 
 const defaultJobTypeSetting = 0;
 
+const defaultSchedulesSortSetting: SortSetting = {
+  ascending: false,
+  columnTitle: "lastExecutionTime",
+};
+
+const defaultScheduleStatusSetting = "";
+
+const defaultScheduleShowSetting = "0";
+
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
@@ -110,6 +122,9 @@ const initialState: LocalStorageState = {
   "showSetting/JobsPage":
     JSON.parse(localStorage.getItem("showSetting/JobsPage")) ||
     defaultJobShowSetting,
+  "showSetting/SchedulesPage":
+    JSON.parse(localStorage.getItem("showSetting/SchedulesPage")) ||
+    defaultScheduleShowSetting,
   "timeScale/SQLActivity":
     JSON.parse(localStorage.getItem("timeScale/SQLActivity")) ||
     defaultTimeScaleSelected,
@@ -122,6 +137,9 @@ const initialState: LocalStorageState = {
   "sortSetting/JobsPage":
     JSON.parse(localStorage.getItem("sortSetting/JobsPage")) ||
     defaultJobsSortSetting,
+  "sortSetting/SchedulesPage":
+    JSON.parse(localStorage.getItem("sortSetting/SchedulesPage")) ||
+    defaultSchedulesSortSetting,
   "sortSetting/StatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
     defaultSortSetting,
@@ -161,6 +179,9 @@ const initialState: LocalStorageState = {
   "statusSetting/JobsPage":
     JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
     defaultJobStatusSetting,
+  "statusSetting/SchedulesPage":
+    JSON.parse(localStorage.getItem("statusSetting/SchedulesPage")) ||
+    defaultScheduleStatusSetting,
 };
 
 const localStorageSlice = createSlice({

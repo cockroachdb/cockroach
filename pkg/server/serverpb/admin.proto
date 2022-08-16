@@ -670,6 +670,38 @@ message JobResponse {
   int64 coordinator_id = 21 [(gogoproto.customname) = "CoordinatorID"];
 }
 
+// SchedulesRequest requests system job information of the given status and type.
+message SchedulesRequest {
+  int32 limit = 1;
+  string status = 2;
+  cockroach.sql.jobs.jobspb.Type type = 3;
+}
+
+// SchedulesResponse contains the job record for each matching job.
+message SchedulesResponse {
+  repeated ScheduleResponse schedules = 1 [(gogoproto.nullable) = false];
+  google.protobuf.Timestamp earliest_retained_time = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
+// ScheduleRequest requests system job information for the given job_id.
+message ScheduleRequest {
+  int64 schedule_id = 1;
+}
+
+// ScheduleResponse contains the job record for a job.
+message ScheduleResponse {
+  int64 id = 1 [(gogoproto.customname) = "ID"];
+  string label = 2;
+  string schedule_status = 3;
+  google.protobuf.Timestamp next_run = 4 [(gogoproto.stdtime) = true];
+  string state = 5;
+  string recurrence = 6;
+  int64 jobs_running = 7;
+  string owner = 8;
+  google.protobuf.Timestamp created = 9 [(gogoproto.stdtime) = true];
+  string command = 10;
+}
+
 // LocationsRequest requests system locality location information.
 message LocationsRequest {
 }
@@ -986,6 +1018,20 @@ service Admin {
   rpc Job(JobRequest) returns (JobResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/jobs/{job_id}"
+    };
+  }
+
+  // Schedules returns the schedule records for all schedules of the given status and type.
+  rpc Schedules(SchedulesRequest) returns (SchedulesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/schedules"
+    };
+  }
+
+  // Schedule returns the schedule record for the schedule of the given schedule_id.
+  rpc Schedule(ScheduleRequest) returns (ScheduleResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/schedules/{schedule_id}"
     };
   }
 
