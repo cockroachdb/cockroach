@@ -10,6 +10,7 @@ go_library(
         "//pkg/cloud/amazon",
         "//pkg/cloud/gcp",
         "//pkg/cloud/nodelocal",
+        "//pkg/cloud/userfile",
     ],
 )
 

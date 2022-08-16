@@ -139,7 +139,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, descRoleOptions.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descRoleOptions, 4 /* expected */); err != nil {
+	if err := checkStatsCount(ctx, cache, descRoleOptions, 5 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -773,8 +773,14 @@ func checkStatsCount(
 		if err != nil {
 			return err
 		}
-		if len(stats) != expected {
-			return fmt.Errorf("expected %d stat(s) but found %d", expected, len(stats))
+		var count int
+		for i := range stats {
+			if stats[i].Name != jobspb.ForecastStatsName {
+				count++
+			}
+		}
+		if count != expected {
+			return fmt.Errorf("expected %d stat(s) but found %d", expected, count)
 		}
 		return nil
 	})

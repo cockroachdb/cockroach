@@ -893,6 +893,13 @@ var charts = []sectionDescription{
 					"queue.gc.info.transactionspangcstaging",
 				},
 			},
+			{
+				Title: "GC Clear Range",
+				Metrics: []string{
+					"queue.gc.info.clearrangesuccess",
+					"queue.gc.info.clearrangefailed",
+				},
+			},
 		},
 	},
 	{
@@ -2021,6 +2028,28 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Successes by Action",
+				Metrics: []string{
+					"queue.replicate.addreplica.success",
+					"queue.replicate.removereplica.success",
+					"queue.replicate.replacedeadreplica.success",
+					"queue.replicate.removedeadreplica.success",
+					"queue.replicate.replacedecommissioningreplica.success",
+					"queue.replicate.removedecommissioningreplica.success",
+				},
+			},
+			{
+				Title: "Errors by Action",
+				Metrics: []string{
+					"queue.replicate.addreplica.error",
+					"queue.replicate.removereplica.error",
+					"queue.replicate.replacedeadreplica.error",
+					"queue.replicate.removedeadreplica.error",
+					"queue.replicate.replacedecommissioningreplica.error",
+					"queue.replicate.removedecommissioningreplica.error",
+				},
+			},
+			{
 				Title: "Successes",
 				Metrics: []string{
 					"queue.replicate.process.failure",
@@ -2252,16 +2281,16 @@ var charts = []sectionDescription{
 		Organization: [][]string{{SQLLayer, "SQL Stats", "Insights"}},
 		Charts: []chartDescription{
 			{
-				Title:   "Number of statement fingerprints being monitored for outlier detection",
-				Metrics: []string{"sql.stats.insights.latency_quantile_detector.fingerprints"},
+				Title:   "Current number of statement fingerprints being monitored for anomaly detection",
+				Metrics: []string{"sql.stats.insights.anomaly_detection.fingerprints"},
 			},
 			{
-				Title:   "Current memory used to support outlier detection",
-				Metrics: []string{"sql.stats.insights.latency_quantile_detector.memory"},
+				Title:   "Current memory used to support anomaly detection",
+				Metrics: []string{"sql.stats.insights.anomaly_detection.memory"},
 			},
 			{
 				Title:   "Evictions of fingerprint latency summaries due to memory pressure",
-				Metrics: []string{"sql.stats.insights.latency_quantile_detector.evictions"},
+				Metrics: []string{"sql.stats.insights.anomaly_detection.evictions"},
 			},
 		},
 	},

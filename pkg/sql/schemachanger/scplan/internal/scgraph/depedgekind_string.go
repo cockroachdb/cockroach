@@ -10,11 +10,12 @@ func _() {
 	var x [1]struct{}
 	_ = x[Precedence-1]
 	_ = x[SameStagePrecedence-2]
+	_ = x[PreviousStagePrecedence-3]
 }
 
-const _DepEdgeKind_name = "PrecedenceSameStagePrecedence"
+const _DepEdgeKind_name = "PrecedenceSameStagePrecedencePreviousStagePrecedence"
 
-var _DepEdgeKind_index = [...]uint8{0, 10, 29}
+var _DepEdgeKind_index = [...]uint8{0, 10, 29, 52}
 
 func (i DepEdgeKind) String() string {
 	i -= 1

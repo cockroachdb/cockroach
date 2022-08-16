@@ -432,7 +432,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Create a prefix sorter that describes which index partitions are
 		// local to the gateway region.
-		prefixSorter, _ := tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx)
+		prefixSorter, _ := tabMeta.IndexPartitionLocality(index.Ordinal(), index, c.e.evalCtx)
 
 		// Build Constraints to scan a subset of the table Spans.
 		if partitionFilters, remainingFilters, combinedConstraint, ok =

@@ -378,6 +378,12 @@ message DeleteRangeRequest {
   // The caller must check the MVCCRangeTombstones version gate before using
   // this parameter, as it is new in 22.2.
   bool use_range_tombstone = 5;
+  // If enabled together with UseRangeTombstone, the MVCC range tombstone will
+  // only be written if there exists point key/tombstones in the span that
+  // aren't already covered by an MVCC range tombstone. As a convenience, it
+  // considers empty spans equivalent to being covered by an MVCC range
+  // tombstone, so it will omit the write across an entirely empty span too.
+  bool idempotent_tombstone = 7;
 
   DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = false];
 }
@@ -1000,6 +1006,18 @@ message GCRequest {
   repeated GCRangeKey range_keys = 6 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
+
+  // GCClearRangeKey contains a range for clear range operation.
+  message GCClearRangeKey {
+    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+  }
+  // clear_range_key contains zero or one range that would be deleted using
+  // storage range clear operation. Note that this range key must cover
+  // cleared range in its entirety, range must not have any data newer than
+  // GC threshold and all data must be covered by a range tombstone otherwise
+  // the request will fail.
+  GCClearRangeKey clear_range_key = 7;
 
   reserved 5;
 }
@@ -1748,8 +1766,6 @@ message AddSSTableRequest {
   // reader has already observed, changing the value at that timestamp and above
   // it. Use with SSTTimestampToRequestTimestamp to guarantee serializability.
   //
-  // MVCC range tombstones are not currently supported with DisallowConflicts.
-  //
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   //
   // TODO(erikgrinaker): It might be possible to avoid this parameter if we
@@ -1761,8 +1777,6 @@ message AddSSTableRequest {
   // DisallowShadowing implies DisallowConflicts, and additionally rejects
   // writing above keys that have an existing/visible value (but will write
   // above tombstones).
-  //
-  // MVCC range tombstones are not currently supported with DisallowShadowing.
   //
   // TODO(erikgrinaker): Consider removing this in 22.1 if all callers have
   // been migrated to DisallowShadowingBelow.
@@ -1784,9 +1798,6 @@ message AddSSTableRequest {
   //
   // If this parameter is used, the value of DisallowShadowing is ignored, so
   // callers may pass both for forward and backwards compatibility.
-  //
-  // MVCC range tombstones are not currently supported with
-  // DisallowShadowingBelow.
   //
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   util.hlc.Timestamp disallow_shadowing_below = 8 [(gogoproto.nullable) = false];
@@ -2257,6 +2268,12 @@ message Header {
   // reference to the initial timestamp, we ensure that a non-transactional
   // request's uncertainty interval remains fixed across retries.
   util.hlc.Timestamp timestamp_from_server_clock = 27 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // now is a clock reading from the sender of the request. It can be used by
+  // the receiver to update its local HLC, which can help stabilize HLCs across
+  // the cluster. The receiver is NOT required to use the timestamp to update
+  // its local clock, and the sender is NOT required to attach a timestamp.
+  util.hlc.Timestamp now = 28 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];

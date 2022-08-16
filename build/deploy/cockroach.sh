@@ -15,7 +15,7 @@
 # set -m: enable job control.
 set -eum
 
-cockroach_entrypoint="/cockroach/cockroach"
+cockroach_entrypoint=${COCKROACH:-"/cockroach/cockroach"}
 
 certs_dir="certs"
 url=

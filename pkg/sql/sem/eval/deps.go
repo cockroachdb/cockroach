@@ -203,8 +203,11 @@ type Planner interface {
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *tree.Subquery) (tree.Datum, error)
 
-	// EvalRoutineExpr evaluates a routine and returns the resulting datum.
-	EvalRoutineExpr(ctx context.Context, expr *tree.RoutineExpr) (tree.Datum, error)
+	// EvalRoutineExpr evaluates a routine with the given input datums and
+	// returns the resulting datum.
+	EvalRoutineExpr(
+		ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
+	) (tree.Datum, error)
 
 	// UnsafeUpsertDescriptor is used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
@@ -379,6 +382,12 @@ type InternalRows interface {
 // those overloads.
 type CompactEngineSpanFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) error
+
+// SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
+// store.
+type SetCompactionConcurrencyFunc func(
+	ctx context.Context, nodeID, storeID int32, compactionConcurrency uint64,
 ) error
 
 // SessionAccessor is a limited interface to access session variables.

@@ -281,6 +281,30 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 TO root, bar -- literals removed
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _, _ TO _, _ -- identifiers removed
 
 parse
+GRANT EXECUTE ON FUNCTION f1 TO root, bar
+----
+GRANT EXECUTE ON FUNCTION f1 TO root, bar
+GRANT EXECUTE ON FUNCTION f1 TO root, bar -- fully parenthesized
+GRANT EXECUTE ON FUNCTION f1 TO root, bar -- literals removed
+GRANT EXECUTE ON FUNCTION _ TO _, _ -- identifiers removed
+
+parse
+GRANT EXECUTE ON FUNCTION f1, f2(INT) TO root, bar
+----
+GRANT EXECUTE ON FUNCTION f1, f2(IN INT8) TO root, bar -- normalized!
+GRANT EXECUTE ON FUNCTION f1, f2(IN INT8) TO root, bar -- fully parenthesized
+GRANT EXECUTE ON FUNCTION f1, f2(IN INT8) TO root, bar -- literals removed
+GRANT EXECUTE ON FUNCTION _, _(IN INT8) TO _, _ -- identifiers removed
+
+parse
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 TO root, bar
+----
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 TO root, bar
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 TO root, bar -- fully parenthesized
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 TO root, bar -- literals removed
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA _, _ TO _, _ -- identifiers removed
+
+parse
 REVOKE SELECT ON SEQUENCE s1 FROM root, bar
 ----
 REVOKE SELECT ON SEQUENCE s1 FROM root, bar
@@ -528,6 +552,30 @@ REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 FROM root, bar
 REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 FROM root, bar -- fully parenthesized
 REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 FROM root, bar -- literals removed
 REVOKE SELECT, UPDATE ON ALL TABLES IN SCHEMA _, _ FROM _, _ -- identifiers removed
+
+parse
+REVOKE EXECUTE ON FUNCTION f1 FROM root, bar
+----
+REVOKE EXECUTE ON FUNCTION f1 FROM root, bar
+REVOKE EXECUTE ON FUNCTION f1 FROM root, bar -- fully parenthesized
+REVOKE EXECUTE ON FUNCTION f1 FROM root, bar -- literals removed
+REVOKE EXECUTE ON FUNCTION _ FROM _, _ -- identifiers removed
+
+parse
+REVOKE EXECUTE ON FUNCTION f1, f2(INT) FROM root, bar
+----
+REVOKE EXECUTE ON FUNCTION f1, f2(IN INT8) FROM root, bar -- normalized!
+REVOKE EXECUTE ON FUNCTION f1, f2(IN INT8) FROM root, bar -- fully parenthesized
+REVOKE EXECUTE ON FUNCTION f1, f2(IN INT8) FROM root, bar -- literals removed
+REVOKE EXECUTE ON FUNCTION _, _(IN INT8) FROM _, _ -- identifiers removed
+
+parse
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 FROM root, bar
+----
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 FROM root, bar
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 FROM root, bar -- fully parenthesized
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA s1, s2 FROM root, bar -- literals removed
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA _, _ FROM _, _ -- identifiers removed
 
 # Ensure that the support for ON ROLE <namelist> doesn't leak
 # where it should not be recognized.

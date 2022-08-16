@@ -137,6 +137,8 @@ var retiredSettings = map[string]struct{}{
 	"sql.ttl.range_batch_size":                          {},
 
 	// removed as of 22.2.
+	"bulkio.restore_at_current_time.enabled":                    {},
+	"bulkio.import_at_current_time.enabled":                     {},
 	"kv.bulk_io_write.experimental_incremental_export_enabled":  {},
 	"kv.bulk_io_write.revert_range_time_bound_iterator.enabled": {},
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled":   {},
@@ -175,6 +177,7 @@ var sqlDefaultSettings = map[string]struct{}{
 	"sql.defaults.on_update_rehome_row.enabled":                                 {},
 	"sql.defaults.optimizer_use_histograms.enabled":                             {},
 	"sql.defaults.optimizer_use_multicol_stats.enabled":                         {},
+	"sql.defaults.optimizer_use_not_visible_indexes.enabled":                    {},
 	"sql.defaults.override_alter_primary_region_in_super_region.enabled":        {},
 	"sql.defaults.override_multi_region_zone_config.enabled":                    {},
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled":                          {},

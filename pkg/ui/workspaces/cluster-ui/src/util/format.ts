@@ -209,3 +209,8 @@ export function Count(count: number): string {
   const fractionDigits = Number.isInteger(unitVal) ? 0 : 1;
   return unitVal.toFixed(fractionDigits) + " " + scale.units;
 }
+
+// limitText returns a shortened form of text that surpasses a given limit
+export const limitText = (text: string, limit: number): string => {
+  return text.length > limit ? text.slice(0, limit - 3).concat("...") : text;
+};

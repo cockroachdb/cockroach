@@ -90,7 +90,8 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kvcoord.DistSender),
 		s3.Gossip(),
-		s3.GetNode().Descriptor,
+		s3.GetNode().Descriptor.NodeID,
+		s3.GetNode().Descriptor.Locality,
 		s3.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
@@ -201,7 +202,8 @@ func TestSpanResolver(t *testing.T) {
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor,
+		s.(*server.TestServer).GetNode().Descriptor.NodeID,
+		s.(*server.TestServer).GetNode().Descriptor.Locality,
 		s.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
@@ -299,7 +301,8 @@ func TestMixedDirections(t *testing.T) {
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor,
+		s.(*server.TestServer).GetNode().Descriptor.NodeID,
+		s.(*server.TestServer).GetNode().Descriptor.Locality,
 		s.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)

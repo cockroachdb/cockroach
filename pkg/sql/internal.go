@@ -17,11 +17,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -29,9 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -72,6 +79,14 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	// extraTxnState is to store extra transaction state info that
+	// will be passed to an internal executor. It should only be set when the
+	// internal executor is used under a not-nil txn.
+	// TODO (janexing): we will deprecate this field with *connExecutor ASAP.
+	// An internal executor, if used with a not nil txn, should be always coupled
+	// with a single connExecutor which runs all passed sql statements.
+	extraTxnState *extraTxnState
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -106,6 +121,52 @@ func MakeInternalExecutor(
 	}
 }
 
+// newInternalExecutorWithTxn creates an Internal Executor with txn related
+// information, and also a function that can be called to commit the txn.
+// This function should only be used in the implementation of
+// descs.CollectionFactory's InternalExecutorFactoryWithTxn.
+// TODO (janexing): This function will be soon refactored after we change
+// the internal executor infrastructure with a single conn executor for all
+// sql statement executions within a txn.
+func newInternalExecutorWithTxn(
+	s *Server,
+	sd *sessiondata.SessionData,
+	txn *kv.Txn,
+	memMetrics MemoryMetrics,
+	monitor *mon.BytesMonitor,
+	descCol *descs.Collection,
+	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
+) (*InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc) {
+	schemaChangerState := &SchemaChangerState{
+		mode: sd.NewSchemaChangerMode,
+	}
+	ie := InternalExecutor{
+		s:          s,
+		mon:        monitor,
+		memMetrics: memMetrics,
+		extraTxnState: &extraTxnState{
+			txn:                    txn,
+			descCollection:         descCol,
+			schemaChangeJobRecords: schemaChangeJobRecords,
+			schemaChangerState:     schemaChangerState,
+		},
+	}
+	ie.s.populateMinimalSessionData(sd)
+	ie.sessionDataStack = sessiondata.NewStack(sd)
+
+	commitTxnFunc := func(ctx context.Context) error {
+		defer func() {
+			ie.releaseSchemaChangeJobRecords()
+		}()
+		if err := ie.commitTxn(ctx); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	return &ie, commitTxnFunc
+}
+
 // MakeInternalExecutorMemMonitor creates and starts memory monitor for an
 // InternalExecutor.
 func MakeInternalExecutorMemMonitor(
@@ -128,8 +189,41 @@ func MakeInternalExecutorMemMonitor(
 //
 // SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
-	ie.s.populateMinimalSessionData(sessionData)
-	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	if sessionData != nil {
+		ie.s.populateMinimalSessionData(sessionData)
+		ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	}
+}
+
+func (ie *InternalExecutor) runWithEx(
+	ctx context.Context,
+	txn *kv.Txn,
+	w ieResultWriter,
+	sd *sessiondata.SessionData,
+	stmtBuf *StmtBuf,
+	wg *sync.WaitGroup,
+	syncCallback func([]resWithPos),
+	errCallback func(error),
+) error {
+	ex, err := ie.initConnEx(ctx, txn, w, sd, stmtBuf, syncCallback)
+	if err != nil {
+		return err
+	}
+	wg.Add(1)
+	go func() {
+		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+			errCallback(err)
+		}
+		w.finish()
+		closeMode := normalClose
+		if txn != nil {
+			closeMode = externalTxnClose
+		}
+		ex.close(ctx, closeMode)
+		wg.Done()
+	}()
+	return nil
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -149,10 +243,8 @@ func (ie *InternalExecutor) initConnEx(
 	w ieResultWriter,
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
-	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
-	errCallback func(error),
-) {
+) (*connExecutor, error) {
 	clientComm := &internalClientComm{
 		w: w,
 		// init lastDelivered below the position of the first result (0).
@@ -180,6 +272,7 @@ func (ie *InternalExecutor) initConnEx(
 	sds := sessiondata.NewStack(sd)
 	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
 	var ex *connExecutor
+	var err error
 	if txn == nil {
 		ex = ie.s.newConnExecutor(
 			ctx,
@@ -189,38 +282,118 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
+			nil, /* postSetupFn */
 		)
 	} else {
-		ex = ie.s.newConnExecutorWithTxn(
+		ex, err = ie.newConnExecutorWithTxn(
 			ctx,
+			txn,
 			sdMutIterator,
 			stmtBuf,
 			clientComm,
-			ie.mon,
-			ie.memMetrics,
-			&ie.s.InternalMetrics,
-			txn,
-			ie.syntheticDescriptors,
 			applicationStats,
 		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	ex.executorType = executorTypeInternal
+	return ex, nil
 
-	wg.Add(1)
-	go func() {
-		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
-			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
-			errCallback(err)
+}
+
+// newConnExecutorWithTxn creates a connExecutor that will execute statements
+// under a higher-level txn. This connExecutor runs with a different state
+// machine, much reduced from the regular one. It cannot initiate or end
+// transactions (so, no BEGIN, COMMIT, ROLLBACK, no auto-commit, no automatic
+// retries). It may inherit the descriptor collection and txn state from the
+// internal executor.
+//
+// If there is no error, this function also activate()s the returned
+// executor, so the caller does not need to run the
+// activation. However this means that run() or close() must be called
+// to release resources.
+// TODO (janexing): txn should be passed to ie.extraTxnState rather than
+// as a parameter to this function.
+func (ie *InternalExecutor) newConnExecutorWithTxn(
+	ctx context.Context,
+	txn *kv.Txn,
+	sdMutIterator *sessionDataMutatorIterator,
+	stmtBuf *StmtBuf,
+	clientComm ClientComm,
+	applicationStats sqlstats.ApplicationStats,
+) (ex *connExecutor, err error) {
+	// If an internal executor is run with a not-nil txn, we may want to
+	// let it inherit the descriptor collection, schema change job records
+	// and job collections from the caller.
+	postSetupFn := func(ex *connExecutor) {
+		if ie.extraTxnState != nil {
+			if ie.extraTxnState.descCollection != nil {
+				ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
+				ex.extraTxnState.fromOuterTxn = true
+				ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
+				if ie.extraTxnState.jobs != nil {
+					ex.extraTxnState.jobs = *ie.extraTxnState.jobs
+				}
+				ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
+			}
 		}
-		w.finish()
-		closeMode := normalClose
-		if txn != nil {
-			closeMode = externalTxnClose
-		}
-		ex.close(ctx, closeMode)
-		wg.Done()
-	}()
+	}
+
+	ex = ie.s.newConnExecutor(
+		ctx,
+		sdMutIterator,
+		stmtBuf,
+		clientComm,
+		ie.memMetrics,
+		&ie.s.InternalMetrics,
+		applicationStats,
+		postSetupFn,
+	)
+
+	if txn.Type() == kv.LeafTxn {
+		// If the txn is a leaf txn it is not allowed to perform mutations. For
+		// sanity, set read only on the session.
+		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+			m.SetReadOnly(true)
+		})
+	}
+
+	// The new transaction stuff below requires active monitors and traces, so
+	// we need to activate the executor now.
+	ex.activate(ctx, ie.mon, &mon.BoundAccount{})
+
+	// Perform some surgery on the executor - replace its state machine and
+	// initialize the state, and its jobs and schema change job records if
+	// they are passed by the caller.
+	// The txn is always set as explicit, because when running in an outer txn,
+	// the conn executor inside an internal executor is generally not at liberty
+	// to commit the transaction.
+	// Thus, to disallow auto-commit and auto-retries, we make the txn
+	// here an explicit one.
+	ex.machine = fsm.MakeMachine(
+		BoundTxnStateTransitions,
+		stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False},
+		&ex.state,
+	)
+
+	ex.state.resetForNewSQLTxn(
+		ctx,
+		explicitTxn,
+		txn.ReadTimestamp().GoTime(),
+		nil, /* historicalTimestamp */
+		roachpb.UnspecifiedUserPriority,
+		tree.ReadWrite,
+		txn,
+		ex.transitionCtx,
+		ex.QualityOfService())
+
+	// Modify the Collection to match the parent executor's Collection.
+	// This allows the InternalExecutor to see schema changes made by the
+	// parent executor.
+	ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+	return ex, err
 }
 
 type ieIteratorResult struct {
@@ -740,7 +913,10 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	err = ie.runWithEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	if err != nil {
+		return nil, err
+	}
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
@@ -835,6 +1011,42 @@ func (ie *InternalExecutor) execInternal(
 	// the iterator and nil retErr so that the iterator is properly closed by
 	// the caller which will cleanup the connExecutor goroutine.
 	return r, nil
+}
+
+// ReleaseSchemaChangeJobRecords is to release the schema change job records.
+func (ie *InternalExecutor) releaseSchemaChangeJobRecords() {
+	for k := range ie.extraTxnState.schemaChangeJobRecords {
+		delete(ie.extraTxnState.schemaChangeJobRecords, k)
+	}
+}
+
+// commitTxn is to commit the txn bound to the internal executor.
+// It should only be used in CollectionFactory.TxnWithExecutor().
+func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
+	if ie.extraTxnState == nil || ie.extraTxnState.txn == nil {
+		return errors.New("no txn to commit")
+	}
+
+	var sd *sessiondata.SessionData
+	if ie.sessionDataStack != nil {
+		sd = ie.sessionDataStack.Top().Clone()
+	} else {
+		sd = ie.s.newSessionData(SessionArgs{})
+	}
+
+	rw := newAsyncIEResultChannel()
+	stmtBuf := NewStmtBuf()
+
+	ex, err := ie.initConnEx(ctx, ie.extraTxnState.txn, rw, sd, stmtBuf, nil /* syncCallback */)
+	if err != nil {
+		return errors.Wrap(err, "cannot create conn executor to commit txn")
+	}
+	defer ex.close(ctx, externalTxnClose)
+
+	if err := ex.commitSQLTransactionInternal(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the
@@ -983,4 +1195,94 @@ func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
 		}
 	}
 	ncl.results = ncl.results[:i]
+}
+
+// extraTxnState is to store extra transaction state info that
+// will be passed to an internal executor when it's used under a txn context.
+// It should not be exported from the sql package.
+// TODO (janexing): we will deprecate this struct ASAP. It only exists as a
+// stop-gap before we implement InternalExecutor.ConnExecutor to run all
+// sql statements under a transaction. This struct is not ideal for an internal
+// executor in that it may lead to surprising bugs whereby we forget to add
+// fields here and keep them in sync.
+type extraTxnState struct {
+	txn                    *kv.Txn
+	descCollection         *descs.Collection
+	jobs                   *jobsCollection
+	schemaChangeJobRecords map[descpb.ID]*jobs.Record
+	schemaChangerState     *SchemaChangerState
+}
+
+// InternalExecutorFactory stored information needed to construct a new
+// internal executor.
+type InternalExecutorFactory struct {
+	server     *Server
+	memMetrics MemoryMetrics
+	monitor    *mon.BytesMonitor
+}
+
+// NewInternalExecutorFactory returns a new internal executor factory.
+func NewInternalExecutorFactory(
+	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
+) *InternalExecutorFactory {
+	return &InternalExecutorFactory{
+		server:     s,
+		memMetrics: memMetrics,
+		monitor:    monitor,
+	}
+}
+
+var _ sqlutil.InternalExecutorFactory = &InternalExecutorFactory{}
+var _ descs.InternalExecutorFactoryWithTxn = &InternalExecutorFactory{}
+
+// NewInternalExecutor constructs a new internal executor.
+// TODO (janexing): this should be deprecated soon.
+func (ief *InternalExecutorFactory) NewInternalExecutor(
+	sd *sessiondata.SessionData,
+) sqlutil.InternalExecutor {
+	ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
+	ie.SetSessionData(sd)
+	return &ie
+}
+
+// NewInternalExecutorWithTxn creates an internal executor with txn-related info,
+// such as descriptor collection and schema change job records, etc. It should
+// be called only after InternalExecutorFactory.NewInternalExecutor is already
+// called to construct the InternalExecutorFactory with required server info.
+// This function should only be used under CollectionFactory.TxnWithExecutor().
+func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
+	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
+) (sqlutil.InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc) {
+	schemaChangeJobRecords := make(map[descpb.ID]*jobs.Record)
+	// By default, if not given session data, we initialize a sessionData that
+	// would be the same as what would be created if root logged in.
+	// The sessionData's user can be override when calling the query
+	// functions of internal executor.
+	// TODO(janexing): since we can be running queries with a higher privilege
+	// than the actual user, a security boundary should be added to the error
+	// handling of internal executor.
+	if sd == nil {
+		sd = NewFakeSessionData(sv)
+		sd.UserProto = username.RootUserName().EncodeProto()
+	}
+	ie, commitTxnFunc := newInternalExecutorWithTxn(
+		ief.server,
+		sd,
+		txn,
+		ief.memMetrics,
+		ief.monitor,
+		descCol,
+		schemaChangeJobRecords,
+	)
+
+	return ie, commitTxnFunc
+}
+
+// RunWithoutTxn is to create an internal executor without binding to a txn,
+// and run the passed function with this internal executor.
+func (ief *InternalExecutorFactory) RunWithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie sqlutil.InternalExecutor) error,
+) error {
+	ie := ief.NewInternalExecutor(nil /* sessionData */)
+	return run(ctx, ie)
 }

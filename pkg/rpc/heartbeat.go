@@ -42,8 +42,6 @@ func (r RemoteOffset) String() string {
 // remote clocks sent to it by storing them in the remoteClockMonitor.
 type HeartbeatService struct {
 	clock hlc.WallClock
-	// maxOffset is the maximum tolerated clock skew between nodes.
-	maxOffset time.Duration
 	// A pointer to the RemoteClockMonitor configured in the RPC Context,
 	// shared by rpc clients, to keep track of remote clock measurements.
 	remoteClockMonitor *RemoteClockMonitor
@@ -156,17 +154,6 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	// Check version compatibility.
 	if err := checkVersion(ctx, hs.settings, args.ServerVersion); err != nil {
 		return nil, errors.Wrap(err, "version compatibility check failed on ping request")
-	}
-
-	// Enforce that clock max offsets are identical between nodes.
-	// Commit suicide in the event that this is ever untrue.
-	// This check is ignored if either offset is set to 0 (for unittests).
-	// Note that we validated this connection already. Different clusters
-	// could very well have different max offsets.
-	mo, amo := hs.maxOffset, time.Duration(args.OriginMaxOffsetNanos)
-	if hs.maxOffset != 0 && amo != 0 && mo != amo {
-		log.Fatalf(ctx, "locally configured maximum clock offset (%s) "+
-			"does not match that of node %s (%s)", mo, args.OriginAddr, amo)
 	}
 
 	if fn := hs.onHandlePing; fn != nil {

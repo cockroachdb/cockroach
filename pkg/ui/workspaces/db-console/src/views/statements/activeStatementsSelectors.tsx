@@ -27,13 +27,15 @@ const selectedColumnsLocalSetting = new LocalSetting<
   null,
 );
 
+const defaultActiveFilters = { app: defaultFilters.app };
+
 const filtersLocalSetting = new LocalSetting<
   AdminUIState,
   ActiveStatementFilters
 >(
   "filters/ActiveStatementsPage",
   (state: AdminUIState) => state.localSettings,
-  { app: defaultFilters.app },
+  defaultActiveFilters,
 );
 
 const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(

@@ -51,9 +51,11 @@ func (mr *MockTransportMockRecorder) IsExhausted() *gomock.Call {
 }
 
 // MoveToFront mocks base method.
-func (m *MockTransport) MoveToFront(arg0 roachpb.ReplicaDescriptor) {
+func (m *MockTransport) MoveToFront(arg0 roachpb.ReplicaDescriptor) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MoveToFront", arg0)
+	ret := m.ctrl.Call(m, "MoveToFront", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // MoveToFront indicates an expected call of MoveToFront.

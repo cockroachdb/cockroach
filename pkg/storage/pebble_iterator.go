@@ -181,6 +181,9 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	if opts.MinTimestampHint.IsSet() && opts.MaxTimestampHint.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
+	if opts.Prefix && opts.RangeKeyMaskingBelow.IsSet() {
+		panic("can't use range key masking with prefix iterators") // very high overhead
+	}
 
 	// If this Pebble database does not support range keys yet, fall back to
 	// only iterating over point keys to avoid panics. This is effectively the
@@ -688,6 +691,11 @@ func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 	return stack
 }
 
+// RangeKeyChanged implements the MVCCIterator interface.
+func (p *pebbleIterator) RangeKeyChanged() bool {
+	return p.iter.RangeKeyChanged()
+}
+
 // EngineRangeKeys implements the EngineIterator interface.
 func (p *pebbleIterator) EngineRangeKeys() []EngineRangeKeyValue {
 	rangeKeys := p.iter.RangeKeys()
@@ -856,6 +864,11 @@ func (p *pebbleIterator) Stats() IteratorStats {
 	return IteratorStats{
 		Stats: p.iter.Stats(),
 	}
+}
+
+// IsPrefix implements the MVCCIterator interface.
+func (p *pebbleIterator) IsPrefix() bool {
+	return p.prefix
 }
 
 // SupportsPrev implements the MVCCIterator interface.

@@ -31,6 +31,13 @@ import (
 // https://github.com/cockroachdb/cockroach/issues/82715
 //
 // For now, see rangefeed_external_test.go for rudimentary range key tests.
+//
+// To invoke and compare on the numRangeKeys dimension:
+//
+//     go test ./pkg/kv/kvserver/rangefeed/ -run - -count 10 -bench BenchmarkCatchUpScan 2>&1 | tee bench.txt
+//     for flavor in numRangeKeys=0 numRangeKeys=1 numRangeKeys=100; do grep -E "${flavor}[^0-9]+" bench.txt | sed -E "s/${flavor}+/X/" > $flavor.txt; done
+//     benchstat numRangeKeys\={0,1}.txt
+//     benchstat numRangeKeys\={0,100}.txt
 func TestCatchupScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -148,4 +155,50 @@ func TestCatchupScanInlineError(t *testing.T) {
 	err := iter.CatchUpScan(nil, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unexpected inline value")
+}
+
+func TestCatchupScanSeesOldIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Regression test for [#85886]. When with-diff is specified, the iterator may
+	// be positioned on an intent that is outside the time bounds. When we read
+	// the intent and want to load the version, we must make sure to ignore time
+	// bounds, or we'll see a wholly unrelated version.
+	//
+	// [#85886]: https://github.com/cockroachdb/cockroach/issues/85886
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// b -> version @ 1100 (visible)
+	// d -> intent @ 990   (iterator will be positioned here because of with-diff option)
+	// e -> version @ 1100
+	tsCutoff := hlc.Timestamp{WallTime: 1000} // the lower bound of the catch-up scan
+	tsIntent := tsCutoff.Add(-10, 0)          // the intent is below the lower bound
+	tsVersionInWindow := tsCutoff.Add(10, 0)  // an unrelated version is above the lower bound
+
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("b"),
+		tsVersionInWindow, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
+
+	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), roachpb.NormalUserPriority, tsIntent, 100, 0)
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("d"),
+		tsIntent, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("intent"), &txn))
+
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("e"),
+		tsVersionInWindow, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("bar"), nil))
+
+	// Run a catchup scan across the span and watch it succeed.
+	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
+	iter := NewCatchUpIterator(eng, span, tsCutoff, nil)
+	defer iter.Close()
+
+	keys := map[string]struct{}{}
+	require.NoError(t, iter.CatchUpScan(func(e *roachpb.RangeFeedEvent) error {
+		keys[string(e.Val.Key)] = struct{}{}
+		return nil
+	}, true /* withDiff */))
+	require.Equal(t, map[string]struct{}{
+		"b": {},
+		"e": {},
+	}, keys)
 }

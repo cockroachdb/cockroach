@@ -233,10 +233,6 @@ type Replica struct {
 	// inform load based lease and replica rebalancing decisions.
 	loadStats *ReplicaLoad
 
-	// creatingReplica is set when a replica is created as uninitialized
-	// via a raft message.
-	creatingReplica *roachpb.ReplicaDescriptor
-
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
 	// RWMutex.
@@ -636,7 +632,7 @@ type Replica struct {
 		// Followers to which replication traffic is currently dropped.
 		//
 		// Never mutated in place (always replaced wholesale), so can be leaked
-		// outside of the surrounding mutex.
+		// outside the surrounding mutex.
 		pausedFollowers map[roachpb.ReplicaID]struct{}
 	}
 

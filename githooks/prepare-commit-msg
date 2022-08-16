@@ -2,7 +2,7 @@
 #
 # Prepare the commit message by adding a release note.
 
-require_justification=0
+require_justification=1
 set -euo pipefail
 
 if [[ "${2-}" = "message" ]]; then
@@ -148,7 +148,6 @@ $cchar Categories for release notes:\\
 $cchar   - cli change\\
 $cchar   - ops change\\
 $cchar   - sql change\\
-$cchar   - api change\\
 $cchar   - ui change\\
 $cchar   - security update\\
 $cchar   - general change (e.g., change of required Go version)\\

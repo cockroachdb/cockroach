@@ -13,7 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -21,24 +23,46 @@ import (
 // routine's PlanFn to generate a plan for each statement in the routine, then
 // runs the plans. The resulting value of the last statement in the routine is
 // returned.
-// TODO(mgartner): Support executing multi-statement routines.
 func (p *planner) EvalRoutineExpr(
-	ctx context.Context, expr *tree.RoutineExpr,
+	ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
 ) (result tree.Datum, err error) {
-	typs := []*types.T{expr.ResolvedType()}
+	// If the routine should not be called on null input, then directly return
+	// NULL if any of the datums in the input are NULL.
+	if !expr.CalledOnNullInput {
+		for i := range input {
+			if input[i] == tree.DNull {
+				return tree.DNull, nil
+			}
+		}
+	}
+
+	retTypes := []*types.T{expr.ResolvedType()}
 
 	// The result of the routine is the result of the last statement. The result
 	// of any preceding statements is ignored. We set up a rowResultWriter that
 	// can store the results of the final statement here.
 	var rch rowContainerHelper
-	rch.Init(typs, p.ExtendedEvalContext(), "routine" /* opName */)
+	rch.Init(retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
 	defer rch.Close(ctx)
 	rrw := NewRowResultWriter(&rch)
 
+	// Configure stepping for volatile routines so that mutations made by the
+	// invoking statement are visible to the routine.
+	txn := p.Txn()
+	if expr.Volatility == volatility.Volatile {
+		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
+		defer func() {
+			_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
+			err = txn.SetReadSeqNum(prevSeqNum)
+		}()
+	}
+
 	// Execute each statement in the routine sequentially.
+	ef := newExecFactory(p)
 	for i := 0; i < expr.NumStmts; i++ {
 		// Generate a plan for executing the ith statement.
-		plan, err := expr.PlanFn(ctx, newExecFactory(p), i)
+		plan, err := expr.PlanFn(ctx, ef, i, input)
 		if err != nil {
 			return nil, err
 		}
@@ -50,6 +74,14 @@ func (p *planner) EvalRoutineExpr(
 			w = rrw
 		} else {
 			w = &droppingResultWriter{}
+		}
+
+		// Place a sequence point before each statement in the routine for
+		// volatile functions.
+		if expr.Volatility == volatility.Volatile {
+			if err := txn.Step(ctx); err != nil {
+				return nil, err
+			}
 		}
 
 		// TODO(mgartner): Add a new tracing.ChildSpan to the context for better
@@ -69,11 +101,15 @@ func (p *planner) EvalRoutineExpr(
 	// Adding the limit would be valid because any other rows after the
 	// first can simply be ignored. The limit could also be beneficial
 	// because it could allow additional query plan optimizations.
-	rightRowsIterator := newRowContainerIterator(ctx, rch, typs)
+	rightRowsIterator := newRowContainerIterator(ctx, rch, retTypes)
 	defer rightRowsIterator.Close()
 	res, err := rightRowsIterator.Next()
 	if err != nil {
 		return nil, err
+	}
+	if res == nil {
+		// Return NULL if there are no results.
+		return tree.DNull, nil
 	}
 	return res[0], nil
 }

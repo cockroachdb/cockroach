@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1239,85 +1238,6 @@ func TestInitialPartitioning(t *testing.T) {
 			testutils.SucceedsSoon(t, test.verifyScansFn(ctx, t, db))
 		})
 	}
-}
-
-func TestSelectPartitionExprs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// TODO(dan): PartitionExprs for range partitions is waiting on the new
-	// range partitioning syntax.
-	testData := partitioningTest{
-		name: `partition exprs`,
-		schema: `CREATE TABLE %s (
-			a INT, b INT, c INT, PRIMARY KEY (a, b, c)
-		) PARTITION BY LIST (a, b) (
-			PARTITION p33p44 VALUES IN ((3, 3), (4, 4)) PARTITION BY LIST (c) (
-				PARTITION p335p445 VALUES IN (5),
-				PARTITION p33dp44d VALUES IN (DEFAULT)
-			),
-			PARTITION p6d VALUES IN ((6, DEFAULT)),
-			PARTITION pdd VALUES IN ((DEFAULT, DEFAULT))
-		)`,
-	}
-	if err := testData.parse(); err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	tests := []struct {
-		// partitions is a comma-separated list of input partitions
-		partitions string
-		// expr is the expected output
-		expr string
-	}{
-		{`p33p44`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
-		{`p335p445`, `((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))`},
-		{`p33dp44d`, `(((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5))))`},
-		// NB See the TODO in the impl for why this next case has some clearly
-		// unrelated `!=`s.
-		{`p6d`, `((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4))))`},
-		{`pdd`, `NOT ((((a, b) = (3, 3)) OR ((a, b) = (4, 4))) OR ((a,) = (6,)))`},
-
-		{`p335p445,p6d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR (((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4)))))`},
-
-		// TODO(dan): The expression simplification in this method is all done
-		// by our normal SQL expression simplification code. Seems like it could
-		// use some targeted work to clean these up. Ideally the following would
-		// all simplyify to  `(a, b) IN ((3, 3), (4, 4))`. Some of them work
-		// because for every requested partition, all descendent partitions are
-		// omitted, which is an optimization to save a little work with the side
-		// benefit of making more of these what we want.
-		{`p335p445,p33dp44d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR ((((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5)))))`},
-		{`p33p44,p335p445`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
-		{`p33p44,p335p445,p33dp44d`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
-	}
-
-	evalCtx := &eval.Context{
-		Codec:    keys.SystemSQLCodec,
-		Settings: cluster.MakeTestingClusterSettings(),
-	}
-	for _, test := range tests {
-		t.Run(test.partitions, func(t *testing.T) {
-			var partNames tree.NameList
-			for _, p := range strings.Split(test.partitions, `,`) {
-				partNames = append(partNames, tree.Name(p))
-			}
-			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			if exprStr := expr.String(); exprStr != test.expr {
-				t.Errorf("got\n%s\nexpected\n%s", exprStr, test.expr)
-			}
-		})
-	}
-	t.Run("error", func(t *testing.T) {
-		partNames := tree.NameList{`p33p44`, `nope`}
-		_, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
-		if !testutils.IsError(err, `unknown partition`) {
-			t.Errorf(`expected "unknown partition" error got: %+v`, err)
-		}
-	})
 }
 
 func TestRepartitioning(t *testing.T) {

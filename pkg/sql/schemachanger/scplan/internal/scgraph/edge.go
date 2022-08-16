@@ -97,6 +97,11 @@ const (
 	// SameStagePrecedence indicates that the source (from) of the edge must
 	// be reached before the destination (to), and _must_ do so in the same stage.
 	SameStagePrecedence
+
+	// PreviousStagePrecedence indicates that the source (from) of the edge must
+	// be reached before the destination (to), and _must_ do so in a previous
+	// stage.
+	PreviousStagePrecedence
 )
 
 // DepEdge represents a dependency between two nodes. A dependency
@@ -156,7 +161,8 @@ func (de *DepEdge) Rules() []Rule { return de.rules }
 
 // Kind returns the kind of the DepEdge. Note that it returns the strongest
 // kind implied by a rule; if one rule which created this edge is Precedence,
-// and another is SameStagePrecedence, this will return SameStagePrecedence.
+// and another is SameStagePrecedence or PreviousStagePrecedence, then it
+// returns the latter.
 func (de *DepEdge) Kind() DepEdgeKind { return de.kind }
 
 // String returns a string representation of this edge

@@ -125,7 +125,7 @@ func EvalAddSSTable(
 
 	var span *tracing.Span
 	var err error
-	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", start.Key, end.Key))
+	ctx, span = tracing.ChildSpan(ctx, "AddSSTable")
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
@@ -205,7 +205,10 @@ func EvalAddSSTable(
 			// bounded with a small number on the SST side.
 			usePrefixSeek = usePrefixSeek || args.MVCCStats.KeyCount < 100
 		}
-		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end,
+		desc := cArgs.EvalCtx.Desc()
+		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
 			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents, usePrefixSeek)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")

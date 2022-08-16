@@ -691,16 +691,18 @@ func getStatementDetailsPerPlanHash(
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
-				aggregation_interval
+				aggregation_interval,
+				index_recommendations
 		FROM crdb_internal.statement_statistics %s
 		GROUP BY
 				plan_hash,
 				plan_gist,
-				aggregation_interval
+				aggregation_interval,
+				index_recommendations
 		LIMIT $%d`, whereClause, len(args)+1)
 
 	args = append(args, limit)
-	const expectedNumDatums = 6
+	const expectedNumDatums = 7
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash", nil,
 		sessiondata.InternalExecutorOverride{
@@ -760,6 +762,12 @@ func getStatementDetailsPerPlanHash(
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 		aggInterval := tree.MustBeDInterval(row[5]).Duration
 
+		recommendations := tree.MustBeDArray(row[6])
+		var idxRecommendations []string
+		for _, s := range recommendations.Array {
+			idxRecommendations = util.CombineUniqueString(idxRecommendations, []string{string(tree.MustBeDString(s))})
+		}
+
 		// A metadata is unique for each plan, meaning if any of the counts are greater than zero,
 		// we can update the value of each count with the execution count of this plan hash to
 		// have the correct count of each metric.
@@ -778,11 +786,12 @@ func getStatementDetailsPerPlanHash(
 		aggregatedMetadata.TotalCount = metadata.Stats.Count
 
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash{
-			AggregationInterval: time.Duration(aggInterval.Nanos()),
-			ExplainPlan:         explainPlan,
-			PlanHash:            planHash,
-			Stats:               metadata.Stats,
-			Metadata:            aggregatedMetadata,
+			AggregationInterval:  time.Duration(aggInterval.Nanos()),
+			ExplainPlan:          explainPlan,
+			PlanHash:             planHash,
+			Stats:                metadata.Stats,
+			Metadata:             aggregatedMetadata,
+			IndexRecommendations: idxRecommendations,
 		}
 
 		statements = append(statements, stmt)

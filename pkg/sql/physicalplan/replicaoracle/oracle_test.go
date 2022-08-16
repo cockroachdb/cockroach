@@ -13,6 +13,7 @@ package replicaoracle
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -21,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRandomOracle defeats TestUnused for RandomChoice.
@@ -35,41 +38,49 @@ func TestRandomOracle(t *testing.T) {
 
 func TestClosest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	g, _ := makeGossip(t, stopper)
-	nd, _ := g.GetNodeDescriptor(1)
-	o := NewOracle(ClosestChoice, Config{
-		NodeDescs: g,
-		NodeDesc:  *nd,
-	})
-	o.(*closestOracle).latencyFunc = func(s string) (time.Duration, bool) {
-		if strings.HasSuffix(s, "2") {
-			return time.Nanosecond, true
+	testutils.RunTrueAndFalse(t, "valid-latency-func", func(t *testing.T, validLatencyFunc bool) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		g, _ := makeGossip(t, stopper)
+		nd2, err := g.GetNodeDescriptor(2)
+		require.NoError(t, err)
+		o := NewOracle(ClosestChoice, Config{
+			NodeDescs: g,
+			NodeID:    1,
+			Locality:  nd2.Locality, // pretend node 2 is closest.
+		})
+		o.(*closestOracle).latencyFunc = func(s string) (time.Duration, bool) {
+			if strings.HasSuffix(s, "2") {
+				return time.Nanosecond, validLatencyFunc
+			}
+			return time.Millisecond, validLatencyFunc
 		}
-		return time.Millisecond, true
-	}
-	info, err := o.ChoosePreferredReplica(
-		ctx,
-		nil, /* txn */
-		&roachpb.RangeDescriptor{
-			InternalReplicas: []roachpb.ReplicaDescriptor{
-				{NodeID: 4, StoreID: 4},
-				{NodeID: 2, StoreID: 2},
-				{NodeID: 3, StoreID: 3},
+		internalReplicas := []roachpb.ReplicaDescriptor{
+			{NodeID: 4, StoreID: 4},
+			{NodeID: 2, StoreID: 2},
+			{NodeID: 3, StoreID: 3},
+		}
+		rand.Shuffle(len(internalReplicas), func(i, j int) {
+			internalReplicas[i], internalReplicas[j] = internalReplicas[j], internalReplicas[i]
+		})
+		info, err := o.ChoosePreferredReplica(
+			ctx,
+			nil, /* txn */
+			&roachpb.RangeDescriptor{
+				InternalReplicas: internalReplicas,
 			},
-		},
-		nil, /* leaseHolder */
-		roachpb.LAG_BY_CLUSTER_SETTING,
-		QueryState{},
-	)
-	if err != nil {
-		t.Fatalf("Failed to choose closest replica: %v", err)
-	}
-	if info.NodeID != 2 {
-		t.Fatalf("Failed to choose node 2, got %v", info.NodeID)
-	}
+			nil, /* leaseHolder */
+			roachpb.LAG_BY_CLUSTER_SETTING,
+			QueryState{},
+		)
+		if err != nil {
+			t.Fatalf("Failed to choose closest replica: %v", err)
+		}
+		if info.NodeID != 2 {
+			t.Fatalf("Failed to choose node 2, got %v", info.NodeID)
+		}
+	})
 }
 
 func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock) {
@@ -99,5 +110,13 @@ func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 	return &roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:%d", nodeID)),
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{
+					Key:   "region",
+					Value: fmt.Sprintf("region_%d", nodeID),
+				},
+			},
+		},
 	}
 }

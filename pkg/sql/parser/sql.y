@@ -1047,6 +1047,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> alter_rename_index_stmt
 %type <tree.Statement> alter_relocate_index_stmt
 %type <tree.Statement> alter_zone_index_stmt
+%type <tree.Statement> alter_index_visible_stmt
 
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
@@ -1388,7 +1389,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
-%type <bool> opt_index_access_method opt_index_visible
+%type <bool> opt_index_access_method opt_index_visible alter_index_visible
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_fetch_first_value
@@ -2099,6 +2100,7 @@ alter_range_stmt:
 //   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER INDEX ... RELOCATE [ LEASE | VOTERS | NONVOTERS ] <selectclause>
+//   ALTER INDEX ... [VISIBLE | NOT VISIBLE]
 //
 // Zone configurations:
 //   DISCARD
@@ -2115,6 +2117,7 @@ alter_index_stmt:
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
 | alter_zone_index_stmt
+| alter_index_visible_stmt
 // ALTER INDEX has its error help token here because the ALTER INDEX
 // prefix is spread over multiple non-terminals.
 | ALTER INDEX error // SHOW HELP: ALTER INDEX
@@ -2245,6 +2248,26 @@ alter_relocate_index_stmt:
       Rows: $6.slct(),
       SubjectReplicas: $5.relocateSubject(),
     }
+  }
+
+alter_index_visible_stmt:
+  ALTER INDEX table_index_name alter_index_visible
+  {
+    $$.val = &tree.AlterIndexVisible{Index: $3.tableIndexName(), NotVisible: $4.bool(), IfExists: false}
+  }
+| ALTER INDEX IF EXISTS table_index_name alter_index_visible
+  {
+    $$.val = &tree.AlterIndexVisible{Index: $5.tableIndexName(), NotVisible: $6.bool(), IfExists: true}
+  }
+
+alter_index_visible:
+  NOT VISIBLE
+  {
+    $$.val = true
+  }
+| VISIBLE
+  {
+    $$.val = false
   }
 
 // Note: even though the ALTER RANGE ... CONFIGURE ZONE syntax only
@@ -5423,6 +5446,18 @@ grant_stmt:
       WithGrantOption: $11.bool(),
     }
   }
+| GRANT privileges ON ALL FUNCTIONS IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      WithGrantOption: $11.bool(),
+    }
+  }
 | GRANT SYSTEM privileges TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
@@ -5533,6 +5568,30 @@ revoke_stmt:
       Targets: tree.GrantTargetList{
         Schemas: $11.objectNamePrefixList(),
         AllTablesInSchema: true,
+      },
+      Grantees: $13.roleSpecList(),
+      GrantOptionFor: true,
+    }
+  }
+| REVOKE privileges ON ALL FUNCTIONS IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON ALL FUNCTIONS IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $5.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $11.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
       },
       Grantees: $13.roleSpecList(),
       GrantOptionFor: true,
@@ -6437,16 +6496,25 @@ session_var_parts:
 // are encoded in JSON format.
 // %SeeAlso: SHOW HISTOGRAM
 show_stats_stmt:
-  SHOW STATISTICS FOR TABLE table_name
+  SHOW STATISTICS FOR TABLE table_name opt_with_options
   {
-    $$.val = &tree.ShowTableStats{Table: $5.unresolvedObjectName()}
+      $$.val = &tree.ShowTableStats{
+        Table:   $5.unresolvedObjectName(),
+        Options: $6.kvOptions(),
+      }
   }
-| SHOW STATISTICS USING JSON FOR TABLE table_name
+| SHOW STATISTICS USING JSON FOR TABLE table_name opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowTableStats{Table: $7.unresolvedObjectName(), UsingJSON: true}
+    $$.val = &tree.ShowTableStats{
+      Table:     $7.unresolvedObjectName(),
+      UsingJSON: true,
+      Options:   $8.kvOptions(),
+    }
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
+
+
 
 // %Help: SHOW HISTOGRAM - display histogram (experimental)
 // %Category: Experimental
@@ -7619,6 +7687,10 @@ grant_targets:
 | EXTERNAL CONNECTION name_list
   {
     $$.val = tree.GrantTargetList{ExternalConnections: $3.nameList()}
+  }
+| FUNCTION function_with_argtypes_list
+  {
+    $$.val = tree.GrantTargetList{Functions: $2.functionObjs()}
   }
 
 // backup_targets is similar to grant_targets but used by backup and restore, and thus
@@ -9574,9 +9646,9 @@ opt_index_visible:
     $$.val = true
   }
 | VISIBLE
-   {
-     $$.val = false
-   }
+  {
+    $$.val = false
+  }
 | /* EMPTY */
   {
     $$.val = false
@@ -9989,7 +10061,7 @@ target_object_type:
   {
     $$.val = privilege.Schemas
   }
-| FUNCTIONS error
+| FUNCTIONS
   {
     $$.val = privilege.Functions
   }

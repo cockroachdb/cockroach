@@ -386,16 +386,19 @@ func (LegacyTimestamp) SafeValue() {}
 // ClockTimestamp is a Timestamp with the added capability of being able to
 // update a peer's HLC clock. It possesses this capability because the clock
 // timestamp itself is guaranteed to have come from an HLC clock somewhere in
-// the system. As such, a clock timestamp is an promise that some node in the
+// the system. As such, a clock timestamp is a promise that some node in the
 // system has a clock with a reading equal to or above its value.
 //
 // ClockTimestamp is the statically typed version of a Timestamp with its
 // Synthetic flag set to false.
 type ClockTimestamp Timestamp
 
-// TryToClockTimestamp attempts to downcast a Timestamp into a ClockTimestamp.
-// Returns the result and a boolean indicating whether the cast succeeded.
-func (t Timestamp) TryToClockTimestamp() (ClockTimestamp, bool) {
+// DeprecatedTryToClockTimestamp attempts to downcast a Timestamp into a
+// ClockTimestamp. Returns the result and a boolean indicating whether the cast
+// succeeded.
+// TODO(nvanbenschoten): remove this in v23.1 when we remove the synthetic
+// timestamp bit.
+func (t Timestamp) DeprecatedTryToClockTimestamp() (ClockTimestamp, bool) {
 	if t.Synthetic {
 		return ClockTimestamp{}, false
 	}

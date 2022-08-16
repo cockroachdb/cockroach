@@ -8963,12 +8963,15 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 		// the tenant. More investigation is required. Tracked with #76378.
 		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
-			GCJob: &sql.GCJobTestingKnobs{RunBeforePerformGC: func(id jobspb.JobID) error {
-				gcJobID = id
-				aboutToGC <- struct{}{}
-				<-allowGC
-				return nil
-			}},
+			GCJob: &sql.GCJobTestingKnobs{
+				RunBeforePerformGC: func(id jobspb.JobID) error {
+					gcJobID = id
+					aboutToGC <- struct{}{}
+					<-allowGC
+					return nil
+				},
+				SkipWaitingForMVCCGC: true,
+			},
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)

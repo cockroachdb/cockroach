@@ -25,7 +25,7 @@ import {
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import SQLActivityError from "../sqlActivity/errorComponent";
 
-import { TimestampToMoment } from "src/util/convert";
+import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT } from "src/util/format";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
@@ -41,10 +41,7 @@ import { Button } from "../button";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Text, TextTypes } from "../text";
 import { SqlBox } from "src/sql/box";
-import {
-  NodeLink,
-  StatementLinkTarget,
-} from "src/statementsTable/statementsTableContent";
+import { NodeLink } from "src/statementsTable/statementsTableContent";
 
 import {
   ICancelQueryRequest,
@@ -244,19 +241,14 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       return (
         <section className={cx("section")}>
           <h3>Unable to find session</h3>
-          There is no currently active session with the id{" "}
+          There is no session with the id{" "}
           {getMatchParamByName(this.props.match, sessionAttr)}.
-          <div>
-            <Link className={cx("back-link")} to={"/sessions"}>
-              Back to Sessions
-            </Link>
-          </div>
         </section>
       );
     }
 
     let txnInfo = <React.Fragment>No Active Transaction</React.Fragment>;
-    if (session.active_txn) {
+    if (session.active_txn && session.end == null) {
       const txn = session.active_txn;
       const start = TimestampToMoment(txn.start);
       txnInfo = (
@@ -352,6 +344,20 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 value={TimestampToMoment(session.start).format(DATE_FORMAT)}
                 className={cx("details-item")}
               />
+              {session.end && (
+                <SummaryCardItem
+                  label={"Session End Time"}
+                  value={TimestampToMoment(session.end).format(DATE_FORMAT)}
+                  className={cx("details-item")}
+                />
+              )}
+              <SummaryCardItem
+                label={"Session Active Duration"}
+                value={DurationToMomentDuration(
+                  session.total_active_time,
+                ).humanize()}
+                className={cx("details-item")}
+              />
               {!isTenant && (
                 <SummaryCardItem
                   label={"Gateway Node"}
@@ -404,6 +410,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 value={session.username}
                 className={cx("details-item")}
               />
+              <SummaryCardItem
+                label="Transaction Count"
+                value={session.num_txns_executed}
+                className={cx("details-item")}
+              />
             </Col>
           </Row>
         </SummaryCard>
@@ -415,6 +426,22 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
           Most Recent Statement
         </Text>
         {curStmtInfo}
+        <div>
+          <Text textType={TextTypes.Heading5} className={cx("details-header")}>
+            Most Recent Transaction Fingerprints Executed
+          </Text>
+          <Text textType={TextTypes.Caption}>
+            A list of the most recent transaction fingerprint IDs executed by
+            this session represented in hexadecimal.
+          </Text>
+          <SummaryCard
+            className={cx("details-section", "session-txn-fingerprints")}
+          >
+            {session.txn_fingerprint_ids.map((txnFingerprintID, i) => (
+              <div key={i}>{txnFingerprintID.toString(16)}</div>
+            ))}
+          </SummaryCard>
+        </div>
       </React.Fragment>
     );
   };

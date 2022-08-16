@@ -62,6 +62,9 @@ func addNewIndexMutation(
 	if opIndex.IndexID >= tbl.NextIndexID {
 		tbl.NextIndexID = opIndex.IndexID + 1
 	}
+	if opIndex.ConstraintID >= tbl.NextConstraintID {
+		tbl.NextConstraintID = opIndex.ConstraintID + 1
+	}
 
 	// Set up the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD
@@ -84,14 +87,13 @@ func addNewIndexMutation(
 		Type:                        indexType,
 		CreatedExplicitly:           true,
 		EncodingType:                encodingType,
-		ConstraintID:                tbl.GetNextConstraintID(),
+		ConstraintID:                opIndex.ConstraintID,
 		UseDeletePreservingEncoding: isDeletePreserving,
 		StoreColumnNames:            []string{},
 	}
 	if opIndex.Sharding != nil {
 		idx.Sharded = *opIndex.Sharding
 	}
-	tbl.NextConstraintID++
 	return enqueueAddIndexMutation(tbl, idx, state)
 }
 
@@ -421,12 +423,6 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	index, err := tbl.FindIndexWithID(op.IndexID)
 	if err != nil {
 		return err
-	}
-	// As a special case, avoid removing any columns from dropped indexes.
-	// The index is going to be removed, so it doesn't matter if it references
-	// dropped columns.
-	if index.Dropped() {
-		return nil
 	}
 	column, err := tbl.FindColumnWithID(op.ColumnID)
 	if err != nil {

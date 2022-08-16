@@ -118,6 +118,9 @@ func TestReplicaClockUpdates(t *testing.T) {
 		// MaxOffset. Set the synthetic flag according to the test case.
 		reqTS := clocks[0].Now().Add(clocks[0].MaxOffset().Nanoseconds()/2, 0).WithSynthetic(synthetic)
 		h := roachpb.Header{Timestamp: reqTS}
+		if !reqTS.Synthetic {
+			h.Now = hlc.ClockTimestamp(reqTS)
+		}
 
 		// Execute the command.
 		var req roachpb.Request
@@ -178,8 +181,8 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	const numCmds = 3
 	clockOffset := s.Clock().MaxOffset() / numCmds
 	for i := int64(1); i <= numCmds; i++ {
-		ts := ts1.Add(i*clockOffset.Nanoseconds(), 0).WithSynthetic(false)
-		if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
+		ts := hlc.ClockTimestamp(ts1.Add(i*clockOffset.Nanoseconds(), 0))
+		if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Now: ts}, incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -190,8 +193,8 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	tsFuture := ts1.Add(s.Clock().MaxOffset().Nanoseconds()+1, 0).WithSynthetic(false)
-	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Timestamp: tsFuture}, incArgs)
+	tsFuture := hlc.ClockTimestamp(ts1.Add(s.Clock().MaxOffset().Nanoseconds()+1, 0))
+	_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Now: tsFuture}, incArgs)
 	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Fatalf("unexpected error %v", pErr)
 	}

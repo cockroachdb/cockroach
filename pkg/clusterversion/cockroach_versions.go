@@ -164,11 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// PebbleFormatBlockPropertyCollector switches to a backwards incompatible
-	// Pebble version that provides block property collectors that can be used
-	// for fine-grained time bound iteration. See
-	// https://github.com/cockroachdb/pebble/issues/1190 for details.
-	PebbleFormatBlockPropertyCollector
 	// ProbeRequest is the version at which roachpb.ProbeRequest was introduced.
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
@@ -185,35 +180,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// SCRAM authentication is available.
-	SCRAMAuthentication
-	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
-	// that correspond to range descriptor changes resulting from recovery
-	// procedures.
-	UnsafeLossOfQuorumRecoveryRangeLog
-	// AlterSystemProtectedTimestampAddColumn adds a target column to the
-	// system.protected_ts_records table that describes what is protected by the
-	// record.
-	AlterSystemProtectedTimestampAddColumn
-	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
-	// in secondary tenants.
-	EnableProtectedTimestampsForTenant
-	// DeleteCommentsWithDroppedIndexes cleans up left over comments that belong
-	// to dropped indexes.
-	DeleteCommentsWithDroppedIndexes
-	// RemoveIncompatibleDatabasePrivileges adds the migration which guarantees that
-	// databases do not have incompatible privileges
-	RemoveIncompatibleDatabasePrivileges
-	// AddRaftAppliedIndexTermMigration is a migration that causes each range
-	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
-	AddRaftAppliedIndexTermMigration
-	// PostAddRaftAppliedIndexTermMigration is used for asserting that
-	// RaftAppliedIndexTerm is populated.
-	PostAddRaftAppliedIndexTermMigration
-	// DontProposeWriteTimestampForLeaseTransfers stops setting the WriteTimestamp
-	// on lease transfer Raft proposals. New leaseholders now forward their clock
-	// directly to the new lease start time.
-	DontProposeWriteTimestampForLeaseTransfers
 	// EnablePebbleFormatVersionBlockProperties enables a new Pebble SSTable
 	// format version for block property collectors.
 	// NB: this cluster version is paired with PebbleFormatBlockPropertyCollector
@@ -224,26 +190,14 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-	// MVCCIndexBackfiller supports MVCC-compliant index
-	// backfillers via a new BACKFILLING index state, delete
-	// preserving temporary indexes, and a post-backfill merging
-	// processing.
-	MVCCIndexBackfiller
-	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
-	// for raft log truncation, by allowing each replica to treat a truncation
-	// proposal as an upper bound on what should be truncated.
-	LooselyCoupledRaftLogTruncation
+	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
+	// during joint configuration, including to VOTER_INCOMING replicas.
+	EnableLeaseHolderRemoval
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
-	// EnableDeclarativeSchemaChanger is the version where new declarative schema changer
-	// can be used to construct schema change plan node.
-	EnableDeclarativeSchemaChanger
 	// RowLevelTTL is the version where we allow row level TTL tables.
 	RowLevelTTL
-	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
-	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
-	PebbleFormatSplitUserKeysMarked
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -259,15 +213,6 @@ const (
 	// such as end_time, initial_scan_only, and setting the value of initial_scan
 	// to 'yes|no|only'
 	EnableNewChangefeedOptions
-	// SpanCountTable adds system.span_count to track the number of committed
-	// tenant spans.
-	SpanCountTable
-	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
-	// accounting for incremental schema changes.
-	PreSeedSpanCountTable
-	// SeedSpanCountTable seeds system.span_count with the number of committed
-	// tenant spans.
-	SeedSpanCountTable
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -329,11 +274,11 @@ const (
 	// AddSystemUserIDColumn is the version where the system.users table has
 	// a user_id column for writes only.
 	AddSystemUserIDColumn
-	// UsersHaveIDs is the version where all users in the system.users table
+	// SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
 	// have ids.
-	UsersHaveIDs
-	// SetUserIDNotNull sets the user_id column in system.users to not null.
-	SetUserIDNotNull
+	SystemUsersIDColumnIsBackfilled
+	// SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
+	SetSystemUsersUserIDColumnNotNull
 	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
 	SQLSchemaTelemetryScheduledJobs
@@ -343,6 +288,38 @@ const (
 	// DeleteRequestReturnKey is the version where the DeleteRequest began
 	// populating the FoundKey value in the response.
 	DeleteRequestReturnKey
+	// PebbleFormatPrePebblev1Marked performs a Pebble-level migration and
+	// upgrades the Pebble format major version to FormatPrePebblev1Marked. This
+	// migration occurs at the per-store level and is twofold:
+	//  - Each store is first bumped to a Pebble format major version that raises
+	//  the minimum supported sstable format to (Pebble,v1) (block properties). New
+	//  tables generated by Pebble (via compactions / flushes), and tables written
+	//  for ingestion will be at table format version (Pebble,v1).
+	//  - Each store is then instructed to mark all existing tables that are
+	//  pre-Pebblev1 for a low-priority compaction. In a future release of
+	//  Cockroach (likely 23.1), a blocking migration will be run to
+	//  rewrite-compact on any remaining marked tables.
+	PebbleFormatPrePebblev1Marked
+	// RoleOptionsTableHasIDColumn is the version where the role options table
+	// has ids.
+	RoleOptionsTableHasIDColumn
+	// RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
+	// table are backfilled.
+	RoleOptionsIDColumnIsBackfilled
+	// SetRoleOptionsUserIDColumnNotNull is the version where the role
+	// options table id column cannot be null. This is the final step
+	// of the system.role_options table migration.
+	SetRoleOptionsUserIDColumnNotNull
+	// UseDelRangeInGCJob enables the use of the DelRange operation in the
+	// GC job. Before it is enabled, the GC job uses ClearRange operations
+	// after the job waits out the GC TTL. After it has been enabled, the
+	// job instead issues DelRange operations at the beginning of the job
+	// and then waits for the data to be removed automatically before removing
+	// the descriptor and zone configurations.
+	UseDelRangeInGCJob
+	// WaitedForDelRangeInGCJob corresponds to the migration which waits for
+	// the GC jobs to adopt the use of DelRange with tombstones.
+	WaitedForDelRangeInGCJob
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -353,6 +330,10 @@ const (
 // TODOPreV21_2 is an alias for V21_2 for use in any version gate/check that
 // previously referenced a < 21.2 version until that check/gate can be removed.
 const TODOPreV21_2 = V21_2
+
+// TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
+// previously referenced a < 22.1 version until that check/gate can be removed.
+const TODOPreV22_1 = V22_1
 
 // versionsSingleton lists all historical versions here in chronological order,
 // with comments describing what backwards-incompatible features were
@@ -384,10 +365,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     PebbleFormatBlockPropertyCollector,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
-	},
-	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
 	},
@@ -408,71 +385,20 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
 	},
 	{
-		Key:     SCRAMAuthentication,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 44},
-	},
-	{
-		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 46},
-	},
-	{
-		Key:     AlterSystemProtectedTimestampAddColumn,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 48},
-	},
-	{
-		Key:     EnableProtectedTimestampsForTenant,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
-	},
-	{
-		Key:     DeleteCommentsWithDroppedIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
-	},
-	{
-		Key:     RemoveIncompatibleDatabasePrivileges,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
-	},
-	{
-		Key:     AddRaftAppliedIndexTermMigration,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
-	},
-	{
-		Key:     PostAddRaftAppliedIndexTermMigration,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
-	},
-	{
-		Key:     DontProposeWriteTimestampForLeaseTransfers,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
-	},
-	{
 		Key:     EnablePebbleFormatVersionBlockProperties,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 	{
-		Key:     MVCCIndexBackfiller,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
-	},
-	// Internal: 72 was reverted (EnsurePebbleFormatVersionRangeKeys)
-	// Internal: 74 was reverted (EnablePebbleFormatVersionRangeKeys)
-	// Internal: 78 was reverted (ExperimentalMVCCRangeTombstones)
-	{
-		Key:     LooselyCoupledRaftLogTruncation,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
+		Key:     EnableLeaseHolderRemoval,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
 	{
 		Key:     ChangefeedIdleness,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
 	},
 	{
-		Key:     EnableDeclarativeSchemaChanger,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
-	},
-	{
 		Key:     RowLevelTTL,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 88},
-	},
-	{
-		Key:     PebbleFormatSplitUserKeysMarked,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
 	},
 	{
 		Key:     EnableNewStoreRebalancer,
@@ -493,18 +419,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableNewChangefeedOptions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
-	},
-	{
-		Key:     SpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 108},
-	},
-	{
-		Key:     PreSeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 110},
-	},
-	{
-		Key:     SeedSpanCountTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
 	},
 	{
 		Key:     V22_1,
@@ -585,11 +499,11 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 36},
 	},
 	{
-		Key:     UsersHaveIDs,
+		Key:     SystemUsersIDColumnIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 38},
 	},
 	{
-		Key:     SetUserIDNotNull,
+		Key:     SetSystemUsersUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
@@ -603,6 +517,30 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DeleteRequestReturnKey,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
+	},
+	{
+		Key:     PebbleFormatPrePebblev1Marked,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
+	},
+	{
+		Key:     RoleOptionsTableHasIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
+	},
+	{
+		Key:     RoleOptionsIDColumnIsBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 52},
+	},
+	{
+		Key:     SetRoleOptionsUserIDColumnNotNull,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
+	},
+	{
+		Key:     UseDelRangeInGCJob,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 56},
+	},
+	{
+		Key:     WaitedForDelRangeInGCJob,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

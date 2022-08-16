@@ -359,3 +359,59 @@ ALTER INDEX i CONFIGURE ZONE USING DEFAULT
 ALTER INDEX i CONFIGURE ZONE USING DEFAULT -- fully parenthesized
 ALTER INDEX i CONFIGURE ZONE USING DEFAULT -- literals removed
 ALTER INDEX _ CONFIGURE ZONE USING DEFAULT -- identifiers removed
+
+parse
+ALTER INDEX i VISIBLE
+----
+ALTER INDEX i VISIBLE
+ALTER INDEX i VISIBLE -- fully parenthesized
+ALTER INDEX i VISIBLE -- literals removed
+ALTER INDEX _ VISIBLE -- identifiers removed
+
+parse
+ALTER INDEX i NOT VISIBLE
+----
+ALTER INDEX i NOT VISIBLE
+ALTER INDEX i NOT VISIBLE -- fully parenthesized
+ALTER INDEX i NOT VISIBLE -- literals removed
+ALTER INDEX _ NOT VISIBLE -- identifiers removed
+
+parse
+ALTER INDEX IF EXISTS i VISIBLE
+----
+ALTER INDEX IF EXISTS i VISIBLE
+ALTER INDEX IF EXISTS i VISIBLE -- fully parenthesized
+ALTER INDEX IF EXISTS i VISIBLE -- literals removed
+ALTER INDEX IF EXISTS _ VISIBLE -- identifiers removed
+
+parse
+ALTER INDEX IF EXISTS i NOT VISIBLE
+----
+ALTER INDEX IF EXISTS i NOT VISIBLE
+ALTER INDEX IF EXISTS i NOT VISIBLE -- fully parenthesized
+ALTER INDEX IF EXISTS i NOT VISIBLE -- literals removed
+ALTER INDEX IF EXISTS _ NOT VISIBLE -- identifiers removed
+
+parse
+ALTER INDEX d.i NOT VISIBLE
+----
+ALTER INDEX d.i NOT VISIBLE
+ALTER INDEX d.i NOT VISIBLE -- fully parenthesized
+ALTER INDEX d.i NOT VISIBLE -- literals removed
+ALTER INDEX _._ NOT VISIBLE -- identifiers removed
+
+parse
+ALTER INDEX t@i NOT VISIBLE
+----
+ALTER INDEX t@i NOT VISIBLE
+ALTER INDEX t@i NOT VISIBLE -- fully parenthesized
+ALTER INDEX t@i NOT VISIBLE -- literals removed
+ALTER INDEX _@_ NOT VISIBLE -- identifiers removed
+
+parse
+ALTER INDEX db.t@i NOT VISIBLE
+----
+ALTER INDEX db.t@i NOT VISIBLE
+ALTER INDEX db.t@i NOT VISIBLE -- fully parenthesized
+ALTER INDEX db.t@i NOT VISIBLE -- literals removed
+ALTER INDEX _._@_ NOT VISIBLE -- identifiers removed

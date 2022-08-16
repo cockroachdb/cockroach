@@ -54,7 +54,7 @@ type indexValidator struct {
 	db                      *kv.DB
 	codec                   keys.SQLCodec
 	settings                *cluster.Settings
-	ieFactory               sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory               sqlutil.InternalExecutorFactory
 	validateForwardIndexes  ValidateForwardIndexesFn
 	validateInvertedIndexes ValidateInvertedIndexesFn
 	newFakeSessionData      NewFakeSessionDataFn
@@ -103,7 +103,7 @@ func (iv indexValidator) makeHistoricalInternalExecTxnRunner() sqlutil.Historica
 		if err != nil {
 			return err
 		}
-		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
+		return fn(ctx, validationTxn, iv.ieFactory.NewInternalExecutor(iv.newFakeSessionData(&iv.settings.SV)))
 	}
 }
 
@@ -113,7 +113,7 @@ func NewIndexValidator(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ieFactory sqlutil.InternalExecutorFactory,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
 	newFakeSessionData NewFakeSessionDataFn,

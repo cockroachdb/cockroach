@@ -198,6 +198,10 @@ type Context struct {
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
 
+	// SetCompactionConcurrency is used to change the compaction concurrency of
+	// a store.
+	SetCompactionConcurrency SetCompactionConcurrencyFunc
+
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
@@ -223,11 +227,21 @@ type Context struct {
 	QueryCancelKey pgwirecancel.BackendKeyData
 
 	DescIDGenerator DescIDGenerator
+
+	// RangeStatsFetcher is used to fetch RangeStats.
+	RangeStatsFetcher RangeStatsFetcher
 }
 
 // DescIDGenerator generates unique descriptor IDs.
 type DescIDGenerator interface {
 	GenerateUniqueDescID(ctx context.Context) (catid.DescID, error)
+}
+
+// RangeStatsFetcher is used to fetch RangeStats.
+type RangeStatsFetcher interface {
+
+	// RangeStats fetches the stats for the ranges which contain the passed keys.
+	RangeStats(ctx context.Context, keys ...roachpb.Key) ([]*roachpb.RangeStatsResponse, error)
 }
 
 var _ tree.ParseTimeContext = &Context{}
@@ -552,6 +566,9 @@ func (ec *Context) SetStmtTimestamp(ts time.Time) {
 
 // GetLocation returns the session timezone.
 func (ec *Context) GetLocation() *time.Location {
+	if ec == nil {
+		return time.UTC
+	}
 	return ec.SessionData().GetLocation()
 }
 

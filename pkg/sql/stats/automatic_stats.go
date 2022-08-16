@@ -810,6 +810,9 @@ func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
 		if !areEqual(stat.ColumnIDs, reference.ColumnIDs) {
 			continue
 		}
+		if stat.CreatedAt.Equal(reference.CreatedAt) {
+			continue
+		}
 		// Stats are sorted with the most recent first.
 		sum += reference.CreatedAt.Sub(stat.CreatedAt)
 		count++

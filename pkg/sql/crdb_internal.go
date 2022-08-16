@@ -2591,6 +2591,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true}}
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
@@ -2604,7 +2605,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 		for _, db := range dbDescs {
 			err := forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 				return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fnDesc, err := p.Descriptors().GetImmutableFunctionByID(ctx, p.txn, overload.ID, tree.ObjectLookupFlags{})
+					fnDesc, err := p.Descriptors().GetImmutableFunctionByID(ctx, p.txn, overload.ID, flags)
 					if err != nil {
 						return err
 					}
@@ -5571,7 +5572,7 @@ SELECT
   plan_hash,
   app_name,
   max(metadata) as metadata,
-  crdb_internal.merge_statement_stats(array_agg(statistics)),
+  crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
   max(sampled_plan),
   aggregation_interval,
   array_remove(array_agg(index_rec), NULL) AS index_recommendations

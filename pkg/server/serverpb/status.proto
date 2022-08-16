@@ -1580,6 +1580,7 @@ message StatementDetailsResponse {
       (gogoproto.stdduration) = true];
     string explain_plan = 4;
     uint64 plan_hash = 5;
+    repeated string index_recommendations = 6;
   }
 
   // statement returns the total statistics for the statement.

@@ -343,6 +343,48 @@ func (m *AlterIndex) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *AlterIndexVisible) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.TableName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.TableName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.IndexName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IndexName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.IndexName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.NotVisible {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NotVisible\":true"...)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *AlterRole) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -740,6 +782,30 @@ func (m *ChangeDatabasePrivilege) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, "\"DatabaseName\":\""...)
 		b = append(b, redact.StartMarker()...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.DatabaseName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *ChangeFunctionPrivilege) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLPrivilegeEventDetails.AppendJSONFields(printComma, b)
+
+	if m.FuncName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FuncName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.FuncName)))))
 		b = append(b, redact.EndMarker()...)
 		b = append(b, '"')
 	}

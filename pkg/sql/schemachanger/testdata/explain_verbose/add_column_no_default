@@ -20,26 +20,21 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │         rule: "column name set right after column existence"
 │       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
-│       │   │         rule: "column named before column type becomes public"
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │       │     rule: "column existence precedes column dependents"
-│       │       │
-│       │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
-│       │       │     rule: "column name and type to public after all index column to public"
-│       │       │
-│       │       └── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
-│       │             rule: "column name and type to public after all index column to public"
+│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │             rule: "column existence precedes column dependents"
 │       │
 │       └── • 5 Mutation operations
 │           │
@@ -136,7 +131,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
         ├── • 1 element transitioning toward PUBLIC
         │   │
         │   └── • Column:{DescID: 106, ColumnID: 2}
-        │         WRITE_ONLY → PUBLIC
+        │       │ WRITE_ONLY → PUBLIC
+        │       │
+        │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+        │       │     rule: "column dependents exist before column becomes public"
+        │       │
+        │       ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+        │       │     rule: "column dependents exist before column becomes public"
+        │       │
+        │       └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+        │             rule: "column dependents exist before column becomes public"
         │
         └── • 4 Mutation operations
             │

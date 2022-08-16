@@ -14,7 +14,6 @@ package tabledesc
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -34,10 +33,6 @@ var _ catalog.TableDescriptor = (*immutable)(nil)
 var _ catalog.TableDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 var _ catalog.TableDescriptor = (*wrapper)(nil)
-
-// ConstraintIDsAddedToTableDescsVersion constraint IDs have been added to table
-// descriptors at this cluster version.
-const ConstraintIDsAddedToTableDescsVersion = clusterversion.RemoveIncompatibleDatabasePrivileges
 
 // wrapper is the base implementation of the catalog.Descriptor
 // interface, which is overloaded by immutable and Mutable.
@@ -116,6 +111,12 @@ func (desc *wrapper) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// GetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
 // ByteSize implements the Descriptor interface.
 func (desc *wrapper) ByteSize() int64 {
 	return int64(desc.Size())
@@ -183,6 +184,20 @@ func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
 // index.
 func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.IndexDescriptor) {
 	desc.Indexes[indexOrdinal-1] = index
+}
+
+// InitializeImport binds the import start time to the table descriptor
+func (desc *Mutable) InitializeImport(startWallTime int64) error {
+	if desc.ImportStartWallTime != 0 {
+		return errors.AssertionFailedf("Import in progress with start time %v", desc.ImportStartWallTime)
+	}
+	desc.ImportStartWallTime = startWallTime
+	return nil
+}
+
+// FinalizeImport removes the ImportStartTime
+func (desc *Mutable) FinalizeImport() {
+	desc.ImportStartWallTime = 0
 }
 
 // UpdateIndexPartitioning applies the new partition and adjusts the column info
@@ -653,4 +668,9 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 		return privilege.Sequence
 	}
 	return privilege.Table
+}
+
+// GetInProgressImportStartTime returns the start wall time of the import if there's one in progress
+func (desc *wrapper) GetInProgressImportStartTime() int64 {
+	return desc.ImportStartWallTime
 }

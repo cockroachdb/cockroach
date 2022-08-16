@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1589,12 +1590,80 @@ var informationSchemaRoutinePrivilegesTable = virtualSchemaTable{
 }
 
 var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
-	comment: "role_routine_grants was created for compatibility and is currently unimplemented",
+	// TODO(chengxiong): add builtin function privileges as well.
+	comment: "privileges granted on functions (incomplete; only contains privileges of user-defined functions)",
 	schema:  vtable.InformationSchemaRoleRoutineGrants,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		var dbDescs []catalog.DatabaseDescriptor
+		if db == nil {
+			var err error
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn())
+			if err != nil {
+				return err
+			}
+		} else {
+			dbDescs = append(dbDescs, db)
+		}
+		for _, db := range dbDescs {
+			err := db.ForEachSchema(func(id descpb.ID, name string) error {
+				sc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, id, tree.SchemaLookupFlags{Required: true})
+				if err != nil {
+					return err
+				}
+				return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+					fn, err := p.Descriptors().GetMutableFunctionByID(ctx, p.txn, overload.ID, tree.ObjectLookupFlagsWithRequired())
+					if err != nil {
+						return err
+					}
+					privs := fn.GetPrivileges()
+					dbNameStr := tree.NewDString(db.GetName())
+					scNameStr := tree.NewDString(sc.GetName())
+					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fn.GetName(), catid.FuncIDToOID(fn.GetID())))
+					fnName := tree.NewDString(fn.GetName())
+					// EXECUTE is the only privilege kind relevant to functions.
+					exPriv := tree.NewDString(privilege.EXECUTE.String())
+					if err := addRow(
+						tree.DNull, // grantor
+						tree.NewDString(privs.Owner().Normalized()), // grantee
+						dbNameStr,      // specific_catalog
+						scNameStr,      // specific_schema
+						fnSpecificName, // specific_name
+						dbNameStr,      // routine_catalog
+						scNameStr,      // routine_schema
+						fnName,         // routine_name
+						exPriv,         // privilege_type
+						yesString,      // is_grantable
+					); err != nil {
+						return err
+					}
+					for _, user := range privs.Users {
+						if !privilege.EXECUTE.IsSetIn(user.Privileges) {
+							continue
+						}
+						if err := addRow(
+							tree.DNull, // grantor
+							tree.NewDString(user.User().Normalized()), // grantee
+							dbNameStr,      // specific_catalog
+							scNameStr,      // specific_schema
+							fnSpecificName, // specific_name
+							dbNameStr,      // routine_catalog
+							scNameStr,      // routine_schema
+							fnName,         // routine_name
+							exPriv,         // privilege_type
+							yesOrNoDatum(privilege.EXECUTE.IsSetIn(user.WithGrantOption)), // is_grantable
+						); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+			})
+			if err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var informationSchemaElementTypesTable = virtualSchemaTable{

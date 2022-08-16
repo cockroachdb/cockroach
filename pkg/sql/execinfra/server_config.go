@@ -149,10 +149,10 @@ type ServerConfig struct {
 	// Dialer for communication between SQL nodes/pods.
 	PodNodeDialer *nodedialer.Dialer
 
-	// SessionBoundInternalExecutorFactory is used to construct session-bound
+	// InternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
@@ -192,6 +192,9 @@ type ServerConfig struct {
 	// ExternalIORecorder is used to record reads and writes from
 	// external services (such as external storage)
 	ExternalIORecorder multitenant.TenantSideExternalIORecorder
+
+	// RangeStatsFetcher is used to fetch range stats for keys.
+	RangeStatsFetcher eval.RangeStatsFetcher
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

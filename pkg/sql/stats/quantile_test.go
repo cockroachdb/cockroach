@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,19 +40,18 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 		types.Float4,
 	}
 	colTypes = append(colTypes, types.Scalar...)
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	rng, seed := randutil.NewTestRand()
 	for _, colType := range colTypes {
-		if canMakeQuantile(colType) {
+		if canMakeQuantile(histVersion, colType) {
 			for i := 0; i < 5; i++ {
 				t.Run(fmt.Sprintf("%v/%v", colType.Name(), i), func(t *testing.T) {
-					hist, rowCount := randHist(evalCtx, colType, rng)
+					hist, rowCount := randHist(colType, rng)
 					qfun, err := makeQuantile(hist, rowCount)
 					if err != nil {
 						t.Errorf("seed: %v unexpected makeQuantile error: %v", seed, err)
 						return
 					}
-					hist2, err := qfun.toHistogram(evalCtx, colType, rowCount)
+					hist2, err := qfun.toHistogram(colType, rowCount)
 					if err != nil {
 						t.Errorf("seed: %v unexpected quantile.toHistogram error: %v", seed, err)
 						return
@@ -70,10 +68,10 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 // randHist makes a random histogram of the specified type, with [1, 200]
 // buckets. Not all types are supported. Every bucket will have NumEq > 0 but
 // could have NumRange == 0.
-func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogram, float64) {
+func randHist(colType *types.T, rng *rand.Rand) (histogram, float64) {
 	numBuckets := rng.Intn(200) + 1
 	buckets := make([]cat.HistogramBucket, numBuckets)
-	bounds := randBounds(evalCtx, colType, rng, numBuckets)
+	bounds := randBounds(colType, rng, numBuckets)
 	buckets[0].NumEq = float64(rng.Intn(100) + 1)
 	buckets[0].UpperBound = bounds[0]
 	rowCount := buckets[0].NumEq
@@ -96,10 +94,11 @@ func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogra
 		rowCount += rows
 	}
 	// Set DistinctRange in all buckets.
+	var compareCtx *eval.Context
 	for i := 1; i < len(buckets); i++ {
-		lowerBound := getNextLowerBound(evalCtx, buckets[i-1].UpperBound)
+		lowerBound := getNextLowerBound(compareCtx, buckets[i-1].UpperBound)
 		buckets[i].DistinctRange = estimatedDistinctValuesInRange(
-			evalCtx, buckets[i].NumRange, lowerBound, buckets[i].UpperBound,
+			compareCtx, buckets[i].NumRange, lowerBound, buckets[i].UpperBound,
 		)
 	}
 	return histogram{buckets: buckets}, rowCount
@@ -109,7 +108,7 @@ func randHist(evalCtx *eval.Context, colType *types.T, rng *rand.Rand) (histogra
 // type. Not all types are supported. This differs from randgen.RandDatum in
 // that it generates no "interesting" Datums, and differs from
 // randgen.RandDatumSimple in that it generates distinct Datums without repeats.
-func randBounds(evalCtx *eval.Context, colType *types.T, rng *rand.Rand, num int) tree.Datums {
+func randBounds(colType *types.T, rng *rand.Rand, num int) tree.Datums {
 	datums := make(tree.Datums, num)
 
 	// randInts creates an ordered slice of num distinct random ints in the closed
@@ -437,7 +436,7 @@ func TestQuantileToHistogram(t *testing.T) {
 		{
 			qfun: zeroQuantile,
 			rows: 0,
-			hist: nil,
+			hist: testHistogram{},
 		},
 		{
 			qfun: zeroQuantile,
@@ -562,10 +561,9 @@ func TestQuantileToHistogram(t *testing.T) {
 			err:  true,
 		},
 	}
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			hist, err := tc.qfun.toHistogram(evalCtx, types.Float, tc.rows)
+			hist, err := tc.qfun.toHistogram(types.Float, tc.rows)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("test case %d unexpected quantile.toHistogram err: %v", i, err)
@@ -839,7 +837,7 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 			err: true,
 		},
 	}
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var compareCtx *eval.Context
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			val, err := toQuantileValue(tc.dat)
@@ -863,7 +861,7 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 				t.Errorf("test case %d (%v) unexpected fromQuantileValue err: %v", i, tc.typ.Name(), err)
 				return
 			}
-			cmp, err := res.CompareError(evalCtx, tc.dat)
+			cmp, err := res.CompareError(compareCtx, tc.dat)
 			if err != nil {
 				t.Errorf("test case %d (%v) unexpected CompareError err: %v", i, tc.typ.Name(), err)
 				return
@@ -1116,7 +1114,7 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 			res: quantileMaxTimestampSec,
 		},
 	}
-	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var compareCtx *eval.Context
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			d, err := fromQuantileValue(tc.typ, tc.val)
@@ -1130,7 +1128,7 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 				t.Errorf("test case %d (%v) expected fromQuantileValue err", i, tc.typ.Name())
 				return
 			}
-			cmp, err := d.CompareError(evalCtx, tc.dat)
+			cmp, err := d.CompareError(compareCtx, tc.dat)
 			if err != nil {
 				t.Errorf("test case %d (%v) unexpected CompareError err: %v", i, tc.typ.Name(), err)
 				return

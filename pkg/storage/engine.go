@@ -165,16 +165,20 @@ type SimpleMVCCIterator interface {
 	// comment on SimpleMVCCIterator.
 	HasPointAndRange() (bool, bool)
 	// RangeBounds returns the range bounds for the current range key, or an
-	// empty span if there are none. The returned keys are only valid until the
-	// next iterator call.
+	// empty span if there are none. The returned keys are valid until the
+	// range key changes, see RangeKeyChanged().
 	RangeBounds() roachpb.Span
 	// RangeKeys returns a stack of all range keys (with different timestamps) at
 	// the current key position. When at a point key, it will return all range
-	// keys overlapping that point key. The stack is only valid until the next
-	// iterator operation. For details on range keys, see comment on
-	// SimpleMVCCIterator, or this tech note:
+	// keys overlapping that point key. The stack is valid until the range key
+	// changes, see RangeKeyChanged().
+	//
+	// For details on range keys, see SimpleMVCCIterator comment, or tech note:
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
 	RangeKeys() MVCCRangeKeyStack
+	// RangeKeyChanged returns true if the previous seek or step moved to a
+	// different range key (or none at all). This includes an exhausted iterator.
+	RangeKeyChanged() bool
 }
 
 // IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
@@ -263,6 +267,9 @@ type MVCCIterator interface {
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
+	// IsPrefix returns true if the MVCCIterator is a prefix iterator, i.e.
+	// created with IterOptions.Prefix enabled.
+	IsPrefix() bool
 	// SupportsPrev returns true if MVCCIterator implementation supports reverse
 	// iteration with Prev() or SeekLT().
 	SupportsPrev() bool
@@ -299,6 +306,9 @@ type EngineIterator interface {
 	EngineRangeBounds() (roachpb.Span, error)
 	// EngineRangeKeys returns the engine range keys at the current position.
 	EngineRangeKeys() []EngineRangeKeyValue
+	// RangeKeyChanged returns true if the previous seek or step moved to a
+	// different range key (or none at all). This includes an exhausted iterator.
+	RangeKeyChanged() bool
 	// UnsafeEngineKey returns the same value as EngineKey, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
@@ -935,6 +945,10 @@ type Engine interface {
 	// calls to this method. Hence, this should be used with care, with only one
 	// caller, which is currently the admission control subsystem.
 	GetInternalIntervalMetrics() *pebble.InternalIntervalMetrics
+
+	// SetCompactionConcurrency is used to set the engine's compaction
+	// concurrency. It returns the previous compaction concurrency.
+	SetCompactionConcurrency(n uint64) uint64
 }
 
 // Batch is the interface for batch specific operations.

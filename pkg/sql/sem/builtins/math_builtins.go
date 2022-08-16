@@ -36,6 +36,8 @@ var (
 	errAbsOfMinInt64  = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
 	errLogOfNegNumber = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
 	errLogOfZero      = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
+
+	bigTen = apd.NewBigInt(10)
 )
 
 const (
@@ -517,10 +519,46 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Trunc(x))), nil
 		}, "Truncates the decimal values of `val`.", volatility.Immutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
+			if x.Form == apd.NaN || x.Form == apd.Infinite {
+				return &tree.DDecimal{Decimal: *x}, nil
+			}
 			dd := &tree.DDecimal{}
 			x.Modf(&dd.Decimal, nil)
 			return dd, nil
 		}, "Truncates the decimal values of `val`.", volatility.Immutable),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Decimal}, {"scale", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The algorithm here is also used in shopspring/decimal; see
+				// https://github.com/shopspring/decimal/blob/f55dd564545cec84cf84f7a53fb3025cdbec1c4f/decimal.go#L1315
+				dec := tree.MustBeDDecimal(args[0]).Decimal
+				scale := -int64(tree.MustBeDInt(args[1]))
+				if scale > int64(tree.DecimalCtx.MaxExponent) {
+					scale = int64(tree.DecimalCtx.MaxExponent)
+				} else if scale < int64(tree.DecimalCtx.MinExponent) {
+					scale = int64(tree.DecimalCtx.MinExponent)
+				}
+				if dec.Form == apd.NaN || dec.Form == apd.Infinite || scale == int64(dec.Exponent) {
+					return &tree.DDecimal{Decimal: dec}, nil
+				} else if scale >= (dec.NumDigits() + int64(dec.Exponent)) {
+					return &tree.DDecimal{Decimal: *decimalZero}, nil
+				}
+				ret := &tree.DDecimal{}
+				diff := math.Abs(float64(scale) - float64(dec.Exponent))
+				expScale := apd.NewBigInt(0).Exp(bigTen, apd.NewBigInt(int64(diff)), nil)
+				if scale > int64(dec.Exponent) {
+					_ = ret.Coeff.Quo(&dec.Coeff, expScale)
+				} else if scale < int64(dec.Exponent) {
+					_ = ret.Coeff.Mul(&dec.Coeff, expScale)
+				}
+				ret.Exponent = int32(scale)
+				ret.Negative = dec.Negative
+				return ret, nil
+			},
+			Info:       "Truncate `val` to `scale` decimal places",
+			Volatility: volatility.Immutable,
+		},
 	),
 
 	"width_bucket": makeBuiltin(defProps(),

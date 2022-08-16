@@ -189,6 +189,11 @@ func (i *MVCCIterator) RangeKeys() storage.MVCCRangeKeyStack {
 	return i.i.RangeKeys()
 }
 
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (i *MVCCIterator) RangeKeyChanged() bool {
+	return i.i.RangeKeyChanged()
+}
+
 // FindSplitKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
@@ -208,6 +213,11 @@ func (i *MVCCIterator) FindSplitKey(
 // Stats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
+}
+
+// IsPrefix is part of the storage.MVCCIterator interface.
+func (i *MVCCIterator) IsPrefix() bool {
+	return i.i.IsPrefix()
 }
 
 // SupportsPrev is part of the storage.MVCCIterator interface.
@@ -354,6 +364,11 @@ func (i *EngineIterator) EngineRangeBounds() (roachpb.Span, error) {
 // EngineRangeKeys is part of the storage.EngineIterator interface.
 func (i *EngineIterator) EngineRangeKeys() []storage.EngineRangeKeyValue {
 	return i.i.EngineRangeKeys()
+}
+
+// RangeKeyChanged is part of the storage.EngineIterator interface.
+func (i *EngineIterator) RangeKeyChanged() bool {
+	return i.i.RangeKeyChanged()
 }
 
 // UnsafeEngineKey is part of the storage.EngineIterator interface.

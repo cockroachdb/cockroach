@@ -702,6 +702,25 @@ ORDER BY table_name
 				},
 			},
 		},
+		{
+			name:   "array",
+			create: `a string, b string[]`,
+			typ:    "CSV",
+			data:   `cat,"{somevalue,anothervalue,anothervalue123}"`,
+			query: map[string][][]string{
+				`SELECT * from t`: {
+					{"cat", "{somevalue,anothervalue,anothervalue123}"},
+				},
+			},
+		},
+		{
+			name:     "array",
+			create:   `a string, b string[]`,
+			typ:      "CSV",
+			data:     `dog,{some,thing}`,
+			err:      "error parsing row 1: expected 2 fields, got 3",
+			rejected: "dog,{some,thing}\n",
+		},
 
 		// PG COPY
 		{
@@ -2025,8 +2044,8 @@ func TestFailedImportGC(t *testing.T) {
 	close(blockGC)
 	// Ensure that a GC job was created, and wait for it to finish.
 	doneGCQuery := fmt.Sprintf(
-		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND created > %s",
-		"SCHEMA CHANGE GC", jobs.StatusSucceeded, beforeImport.String(),
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND running_status = '%s' AND created > %s",
+		"SCHEMA CHANGE GC", sql.RunningStatusWaitingForMVCCGC, beforeImport.String(),
 	)
 	sqlDB.CheckQueryResultsRetry(t, doneGCQuery, [][]string{{"1"}})
 	// Expect there are no more KVs for this span.
@@ -6282,8 +6301,8 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		// Ensure that a GC job was created, and wait for it to finish.
 		doneGCQuery := fmt.Sprintf(
-			"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status = '%s' AND created > %s",
-			"SCHEMA CHANGE GC", jobs.StatusSucceeded, beforeImport.String(),
+			"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND running_status = '%s' AND created > %s",
+			"SCHEMA CHANGE GC", sql.RunningStatusWaitingForMVCCGC, beforeImport.String(),
 		)
 
 		doneSchemaDropQuery := fmt.Sprintf(

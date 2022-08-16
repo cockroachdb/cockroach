@@ -336,6 +336,11 @@ type DistSender struct {
 	// LatencyFunc is used to estimate the latency to other nodes.
 	latencyFunc LatencyFunc
 
+	// locality is the description of the topography of the server on which the
+	// DistSender is running. It is used to estimate the latency to other nodes
+	// in the absence of a latency function.
+	locality roachpb.Locality
+
 	// If set, the DistSender will try the replicas in the order they appear in
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
@@ -386,6 +391,10 @@ type DistSenderConfig struct {
 	FirstRangeProvider FirstRangeProvider
 	RangeDescriptorDB  rangecache.RangeDescriptorDB
 
+	// Locality is the description of the topography of the server on which the
+	// DistSender is running.
+	Locality roachpb.Locality
+
 	// KVInterceptor is set for tenants; when set, information about all
 	// BatchRequests and BatchResponses are passed through this interceptor, which
 	// can potentially throttle requests.
@@ -405,6 +414,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		nodeDescs:     cfg.NodeDescs,
 		metrics:       makeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
+		locality:      cfg.Locality,
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -545,46 +555,17 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 // getNodeID attempts to return the local node ID. It returns 0 if the DistSender
 // does not have access to the Gossip network.
 func (ds *DistSender) getNodeID() roachpb.NodeID {
-	// TODO(nvanbenschoten): open an issue about the effect of this.
+	// Today, secondary tenants don't run in process with KV instances, so they
+	// don't have access to the Gossip network. The DistSender uses the node ID to
+	// preferentially route requests to a local replica (if one exists). Not
+	// knowing the node ID, and thus not being able to take advantage of this
+	// optimization is okay, given tenants not running in-process with KV
+	// instances have no such optimization to take advantage of to begin with.
 	g, ok := ds.nodeDescs.(*gossip.Gossip)
 	if !ok {
 		return 0
 	}
 	return g.NodeID.Get()
-}
-
-// getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
-// it from the Gossip network if a nil value is found.
-// We must jump through hoops here to get the node descriptor because it's not available
-// until after the node has joined the gossip network and been allowed to initialize
-// its stores.
-func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
-	if desc := atomic.LoadPointer(&ds.nodeDescriptor); desc != nil {
-		return (*roachpb.NodeDescriptor)(desc)
-	}
-	// TODO(nvanbenschoten): open an issue about the effect of this.
-	g, ok := ds.nodeDescs.(*gossip.Gossip)
-	if !ok {
-		return nil
-	}
-
-	ownNodeID := g.NodeID.Get()
-	if ownNodeID > 0 {
-		// TODO(tschottdorf): Consider instead adding the NodeID of the
-		// coordinator to the header, so we can get this from incoming
-		// requests. Just in case we want to mostly eliminate gossip here.
-		nodeDesc := &roachpb.NodeDescriptor{}
-		if err := g.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), nodeDesc); err == nil {
-			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc))
-			return nodeDesc
-		}
-	}
-	if log.V(1) {
-		ctx := ds.AnnotateCtx(context.TODO())
-		log.Infof(ctx, "unable to determine this node's attributes for replica "+
-			"selection; node is most likely bootstrapping")
-	}
-	return nil
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
@@ -653,14 +634,18 @@ func (ds *DistSender) initAndVerifyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
 	// Attach the local node ID to each request.
-	if ba.Header.GatewayNodeID == 0 {
-		ba.Header.GatewayNodeID = ds.getNodeID()
+	if ba.GatewayNodeID == 0 {
+		ba.GatewayNodeID = ds.getNodeID()
 	}
+
+	// Attach a clock reading from the local node to help stabilize HLCs across
+	// the cluster. This is NOT required for correctness.
+	ba.Now = ds.clock.NowAsClockTimestamp()
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp.IsEmpty() {
-		ba.Timestamp = ds.clock.Now()
+		ba.Timestamp = ba.Now.ToTimestamp()
 	}
 
 	if len(ba.Requests) < 1 {
@@ -1964,7 +1949,7 @@ func (ds *DistSender) sendToReplicas(
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+			replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
 		}
 
 		idx := -1
@@ -1983,7 +1968,7 @@ func (ds *DistSender) sendToReplicas(
 	case roachpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+		replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
@@ -2029,12 +2014,6 @@ func (ds *DistSender) sendToReplicas(
 		// part of routing.entry.Desc. The transport starts up initialized with
 		// routing's replica info, but routing can be updated as we go through the
 		// replicas, whereas transport isn't.
-		//
-		// TODO(andrei): The structure around here is no good; we're potentially
-		// updating routing with replicas that are not part of transport, and so
-		// those replicas will never be tried. Instead, we'll exhaust the transport
-		// and bubble up a SendError, which will cause a cache eviction and a new
-		// descriptor lookup potentially unnecessarily.
 		lastErr := err
 		if lastErr == nil && br != nil {
 			lastErr = br.Error.GoError()
@@ -2216,11 +2195,9 @@ func (ds *DistSender) sendToReplicas(
 
 					var updatedLeaseholder bool
 					if tErr.Lease != nil {
-						updatedLeaseholder = routing.UpdateLease(ctx, tErr.Lease, tErr.RangeDesc.Generation)
+						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCache(ctx, tErr.Lease, &tErr.RangeDesc)
 					} else if tErr.LeaseHolder != nil {
-						// tErr.LeaseHolder might be set when tErr.Lease isn't.
-						routing.UpdateLeaseholder(ctx, *tErr.LeaseHolder, tErr.RangeDesc.Generation)
-						updatedLeaseholder = true
+						updatedLeaseholder = routing.SyncTokenAndMaybeUpdateCacheWithSpeculativeLease(ctx, *tErr.LeaseHolder, &tErr.RangeDesc)
 					}
 					// Move the new leaseholder to the head of the queue for the next
 					// retry. Note that the leaseholder might not be the one indicated by
@@ -2234,7 +2211,25 @@ func (ds *DistSender) sendToReplicas(
 						// lease expires and someone else gets a new one, so by moving on we
 						// get out of possibly infinite loops.
 						if !lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit {
-							transport.MoveToFront(*lh)
+							moved := transport.MoveToFront(*lh)
+							if !moved {
+								// The transport always includes the client's view of the
+								// leaseholder when it's constructed. If the leaseholder can't
+								// be found on the transport then it must be the case that the
+								// routing was updated with lease information that is not
+								// compatible with the range descriptor that was used to
+								// construct the transport. A client may have an arbitrarily
+								// stale view of the leaseholder, but it is never expected to
+								// regress. As such, advancing through each replica on the
+								// transport until it's exhausted is unlikely to achieve much.
+								//
+								// We bail early by returning a SendError. The expectation is
+								// for the client to retry with a fresher eviction token.
+								log.VEventf(
+									ctx, 2, "transport incompatible with updated routing; bailing early",
+								)
+								return nil, newSendError(fmt.Sprintf("leaseholder not found in transport; last error: %s", tErr.Error()))
+							}
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
@@ -2249,6 +2244,15 @@ func (ds *DistSender) sendToReplicas(
 					// the leaseholder, we backoff because it might be the case that
 					// there's a lease transfer in progress and the would-be leaseholder
 					// has not yet applied the new lease.
+					//
+					// TODO(arul): The idea here is for the client to not keep sending
+					// the would-be leaseholder multiple requests and backoff a bit to let
+					// it apply the its lease. Instead of deriving this information like
+					// we do above, we could instead check if we're retrying the same
+					// leaseholder (i.e, if the leaseholder on the routing is the same as
+					// the replica we just tried), in which case we should backoff. With
+					// this scheme we'd no longer have to track "updatedLeaseholder" state
+					// when syncing the NLHE with the range cache.
 					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower
 					if shouldBackoff {
 						ds.metrics.InLeaseTransferBackoffs.Inc(1)

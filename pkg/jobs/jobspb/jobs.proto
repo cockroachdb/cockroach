@@ -756,13 +756,22 @@ message SchemaChangeProgress {
 
 message SchemaChangeGCProgress {
   enum Status {
-    // Waiting for the index/table to expire.
-    WAITING_FOR_GC = 0;
+    // Waiting for the index/table to expire before issuing ClearRange
+    // requests over the table span.
+    //
+    // TODO(ajwerner): Remove this in 23.1.
+    WAITING_FOR_CLEAR = 0;
     // The GC TTL has expired. This element is marked for imminent deletion
-    DELETING = 1;
+    // or is being cleared.
+    //
+    // TODO(ajwerner): Remove this in 23.1.
+    CLEARING = 1;
     // This element has been deleted. The job is done when all elements are in
     // this state.
-    DELETED = 2;
+    CLEARED = 2;
+    // The index has been deleted, but we need to wait for the data to be
+    // removed before the relevant descriptors and zone configs can be deleted.
+    WAITING_FOR_MVCC_GC = 3;
   }
 
   message IndexProgress {

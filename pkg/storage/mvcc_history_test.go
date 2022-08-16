@@ -81,7 +81,7 @@ var (
 // cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [noCoveredStats]
+// del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [idempotent] [noCoveredStats]
 // del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
@@ -92,7 +92,7 @@ var (
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey]
 //
-// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis [emitOnSeekGE]] [maskBelow=<int>[,<int>]]
+// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis] [maskBelow=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
 // iter_seek_ge   k=<key> [ts=<int>[,<int>]]
 // iter_seek_lt   k=<key> [ts=<int>[,<int>]]
@@ -110,6 +110,8 @@ var (
 // clear_range    k=<key> end=<key>
 // clear_rangekey k=<key> end=<key> ts=<int>[,<int>]
 // clear_time_range k=<key> end=<key> ts=<int>[,<int>] targetTs=<int>[,<int>] [clearRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchByteSize=<int>]
+//
+// gc_clear_range k=<key> end=<key> startTs=<int>[,<int>] ts=<int>[,<int>]
 //
 // sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
 // sst_put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
@@ -668,6 +670,7 @@ var commands = map[string]cmd{
 	"del_range_pred":   {typDataUpdate, cmdDeleteRangePredicate},
 	"export":           {typReadOnly, cmdExport},
 	"get":              {typReadOnly, cmdGet},
+	"gc_clear_range":   {typDataUpdate, cmdGCClearRange},
 	"increment":        {typDataUpdate, cmdIncrement},
 	"initput":          {typDataUpdate, cmdInitPut},
 	"merge":            {typDataUpdate, cmdMerge},
@@ -948,6 +951,16 @@ func cmdClearTimeRange(e *evalCtx) error {
 	return nil
 }
 
+func cmdGCClearRange(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	gcTs := e.getTs(nil)
+	return e.withWriter("gc_clear_range", func(rw ReadWriter) error {
+		cms, err := ComputeStats(rw, key, endKey, 100e9)
+		require.NoError(e.t, err, "failed to compute range stats")
+		return MVCCGarbageCollectWholeRange(e.ctx, rw, e.ms, key, endKey, gcTs, cms)
+	})
+}
+
 func cmdCPut(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
@@ -1055,6 +1068,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
+	idempotent := e.hasArg("idempotent")
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
@@ -1070,7 +1084,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	}
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, 0, msCovered)
+		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, idempotent, 0, msCovered)
 	})
 }
 
@@ -1432,12 +1446,16 @@ func cmdIterNew(e *evalCtx) error {
 	}
 
 	r, closer := metamorphicReader(e)
-	e.iter = &iterWithCloser{r.NewMVCCIterator(kind, opts), closer}
-
+	iter := r.NewMVCCIterator(kind, opts)
 	if e.hasArg("pointSynthesis") {
-		e.iter = newPointSynthesizingIter(e.mvccIter(), e.hasArg("emitOnSeekGE"))
+		iter = newPointSynthesizingIter(iter)
+	}
+	if opts.Prefix != iter.IsPrefix() {
+		return errors.Errorf("prefix iterator returned IsPrefix=false")
 	}
 
+	e.iter = &iterWithCloser{iter, closer}
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1495,6 +1513,7 @@ func cmdIterNewIncremental(e *evalCtx) error {
 
 	r, closer := metamorphicReader(e)
 	e.iter = &iterWithCloser{NewMVCCIncrementalIterator(r, opts), closer}
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1518,6 +1537,7 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 	r, closer := metamorphicReader(e)
 	iter := &iterWithCloser{r.NewMVCCIterator(MVCCKeyIterKind, opts), closer}
 	e.iter = NewReadAsOfIterator(iter, asOf)
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1579,6 +1599,25 @@ func cmdIterPrev(e *evalCtx) error {
 
 func cmdIterScan(e *evalCtx) error {
 	reverse := e.hasArg("reverse")
+	// printIter will automatically check RangeKeyChanged() by comparing the
+	// previous e.iterRangeKeys to the current. However, iter_scan is special in
+	// that it also prints the current iterator position before stepping, so we
+	// adjust e.iterRangeKeys to comply with the previous positioning operation.
+	// The previous position already passed this check, so it doesn't matter that
+	// we're fudging e.rangeKeys.
+	if _, ok := e.bareIter().(*MVCCIncrementalIterator); !ok {
+		if e.iter.RangeKeyChanged() {
+			if e.iterRangeKeys.IsEmpty() {
+				e.iterRangeKeys = MVCCRangeKeyStack{
+					Bounds:   roachpb.Span{Key: keys.MinKey.Next(), EndKey: keys.MaxKey},
+					Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
+				}
+			} else {
+				e.iterRangeKeys.Clear()
+			}
+		}
+	}
+
 	for {
 		printIter(e)
 		if ok, err := e.iter.Valid(); err != nil {
@@ -1657,6 +1696,7 @@ func cmdSSTIterNew(e *evalCtx) error {
 		return err
 	}
 	e.iter = iter
+	e.iterRangeKeys.Clear()
 	return nil
 }
 
@@ -1671,6 +1711,7 @@ func printIter(e *evalCtx) {
 	}
 	if !ok {
 		e.results.buf.Print(" .")
+		e.iterRangeKeys.Clear()
 		return
 	}
 	hasPoint, hasRange := e.iter.HasPointAndRange()
@@ -1693,6 +1734,7 @@ func printIter(e *evalCtx) {
 			e.results.buf.Printf(" %s=%s", e.iter.UnsafeKey(), value)
 		}
 	}
+
 	if hasRange {
 		rangeKeys := e.iter.RangeKeys()
 		e.results.buf.Printf(" %s/[", rangeKeys.Bounds)
@@ -1708,6 +1750,25 @@ func printIter(e *evalCtx) {
 		}
 		e.results.buf.Printf("]")
 	}
+
+	if checkAndUpdateRangeKeyChanged(e) {
+		e.results.buf.Printf(" !")
+	}
+}
+
+func checkAndUpdateRangeKeyChanged(e *evalCtx) bool {
+	// MVCCIncrementalIterator does not yet support RangeKeyChanged().
+	if _, ok := e.bareIter().(*MVCCIncrementalIterator); ok {
+		return false
+	}
+	rangeKeyChanged := e.iter.RangeKeyChanged()
+	rangeKeys := e.iter.RangeKeys()
+	if rangeKeyChanged != !rangeKeys.Equal(e.iterRangeKeys) {
+		e.t.Fatalf("incorrect RangeKeyChanged=%t (was:%s is:%s) at %s\n",
+			rangeKeyChanged, e.iterRangeKeys, rangeKeys, e.td.Pos)
+	}
+	rangeKeys.CloneInto(&e.iterRangeKeys)
+	return rangeKeyChanged
 }
 
 // formatStats formats MVCC stats.
@@ -1767,19 +1828,20 @@ type evalCtx struct {
 		txn               *roachpb.Transaction
 		traceIntentWrites bool
 	}
-	ctx        context.Context
-	st         *cluster.Settings
-	engine     Engine
-	iter       SimpleMVCCIterator
-	t          *testing.T
-	td         *datadriven.TestData
-	txns       map[string]*roachpb.Transaction
-	txnCounter uint128.Uint128
-	locks      map[string]*roachpb.Transaction
-	ms         *enginepb.MVCCStats
-	sstWriter  *SSTWriter
-	sstFile    *MemFile
-	ssts       [][]byte
+	ctx           context.Context
+	st            *cluster.Settings
+	engine        Engine
+	iter          SimpleMVCCIterator
+	iterRangeKeys MVCCRangeKeyStack
+	t             *testing.T
+	td            *datadriven.TestData
+	txns          map[string]*roachpb.Transaction
+	txnCounter    uint128.Uint128
+	locks         map[string]*roachpb.Transaction
+	ms            *enginepb.MVCCStats
+	sstWriter     *SSTWriter
+	sstFile       *MemFile
+	ssts          [][]byte
 }
 
 func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {

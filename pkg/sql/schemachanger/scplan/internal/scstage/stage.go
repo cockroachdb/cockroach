@@ -158,9 +158,16 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 		}
 	}
 
+	type beforeOrDuring int
+	const (
+		_ beforeOrDuring = iota
+		before
+		during
+	)
+
 	// Build the initial set of fulfilled nodes by traversing the graph
 	// recursively and backwards.
-	fulfilled := map[*screl.Node]bool{}
+	fulfilled := map[*screl.Node]beforeOrDuring{}
 	current := make([]*screl.Node, len(ts.Targets))
 	for i, status := range stage.Before {
 		t := &ts.Targets[i]
@@ -182,7 +189,7 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 			if _, found := fulfilled[n]; found {
 				return
 			}
-			fulfilled[n] = true
+			fulfilled[n] = before
 			for _, e := range edgesTo[n] {
 				dfs(e.From())
 			}
@@ -215,7 +222,9 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 			// Prevent making progress on this target if there are unmet dependencies.
 			var hasUnmetDeps bool
 			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph.DepEdge) error {
-				hasUnmetDeps = hasUnmetDeps || !fulfilled[de.From()]
+				if _, isFulfilled := fulfilled[de.From()]; !isFulfilled {
+					hasUnmetDeps = true
+				}
 				return nil
 			}); err != nil {
 				return err
@@ -233,8 +242,27 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 			}
 
 			current[i] = oe.To()
-			fulfilled[oe.To()] = true
+			fulfilled[oe.To()] = during
 			hasProgressed = true
+
+			// Check same-stage or previous-stage constraints.
+			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph.DepEdge) error {
+				switch fulfilled[de.From()] {
+				case before:
+					if de.Kind() == scgraph.SameStagePrecedence {
+						return errors.Errorf("%s not reached in same stage as %s, violates rule in %s",
+							de.From(), oe.To(), de.RuleNames())
+					}
+				case during:
+					if de.Kind() == scgraph.PreviousStagePrecedence {
+						return errors.Errorf("%s reached in same stage as %s, violates rule in %s",
+							de.From(), oe.To(), de.RuleNames())
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	// When we stop making progress we expect to have reached the After state.

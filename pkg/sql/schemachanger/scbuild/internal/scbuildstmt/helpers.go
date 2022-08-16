@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -325,6 +326,10 @@ func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element)
 	return target == scpb.ToAbsent
 }
 
+func notAbsentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+	return target != scpb.ToAbsent
+}
+
 func statusAbsentOrBackfillOnlyFilter(
 	status scpb.Status, _ scpb.TargetStatus, _ scpb.Element,
 ) bool {
@@ -333,6 +338,38 @@ func statusAbsentOrBackfillOnlyFilter(
 
 func statusPublicFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
 	return status == scpb.Status_PUBLIC
+}
+
+func hasIndexIDAttrFilter(
+	indexID catid.IndexID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		idI, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+		return idI != nil && idI.(catid.IndexID) == indexID
+	}
+}
+
+func hasColumnIDAttrFilter(
+	columnID catid.ColumnID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
+		return idI != nil && idI.(catid.ColumnID) == columnID
+	}
+}
+
+func referencesColumnIDFilter(
+	columnID catid.ColumnID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		_ = screl.WalkColumnIDs(e, func(id *catid.ColumnID) error {
+			if id != nil && *id == columnID {
+				included = true
+			}
+			return nil
+		})
+		return included
+	}
 }
 
 // getPrimaryIndexes returns the primary indexes of the current table.
@@ -369,4 +406,148 @@ func indexColumnDirection(d tree.Direction) catpb.IndexColumn_Direction {
 	default:
 		panic(errors.AssertionFailedf("unknown direction %s", d))
 	}
+}
+
+// primaryIndexSpec holds a primary index element and its children.
+type primaryIndexSpec struct {
+	idx          *scpb.PrimaryIndex
+	name         *scpb.IndexName
+	partitioning *scpb.IndexPartitioning
+	columns      []*scpb.IndexColumn
+}
+
+// apply makes it possible to conveniently define build targets for all
+// the elements in the primaryIndexSpec.
+func (s primaryIndexSpec) apply(fn func(e scpb.Element)) {
+	fn(s.idx)
+	if s.name != nil {
+		fn(s.name)
+	}
+	if s.partitioning != nil {
+		fn(s.partitioning)
+	}
+	for _, ic := range s.columns {
+		fn(ic)
+	}
+}
+
+// clone conveniently deep-copies all the elements in the primaryIndexSpec.
+func (s primaryIndexSpec) clone() (c primaryIndexSpec) {
+	c.idx = protoutil.Clone(s.idx).(*scpb.PrimaryIndex)
+	if s.name != nil {
+		c.name = protoutil.Clone(s.name).(*scpb.IndexName)
+	}
+	if s.partitioning != nil {
+		c.partitioning = protoutil.Clone(s.partitioning).(*scpb.IndexPartitioning)
+	}
+	for _, ic := range s.columns {
+		c.columns = append(c.columns, protoutil.Clone(ic).(*scpb.IndexColumn))
+	}
+	return c
+}
+
+// makePrimaryIndexSpec constructs a primaryIndexSpec based on an existing
+// scpb.PrimaryIndex element.
+func makePrimaryIndexSpec(b BuildCtx, idx *scpb.PrimaryIndex) (s primaryIndexSpec) {
+	s.idx = idx
+	publicIdxTargets := b.QueryByID(idx.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(idx.IndexID))
+	_, _, s.name = scpb.FindIndexName(publicIdxTargets)
+	_, _, s.partitioning = scpb.FindIndexPartitioning(publicIdxTargets)
+	scpb.ForEachIndexColumn(publicIdxTargets, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+		s.columns = append(s.columns, ic)
+	})
+	return s
+}
+
+// tempIndexSpec holds a temporary index element and its children.
+type tempIndexSpec struct {
+	idx          *scpb.TemporaryIndex
+	partitioning *scpb.IndexPartitioning
+	columns      []*scpb.IndexColumn
+}
+
+// apply makes it possible to conveniently define build targets for all
+// the elements in the tempIndexSpec.
+func (s tempIndexSpec) apply(fn func(e scpb.Element)) {
+	fn(s.idx)
+	if s.partitioning != nil {
+		fn(s.partitioning)
+	}
+	for _, ic := range s.columns {
+		fn(ic)
+	}
+}
+
+// indexColumnSpec specifies how to construct a scpb.IndexColumn element.
+type indexColumnSpec struct {
+	columnID  catid.ColumnID
+	kind      scpb.IndexColumn_Kind
+	direction catpb.IndexColumn_Direction
+}
+
+func makeIndexColumnSpec(ic *scpb.IndexColumn) indexColumnSpec {
+	return indexColumnSpec{
+		columnID:  ic.ColumnID,
+		kind:      ic.Kind,
+		direction: ic.Direction,
+	}
+}
+
+// makeSwapPrimaryIndexSpec constructs a primaryIndexSpec and an accompanying
+// tempIndexSpec to swap out an existing primary index with.
+func makeSwapPrimaryIndexSpec(
+	b BuildCtx, out primaryIndexSpec, inColumns []indexColumnSpec,
+) (in primaryIndexSpec, temp tempIndexSpec) {
+	var inID, tempID catid.IndexID
+	var inConstraintID, tempConstraintID catid.ConstraintID
+	{
+		_, _, tbl := scpb.FindTable(b.QueryByID(out.idx.TableID).Filter(notAbsentTargetFilter))
+		inID = b.NextTableIndexID(tbl)
+		inConstraintID = b.NextTableConstraintID(tbl.TableID)
+		tempID = inID + 1
+		tempConstraintID = inConstraintID + 1
+	}
+	{
+		in = out.clone()
+		in.idx.IndexID = inID
+		in.idx.SourceIndexID = out.idx.IndexID
+		in.idx.TemporaryIndexID = tempID
+		in.idx.ConstraintID = inConstraintID
+		if in.name != nil {
+			in.name.IndexID = inID
+		}
+		if in.partitioning != nil {
+			in.partitioning.IndexID = inID
+		}
+		m := make(map[scpb.IndexColumn_Kind]uint32)
+		in.columns = in.columns[:0]
+		for _, cs := range inColumns {
+			ordinalInKind := m[cs.kind]
+			m[cs.kind] = ordinalInKind + 1
+			in.columns = append(in.columns, &scpb.IndexColumn{
+				TableID:       in.idx.TableID,
+				IndexID:       inID,
+				ColumnID:      cs.columnID,
+				OrdinalInKind: ordinalInKind,
+				Kind:          cs.kind,
+				Direction:     cs.direction,
+			})
+		}
+	}
+	{
+		s := in.clone()
+		temp.idx = &scpb.TemporaryIndex{Index: s.idx.Index}
+		temp.idx.IndexID = tempID
+		temp.idx.TemporaryIndexID = 0
+		temp.idx.ConstraintID = tempConstraintID
+		if s.partitioning != nil {
+			temp.partitioning = s.partitioning
+			temp.partitioning.IndexID = tempID
+		}
+		for _, ic := range s.columns {
+			ic.IndexID = tempID
+		}
+		temp.columns = s.columns
+	}
+	return in, temp
 }

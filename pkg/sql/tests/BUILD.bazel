@@ -29,6 +29,7 @@ go_test(
     srcs = [
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
+        "copy_file_upload_test.go",
         "empty_query_test.go",
         "enum_test.go",
         "hash_sharded_test.go",
@@ -56,6 +57,7 @@ go_test(
         "//pkg/bench",
         "//pkg/ccl",
         "//pkg/ccl/utilccl",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/internal/rsg",
@@ -99,6 +101,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
+        "//pkg/util/ioctx",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",

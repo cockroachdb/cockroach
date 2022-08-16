@@ -38,7 +38,10 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		desc,
 		false, /* includeOffline */
 		false /*avoidLeased*/)
-	return ret.(catalog.TableDescriptor), err
+	if err != nil {
+		return nil, err
+	}
+	return ret.(catalog.TableDescriptor), nil
 }
 
 // hydrateTypesInDescWithOptions installs user defined type metadata in all
@@ -264,11 +267,33 @@ func getMutableTypeLookupFunc(
 	tc *Collection, txn *kv.Txn, schema catalog.SchemaDescriptor,
 ) typedesc.TypeLookupFunc {
 	return func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
-		desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
+		// Note that getting mutable table implicit type is not allowed. To
+		// hydrate table implicit types, we don't really need a mutable type
+		// descriptor since we are not going to mutate the table because we simply
+		// need the tuple type and some metadata. So it's adequate here to get a
+		// fresh immutable.
+		flags := tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:       true,
+				IncludeDropped: true,
+				IncludeOffline: true,
+				AvoidLeased:    true,
+			},
+		}
+		typDesc, err := tc.GetImmutableTypeByID(ctx, txn, id, flags)
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}
-		dbDesc, err := tc.GetMutableDescriptorByID(ctx, txn, desc.ParentID)
+
+		_, dbDesc, err := tc.GetImmutableDatabaseByID(
+			ctx, txn, typDesc.GetParentID(),
+			tree.DatabaseLookupFlags{
+				Required:       true,
+				IncludeDropped: true,
+				IncludeOffline: true,
+				AvoidLeased:    true,
+			},
+		)
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}
@@ -278,12 +303,12 @@ func getMutableTypeLookupFunc(
 			scName = schema.GetName()
 		} else {
 			sc, err := tc.getSchemaByID(
-				ctx, txn, desc.ParentSchemaID,
+				ctx, txn, typDesc.GetParentSchemaID(),
 				tree.SchemaLookupFlags{
 					Required:       true,
 					IncludeDropped: true,
 					IncludeOffline: true,
-					RequireMutable: true,
+					AvoidLeased:    true,
 				},
 			)
 			if err != nil {
@@ -291,8 +316,8 @@ func getMutableTypeLookupFunc(
 			}
 			scName = sc.GetName()
 		}
-		name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scName, desc.Name)
-		return name, desc, nil
+		name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
+		return name, typDesc, nil
 	}
 }
 

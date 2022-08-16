@@ -1146,6 +1146,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 2880917710  50        2         true         true          false           true          false           true        false         false       true       false           1 2            0 3403232968               0 0          2 2          NULL      NULL                                                                                                                          2
 3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
+3094258318  33        1         false        false         false           false         false           true        false         false       true       false           4              0                          0            2            NULL      NULL                                                                                                                          1
 3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 3400390248  52        1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
 3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
@@ -1239,6 +1240,7 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2880917710  0                           2
 3094258317  0                           1
 3094258317  0                           2
+3094258318  0                           1
 3353994584  0                           1
 3400390248  0                           1
 3446785912  0                           1
@@ -3906,7 +3908,7 @@ objoid      classoid    objsubid  description
 4294967179  4294967123  0         foreign key constraints
 4294967178  4294967123  0         resource_groups was created for compatibility and is currently unimplemented
 4294967177  4294967123  0         role_column_grants was created for compatibility and is currently unimplemented
-4294967176  4294967123  0         role_routine_grants was created for compatibility and is currently unimplemented
+4294967176  4294967123  0         privileges granted on functions (incomplete; only contains privileges of user-defined functions)
 4294967175  4294967123  0         privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
 4294967174  4294967123  0         role_udt_grants was created for compatibility and is currently unimplemented
 4294967173  4294967123  0         role_usage_grants was created for compatibility and is currently unimplemented
@@ -4222,6 +4224,7 @@ on_update_rehome_row_enabled                          on                  NULL  
 opt_split_scan_limit                                  2048                NULL      NULL        NULL        string
 optimizer_use_histograms                              on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                          on                  NULL      NULL        NULL        string
+optimizer_use_not_visible_indexes                     off                 NULL      NULL        NULL        string
 override_multi_region_zone_config                     off                 NULL      NULL        NULL        string
 parallelize_multi_key_lookup_joins_enabled            off                 NULL      NULL        NULL        string
 password_encryption                                   scram-sha-256       NULL      NULL        NULL        string
@@ -4347,6 +4350,7 @@ on_update_rehome_row_enabled                          on                  NULL  
 opt_split_scan_limit                                  2048                NULL  user     NULL      2048                2048
 optimizer_use_histograms                              on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                          on                  NULL  user     NULL      on                  on
+optimizer_use_not_visible_indexes                     off                 NULL  user     NULL      off                 off
 override_multi_region_zone_config                     off                 NULL  user     NULL      off                 off
 parallelize_multi_key_lookup_joins_enabled            off                 NULL  user     NULL      false               false
 password_encryption                                   scram-sha-256       NULL  user     NULL      scram-sha-256       scram-sha-256
@@ -4469,6 +4473,7 @@ opt_split_scan_limit                                  NULL    NULL     NULL     
 optimizer                                             NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                              NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                          NULL    NULL     NULL     NULL        NULL
+optimizer_use_not_visible_indexes                     NULL    NULL     NULL     NULL        NULL
 override_multi_region_zone_config                     NULL    NULL     NULL     NULL        NULL
 parallelize_multi_key_lookup_joins_enabled            NULL    NULL     NULL     NULL        NULL
 password_encryption                                   NULL    NULL     NULL     NULL        NULL
@@ -4645,7 +4650,7 @@ FROM pg_proc p
 JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
-2011  array_in  array_in
+2013  array_in  array_in
 
 ## #16285
 ## int2vectors should be 0-indexed
@@ -4669,6 +4674,21 @@ ORDER BY id
 query T
 SELECT proname FROM pg_catalog.pg_proc WHERE oid = 0
 ----
+
+let $cur_max_builtin_oid
+SELECT cur_max_builtin_oid FROM [SELECT max(oid) as cur_max_builtin_oid FROM pg_catalog.pg_proc]
+
+## If this test failed (proname is the same, but oid increased), it's likely that a
+## new builtin function is implemented and  it's somewhere in the middle of the
+## existing functions at init time. Though the changes to builtin function OID is
+## generally ok, it's still better if we could move the new implement to end of the
+## list at init time (see all_builtins.go)
+## TODO(chengxiong): consider to have a deterministic list of builtin function oids
+## so that new implementations can just be added to it.
+query TT
+SELECT proname, oid FROM pg_catalog.pg_proc WHERE oid = $cur_max_builtin_oid
+----
+to_regtype  2033
 
 ## Ensure that unnest works with oid wrapper arrays
 

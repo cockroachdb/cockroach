@@ -944,6 +944,8 @@ CREATE TABLE t.foo (v INT);
 // table descriptor.
 func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 85876)
 	params := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())

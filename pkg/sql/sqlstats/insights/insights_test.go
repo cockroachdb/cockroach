@@ -36,7 +36,7 @@ func BenchmarkInsights(b *testing.B) {
 	// backpressure from the registry.
 	settings := cluster.MakeTestingClusterSettings()
 	insights.LatencyThreshold.Override(ctx, &settings.SV, 100*time.Millisecond)
-	insights.LatencyQuantileDetectorEnabled.Override(ctx, &settings.SV, true)
+	insights.AnomalyDetectionEnabled.Override(ctx, &settings.SV, true)
 
 	// Run these benchmarks with an increasing number of concurrent (simulated)
 	// SQL sessions, to gauge where our runtime performance starts to break

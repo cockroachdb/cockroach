@@ -55,11 +55,13 @@ var kmsFactoryMap = make(map[string]KMSFromURIFactory)
 
 // RegisterKMSFromURIFactory is used by every concrete KMS implementation to
 // register its factory method.
-func RegisterKMSFromURIFactory(factory KMSFromURIFactory, scheme string) {
-	if _, ok := kmsFactoryMap[scheme]; ok {
-		panic("factory method for " + scheme + " has already been registered")
+func RegisterKMSFromURIFactory(factory KMSFromURIFactory, schemes ...string) {
+	for _, scheme := range schemes {
+		if _, ok := kmsFactoryMap[scheme]; ok {
+			panic("factory method for " + scheme + " has already been registered")
+		}
+		kmsFactoryMap[scheme] = factory
 	}
-	kmsFactoryMap[scheme] = factory
 }
 
 // KMSFromURI is the method used to create a KMS instance from the provided URI.

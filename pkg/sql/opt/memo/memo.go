@@ -139,6 +139,7 @@ type Memo struct {
 	zigzagJoinEnabled                      bool
 	useHistograms                          bool
 	useMultiColStats                       bool
+	useNotVisibleIndex                     bool
 	localityOptimizedSearch                bool
 	safeUpdates                            bool
 	preferLookupJoinsForFKs                bool
@@ -188,6 +189,7 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		zigzagJoinEnabled:                      evalCtx.SessionData().ZigzagJoinEnabled,
 		useHistograms:                          evalCtx.SessionData().OptimizerUseHistograms,
 		useMultiColStats:                       evalCtx.SessionData().OptimizerUseMultiColStats,
+		useNotVisibleIndex:                     evalCtx.SessionData().OptimizerUseNotVisibleIndexes,
 		localityOptimizedSearch:                evalCtx.SessionData().LocalityOptimizedSearch,
 		safeUpdates:                            evalCtx.SessionData().SafeUpdates,
 		preferLookupJoinsForFKs:                evalCtx.SessionData().PreferLookupJoinsForFKs,
@@ -321,6 +323,7 @@ func (m *Memo) IsStale(
 		m.zigzagJoinEnabled != evalCtx.SessionData().ZigzagJoinEnabled ||
 		m.useHistograms != evalCtx.SessionData().OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData().OptimizerUseMultiColStats ||
+		m.useNotVisibleIndex != evalCtx.SessionData().OptimizerUseNotVisibleIndexes ||
 		m.localityOptimizedSearch != evalCtx.SessionData().LocalityOptimizedSearch ||
 		m.safeUpdates != evalCtx.SessionData().SafeUpdates ||
 		m.preferLookupJoinsForFKs != evalCtx.SessionData().PreferLookupJoinsForFKs ||

@@ -13,6 +13,7 @@ import React from "react";
 import { ColumnDescriptor, SortedTable } from "../sortedtable";
 import classNames from "classnames/bind";
 import styles from "./insightsTable.module.scss";
+import { StatementLink } from "../statementsTable";
 
 const cx = classNames.bind(styles);
 
@@ -24,8 +25,14 @@ export interface InsightRecommendation {
   table: string;
   index_id: number;
   query: string;
-  exec_stmt: string;
-  exec_id: string;
+  execution: executionDetails;
+}
+
+export interface executionDetails {
+  statement: string;
+  summary: string;
+  fingerprintID: string;
+  implicit: boolean;
 }
 
 export class InsightsSortedTable extends SortedTable<InsightRecommendation> {}
@@ -90,11 +97,17 @@ function descriptionCell(
     case "REPLACE_INDEX":
       return (
         <>
-          <div>
-            <span className={cx("label-bold")}>Statement Execution: </span>{" "}
-            {insightRec.exec_stmt}
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Statement Fingerprint: </span>{" "}
+            <StatementLink
+              statementFingerprintID={insightRec.execution.fingerprintID}
+              statement={insightRec.execution.statement}
+              statementSummary={insightRec.execution.summary}
+              implicitTxn={insightRec.execution.implicit}
+              className={"inline"}
+            />
           </div>
-          <div>
+          <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Recommendation: </span>{" "}
             {insightRec.query}
           </div>

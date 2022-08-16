@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -117,18 +116,6 @@ var PasswordHashMethod = settings.RegisterEnumSetting(
 	},
 ).WithPublic()
 
-// hasClusterVersion verifies that all nodes have been upgraded to
-// support the given target version key.
-func hasClusterVersion(
-	ctx context.Context, values *settings.Values, versionkey clusterversion.Key,
-) bool {
-	var vh clusterversion.Handle
-	if values != nil {
-		vh = values.Opaque().(clusterversion.Handle)
-	}
-	return vh != nil && vh.IsActive(ctx, versionkey)
-}
-
 // GetConfiguredPasswordCost returns the configured hashing cost
 // for the given method.
 func GetConfiguredPasswordCost(
@@ -151,13 +138,7 @@ func GetConfiguredPasswordCost(
 func GetConfiguredPasswordHashMethod(
 	ctx context.Context, sv *settings.Values,
 ) (method password.HashMethod) {
-	method = password.HashMethod(PasswordHashMethod.Get(sv))
-	if method == password.HashSCRAMSHA256 && !hasClusterVersion(ctx, sv, clusterversion.SCRAMAuthentication) {
-		// Not all nodes are upgraded to understand SCRAM yet. Force
-		// Bcrypt for now, otherwise previous-version nodes will get confused.
-		method = password.HashBCrypt
-	}
-	return method
+	return password.HashMethod(PasswordHashMethod.Get(sv))
 }
 
 // AutoDetectPasswordHashes is the cluster setting that configures whether

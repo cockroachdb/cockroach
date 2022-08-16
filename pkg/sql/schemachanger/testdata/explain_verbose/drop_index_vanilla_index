@@ -20,7 +20,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       │ PUBLIC → ABSENT
 │       │       │
 │       │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │             rule: "index no longer public before dependents removed"
+│       │             rule: "index no longer public before dependents"
 │       │
 │       └── • 2 Mutation operations
 │           │
@@ -50,7 +50,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │                 - 104
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: DROP INDEX idx CASCADE
 │                   redactedstatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
@@ -65,39 +65,28 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   │     rule: "index no longer public before dependents"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "secondary index in DELETE_ONLY before removing columns"
+    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   │     rule: "index no longer public before dependents"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │         rule: "index no longer public before dependents removed"
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │         VALIDATED → DELETE_ONLY
     │   │
-    │   └── • 5 Mutation operations
+    │   └── • 3 Mutation operations
     │       │
     │       ├── • MakeDroppedIndexDeleteOnly
     │       │     IndexID: 2
-    │       │     TableID: 104
-    │       │
-    │       ├── • RemoveColumnFromIndex
-    │       │     ColumnID: 2
-    │       │     IndexID: 2
-    │       │     TableID: 104
-    │       │
-    │       ├── • RemoveColumnFromIndex
-    │       │     ColumnID: 1
-    │       │     IndexID: 2
-    │       │     Kind: 1
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor
@@ -116,11 +105,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │       │ DELETE_ONLY → ABSENT
         │       │
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-        │       │     rule: "secondary index columns removed before removing the index"
         │       │     rule: "dependents removed before index"
         │       │
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-        │       │     rule: "secondary index columns removed before removing the index"
         │       │     rule: "dependents removed before index"
         │       │
         │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}

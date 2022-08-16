@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,7 +41,7 @@ func gcTables(
 		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
 	for _, droppedTable := range progress.Tables {
-		if droppedTable.Status != jobspb.SchemaChangeGCProgress_DELETING {
+		if droppedTable.Status != jobspb.SchemaChangeGCProgress_CLEARING {
 			// Table is not ready to be dropped, or has already been dropped.
 			continue
 		}
@@ -55,12 +56,13 @@ func gcTables(
 				// the table first. See #50344.
 				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
-				markTableGCed(ctx, droppedTable.ID, progress)
+				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue
 			}
 			return errors.Wrapf(err, "fetching table %d", droppedTable.ID)
 		}
 
+		// TODO(ajwerner): How does this happen?
 		if !table.Dropped() {
 			// We shouldn't drop this table yet.
 			continue
@@ -94,7 +96,7 @@ func gcTables(
 		}
 
 		// Update the details payload to indicate that the table was dropped.
-		markTableGCed(ctx, table.GetID(), progress)
+		markTableGCed(ctx, table.GetID(), progress, jobspb.SchemaChangeGCProgress_CLEARED)
 	}
 	return nil
 }
@@ -266,5 +268,87 @@ func deleteAllSpanData(
 		}
 	}
 
+	return nil
+}
+
+func deleteTableDescriptorsAfterGC(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	details *jobspb.SchemaChangeGCDetails,
+	progress *jobspb.SchemaChangeGCProgress,
+) error {
+	for _, droppedTable := range progress.Tables {
+		if droppedTable.Status == jobspb.SchemaChangeGCProgress_CLEARED {
+			// Table is not ready to be dropped, or has already been dropped.
+			continue
+		}
+
+		var table catalog.TableDescriptor
+		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+			table, err = col.Direct().MustGetTableDescByID(ctx, txn, droppedTable.ID)
+			return err
+		}); err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				// This can happen if another GC job created for the same table got to
+				// the table first. See #50344.
+				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				// Update the details payload to indicate that the table was dropped.
+				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
+				continue
+			}
+			return errors.Wrapf(err, "fetching table %d", droppedTable.ID)
+		}
+
+		// TODO(ajwerner): How does this happen?
+		if !table.Dropped() {
+			// We shouldn't drop this table yet.
+			continue
+		}
+
+		// First, delete all the table data.
+		if err := waitForEmptyPrefix(
+			ctx, execCfg.DB, &execCfg.Settings.SV,
+			execCfg.GCJobTestingKnobs.SkipWaitingForMVCCGC,
+			execCfg.Codec.TablePrefix(uint32(table.GetID())),
+		); err != nil {
+			return errors.Wrapf(err, "waiting for empty table %d", table.GetID())
+		}
+
+		delta, err := spanconfig.Delta(ctx, execCfg.SpanConfigSplitter, table, nil /* uncommitted */)
+		if err != nil {
+			return err
+		}
+
+		// Deduct from system.span_count appropriately.
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := execCfg.SpanConfigLimiter.ShouldLimit(ctx, txn, delta)
+			return err
+		}); err != nil {
+			return errors.Wrapf(err, "deducting span count for table %d", table.GetID())
+		}
+
+		// Finished deleting all the table data, now delete the table meta data.
+		if err := sql.DeleteTableDescAndZoneConfig(
+			ctx, execCfg.DB, execCfg.Settings, execCfg.Codec, table,
+		); err != nil {
+			return errors.Wrapf(err, "dropping table descriptor for table %d", table.GetID())
+		}
+
+		// Update the details payload to indicate that the table was dropped.
+		markTableGCed(ctx, table.GetID(), progress, jobspb.SchemaChangeGCProgress_CLEARED)
+	}
+
+	// Drop database zone config when all the tables have been GCed.
+	if details.ParentID != descpb.InvalidID && isDoneGC(progress) {
+		if err := deleteDatabaseZoneConfig(
+			ctx,
+			execCfg.DB,
+			execCfg.Codec,
+			execCfg.Settings,
+			details.ParentID,
+		); err != nil {
+			return errors.Wrap(err, "deleting database zone config")
+		}
+	}
 	return nil
 }

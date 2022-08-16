@@ -145,24 +145,34 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 
 		// Emit any new MVCC range tombstones when their start key is encountered.
 		// Range keys can currently only be MVCC range tombstones.
+		// We need to verify that the range tombstone is visible at the catch-up
+		// timestamp, since we might have come here after a call to NextIgnoringTime.
 		//
 		// TODO(erikgrinaker): Find a faster/better way to detect range key changes
 		// that doesn't involve constant comparisons. Pebble probably already knows,
 		// we just need a way to ask it.
+		// Note that byte slice comparison in Go is smart enough to immediately bail
+		// if lengths are different. However, it isn't smart enough to compare from
+		// the end, which would really help since our keys share prefixes.
 		if hasRange {
 			if rangeBounds := i.RangeBounds(); !rangeBounds.Key.Equal(rangeKeysStart) {
 				rangeKeysStart = append(rangeKeysStart[:0], rangeBounds.Key...)
 
 				// Emit events for these MVCC range tombstones, in chronological order.
 				versions := i.RangeKeys().Versions
-				for i := len(versions) - 1; i >= 0; i-- {
+				for j := len(versions) - 1; j >= 0; j-- {
+					if !i.startTime.LessEq(versions[j].Timestamp) {
+						// This range tombstone isn't visible by this catch-up scan.
+						continue
+					}
+
 					var span roachpb.Span
 					a, span.Key = a.Copy(rangeBounds.Key, 0)
 					a, span.EndKey = a.Copy(rangeBounds.EndKey, 0)
 					err := outputFn(&roachpb.RangeFeedEvent{
 						DeleteRange: &roachpb.RangeFeedDeleteRange{
 							Span:      span,
-							Timestamp: versions[i].Timestamp,
+							Timestamp: versions[j].Timestamp,
 						},
 					})
 					if err != nil {
@@ -194,13 +204,17 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 				return errors.AssertionFailedf("unexpected inline key %s", unsafeKey)
 			}
 
-			// This is an MVCCMetadata key for an intent. The catchUp scan only cares
-			// about committed values, so ignore this and skip past the corresponding
-			// provisional key-value. To do this, iterate to the provisional
-			// key-value, validate its timestamp, then iterate again. When using
-			// MVCCIncrementalIterator we know that the provisional value will also be
-			// within the time bounds so we use Next.
-			i.Next()
+			// This is an MVCCMetadata key for an intent. The catchUp scan
+			// only cares about committed values, so ignore this and skip past
+			// the corresponding provisional key-value. To do this, iterate to
+			// the provisional key-value, validate its timestamp, then iterate
+			// again. If we arrived here with a preceding call to NextIgnoringTime
+			// (in the with-diff case), it's possible that the intent is not within
+			// the time bounds. Using `NextIgnoringTime` on the next line makes sure
+			// that we are guaranteed to validate the version that belongs to the
+			// intent.
+			i.NextIgnoringTime()
+
 			if ok, err := i.Valid(); err != nil {
 				return errors.Wrap(err, "iterating to provisional value for intent")
 			} else if !ok {
@@ -210,6 +224,11 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 				return errors.Errorf("expected provisional value for intent with ts %s, found %s",
 					meta.Timestamp, i.UnsafeKey().Timestamp)
 			}
+			// Now move to the next key of interest. Note that if in the last
+			// iteration of the loop we called `NextIgnoringTime`, the fact that we
+			// hit an intent proves that there wasn't a previous value, so we can
+			// (in fact, have to, to avoid surfacing unwanted keys) unconditionally
+			// enforce time bounds.
 			i.Next()
 			continue
 		}

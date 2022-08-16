@@ -183,6 +183,17 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 				}
 			}
 		}
+		for _, fnID := range lCtx.fnIDs {
+			isOwner, err := IsOwner(params.ctx, params.p, lCtx.fnDescs[fnID], oldRole)
+			if err != nil {
+				return err
+			}
+			if isOwner {
+				if err := n.reassignFunctionOwner(lCtx.fnDescs[fnID], params); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -314,6 +325,25 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 		return err
 	}
 	return nil
+}
+
+func (n *reassignOwnedByNode) reassignFunctionOwner(
+	fnDesc catalog.FunctionDescriptor, params runParams,
+) error {
+	mutableDesc, err := params.p.Descriptors().GetMutableFunctionByID(
+		params.ctx, params.p.txn, fnDesc.GetID(), tree.ObjectLookupFlagsWithRequired(),
+	)
+	if err != nil {
+		return err
+	}
+	newOwner, err := decodeusername.FromRoleSpec(
+		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
+	)
+	if err != nil {
+		return err
+	}
+	mutableDesc.GetPrivileges().SetOwner(newOwner)
+	return params.p.writeFuncSchemaChange(params.ctx, mutableDesc)
 }
 
 func (n *reassignOwnedByNode) Next(runParams) (bool, error) { return false, nil }

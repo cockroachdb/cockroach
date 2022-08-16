@@ -137,6 +137,12 @@ func (desc *immutable) ByteSize() int64 {
 	return int64(desc.Size())
 }
 
+// GetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
 	return newBuilder(&desc.FunctionDescriptor, desc.IsUncommittedVersion(), desc.changes)
@@ -439,6 +445,30 @@ func (desc *Mutable) SetLang(v catpb.Function_Language) {
 // SetFuncBody sets the function body.
 func (desc *Mutable) SetFuncBody(v string) {
 	desc.FunctionBody = v
+}
+
+// SetName sets the function name.
+func (desc *Mutable) SetName(n string) {
+	desc.Name = n
+}
+
+// SetParentSchemaID sets function's parent schema id.
+func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
+	desc.ParentSchemaID = id
+}
+
+// ToFuncObj converts the descriptor to a tree.FuncObj.
+func (desc *immutable) ToFuncObj() tree.FuncObj {
+	ret := tree.FuncObj{
+		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		Args:     make(tree.FuncArgs, len(desc.Args)),
+	}
+	for i := range desc.Args {
+		ret.Args[i] = tree.FuncArg{
+			Type: desc.Args[i].Type,
+		}
+	}
+	return ret
 }
 
 // GetObjectType implements the PrivilegeObject interface.

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -85,9 +87,30 @@ func (f *fakeLeaseManager) TimeRemaining(l *leasemanager.Lease) time.Duration {
 
 type fakeDB struct {
 	codec   keys.SQLCodec
+	rand    *rand.Rand
 	kvs     map[string][]byte
 	scanErr error
 	putErr  error
+}
+
+func newFakeDB(codec keys.SQLCodec) *fakeDB {
+	r, _ := randutil.NewTestRand()
+	return &fakeDB{
+		codec: codec,
+		rand:  r,
+		kvs:   make(map[string][]byte),
+	}
+}
+
+// ReadCommittedScan never returns any data.
+func (f *fakeDB) ReadCommittedScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]kv.KeyValue, error) {
+	// Sometimes return the data, sometimes return nothing.
+	if f.rand.Float64() < .9 {
+		return f.Scan(ctx, begin, end, maxRows)
+	}
+	return nil, nil
 }
 
 func (f *fakeDB) Scan(
@@ -135,7 +158,7 @@ func (f *fakeDB) Txn(context.Context, func(context.Context, *kv.Txn) error) erro
 func TestEnsureMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
@@ -237,7 +260,7 @@ func TestSkipMigrationsIncludedInBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
@@ -280,7 +303,7 @@ func TestClusterWideMigrationOnlyRunBySystemTenant(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		db := &fakeDB{codec: codec}
+		db := newFakeDB(codec)
 		mgr := Manager{
 			stopper:      stop.NewStopper(),
 			leaseManager: &fakeLeaseManager{},
@@ -310,7 +333,7 @@ func TestClusterWideMigrationOnlyRunBySystemTenant(t *testing.T) {
 func TestDBErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
@@ -373,7 +396,7 @@ func TestDBErrors(t *testing.T) {
 func TestLeaseErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper: stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{
@@ -405,7 +428,7 @@ func TestLeaseErrors(t *testing.T) {
 func TestLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{leaseTimeRemaining: time.Nanosecond},
@@ -520,7 +543,7 @@ func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor
 	return m.workFn(ctx, runner{
 		settings:    mt.server.ClusterSettings(),
 		codec:       keys.SystemSQLCodec,
-		db:          mt.kvDB,
+		db:          dbAdapter{DB: mt.kvDB},
 		sqlExecutor: mt.server.InternalExecutor().(*sql.InternalExecutor),
 	})
 }

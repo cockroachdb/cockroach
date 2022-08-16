@@ -94,7 +94,7 @@ func newRowFetcherCache(
 	return &rowFetcherCache{
 		codec:           codec,
 		leaseMgr:        leaseMgr,
-		collection:      cf.NewCollection(ctx, nil /* TemporarySchemaProvider */),
+		collection:      cf.NewCollection(ctx, nil /* TemporarySchemaProvider */, nil /* monitor */),
 		db:              db,
 		fetchers:        cache.NewUnorderedCache(defaultCacheConfig),
 		watchedFamilies: watchedFamilies,

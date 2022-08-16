@@ -598,7 +598,10 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 				},
 				// Decrease the adopt loop interval so that retries happen quickly.
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				GCJob:            &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
+				GCJob: &sql.GCJobTestingKnobs{
+					RunBeforeResume:      func(_ jobspb.JobID) error { <-blockGC; return nil },
+					SkipWaitingForMVCCGC: true,
+				},
 			}
 
 			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -699,14 +702,6 @@ CREATE TABLE regional_by_row (
 
 			// Unblock GC jobs.
 			close(blockGC)
-			// The GC jobs for the temporary indexes should be cleaned up immediately.
-			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForTempIndexes))
-			// The GC jobs for the drops should still be waiting out the GC TTL.
-			err = queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops)
-			require.NoError(t, err)
-
-			// Change gc.ttlseconds to speed up the cleanup.
-			_ = sqlRunner.Exec(t, `ALTER TABLE regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 1`)
 
 			// Validate that indexes are cleaned up.
 			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForDrops+expectedGCJobsForTempIndexes))

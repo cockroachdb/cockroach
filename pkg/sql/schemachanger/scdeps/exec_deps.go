@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -50,6 +52,7 @@ type JobRegistry interface {
 // NewExecutorDependencies returns an scexec.Dependencies implementation built
 // from the given arguments.
 func NewExecutorDependencies(
+	settings *cluster.Settings,
 	codec keys.SQLCodec,
 	sessionData *sessiondata.SessionData,
 	txn *kv.Txn,
@@ -81,6 +84,7 @@ func NewExecutorDependencies(
 			statsRefresher:     statsRefresher,
 			schemaChangerJobID: schemaChangerJobID,
 			kvTrace:            kvTrace,
+			settings:           settings,
 		},
 		backfiller:              backfiller,
 		merger:                  merger,
@@ -108,6 +112,7 @@ type txnDeps struct {
 	deletedDescriptors  catalog.DescriptorIDSet
 	schemaChangerJobID  jobspb.JobID
 	kvTrace             bool
+	settings            *cluster.Settings
 }
 
 func (d *txnDeps) UpdateSchemaChangeJob(
@@ -283,6 +288,10 @@ func (d *txnDeps) MakeJobID() jobspb.JobID {
 
 func (d *txnDeps) CheckPausepoint(name string) error {
 	return d.jobRegistry.CheckPausepoint(name)
+}
+
+func (d *txnDeps) UseLegacyGCJob(ctx context.Context) bool {
+	return !d.settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob)
 }
 
 func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {

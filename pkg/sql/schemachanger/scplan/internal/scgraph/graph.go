@@ -267,8 +267,12 @@ func (g *Graph) AddDepEdge(
 		return err
 	}
 	if got := g.depEdgesFrom.get(de); got != nil {
-		if got.kind == Precedence && kind == SameStagePrecedence {
-			got.kind = SameStagePrecedence
+		if got.kind != kind && kind != Precedence {
+			if got.kind != Precedence {
+				return errors.AssertionFailedf("inconsistent dep edge kinds: %s rule %q conflicts with %s",
+					rule.Kind, rule.Name, got)
+			}
+			got.kind = kind
 		}
 		got.rules = append(got.rules, rule)
 		return

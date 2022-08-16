@@ -1180,7 +1180,11 @@ message TableDescriptor {
   // this table, in which case the global setting is used.
   optional bool forecast_stats = 52 [(gogoproto.nullable) = true, (gogoproto.customname) = "ForecastStats"];
 
-  // Next ID: 54
+  // ImportStartWallTime contains the start wall time of an in-progress import.
+  // This field is non zero if this table is offline during an import.
+  optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
+
+  // Next ID: 55
 }
 
 // SurvivalGoal is the survival goal for a database.

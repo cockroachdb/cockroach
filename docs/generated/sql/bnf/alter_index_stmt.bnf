@@ -5,3 +5,4 @@ alter_index_stmt ::=
 	| alter_scatter_index_stmt
 	| alter_rename_index_stmt
 	| alter_zone_index_stmt
+	| alter_index_visible_stmt

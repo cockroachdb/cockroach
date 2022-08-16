@@ -20,9 +20,10 @@ enum ConnectionProvider {
   // External Storage providers.
   nodelocal = 1;
   s3 = 4;
+  userfile = 5;
 
   // KMS providers.
-  gs_kms = 2;
+  gcp_kms = 2;
 
   // Sink providers.
   kafka = 3;

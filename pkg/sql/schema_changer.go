@@ -69,6 +69,12 @@ import (
 )
 
 const (
+	// RunningStatusWaitingForMVCCGC is used for the GC job when it has cleared
+	// the data but is waiting for MVCC GC to remove the data.
+	RunningStatusWaitingForMVCCGC jobs.RunningStatus = "waiting for MVCC GC"
+	// RunningStatusDeletingData is used for the GC job when it is about
+	// to clear the data.
+	RunningStatusDeletingData jobs.RunningStatus = "deleting data"
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
 	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
@@ -115,7 +121,7 @@ type SchemaChanger struct {
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
-	ieFactory            sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory            sqlutil.InternalExecutorFactory
 
 	// mvccCompliantAddIndex is set to true early in exec if we
 	// find that the schema change was created under the
@@ -145,11 +151,7 @@ func NewSchemaChangerForTesting(
 		execCfg:       execCfg,
 		// Note that this doesn't end up actually being session-bound but that's
 		// good enough for testing.
-		ieFactory: func(
-			ctx context.Context, sd *sessiondata.SessionData,
-		) sqlutil.InternalExecutor {
-			return execCfg.InternalExecutor
-		},
+		ieFactory:      execCfg.InternalExecutorFactory,
 		metrics:        NewSchemaChangerMetrics(),
 		clock:          db.Clock(),
 		distSQLPlanner: execCfg.DistSQLPlanner,
@@ -515,8 +517,11 @@ func startGCJob(
 	userName username.SQLUsername,
 	schemaChangeDescription string,
 	details jobspb.SchemaChangeGCDetails,
+	useLegacyGCJob bool,
 ) error {
-	jobRecord := CreateGCJobRecord(schemaChangeDescription, userName, details)
+	jobRecord := CreateGCJobRecord(
+		schemaChangeDescription, userName, details, useLegacyGCJob,
+	)
 	jobID := jobRegistry.MakeJobID()
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := jobRegistry.CreateJobWithTxn(ctx, jobRecord, jobID, txn)
@@ -627,7 +632,7 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 		}
 
 		settings := sc.execCfg.Settings
-		mvccCompliantBackfillSupported := settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) && tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
+		mvccCompliantBackfillSupported := tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
 		if !mvccCompliantBackfillSupported {
 			return errors.Newf("schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
 		}
@@ -724,7 +729,11 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				},
 			}
 			if err := startGCJob(
-				ctx, sc.db, sc.jobRegistry, sc.job.Payload().UsernameProto.Decode(), sc.job.Payload().Description, gcDetails,
+				ctx, sc.db, sc.jobRegistry,
+				sc.job.Payload().UsernameProto.Decode(),
+				sc.job.Payload().Description,
+				gcDetails,
+				!sc.settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob),
 			); err != nil {
 				return err
 			}
@@ -1067,6 +1076,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 					},
 				},
 			},
+			!sc.settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob),
 		)
 		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, gcJobID, txn); err != nil {
 			return err
@@ -1282,7 +1292,10 @@ func (sc *SchemaChanger) createIndexGCJobWithDropTime(
 		ParentID: sc.descID,
 	}
 
-	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails)
+	gcJobRecord := CreateGCJobRecord(
+		jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails,
+		!sc.settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob),
+	)
 	jobID := sc.jobRegistry.MakeJobID()
 	if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, jobID, txn); err != nil {
 		return err
@@ -2284,7 +2297,10 @@ func (sc *SchemaChanger) reverseMutation(
 // CreateGCJobRecord creates the job record for a GC job, setting some
 // properties which are common for all GC jobs.
 func CreateGCJobRecord(
-	originalDescription string, userName username.SQLUsername, details jobspb.SchemaChangeGCDetails,
+	originalDescription string,
+	userName username.SQLUsername,
+	details jobspb.SchemaChangeGCDetails,
+	useLegacyGCJob bool,
 ) jobs.Record {
 	descriptorIDs := make([]descpb.ID, 0)
 	if len(details.Indexes) > 0 {
@@ -2296,13 +2312,17 @@ func CreateGCJobRecord(
 			descriptorIDs = append(descriptorIDs, table.ID)
 		}
 	}
+	runningStatus := RunningStatusDeletingData
+	if useLegacyGCJob {
+		runningStatus = RunningStatusWaitingGC
+	}
 	return jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", originalDescription),
 		Username:      userName,
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
-		RunningStatus: RunningStatusWaitingGC,
+		RunningStatus: runningStatus,
 		NonCancelable: true,
 	}
 }
@@ -2320,6 +2340,9 @@ type GCJobTestingKnobs struct {
 
 	// Notifier is used to optionally inject a new gcjobnotifier.Notifier.
 	Notifier *gcjobnotifier.Notifier
+
+	// If true, the GC job will not wait for MVCC GC.
+	SkipWaitingForMVCCGC bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -2451,8 +2474,21 @@ func (sc *SchemaChanger) txn(
 			return err
 		}
 	}
-
 	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
+}
+
+// txnWithExecutor is to run internal executor within a txn.
+func (sc *SchemaChanger) txnWithExecutor(
+	ctx context.Context,
+	sd *sessiondata.SessionData,
+	f func(context.Context, *kv.Txn, *descs.Collection, sqlutil.InternalExecutor) error,
+) error {
+	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
+		if err := fn(sc.job.ID()); err != nil {
+			return err
+		}
+	}
+	return sc.execCfg.CollectionFactory.TxnWithExecutor(ctx, sc.db, sd, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
@@ -2463,11 +2499,12 @@ func (sc *SchemaChanger) txn(
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context, execCfg *ExecutorConfig, ts hlc.Timestamp, descriptors *descs.Collection,
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	sd *sessiondata.SessionData,
+	ts hlc.Timestamp,
+	descriptors *descs.Collection,
 ) extendedEvalContext {
-
-	sd := NewFakeSessionData(execCfg.SV())
-
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
@@ -2573,10 +2610,8 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
-			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
-			},
-			metrics: p.ExecCfg().SchemaChangerMetrics,
+			ieFactory:            r.job.GetInternalExecutorFactory(),
+			metrics:              p.ExecCfg().SchemaChangerMetrics,
 		}
 		opts := retry.Options{
 			InitialBackoff: 20 * time.Millisecond,
@@ -2716,6 +2751,9 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			r.job.Payload().UsernameProto.Decode(),
 			r.job.Payload().Description,
 			multiTableGCDetails,
+			!p.ExecCfg().Settings.Version.IsActive(
+				ctx, clusterversion.UseDelRangeInGCJob,
+			),
 		); err != nil {
 			return err
 		}
@@ -2763,9 +2801,7 @@ func (r schemaChangeResumer) OnFailOrCancel(
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
-		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-			return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
-		},
+		ieFactory:            r.job.GetInternalExecutorFactory(),
 	}
 
 	if r.job.Payload().FinalResumeError == nil {

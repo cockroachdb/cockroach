@@ -5414,20 +5414,18 @@ value if you rely on the HLC for accuracy.`,
 			Types: tree.ArgTypes{
 				{"key", types.Bytes},
 			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
+			SpecializedVecBuiltin: tree.CrdbInternalRangeStats,
+			ReturnType:            tree.FixedReturnType(types.Jsonb),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				key := []byte(tree.MustBeDBytes(args[0]))
-				b := &kv.Batch{}
-				b.AddRawRequest(&roachpb.RangeStatsRequest{
-					RequestHeader: roachpb.RequestHeader{
-						Key: key,
-					},
-				})
-				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				resps, err := ctx.RangeStatsFetcher.RangeStats(ctx.Ctx(),
+					roachpb.Key(tree.MustBeDBytes(args[0])))
+				if err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching range stats")
 				}
-				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
-				jsonStr, err := gojson.Marshal(&resp)
+				jsonStr, err := gojson.Marshal(&resps[0].MVCCStats)
 				if err != nil {
 					return nil, err
 				}
@@ -7205,6 +7203,50 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 that has execution latency greater than the 'minExecutionLatency'. If the
 'expiresAfter' argument is empty, then the statement bundle request never
 expires until the statement bundle is collected`,
+		},
+	),
+
+	"crdb_internal.set_compaction_concurrency": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"node_id", types.Int},
+				{"store_id", types.Int},
+				{"compaction_concurrency", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+				nodeID := int32(tree.MustBeDInt(args[0]))
+				storeID := int32(tree.MustBeDInt(args[1]))
+				compactionConcurrency := tree.MustBeDInt(args[2])
+				if compactionConcurrency <= 0 {
+					return nil, errors.AssertionFailedf("compaction_concurrency must be > 0")
+				}
+				if err = ctx.SetCompactionConcurrency(
+					ctx.Context, nodeID, storeID, uint64(compactionConcurrency)); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: "This function can be used to temporarily change the compaction concurrency of a " +
+				"given node and store. " +
+				"To change the compaction concurrency of a store one can do: " +
+				"SELECT crdb_internal.set_compaction_concurrency(<node_id>, <store_id>, <compaction_concurrency>). " +
+				"The store's compaction concurrency will change until the sql command is cancelled. Once cancelled " +
+				"the store's compaction concurrency will return to what it was previously. This command isn't safe " +
+				"for concurrent use.",
+			Volatility: volatility.Volatile,
 		},
 	),
 }

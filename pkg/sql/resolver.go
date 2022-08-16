@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -447,6 +448,37 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		return descs, nil
 	}
 
+	if targets.Functions != nil {
+		if len(targets.Functions) == 0 {
+			return nil, errNoFunction
+		}
+		descs := make([]DescriptorWithObjectType, 0, len(targets.Functions))
+		fnResolved := catalog.DescriptorIDSet{}
+		for _, f := range targets.Functions {
+			overload, err := p.matchUDF(ctx, &f, true /* required */)
+			if err != nil {
+				return nil, err
+			}
+			fnID, err := funcdesc.UserDefinedFunctionOIDToID(overload.Oid)
+			if err != nil {
+				return nil, err
+			}
+			if fnResolved.Contains(fnID) {
+				continue
+			}
+			fnResolved.Add(fnID)
+			fnDesc, err := p.Descriptors().GetMutableFunctionByID(ctx, p.txn, fnID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				return nil, err
+			}
+			descs = append(descs, DescriptorWithObjectType{
+				descriptor: fnDesc,
+				objectType: privilege.Function,
+			})
+		}
+		return descs, nil
+	}
+
 	if targets.Schemas != nil {
 		if len(targets.Schemas) == 0 {
 			return nil, errNoSchema
@@ -505,6 +537,39 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				}
 			}
 
+			return descs, nil
+		} else if targets.AllFunctionsInSchema {
+			var descs []DescriptorWithObjectType
+			for _, scName := range targets.Schemas {
+				dbName := p.CurrentDatabase()
+				if scName.ExplicitCatalog {
+					dbName = scName.Catalog()
+				}
+				db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, flags)
+				if err != nil {
+					return nil, err
+				}
+				sc, err := p.Descriptors().GetMutableSchemaByName(
+					ctx, p.txn, db, scName.Schema(), tree.SchemaLookupFlags{Required: true},
+				)
+				if err != nil {
+					return nil, err
+				}
+				err = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+					fn, err := p.Descriptors().GetMutableFunctionByID(ctx, p.txn, overload.ID, tree.ObjectLookupFlagsWithRequired())
+					if err != nil {
+						return err
+					}
+					descs = append(descs, DescriptorWithObjectType{
+						descriptor: fn,
+						objectType: privilege.Function,
+					})
+					return nil
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
 			return descs, nil
 		}
 
@@ -865,6 +930,8 @@ type internalLookupCtx struct {
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]catalog.TypeDescriptor
 	typIDs      []descpb.ID
+	fnDescs     map[descpb.ID]catalog.FunctionDescriptor
+	fnIDs       []descpb.ID
 }
 
 // GetSchemaName looks up a schema with the given id in the LookupContext.
@@ -929,7 +996,9 @@ func newInternalLookupCtx(
 
 	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
-	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
+	fnDescs := make(map[descpb.ID]catalog.FunctionDescriptor)
+
+	var tbIDs, typIDs, dbIDs, schemaIDs, fnIDs []descpb.ID
 
 	// Record descriptors for name lookups.
 	for i := range descs {
@@ -960,6 +1029,11 @@ func newInternalLookupCtx(
 				schemaIDs = append(schemaIDs, desc.GetID())
 				schemaNames[desc.GetID()] = desc.GetName()
 			}
+		case catalog.FunctionDescriptor:
+			fnDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.GetParentID() {
+				fnIDs = append(fnIDs, desc.GetID())
+			}
 		}
 	}
 
@@ -971,9 +1045,11 @@ func newInternalLookupCtx(
 		schemaIDs:   schemaIDs,
 		tbDescs:     tbDescs,
 		typDescs:    typDescs,
+		fnDescs:     fnDescs,
 		tbIDs:       tbIDs,
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
+		fnIDs:       fnIDs,
 	}
 }
 
@@ -1100,6 +1176,28 @@ func getTypeNameFromTypeDescriptor(
 	typeName = tree.MakeQualifiedTypeName(tableDbDesc.GetName(),
 		parentSchemaName, typ.GetName())
 	return typeName, nil
+}
+
+func getFunctionNameFromFunctionDescriptor(
+	l simpleSchemaResolver, fn catalog.FunctionDescriptor,
+) (tree.FunctionName, error) {
+	var fnName tree.FunctionName
+	db, err := l.getDatabaseByID(fn.GetParentID())
+	if err != nil {
+		return fnName, err
+	}
+	var scName string
+	// TODO(richardjcai): Remove this in 22.2.
+	if fn.GetParentSchemaID() == keys.PublicSchemaID {
+		scName = tree.PublicSchema
+	} else {
+		sc, err := l.getSchemaByID(fn.GetParentSchemaID())
+		if err != nil {
+			return fnName, err
+		}
+		scName = sc.GetName()
+	}
+	return tree.MakeQualifiedFunctionName(db.GetName(), scName, fn.GetName()), nil
 }
 
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
