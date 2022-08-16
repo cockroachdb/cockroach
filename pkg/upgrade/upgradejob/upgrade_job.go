@@ -96,6 +96,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			LeaseManager:      execCtx.ExecCfg().LeaseManager,
 			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
 			TestingKnobs:      execCtx.ExecCfg().UpgradeTestingKnobs,
+			SessionData:       execCtx.SessionData(),
 		}
 		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
 		tenantDeps.SpanConfig.Splitter = execCtx.ExecCfg().SpanConfigSplitter
