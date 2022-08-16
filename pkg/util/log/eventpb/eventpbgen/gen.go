@@ -84,6 +84,7 @@ type fieldInfo struct {
 	MixedRedactable     bool
 	Inherited           bool
 	IsEnum              bool
+	AllowZeroValue      bool
 }
 
 var (
@@ -380,6 +381,9 @@ func readInput(
 				return errors.Newf("unknown field definition syntax: %q", line)
 			}
 
+			// Allow zero values if the field is annotated with 'includeempty'.
+			allowZeroValue := strings.Contains(line, "includeempty")
+
 			typ := fieldDefRe.ReplaceAllString(line, "$typ")
 			switch typ {
 			case "google.protobuf.Timestamp":
@@ -451,6 +455,7 @@ func readInput(
 					ReportingSafeRe:     safeReName,
 					MixedRedactable:     mixed,
 					IsEnum:              isEnum,
+					AllowZeroValue:      allowZeroValue,
 				}
 				curMsg.Fields = append(curMsg.Fields, fi)
 				curMsg.AllFields = append(curMsg.AllFields, fi)
@@ -536,7 +541,9 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
    {{if .Inherited -}}
    printComma, b = m.{{.FieldName}}.AppendJSONFields(printComma, b)
    {{- else if eq .FieldType "string" -}}
+   {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != "" {
+   {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":\""...)
      {{ if .AlwaysReportingSafe -}}
@@ -555,7 +562,9 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      b = append(b, redact.EndMarker()...)
      {{- end }}
      b = append(b, '"')
+   {{ if not .AllowZeroValue -}}
    }
+   {{- end }}
    {{- else if eq .FieldType "array_of_string" -}}
    if len(m.{{.FieldName}}) > 0 {
      if printComma { b = append(b, ',')}; printComma = true
@@ -583,34 +592,54 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      b = append(b, ']')
    }
    {{- else if eq .FieldType "bool" -}}
+   {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} {
+   {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":true"...)
+   {{ if not .AllowZeroValue -}}
    }
+   {{- end }}
    {{- else if eq .FieldType "int16" "int32" "int64"}}
+   {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != 0 {
+   {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendInt(b, int64(m.{{.FieldName}}), 10)
+   {{ if not .AllowZeroValue -}}
    }
+   {{- end }}
    {{- else if eq .FieldType "float"}}
+   {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != 0 {
+   {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendFloat(b, float64(m.{{.FieldName}}), 'f', -1, 32)
+   {{ if not .AllowZeroValue -}}
    }
+   {{- end }}
    {{- else if eq .FieldType "double"}}
+   {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != 0 {
+   {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendFloat(b, float64(m.{{.FieldName}}), 'f', -1, 64)
+   {{ if not .AllowZeroValue -}}
    }
+   {{- end }}
    {{- else if eq .FieldType "uint16" "uint32" "uint64"}}
+   {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != 0 {
+   {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendUint(b, uint64(m.{{.FieldName}}), 10)
+   {{ if not .AllowZeroValue -}}
    }
+   {{- end }}
    {{- else if eq .FieldType "array_of_uint32" -}}
    if len(m.{{.FieldName}}) > 0 {
      if printComma { b = append(b, ',')}; printComma = true
@@ -622,11 +651,15 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      b = append(b, ']')
    }
    {{- else if .IsEnum }}
+   {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != 0 {
+   {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendInt(b, int64(m.{{.FieldName}}), 10)
+   {{ if not .AllowZeroValue -}}
    }
+   {{- end }}
    {{- else if eq .FieldType "protobuf"}}
    if m.{{.FieldName}} != nil {
      if printComma { b = append(b, ',')}; printComma = true

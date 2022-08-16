@@ -52,6 +52,12 @@ func TestEventJSON(t *testing.T) {
 
 		// Integer and boolean fields are not redactable in any case.
 		{&UnsafeDeleteDescriptor{ParentID: 123, Force: true}, `"ParentID":123,"Force":true`},
+
+		// Primitive fields without an `includeempty` annotation will NOT emit their
+		// zero value. In this case, `SnapshotID` and `NumRecords` do not have the
+		// `includeempty` annotation, so nothing is emitted, despite the presence of
+		// zero values.
+		{&SchemaSnapshotMetadata{SnapshotID: "", NumRecords: 0}, ""},
 	}
 
 	for _, tc := range testCases {
