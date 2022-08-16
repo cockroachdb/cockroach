@@ -49,7 +49,7 @@ statement ok
 SET TRACING = off
 
 # Confirm that the trace and its associated spans are no longer tracked.
-query B
+query B retry
 SELECT count(*) = 0
   FROM current_trace_spans
 ----

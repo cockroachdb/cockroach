@@ -24,16 +24,37 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// supportedAlterTableCommand tracks metadata for ALTER TABLE commands that are
+// implemented by the new schema changer.
+type supportedAlterTableCommand struct {
+	// fn is a function to perform a schema change.
+	fn interface{}
+	// on indicates that this statement is on by default.
+	on bool
+	// extraChecks contains a function to determine whether the command is
+	// supported. These extraChecks are important to be able to avoid any
+	// extra round-trips to resolve the descriptor and its elements if we know
+	// that we cannot process the command.
+	extraChecks interface{}
+}
+
 // supportedAlterTableStatements tracks alter table operations fully supported by
 // declarative schema  changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
-var supportedAlterTableStatements = map[reflect.Type]supportedStatement{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {alterTableAddColumn, true},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {alterTableDropColumn, true},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {alterTableAlterPrimaryKey, true},
+var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {fn: alterTableAddColumn, on: true},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {fn: alterTableDropColumn, on: true},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {fn: alterTableAlterPrimaryKey, on: true},
+	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
+		t *tree.AlterTableAddConstraint,
+	) bool {
+		d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
+		return ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault
+	}},
 }
 
 func init() {
+	boolType := reflect.TypeOf((*bool)(nil)).Elem()
 	// Check function signatures inside the supportedAlterTableStatements map.
 	for statementType, statementEntry := range supportedAlterTableStatements {
 		callBackType := reflect.TypeOf(statementEntry.fn)
@@ -48,6 +69,20 @@ func init() {
 			callBackType.In(3) != statementType {
 			panic(errors.AssertionFailedf("%v entry for alter table statement "+
 				"does not have a valid signature got %v", statementType, callBackType))
+		}
+		if statementEntry.extraChecks != nil {
+			extraChecks := reflect.TypeOf(statementEntry.extraChecks)
+			if extraChecks.Kind() != reflect.Func {
+				panic(errors.AssertionFailedf("%v extra checks for statement is "+
+					"not a function", statementType))
+			}
+			if extraChecks.NumIn() != 1 ||
+				extraChecks.In(0) != statementType ||
+				extraChecks.NumOut() != 1 ||
+				extraChecks.Out(0) != boolType {
+				panic(errors.AssertionFailedf("%v extra checks for alter table statement "+
+					"does not have a valid signature got %v", statementType, callBackType))
+			}
 		}
 	}
 }
@@ -71,7 +106,16 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		// Check if partially supported operations are allowed next. If an
 		// operation is not fully supported will not allow it to be run in
 		// the declarative schema changer until its fully supported.
-		if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
+		if !isFullySupported(
+			info.on, b.EvalCtx().SessionData().NewSchemaChangerMode,
+		) {
+			panic(scerrors.NotImplementedError(cmd))
+		}
+
+		// Run the extraChecks to see if we should avoid even resolving the
+		// descriptor.
+		if info.extraChecks != nil && !reflect.ValueOf(info.extraChecks).
+			Call([]reflect.Value{reflect.ValueOf(cmd)})[0].Bool() {
 			panic(scerrors.NotImplementedError(cmd))
 		}
 	}
