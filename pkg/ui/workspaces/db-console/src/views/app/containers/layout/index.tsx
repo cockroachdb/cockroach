@@ -39,6 +39,7 @@ import { Badge } from "@cockroachlabs/cluster-ui";
 
 import "./layout.styl";
 import "./layoutPanel.styl";
+import {getDataFromServer, getFlagValue} from "src/util/dataFromServer";
 
 export interface LayoutProps {
   clusterName: string;
@@ -82,6 +83,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
             <GlobalNavigation>
               <Left>
                 <CockroachLabsLockupIcon height={26} />
+                {getDataFromServer().FeatureFlags.is_observability_service ? "~~ Observability Service ~~" : ""}
               </Left>
               <Right>
                 <FeedbackSurveyLink />

@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -155,6 +156,9 @@ func (p *ReverseHTTPProxy) RunAsync(ctx context.Context) <-chan struct{} {
 				return &u
 			},
 			OIDC: &noOIDCConfigured{},
+			Flags: &serverpb.FeatureFlags{
+				IsObservabilityService: true,
+			},
 		}))
 		for _, path := range CRDBProxyPaths {
 			mux.Handle(path, p.proxy)

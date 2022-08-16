@@ -10,6 +10,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/server/serverpb",
         "//pkg/util/httputil",
         "//pkg/util/log",
     ],
