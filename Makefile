@@ -1633,6 +1633,7 @@ EVENTPB_PROTOS = \
   pkg/util/log/eventpb/cluster_events.proto \
   pkg/util/log/eventpb/job_events.proto \
   pkg/util/log/eventpb/health_events.proto \
+  pkg/util/log/eventpb/storage_events.proto \
   pkg/util/log/eventpb/telemetry.proto
 
 EVENTLOG_PROTOS = pkg/util/log/logpb/event.proto $(EVENTPB_PROTOS)
