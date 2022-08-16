@@ -118,7 +118,7 @@ func Example_workload() {
 	s := state.LoadConfig(state.ComplexConfig)
 	testPreGossipStores(s, exchange, start)
 
-	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, settings, m)
+	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, exchange, changer, settings, m)
 	sim.RunSim(ctx)
 	// WIP: non deterministic
 	// Output:
