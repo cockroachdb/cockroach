@@ -6370,3 +6370,152 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		require.Equal(t, failLogs[0].NumTables, int32(1))
 	}))
 }
+
+func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	t.Run(`succeed eventually if batches are rejected by the server for being too large`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		changefeedbase.BatchReductionRetryEnabled.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, true)
+		knobs := f.(*kafkaFeedFactory).knobs
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+		// MaxMessages of 0 means unlimited
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH kafka_sink_config='{"Flush": {"MaxMessages": 0}}'`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+		})
+
+		// Messages should be sent by a smaller and smaller MaxMessages config
+		// only until ErrMessageSizeTooLarge is no longer returned.
+		knobs.kafkaInterceptor = func(m *sarama.ProducerMessage, client kafkaClient) error {
+			maxMessages := client.Config().Producer.Flush.MaxMessages
+			if maxMessages == 0 || maxMessages >= 250 {
+				return sarama.ErrMessageSizeTooLarge
+			}
+			require.Greater(t, maxMessages, 100)
+			return nil
+		}
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+		assertPayloads(t, foo, []string{
+			`foo: [3]->{"after": {"a": 3}}`,
+			`foo: [4]->{"after": {"a": 4}}`,
+		})
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (5)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (6)`)
+		assertPayloads(t, foo, []string{
+			`foo: [5]->{"after": {"a": 5}}`,
+			`foo: [6]->{"after": {"a": 6}}`,
+		})
+	}, feedTestNoTenants))
+
+	t.Run(`succeed against a large backfill`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		changefeedbase.BatchReductionRetryEnabled.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, true)
+		knobs := f.(*kafkaFeedFactory).knobs
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE large (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO large (a) SELECT * FROM generate_series(1, 2000);`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR large WITH kafka_sink_config='{"Flush": {"MaxMessages": 1000}}'`)
+		defer closeFeed(t, foo)
+
+		rnd, _ := randutil.NewPseudoRand()
+
+		knobs.kafkaInterceptor = func(m *sarama.ProducerMessage, client kafkaClient) error {
+			if client.Config().Producer.Flush.MaxMessages > 1 && rnd.Int()%5 == 0 {
+				return sarama.ErrMessageSizeTooLarge
+			}
+			return nil
+		}
+
+		var expected []string
+		for i := 1; i <= 2000; i++ {
+			expected = append(expected, fmt.Sprintf(
+				`large: [%d]->{"after": {"a": %d}}`, i, i,
+			))
+		}
+		assertPayloads(t, foo, expected)
+	}, feedTestNoTenants))
+
+	for _, failTest := range []struct {
+		failInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
+		errMsg          string
+	}{
+		{
+			func(m *sarama.ProducerMessage, client kafkaClient) error {
+				return sarama.ErrMessageSizeTooLarge
+			},
+			"kafka server: Message was too large, server rejected it to avoid allocation error",
+		},
+		{
+			func(m *sarama.ProducerMessage, client kafkaClient) error {
+				return errors.Errorf("unrelated error")
+			},
+			"unrelated error",
+		},
+		{
+			func(m *sarama.ProducerMessage, client kafkaClient) error {
+				maxMessages := client.Config().Producer.Flush.MaxMessages
+				if maxMessages == 0 || maxMessages > 250 {
+					return sarama.ErrMessageSizeTooLarge
+				}
+				return errors.Errorf("unrelated error mid-retry")
+			},
+			"unrelated error mid-retry",
+		},
+		{
+			func() func(m *sarama.ProducerMessage, client kafkaClient) error {
+				// Trigger an internal retry for the first message but have successive
+				// messages throw a non-retryable error. This can happen in practice
+				// when the second message is on a different topic to the first.
+				startedBuffering := false
+				return func(m *sarama.ProducerMessage, client kafkaClient) error {
+					if !startedBuffering {
+						startedBuffering = true
+						return sarama.ErrMessageSizeTooLarge
+					}
+					return errors.Errorf("unrelated error mid-buffering")
+				}
+			}(),
+			"unrelated error mid-buffering",
+		},
+	} {
+		t.Run(fmt.Sprintf(`eventually surface error for retry: %s`, failTest.errMsg), kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			changefeedbase.BatchReductionRetryEnabled.Override(
+				context.Background(), &f.Server().ClusterSettings().SV, true)
+			knobs := f.(*kafkaFeedFactory).knobs
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			// Validate that different failure scenarios result in a full changefeed retry
+			sqlDB.Exec(t, `CREATE TABLE errors (a INT PRIMARY KEY);`)
+			sqlDB.Exec(t, `INSERT INTO errors (a) SELECT * FROM generate_series(1, 1000);`)
+			knobs.kafkaInterceptor = failTest.failInterceptor
+			foo := feed(t, f, `CREATE CHANGEFEED FOR errors WITH kafka_sink_config='{"Flush": {"MaxMessages": 0}}'`)
+			defer closeFeed(t, foo)
+
+			feedJob := foo.(cdctest.EnterpriseTestFeed)
+
+			// check that running status correctly updates with retryable error
+			testutils.SucceedsSoon(t, func() error {
+				status, err := feedJob.FetchRunningStatus()
+				if err != nil {
+					return err
+				}
+
+				if !strings.Contains(status, failTest.errMsg) {
+					return errors.Errorf("expected error to contain '%s', got: %v", failTest.errMsg, status)
+				}
+				return nil
+			})
+		}, feedTestNoTenants))
+	}
+}
