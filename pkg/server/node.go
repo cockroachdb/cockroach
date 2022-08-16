@@ -232,8 +232,6 @@ type Node struct {
 
 	perReplicaServer kvserver.Server
 
-	admissionController kvserver.KVAdmissionController
-
 	tenantUsage multitenant.TenantUsageServer
 
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher
@@ -368,22 +366,21 @@ func NewNode(
 	spanConfigAccessor spanconfig.KVAccessor,
 ) *Node {
 	n := &Node{
-		storeCfg:   cfg,
-		stopper:    stopper,
-		recorder:   recorder,
-		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:     stores,
-		txnMetrics: txnMetrics,
-		execCfg:    nil, // filled in later by InitLogger()
-		clusterID:  clusterID,
-		admissionController: kvserver.MakeKVAdmissionController(
-			kvAdmissionQ, storeGrantCoords, cfg.Settings),
+		storeCfg:              cfg,
+		stopper:               stopper,
+		recorder:              recorder,
+		metrics:               makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:                stores,
+		txnMetrics:            txnMetrics,
+		execCfg:               nil, // filled in later by InitLogger()
+		clusterID:             clusterID,
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
-	n.storeCfg.KVAdmissionController = n.admissionController
+	n.storeCfg.KVAdmissionController = kvserver.MakeKVAdmissionController(
+		kvAdmissionQ, storeGrantCoords, cfg.Settings)
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -526,7 +523,7 @@ func (n *Node) start(
 
 	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
 	// Stores have been created, so can start providing tenant weights.
-	n.admissionController.SetTenantWeightProvider(n, n.stopper)
+	n.storeCfg.KVAdmissionController.SetTenantWeightProvider(n, n.stopper)
 
 	// Be careful about moving this line above where we start stores; store
 	// upgrades rely on the fact that the cluster version has not been updated
@@ -989,13 +986,13 @@ func (n *Node) batchInternal(
 	}
 
 	tStart := timeutil.Now()
-	handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
+	handle, err := n.storeCfg.KVAdmissionController.AdmitKVWork(ctx, tenID, args)
 	if err != nil {
 		return nil, err
 	}
 	var writeBytes *kvserver.StoreWriteBytes
 	defer func() {
-		n.admissionController.AdmittedKVWorkDone(handle, writeBytes)
+		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
 	var pErr *roachpb.Error
