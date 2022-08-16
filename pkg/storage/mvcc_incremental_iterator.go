@@ -280,18 +280,13 @@ func (i *MVCCIncrementalIterator) NextKey() {
 
 // maybeSkipKeys checks if any keys can be skipped by using a time-bound
 // iterator. If keys can be skipped, it will update the main iterator to point
-// to the earliest version of the next candidate key.
-// It is expected (but not required) that TBI is at a key <= main iterator key
-// when calling maybeSkipKeys().
-//
-// TODO(erikgrinaker): Make sure this works properly when TBIs handle range
-// keys. In particular, we need to make sure a SeekGE doesn't get stuck
-// prematurely on a bare range key that we've already emitted, but moves onto
-// the next TBI point key (which can be much further ahead).
-func (i *MVCCIncrementalIterator) maybeSkipKeys() {
+// to the earliest version of the next candidate key, returning true. It is
+// expected (but not required) that TBI is at a key <= main iterator key when
+// calling maybeSkipKeys().
+func (i *MVCCIncrementalIterator) maybeSkipKeys() bool {
 	if i.timeBoundIter == nil {
 		// If there is no time bound iterator, we cannot skip any keys.
-		return
+		return false
 	}
 	tbiKey := i.timeBoundIter.UnsafeKey().Key
 	iterKey := i.iter.UnsafeKey().Key
@@ -309,9 +304,8 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 		// using the incremental iterator, by avoiding a SeekGE.
 		i.timeBoundIter.NextKey()
 		if ok, err := i.timeBoundIter.Valid(); !ok {
-			i.err = err
-			i.valid = false
-			return
+			i.valid, i.err = false, err
+			return false
 		}
 		tbiKey = i.timeBoundIter.UnsafeKey().Key
 
@@ -325,11 +319,23 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			seekKey := MakeMVCCMetadataKey(iterKey)
 			i.timeBoundIter.SeekGE(seekKey)
 			if ok, err := i.timeBoundIter.Valid(); !ok {
-				i.err = err
-				i.valid = false
-				return
+				i.valid, i.err = false, err
+				return false
 			}
 			tbiKey = i.timeBoundIter.UnsafeKey().Key
+
+			// If there is an MVCC range key across iterKey, then the TBI seek may get
+			// stuck in the middle of the bare range key so we move on to the next.
+			if hasPoint, hasRange := i.timeBoundIter.HasPointAndRange(); hasRange && !hasPoint {
+				if !i.timeBoundIter.RangeBounds().Key.Equal(tbiKey) {
+					i.timeBoundIter.Next()
+					if ok, err := i.timeBoundIter.Valid(); !ok {
+						i.valid, i.err = false, err
+						return false
+					}
+					tbiKey = i.timeBoundIter.UnsafeKey().Key
+				}
+			}
 			cmp = iterKey.Compare(tbiKey)
 		}
 
@@ -343,11 +349,10 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// "nearby" (within the same sstable block).
 			seekKey := MakeMVCCMetadataKey(tbiKey)
 			i.iter.SeekGE(seekKey)
-			if !i.updateValid() {
-				return
-			}
+			return i.updateValid()
 		}
 	}
+	return false
 }
 
 // updateMeta initializes i.meta. It sets i.err and returns an error on any
@@ -421,9 +426,21 @@ func (i *MVCCIncrementalIterator) advance() {
 		if !i.updateValid() {
 			return
 		}
-		i.maybeSkipKeys()
+		skipped := i.maybeSkipKeys()
 		if !i.valid {
 			return
+		}
+		if skipped {
+			// The skip may landed in the middle of a bare range key, in which case we
+			// should move on to the next key.
+			if hasPoint, hasRange := i.iter.HasPointAndRange(); hasRange && !hasPoint {
+				if !i.iter.RangeBounds().Key.Equal(i.iter.UnsafeKey().Key) {
+					i.iter.Next()
+					if !i.updateValid() {
+						return
+					}
+				}
+			}
 		}
 
 		// NB: Don't update i.hasRange directly -- we only change it when
