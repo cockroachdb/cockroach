@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -259,6 +261,53 @@ func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 			context.Background(), t, setup, stmts, db, nil, nil, onError,
 		))
 		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))
+	}
+	cumulativeTest(t, dir, testFunc)
+}
+
+// GenerateSchemaChangeCorpus executes each post commit stage of a given set of
+// statements and writes them into a corpus file. This file can be later used to
+// validate mixed version / forward compatibility.
+func GenerateSchemaChangeCorpus(
+	t *testing.T, dir string, corpusPath string, newCluster NewClusterFunc,
+) {
+	skip.UnderRace(t)
+	cc, err := corpus.NewCorpusCollector(corpusPath)
+	if err != nil {
+		t.Fatalf("failed to create collection %v", err)
+	}
+	defer func() {
+		err := cc.UpdateCorpus()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	var testCorpusCollect func(
+		t *testing.T, setup, stmts []parser.Statement,
+	)
+	testFunc := func(t *testing.T, setup, stmts []parser.Statement) {
+		if !t.Run("starting",
+			func(t *testing.T) { testCorpusCollect(t, setup, stmts) },
+		) {
+			return
+		}
+	}
+	testCorpusCollect = func(t *testing.T, setup, stmts []parser.Statement) {
+		// If any of the statements are not supported, then skip over this
+		// file for the corpus.
+		for _, stmt := range stmts {
+			if !scbuild.CheckIfSupported(stmt.AST) {
+				return
+			}
+		}
+		db, cleanup := newCluster(t, &scrun.TestingKnobs{
+			BeforeStage: cc.GetBeforeStage("EndToEndCorpus", t),
+		})
+
+		defer cleanup()
+		require.NoError(t, executeSchemaChangeTxn(
+			context.Background(), t, setup, stmts, db, nil, nil, nil,
+		))
 	}
 	cumulativeTest(t, dir, testFunc)
 }
