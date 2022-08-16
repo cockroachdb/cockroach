@@ -674,7 +674,7 @@ func (sp *Span) reset(
 			recording: recordingState{
 				logs:             makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */),
 				structured:       makeSizeLimitedBuffer(maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
-				childrenMetadata: make(map[string]tracingpb.OperationMetadata),
+				childrenMetadata: h.childrenMetadataAlloc,
 			},
 			tags: h.tagsAlloc[:0],
 		}
