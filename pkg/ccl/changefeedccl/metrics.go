@@ -57,6 +57,7 @@ type AggMetrics struct {
 	ErrorRetries          *aggmetric.AggCounter
 	AdmitLatency          *aggmetric.AggHistogram
 	RunningCount          *aggmetric.AggGauge
+	BatchReductionCount   *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -80,6 +81,7 @@ type metricsRecorder interface {
 	recordEmittedBatch(startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
 	recordResolvedCallback() func()
 	recordFlushRequestCallback() func()
+	recordBatchReduction() func()
 	getBackfillCallback() func() func()
 	getBackfillRangeCallback() func(int64) (func(), func())
 }
@@ -105,6 +107,7 @@ type sliMetrics struct {
 	BackfillCount         *aggmetric.Gauge
 	BackfillPendingRanges *aggmetric.Gauge
 	RunningCount          *aggmetric.Gauge
+	BatchReductionCount   *aggmetric.Gauge
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -128,6 +131,12 @@ func (m *sliMetrics) recordOneMessage() recordOneMessageCallback {
 func (m *sliMetrics) recordMessageSize(sz int64) {
 	if m != nil {
 		m.MessageSize.RecordValue(sz)
+	}
+}
+
+func (m *sliMetrics) recordBatchReduction() {
+	if m != nil {
+		m.BatchReductionCount.Inc(1)
 	}
 }
 
@@ -411,6 +420,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBatchReductionCount := metric.Metadata{
+		Name:        "changefeed.batch_reduction_count",
+		Help:        "Number of times the changefeed attempted to reduce the size of message batches it emitted to the sink",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_COUNT,
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -434,6 +449,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		BackfillCount:         b.Gauge(metaChangefeedBackfillCount),
 		BackfillPendingRanges: b.Gauge(metaChangefeedBackfillPendingRanges),
 		RunningCount:          b.Gauge(metaChangefeedRunning),
+		BatchReductionCount:   b.Gauge(metaBatchReductionCount),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -491,6 +507,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		BackfillCount:         a.BackfillCount.AddChild(scope),
 		BackfillPendingRanges: a.BackfillPendingRanges.AddChild(scope),
 		RunningCount:          a.RunningCount.AddChild(scope),
+		BatchReductionCount:   a.BatchReductionCount.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm
