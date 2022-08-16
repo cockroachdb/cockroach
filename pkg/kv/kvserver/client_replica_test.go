@@ -1617,9 +1617,9 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 	}
-	if !nlhe.LeaseHolder.Equal(&l.replica1Desc) {
+	if !nlhe.Lease.Replica.Equal(&l.replica1Desc) {
 		t.Fatalf("expected lease holder %+v, got %+v",
-			l.replica1Desc, nlhe.LeaseHolder)
+			l.replica1Desc, nlhe.Lease.Replica)
 	}
 
 	// Check that replica1 now has the lease.
@@ -1717,9 +1717,9 @@ func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 	}
-	if nlhe.LeaseHolder == nil || !nlhe.LeaseHolder.Equal(&l.replica1Desc) {
+	if nlhe.Lease.Empty() || !nlhe.Lease.Replica.Equal(&l.replica1Desc) {
 		t.Fatalf("expected lease holder %+v, got %+v",
-			l.replica1Desc, nlhe.LeaseHolder)
+			l.replica1Desc, nlhe.Lease.Replica)
 	}
 
 	// Check that replica1 now has the lease.
