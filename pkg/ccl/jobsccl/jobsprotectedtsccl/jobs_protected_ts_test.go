@@ -117,16 +117,14 @@ func testJobsProtectedTimestamp(
 
 	// Verify that the two jobs we just observed as removed were recorded in the
 	// metrics.
-	var removed int
-	runner.QueryRow(t, `
+	runner.CheckQueryResultsRetry(t, `
 SELECT
-    value
+    value >= 2 -- we expect 2, but with retries it can be higher
 FROM
     crdb_internal.node_metrics
 WHERE
     name = 'kv.protectedts.reconciliation.records_removed';
-`).Scan(&removed)
-	require.Equal(t, 2, removed)
+`, [][]string{{"true"}})
 }
 
 // TestJobsProtectedTimestamp is an end-to-end test of protected timestamp
