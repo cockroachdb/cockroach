@@ -173,8 +173,6 @@ function formatIdxRecommendations(
     const idxRec: InsightRecommendation = {
       type: idxType,
       database: plan.metadata.databases[0],
-      table: "",
-      index_id: 0,
       query: rec.split(" : ")[1],
       execution: {
         statement: plan.metadata.query,

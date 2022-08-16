@@ -9,5 +9,7 @@
 // licenses/APL.txt.
 
 export * from "./workloadInsights";
+export * from "./schemaInsights";
 export * from "./utils";
 export * from "./types";
+export * from "./insightsErrorComponent";
