@@ -17,6 +17,7 @@ EVENTPB_PROTOS = [
     "cluster_events.proto",
     "job_events.proto",
     "health_events.proto",
+    "storage_events.proto",
     "telemetry.proto",
 ]
 
