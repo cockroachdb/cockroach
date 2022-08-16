@@ -1351,7 +1351,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.From> from_clause
 %type <tree.TableExprs> from_list rowsfrom_list opt_from_list
 %type <tree.TablePatterns> table_pattern_list
-%type <tree.TableNames> table_name_list opt_locked_rels
+%type <tree.TableNames> db_object_name_list table_name_list view_name_list sequence_name_list opt_locked_rels
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
@@ -4824,15 +4824,15 @@ drop_ddl_stmt:
 // %Text: DROP [MATERIALIZED] VIEW [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
 // %SeeAlso: WEBDOCS/drop-index.html
 drop_view_stmt:
-  DROP VIEW table_name_list opt_drop_behavior
+  DROP VIEW view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{Names: $3.tableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
+| DROP VIEW IF EXISTS view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
-| DROP MATERIALIZED VIEW table_name_list opt_drop_behavior
+| DROP MATERIALIZED VIEW view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{
       Names: $4.tableNames(),
@@ -4841,7 +4841,7 @@ drop_view_stmt:
       IsMaterialized: true,
     }
   }
-| DROP MATERIALIZED VIEW IF EXISTS table_name_list opt_drop_behavior
+| DROP MATERIALIZED VIEW IF EXISTS view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{
       Names: $6.tableNames(),
@@ -4857,11 +4857,11 @@ drop_view_stmt:
 // %Text: DROP SEQUENCE [IF EXISTS] <sequenceName> [, ...] [CASCADE | RESTRICT]
 // %SeeAlso: DROP
 drop_sequence_stmt:
-  DROP SEQUENCE table_name_list opt_drop_behavior
+  DROP SEQUENCE sequence_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSequence{Names: $3.tableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP SEQUENCE IF EXISTS table_name_list opt_drop_behavior
+| DROP SEQUENCE IF EXISTS sequence_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSequence{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
@@ -5005,17 +5005,26 @@ drop_role_stmt:
   }
 | DROP role_or_group_or_user error // SHOW HELP: DROP ROLE
 
-table_name_list:
-  table_name
+db_object_name_list:
+  db_object_name
   {
     name := $1.unresolvedObjectName().ToTableName()
     $$.val = tree.TableNames{name}
   }
-| table_name_list ',' table_name
+| db_object_name_list ',' db_object_name
   {
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = append($1.tableNames(), name)
   }
+
+table_name_list:
+  db_object_name_list
+
+sequence_name_list:
+  db_object_name_list
+
+view_name_list:
+  db_object_name_list
 
 // %Help: ANALYZE - collect table statistics
 // %Category: Misc
@@ -7225,7 +7234,7 @@ show_create_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeView, Name: $4.unresolvedObjectName()}
 	}
-| SHOW CREATE SEQUENCE table_name
+| SHOW CREATE SEQUENCE sequence_name
 	{
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSequence, Name: $4.unresolvedObjectName()}
