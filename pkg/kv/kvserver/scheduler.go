@@ -164,6 +164,12 @@ const (
 type raftScheduleState struct {
 	flags raftScheduleFlags
 	begin int64 // nanoseconds
+
+	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
+	// scheduling or processing is slow.
+	//
+	// INVARIANT: flags&stateRaftTick == 0 iff ticks == 0.
+	ticks int
 }
 
 type raftScheduler struct {
@@ -297,7 +303,7 @@ func (s *raftScheduler) worker(ctx context.Context) {
 				state.flags |= stateRaftReady
 			}
 		}
-		if state.flags&stateRaftTick != 0 {
+		for tick, t := state.flags&stateRaftTick != 0, state.ticks; tick && t > 0; t-- {
 			// processRaftTick returns true if the range should perform ready
 			// processing. Do not reorder this below the call to processReady.
 			if s.processor.processTick(ctx, id) {
@@ -310,7 +316,7 @@ func (s *raftScheduler) worker(ctx context.Context) {
 
 		s.mu.Lock()
 		state = s.mu.state[id]
-		if state.flags == stateQueued {
+		if state.flags == stateQueued && state.ticks == 0 {
 			// No further processing required by the range ID, clear it from the
 			// state map.
 			delete(s.mu.state, id)
@@ -344,13 +350,16 @@ func (s *raftScheduler) worker(ctx context.Context) {
 func (s *raftScheduler) enqueue1Locked(
 	addFlags raftScheduleFlags, id roachpb.RangeID, now int64,
 ) int {
+	ticks := int((addFlags & stateRaftTick) / stateRaftTick) // 0 or 1
+
 	prevState := s.mu.state[id]
-	if prevState.flags&addFlags == addFlags {
+	if prevState.flags&addFlags == addFlags && ticks == 0 {
 		return 0
 	}
 	var queued int
 	newState := prevState
 	newState.flags = newState.flags | addFlags
+	newState.ticks += ticks
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
