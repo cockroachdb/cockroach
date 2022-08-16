@@ -178,7 +178,8 @@ func (f *firstNErrorTransport) SkipReplica() {
 	panic("SkipReplica not supported")
 }
 
-func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
+func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) bool {
+	return true
 }
 
 // TestComplexScenarios verifies various complex success/failure scenarios by
