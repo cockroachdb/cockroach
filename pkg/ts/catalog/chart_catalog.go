@@ -1477,6 +1477,18 @@ var charts = []sectionDescription{
 					"changefeed.flush.messages_pushback_nanos",
 				},
 			},
+			{
+				Title: "Batching",
+				Metrics: []string{
+					"changefeed.batch_reduction_count",
+				},
+			},
+			{
+				Title: "Internal Retries",
+				Metrics: []string{
+					"changefeed.internal_retry_message_count",
+				},
+			},
 		},
 	},
 	{

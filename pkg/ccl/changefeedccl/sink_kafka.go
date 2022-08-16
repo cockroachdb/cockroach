@@ -23,6 +23,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -34,8 +35,31 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
+// maybeLocker is a wrapper around a Locker that allows for successive Unlocks
+type maybeLocker struct {
+	wrapped sync.Locker
+	locked  bool
+}
+
+func (l *maybeLocker) Lock() {
+	l.wrapped.Lock()
+	l.locked = true
+}
+func (l *maybeLocker) Unlock() {
+	if l.locked {
+		l.wrapped.Unlock()
+		l.locked = false
+	}
+}
+
 type kafkaLogAdapter struct {
 	ctx context.Context
+}
+
+type kafkaSinkKnobs struct {
+	OverrideClientInit              func(config *sarama.Config) (kafkaClient, error)
+	OverrideAsyncProducerFromClient func(kafkaClient) (sarama.AsyncProducer, error)
+	OverrideSyncProducerFromClient  func(kafkaClient) (sarama.SyncProducer, error)
 }
 
 var _ sarama.StdLogger = (*kafkaLogAdapter)(nil)
@@ -72,6 +96,8 @@ type kafkaClient interface {
 	// available metadata for those topics. If no topics are provided, it will refresh
 	// metadata for all topics.
 	RefreshMetadata(topics ...string) error
+	// Config returns the sarama config used on the client
+	Config() *sarama.Config
 	// Close closes kafka connection.
 	Close() error
 }
@@ -93,6 +119,8 @@ type kafkaSink struct {
 	scratch      bufalloc.ByteAllocator
 	metrics      metricsRecorder
 
+	knobs kafkaSinkKnobs
+
 	stats kafkaStats
 
 	// Only synchronized between the client goroutine and the worker goroutine.
@@ -102,6 +130,8 @@ type kafkaSink struct {
 		flushErr error
 		flushCh  chan struct{}
 	}
+
+	disableInternalRetry bool
 }
 
 type saramaConfig struct {
@@ -167,36 +197,83 @@ func defaultSaramaConfig() *saramaConfig {
 	return config
 }
 
-func (s *kafkaSink) start() {
+// Dial implements the Sink interface.
+func (s *kafkaSink) Dial() error {
+	client, err := s.newClient(s.kafkaCfg)
+	if err != nil {
+		return err
+	}
+
+	producer, err := s.newAsyncProducer(client)
+	if err != nil {
+		return err
+	}
+
+	s.client = client
+	s.producer = producer
+
+	// Start the worker
 	s.stopWorkerCh = make(chan struct{})
 	s.worker.Add(1)
 	go s.workerLoop()
+	return nil
 }
 
-// Dial implements the Sink interface.
-func (s *kafkaSink) Dial() error {
-	client, err := sarama.NewClient(strings.Split(s.bootstrapAddrs, `,`), s.kafkaCfg)
+func (s *kafkaSink) newClient(config *sarama.Config) (kafkaClient, error) {
+	// Initialize client and producer
+	if s.knobs.OverrideClientInit != nil {
+		client, err := s.knobs.OverrideClientInit(config)
+		return client, err
+	}
+
+	client, err := sarama.NewClient(strings.Split(s.bootstrapAddrs, `,`), config)
 	if err != nil {
-		return pgerror.Wrapf(err, pgcode.CannotConnectNow,
+		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, s.bootstrapAddrs)
 	}
-	s.producer, err = sarama.NewAsyncProducerFromClient(client)
+	return client, err
+}
+
+func (s *kafkaSink) newAsyncProducer(client kafkaClient) (sarama.AsyncProducer, error) {
+	var producer sarama.AsyncProducer
+	var err error
+	if s.knobs.OverrideAsyncProducerFromClient != nil {
+		producer, err = s.knobs.OverrideAsyncProducerFromClient(client)
+	} else {
+		producer, err = sarama.NewAsyncProducerFromClient(client.(sarama.Client))
+	}
 	if err != nil {
-		return pgerror.Wrapf(err, pgcode.CannotConnectNow,
+		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, s.bootstrapAddrs)
 	}
-	s.client = client
-	s.start()
-	return nil
+	return producer, nil
+}
+
+func (s *kafkaSink) newSyncProducer(client kafkaClient) (sarama.SyncProducer, error) {
+	var producer sarama.SyncProducer
+	var err error
+	if s.knobs.OverrideSyncProducerFromClient != nil {
+		producer, err = s.knobs.OverrideSyncProducerFromClient(client)
+	} else {
+		producer, err = sarama.NewSyncProducerFromClient(client.(sarama.Client))
+	}
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
+			`connecting to kafka: %s`, s.bootstrapAddrs)
+	}
+	return producer, nil
 }
 
 // Close implements the Sink interface.
 func (s *kafkaSink) Close() error {
 	close(s.stopWorkerCh)
 	s.worker.Wait()
-	// If we're shutting down, we don't care what happens to the outstanding
-	// messages, so ignore this error.
-	_ = s.producer.Close()
+
+	if s.producer != nil {
+		// Ignore errors related to outstanding messages since we're either shutting
+		// down or beginning to retry regardless
+		_ = s.producer.Close()
+	}
 	// s.client is only nil in tests.
 	if s.client != nil {
 		return s.client.Close()
@@ -218,7 +295,6 @@ func (s *kafkaSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-
 	topic, err := s.topics.Name(topicDescr)
 	if err != nil {
 		return err
@@ -345,8 +421,54 @@ func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage
 	return nil
 }
 
+// isInternallyRetryable returns true if the sink should attempt to re-emit the
+// messages with a non-batching config first rather than surfacing the error to
+// the overarching feed.
+func (s *kafkaSink) isInternalRetryable(err error) bool {
+	if s.disableInternalRetry || err == nil { // Avoid allocating a KError if we don't need to
+		return false
+	}
+	var kError sarama.KError
+	return errors.As(err, &kError) && kError == sarama.ErrMessageSizeTooLarge
+}
+
 func (s *kafkaSink) workerLoop() {
 	defer s.worker.Done()
+
+	// Locking/Unlocking of s.mu during the retry process must be done
+	// through a maybeLocker with a deferred Unlock to allow for mu to
+	// always be unlocked upon worker completion even if it is mid-internal-retry
+	muLocker := &maybeLocker{&s.mu, false}
+	defer muLocker.Unlock()
+
+	// For an error like ErrMessageSizeTooLarge, we freeze incoming messages and
+	// retry internally with a more finely grained client until one is found that
+	// can successfully send the errored messages.
+	var retryBuf []*sarama.ProducerMessage
+	var retryErr error
+
+	startInternalRetry := func(err error) {
+		s.mu.AssertHeld()
+		log.Infof(
+			s.ctx,
+			"kafka sink with flush config (%+v) beginning internal retry with %d inflight messages due to error: %s",
+			s.kafkaCfg.Producer.Flush,
+			s.mu.inflight,
+			err.Error(),
+		)
+		retryErr = err
+		// Note that even if we reserve mu.inflight space, it may not be filled as
+		// some inflight messages won't error (ex: they're for a different topic
+		// than the one with the original message that errored).
+		retryBuf = make([]*sarama.ProducerMessage, 0, s.mu.inflight)
+	}
+	endInternalRetry := func() {
+		retryErr = nil
+		retryBuf = nil
+	}
+	isRetrying := func() bool {
+		return retryErr != nil
+	}
 
 	for {
 		var ackMsg *sarama.ProducerMessage
@@ -371,27 +493,147 @@ func (s *kafkaSink) workerLoop() {
 			}
 		}
 
-		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
-			if ackError == nil {
-				sz := ackMsg.Key.Length() + ackMsg.Value.Length()
-				s.stats.finishMessage(int64(sz))
-				m.updateMetrics(m.mvcc, sz, sinkDoesNotCompress)
-			}
-			m.alloc.Release(s.ctx)
+		// If we're in a retry we already had the lock.
+		if !isRetrying() {
+			muLocker.Lock()
 		}
-
-		s.mu.Lock()
 		s.mu.inflight--
-		if s.mu.flushErr == nil && ackError != nil {
-			s.mu.flushErr = ackError
+
+		if !isRetrying() && s.isInternalRetryable(ackError) {
+			startInternalRetry(ackError)
 		}
 
-		if s.mu.inflight == 0 && s.mu.flushCh != nil {
+		// If we're retrying and its a valid but errored message, buffer it to be retried.
+		isValidMessage := ackMsg != nil && ackMsg.Key != nil && ackMsg.Value != nil
+		if isRetrying() && isValidMessage {
+			retryBuf = append(retryBuf, ackMsg)
+		} else {
+			s.finishProducerMessage(ackMsg, ackError)
+		}
+
+		// Once inflight messages to retry are done buffering, find a new client
+		// that successfully resends and continue on with it.
+		if isRetrying() && s.mu.inflight == 0 {
+			if err := s.handleBufferedRetries(retryBuf, retryErr); err != nil {
+				s.mu.flushErr = err
+			}
+			endInternalRetry()
+		}
+
+		// If we're in a retry inflight can be 0 but messages in retryBuf are yet to
+		// be resent.
+		if !isRetrying() && s.mu.inflight == 0 && s.mu.flushCh != nil {
 			s.mu.flushCh <- struct{}{}
 			s.mu.flushCh = nil
 		}
-		s.mu.Unlock()
+
+		// If we're in a retry we keep hold of the lock to stop all other operations
+		// until the retry has completed.
+		if !isRetrying() {
+			muLocker.Unlock()
+		}
 	}
+}
+
+func (s *kafkaSink) finishProducerMessage(ackMsg *sarama.ProducerMessage, ackError error) {
+	s.mu.AssertHeld()
+	if m, ok := ackMsg.Metadata.(messageMetadata); ok {
+		if ackError == nil {
+			sz := ackMsg.Key.Length() + ackMsg.Value.Length()
+			s.stats.finishMessage(int64(sz))
+			m.updateMetrics(m.mvcc, sz, sinkDoesNotCompress)
+		}
+		m.alloc.Release(s.ctx)
+	}
+	if s.mu.flushErr == nil && ackError != nil {
+		s.mu.flushErr = ackError
+	}
+}
+
+func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryErr error) error {
+	lastSendErr := retryErr
+	activeConfig := s.kafkaCfg
+
+	// Ensure memory for messages are always cleaned up
+	defer func() {
+		for _, msg := range msgs {
+			s.finishProducerMessage(msg, lastSendErr)
+		}
+	}()
+
+	for {
+		select {
+		case <-s.stopWorkerCh:
+			log.Infof(s.ctx, "kafka sink ending retries due to worker close")
+			return lastSendErr
+		default:
+		}
+
+		newConfig, wasReduced := reduceBatchingConfig(activeConfig)
+
+		// Surface the error if its not retryable or we weren't able to reduce the
+		// batching config any further
+		if !s.isInternalRetryable(lastSendErr) {
+			log.Infof(s.ctx, "kafka sink abandoning internal retry due to error: %s", lastSendErr.Error())
+			return lastSendErr
+		} else if !wasReduced {
+			log.Infof(s.ctx, "kafka sink abandoning internal retry due to being unable to reduce batching size")
+			return lastSendErr
+		}
+
+		log.Infof(s.ctx, "kafka sink retrying %d messages with reduced flush config: (%+v)", len(msgs), newConfig.Producer.Flush)
+		activeConfig = newConfig
+
+		newClient, err := s.newClient(newConfig)
+		if err != nil {
+			return err
+		}
+		newProducer, err := s.newSyncProducer(newClient)
+		if err != nil {
+			return err
+		}
+
+		s.metrics.recordInternalRetry(int64(len(msgs)), true /* reducedBatchSize */)
+
+		// SendMessages will attempt to send all messages into an AsyncProducer with
+		// the client's config and then block until the results come in.
+		lastSendErr = newProducer.SendMessages(msgs)
+
+		if err := newProducer.Close(); err != nil {
+			log.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
+		}
+		if err := newClient.Close(); err != nil {
+			log.Errorf(s.ctx, "closing of previous sarama client for retry failed with: %s", err.Error())
+		}
+
+		if lastSendErr == nil {
+			log.Infof(s.ctx, "kafka sink internal retry succeeded")
+			return nil
+		}
+	}
+}
+
+func reduceBatchingConfig(c *sarama.Config) (*sarama.Config, bool) {
+	flooredHalve := func(num int) int {
+		if num < 2 {
+			return num
+		}
+		return num / 2
+	}
+
+	newConfig := *c
+
+	newConfig.Producer.Flush.Messages = flooredHalve(c.Producer.Flush.Messages)
+	// MaxMessages of 0 means unlimited, so treat "halving" it as reducing it to
+	// 250 (an arbitrary number)
+	if c.Producer.Flush.MaxMessages == 0 {
+		newConfig.Producer.Flush.MaxMessages = 250
+	} else {
+		newConfig.Producer.Flush.MaxMessages = flooredHalve(c.Producer.Flush.MaxMessages)
+	}
+
+	wasReduced := newConfig.Producer.Flush != c.Producer.Flush
+	return &newConfig, wasReduced
 }
 
 // Topics gives the names of all topics that have been initialized
@@ -646,6 +888,7 @@ func makeKafkaSink(
 	u sinkURL,
 	targets changefeedbase.Targets,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
@@ -667,12 +910,15 @@ func makeKafkaSink(
 		return nil, err
 	}
 
+	internalRetryEnabled := settings != nil && changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV)
+
 	sink := &kafkaSink{
-		ctx:            ctx,
-		kafkaCfg:       config,
-		bootstrapAddrs: u.Host,
-		metrics:        mb(requiresResourceAccounting),
-		topics:         topics,
+		ctx:                  ctx,
+		kafkaCfg:             config,
+		bootstrapAddrs:       u.Host,
+		metrics:              mb(requiresResourceAccounting),
+		topics:               topics,
+		disableInternalRetry: !internalRetryEnabled,
 	}
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
