@@ -48,11 +48,12 @@ func _() {
 	_ = x[WaitedForDelRangeInGCJob-37]
 	_ = x[RangefeedUseOneStreamPerNode-38]
 	_ = x[NoNonMVCCAddSSTable-39]
+	_ = x[UpdateInvalidColumnIDsInSequenceBackReferences-40]
 }
 
-const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnableNewStoreRebalancerV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTable"
+const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnableNewStoreRebalancerV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTableUpdateInvalidColumnIDsInSequenceBackReferences"
 
-var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 157, 162, 171, 186, 226, 260, 294, 316, 336, 355, 388, 407, 427, 448, 483, 517, 547, 600, 614, 635, 666, 699, 730, 764, 786, 815, 842, 873, 906, 924, 948, 976, 995}
+var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 157, 162, 171, 186, 226, 260, 294, 316, 336, 355, 388, 407, 427, 448, 483, 517, 547, 600, 614, 635, 666, 699, 730, 764, 786, 815, 842, 873, 906, 924, 948, 976, 995, 1041}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
