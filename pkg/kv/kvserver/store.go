@@ -1233,7 +1233,10 @@ func NewStore(
 	)
 
 	s.draining.Store(false)
-	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
+	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
+	// unnecessary elections when ticks are temporarily delayed and piled up.
+	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency,
+		cfg.RaftElectionTimeoutTicks)
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
