@@ -22,6 +22,7 @@ enum ConnectionProvider {
   s3 = 4;
   userfile = 5;
   gs = 6;
+  azure_storage = 7;
 
   // KMS providers.
   gcp_kms = 2;

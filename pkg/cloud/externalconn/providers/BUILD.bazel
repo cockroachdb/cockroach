@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud/amazon",
+        "//pkg/cloud/azure",
         "//pkg/cloud/gcp",
         "//pkg/cloud/nodelocal",
         "//pkg/cloud/userfile",
