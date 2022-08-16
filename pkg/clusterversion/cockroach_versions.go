@@ -290,6 +290,10 @@ const (
 	// GCHintInReplicaState adds GC hint to replica state. When this version is
 	// enabled, replicas will populate GC hint and update them when necessary.
 	GCHintInReplicaState
+	// UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
+	// ids in sequences' back references and attempts a best-effort-based matching
+	// to update those column IDs.
+	UpdateInvalidColumnIDsInSequenceBackReferences
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -483,6 +487,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     GCHintInReplicaState,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
+	},
+	{
+		Key:     UpdateInvalidColumnIDsInSequenceBackReferences,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
 	},
 
 	// *************************************************
