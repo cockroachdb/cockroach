@@ -2179,6 +2179,63 @@ index-join e
       ├── key: (1)
       └── fd: (1)-->(2,4)
 
+# Regression test for #86168. Selecting from a table with a partitioned
+# primary and secondary index, where the primary index is partitioned by
+# region and the secondary index is partitioned by another column, should
+# not cause an error.
+exec-ddl
+CREATE TYPE region_enum AS ENUM ('AP_SOUTHEAST', 'CA_CENTRAL', 'US_EAST');
+----
+
+exec-ddl
+CREATE TABLE "user" (
+  region region_enum NOT NULL,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  col1 int2 AS (col2::int2) VIRTUAL,
+  col2 varchar NOT NULL,
+  PRIMARY KEY (region, id),
+  UNIQUE (col1, col2) PARTITION BY LIST (col1) (
+    PARTITION user_col1_col2_key_ap_southeast VALUES IN (43,32),
+    PARTITION user_col1_col2_key_ca_central VALUES IN (1),
+    PARTITION DEFAULT VALUES IN (default)
+  )
+) PARTITION BY LIST (region) (
+  PARTITION user_ap_southeast VALUES IN ('AP_SOUTHEAST'),
+  PARTITION user_us_east VALUES IN ('US_EAST'),
+  PARTITION user_ca_central VALUES IN ('CA_CENTRAL'),
+  PARTITION DEFAULT VALUES IN (default)
+);
+----
+
+exec-ddl
+ALTER PARTITION user_ap_southeast OF TABLE "user" CONFIGURE ZONE USING
+  num_replicas = 5,
+  num_voters = 3,
+  lease_preferences = '[[+region=ap-southeast-2]]',
+  voter_constraints = '[+region=ap-southeast-2]';
+----
+
+opt locality=(region=ap-southeast-2)
+SELECT *
+FROM "user"
+WHERE region = 'AP_SOUTHEAST';
+----
+project
+ ├── columns: region:1!null id:2!null col1:3!null col2:4!null
+ ├── immutable
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(4), (4)-->(3)
+ ├── distribution: ap-southeast-2
+ ├── scan user
+ │    ├── columns: region:1!null id:2!null col2:4!null
+ │    ├── constraint: /1/2: [/'AP_SOUTHEAST' - /'AP_SOUTHEAST']
+ │    ├── immutable
+ │    ├── key: (2)
+ │    ├── fd: ()-->(1), (2)-->(4)
+ │    └── distribution: ap-southeast-2
+ └── projections
+      └── col2:4::INT2 [as=col1:3, outer=(4), immutable]
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
