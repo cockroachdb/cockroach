@@ -60,6 +60,7 @@ go_test(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
