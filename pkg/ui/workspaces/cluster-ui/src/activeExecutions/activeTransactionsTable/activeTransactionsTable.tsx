@@ -9,34 +9,22 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {
-  SortedTable,
-  ISortedTablePagination,
-  ColumnDescriptor,
-} from "../../sortedtable";
-import { SortSetting } from "../../sortedtable";
-import { ActiveTransaction, ExecutionType } from "../types";
-import { isSelectedColumn } from "../../columnsSelector/utils";
 import { Link } from "react-router-dom";
+import { isSelectedColumn } from "../../columnsSelector/utils";
+import { ColumnDescriptor } from "../../sortedtable";
 import {
-  getLabel,
-  executionsTableTitles,
-  ExecutionsColumn,
   activeTransactionColumnsFromCommon,
+  ExecutionsColumn,
+  executionsTableTitles,
+  getLabel,
 } from "../execTableCommon";
+import { ActiveTransaction, ExecutionType } from "../types";
 
-interface ActiveTransactionsTable {
-  data: ActiveTransaction[];
-  sortSetting: SortSetting;
-  onChangeSortSetting: (ss: SortSetting) => void;
-  pagination: ISortedTablePagination;
-  renderNoResult?: React.ReactNode;
-  selectedColumns: string[];
-}
-
-export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransaction>[] {
+export function makeActiveTransactionsColumns(
+  isCockroachCloud: boolean,
+): ColumnDescriptor<ActiveTransaction>[] {
   const execType: ExecutionType = "transaction";
-  const columns: ColumnDescriptor<ActiveTransaction>[] = [
+  return [
     activeTransactionColumnsFromCommon.executionID,
     {
       name: "mostRecentStatement",
@@ -51,7 +39,9 @@ export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransact
     activeTransactionColumnsFromCommon.status,
     activeTransactionColumnsFromCommon.startTime,
     activeTransactionColumnsFromCommon.elapsedTime,
-    activeTransactionColumnsFromCommon.timeSpentWaiting,
+    !isCockroachCloud
+      ? activeTransactionColumnsFromCommon.timeSpentWaiting
+      : null,
     {
       name: "statementCount",
       title: executionsTableTitles.statementCount(execType),
@@ -65,14 +55,14 @@ export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransact
       sort: (item: ActiveTransaction) => item.retries,
     },
     activeTransactionColumnsFromCommon.applicationName,
-  ];
-  return columns;
+  ].filter(col => col != null);
 }
 
 export function getColumnOptions(
+  columns: ColumnDescriptor<ActiveTransaction>[],
   selectedColumns: string[] | null,
 ): { label: string; value: string; isSelected: boolean }[] {
-  return makeActiveTransactionsColumns()
+  return columns
     .filter(col => !col.alwaysShow)
     .map(col => ({
       value: col.name,
@@ -80,18 +70,3 @@ export function getColumnOptions(
       isSelected: isSelectedColumn(selectedColumns, col),
     }));
 }
-
-export const ActiveTransactionsTable: React.FC<
-  ActiveTransactionsTable
-> = props => {
-  const { selectedColumns, ...rest } = props;
-  const columns = makeActiveTransactionsColumns().filter(col =>
-    isSelectedColumn(selectedColumns, col),
-  );
-
-  return (
-    <SortedTable columns={columns} className="statements-table" {...rest} />
-  );
-};
-
-ActiveTransactionsTable.defaultProps = {};
