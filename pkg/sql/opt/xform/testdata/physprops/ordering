@@ -2845,3 +2845,57 @@ sort (segmented)
       │    ├── key: (1-3)
       │    └── ordering: +1,+2,+3
       └── filters (true)
+
+# Regression test for #85393 - use only columns from the required ordering when
+# building the provided ordering for Project operators.
+exec-ddl
+CREATE TABLE t0_85393 (c0 INT);
+----
+
+exec-ddl
+CREATE TABLE t1_85393 (c0 INT);
+----
+
+opt
+SELECT *
+FROM t0_85393 CROSS JOIN t1_85393
+WHERE (t0_85393.rowid IS NULL) OR (t1_85393.rowid IN (t0_85393.rowid))
+ORDER BY t1_85393.rowid;
+----
+project
+ ├── columns: c0:1 c0:5  [hidden: t1_85393.rowid:6!null]
+ ├── fd: (6)-->(5)
+ ├── ordering: +6
+ └── project
+      ├── columns: t0_85393.c0:1 t0_85393.rowid:2!null t1_85393.c0:5 t1_85393.rowid:6!null
+      ├── key: (2,6)
+      ├── fd: (2)-->(1), (6)-->(5)
+      ├── ordering: +6
+      └── project
+           ├── columns: t0_85393.c0:1 t0_85393.rowid:2!null t1_85393.c0:5 t1_85393.rowid:6!null
+           ├── key: (6)
+           ├── fd: (2)==(6), (6)==(2), (2)-->(1,5)
+           ├── ordering: +(2|6) [actual: +2]
+           ├── inner-join (merge)
+           │    ├── columns: t0_85393.c0:9 t0_85393.rowid:10!null t1_85393.c0:13 t1_85393.rowid:14!null
+           │    ├── left ordering: +10
+           │    ├── right ordering: +14
+           │    ├── key: (14)
+           │    ├── fd: (10)-->(9), (14)-->(13), (10)==(14), (14)==(10)
+           │    ├── ordering: +(10|14) [actual: +10]
+           │    ├── scan t0_85393
+           │    │    ├── columns: t0_85393.c0:9 t0_85393.rowid:10!null
+           │    │    ├── key: (10)
+           │    │    ├── fd: (10)-->(9)
+           │    │    └── ordering: +10
+           │    ├── scan t1_85393
+           │    │    ├── columns: t1_85393.c0:13 t1_85393.rowid:14!null
+           │    │    ├── key: (14)
+           │    │    ├── fd: (14)-->(13)
+           │    │    └── ordering: +14
+           │    └── filters (true)
+           └── projections
+                ├── t0_85393.c0:9 [as=t0_85393.c0:1, outer=(9)]
+                ├── t0_85393.rowid:10 [as=t0_85393.rowid:2, outer=(10)]
+                ├── t1_85393.c0:13 [as=t1_85393.c0:5, outer=(13)]
+                └── t1_85393.rowid:14 [as=t1_85393.rowid:6, outer=(14)]
