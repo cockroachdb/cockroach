@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/logtags"
 )
@@ -37,6 +38,7 @@ type TenantDeps struct {
 	CollectionFactory *descs.CollectionFactory
 	LeaseManager      *lease.Manager
 	InternalExecutor  sqlutil.InternalExecutor
+	SessionData       *sessiondata.SessionData
 
 	SpanConfig struct { // deps for span config upgrades; can be removed accordingly
 		spanconfig.KVAccessor
