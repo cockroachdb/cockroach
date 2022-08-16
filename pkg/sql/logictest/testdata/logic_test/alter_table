@@ -2071,7 +2071,6 @@ SHOW CREATE TABLE t
 ----
 t  CREATE TABLE public.t (
    id INT8 NOT NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t_pkey PRIMARY KEY (id ASC)
 )
 
