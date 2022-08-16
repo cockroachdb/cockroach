@@ -739,7 +739,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 			require.Error(t, err)
 			var lErr *roachpb.NotLeaseHolderError
 			require.True(t, errors.As(err, &lErr))
-			require.Equal(t, secondReplica.StoreID, lErr.LeaseHolder.StoreID)
+			require.Equal(t, secondReplica.StoreID, lErr.Lease.Replica.StoreID)
 		} else {
 			// Check that the replica doesn't use its lease, even though there's
 			// no longer a transfer in progress. This is because, even though

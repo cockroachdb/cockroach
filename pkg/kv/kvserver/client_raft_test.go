@@ -1282,8 +1282,9 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	require.NotNil(t, pErr, "unexpected success")
 	nlhe := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	require.NotNil(t, nlhe, "expected NotLeaseholderError, got: %s", pErr)
-	require.NotNil(t, nlhe.LeaseHolder, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
-	require.Equal(t, leaderReplicaID, nlhe.LeaseHolder.ReplicaID)
+	require.False(t, nlhe.Lease.Empty())
+	require.NotNil(t, nlhe.Lease.Replica, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
+	require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
 }
 
 type fakeSnapshotStream struct {
