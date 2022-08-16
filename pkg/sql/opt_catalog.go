@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1683,6 +1684,11 @@ func (os *optTableStat) Histogram() []cat.HistogramBucket {
 // HistogramType is part of the cat.TableStatistic interface.
 func (os *optTableStat) HistogramType() *types.T {
 	return os.stat.HistogramData.ColumnType
+}
+
+// IsForecast is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsForecast() bool {
+	return os.stat.Name == jobspb.ForecastStatsName
 }
 
 // optFamily is a wrapper around descpb.ColumnFamilyDescriptor that keeps a

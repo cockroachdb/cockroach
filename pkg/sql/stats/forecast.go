@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -57,12 +57,7 @@ const maxForecastDistance = time.Hour * 24 * 7
 //
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
-//
-// TODO(michae2): Use nil *eval.Context or custom tree.CompareContext instead of
-// taking an evalCtx.
-func ForecastTableStatistics(
-	ctx context.Context, evalCtx tree.CompareContext, observed []*TableStatistic,
-) []*TableStatistic {
+func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []*TableStatistic {
 	// Early sanity check. We'll check this again in forecastColumnStatistics.
 	if len(observed) < minObservationsForForecast {
 		return nil
@@ -102,9 +97,7 @@ func ForecastTableStatistics(
 
 	forecasts := make([]*TableStatistic, 0, len(forecastCols))
 	for _, colKey := range forecastCols {
-		forecast, err := forecastColumnStatistics(
-			ctx, evalCtx, observedByCols[colKey], at, minGoodnessOfFit,
-		)
+		forecast, err := forecastColumnStatistics(ctx, observedByCols[colKey], at, minGoodnessOfFit)
 		if err != nil {
 			log.VEventf(
 				ctx, 2, "could not forecast statistics for table %v columns %s: %v",
@@ -135,11 +128,7 @@ func ForecastTableStatistics(
 // forecastColumnStatistics is deterministic: given the same observations and
 // forecast time, it will return the same forecast.
 func forecastColumnStatistics(
-	ctx context.Context,
-	evalCtx tree.CompareContext,
-	observed []*TableStatistic,
-	at time.Time,
-	minRequiredFit float64,
+	ctx context.Context, observed []*TableStatistic, at time.Time, minRequiredFit float64,
 ) (forecast *TableStatistic, err error) {
 	if len(observed) < minObservationsForForecast {
 		return nil, errors.New("not enough observations to forecast statistics")
@@ -263,9 +252,7 @@ func forecastColumnStatistics(
 	// histogram. NOTE: If any of the observed histograms were for inverted
 	// indexes this will produce an incorrect histogram.
 	if observed[0].HistogramData != nil {
-		hist, err := predictHistogram(
-			ctx, evalCtx, observed, forecastAt, minRequiredFit, nonNullRowCount,
-		)
+		hist, err := predictHistogram(ctx, observed, forecastAt, minRequiredFit, nonNullRowCount)
 		if err != nil {
 			// If we did not successfully predict a histogram then copy the latest
 			// histogram so we can adjust it.
@@ -276,8 +263,10 @@ func forecastColumnStatistics(
 			hist.buckets = append([]cat.HistogramBucket{}, observed[0].nonNullHistogram().buckets...)
 		}
 
-		// Now adjust for consistency.
-		hist.adjustCounts(evalCtx, nonNullRowCount, nonNullDistinctCount)
+		// Now adjust for consistency. We don't use any session data for operations
+		// on upper bounds, so a nil *eval.Context works as our tree.CompareContext.
+		var compareCtx *eval.Context
+		hist.adjustCounts(compareCtx, nonNullRowCount, nonNullDistinctCount)
 
 		// Finally, convert back to HistogramData.
 		histData, err := hist.toHistogramData(observed[0].HistogramData.ColumnType)
@@ -294,7 +283,6 @@ func forecastColumnStatistics(
 // predictHistogram tries to predict the histogram at forecast time.
 func predictHistogram(
 	ctx context.Context,
-	evalCtx tree.CompareContext,
 	observed []*TableStatistic,
 	forecastAt float64,
 	minRequiredFit float64,
@@ -359,5 +347,5 @@ func predictHistogram(
 	}
 
 	// Finally, convert the predicted quantile function back to a histogram.
-	return yₙ.toHistogram(evalCtx, colType, nonNullRowCount)
+	return yₙ.toHistogram(colType, nonNullRowCount)
 }

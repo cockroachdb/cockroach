@@ -207,6 +207,13 @@ func TestExecBuild_fk(
 	runExecBuildLogicTest(t, "fk")
 }
 
+func TestExecBuild_forecast(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "forecast")
+}
+
 func TestExecBuild_geospatial(
 	t *testing.T,
 ) {
