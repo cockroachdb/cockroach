@@ -114,3 +114,44 @@ query I
 SELECT nextval('s2')
 ----
 11
+
+statement ok
+SET experimental_enable_temp_tables=on
+
+query I
+SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'
+----
+0
+
+statement ok
+DISCARD TEMP;
+
+query I
+SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'
+----
+0
+
+statement ok
+CREATE TEMP TABLE test (a int);
+
+statement ok
+CREATE TEMP TABLE test2 (a uuid);
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+test
+test2
+
+statement ok
+DISCARD TEMP;
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+
+#Ensure temp schema is not deleted
+query I
+SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'
+----
+1
