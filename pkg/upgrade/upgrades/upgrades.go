@@ -148,6 +148,11 @@ var upgrades = []upgrade.Upgrade{
 		checkForPausedGCJobs,
 		waitForDelRangeInGCJob,
 	),
+	upgrade.NewTenantUpgrade("update invalid column IDs in sequence back references",
+		toCV(clusterversion.UpdateInvalidColumnIDsInSequenceBackReferences),
+		NoPrecondition,
+		updateInvalidColumnIDsInSequenceBackReferences,
+	),
 }
 
 func init() {
