@@ -1,0 +1,265 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "src/core/index.module.scss";
+
+.schedules-page {
+  display: flex;
+  flex-flow: column;
+  height: 100%;
+}
+
+.no-results {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.schedules-table-summary {
+  &__retention-divider {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+}
+
+.schedules-table {
+  h3 {
+    color: $headings-color;
+  }
+
+  &__row {
+    &--paused .rc-progress-line-path {
+      stroke: $tooltip-color;
+    }
+
+    &--failed {
+      & + & {
+        // Match two adjacent failed rows.
+        border-top: 1px solid $table-border-color;
+      }
+    }
+  }
+
+  &__progress-bar {
+    padding-right: 0.7em;
+    width: 120px;
+  }
+
+  &__running-status,
+  &__duration {
+    font-family: $font-family--base;
+    font-size: $font-size--small;
+    line-height: 1.67;
+    letter-spacing: 0.3px;
+    color: $colors--neutral-8;
+  }
+
+  &__status,
+  &__running-status {
+    text-transform: capitalize;
+  }
+  &__progress {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  &__two-statuses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  &__status {
+    margin-bottom: 8px;
+    font-family: $font-family--semi-bold;
+    font-size: $font-size--small;
+    font-weight: 500;
+    line-height: 1.17;
+    letter-spacing: 1.5px;
+    color: $colors--neutral-8;
+    text-transform: uppercase;
+    padding: 5px 8px;
+    border-radius: 3px;
+    text-align: center;
+    &--percentage {
+      font-family: $font-family--base;
+      font-size: $font-size--small;
+      line-height: 1.67;
+      letter-spacing: 0.3px;
+      width: 40px;
+    }
+    .schedule-detail {
+      white-space: pre-wrap;
+      padding: 5px;
+      margin-top: 5px;
+      margin-bottom: 10px;
+      border: 1px solid $button-border-color;
+      border-radius: 4px;
+      background-color: white;
+      color: $headings-color;
+    }
+  }
+
+  &__cell--description {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 500px;
+    word-wrap: break-word;
+  }
+
+  &__status-icon {
+    display: inline-block;
+    margin-right: 7px;
+  }
+}
+
+.schedule-details {
+  .summary--card__counting {
+    margin-bottom: 15px;
+    &--value {
+      margin-bottom: 5px;
+    }
+  }
+
+  .summary--card--title {
+    font-family: $font-family--base;
+    font-size: $font-size--tall;
+    font-weight: $font-weight--bold;
+    line-height: 1.5;
+    color: $colors--neutral-8;
+    margin-bottom: 15px;
+  }
+  .secondary {
+    margin-top: 15px;
+  }
+  .page--header__title {
+    margin-bottom: 30px;
+  }
+  .schedule-status__line,
+  .schedules-table__status {
+    display: flex;
+    align-items: baseline;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    margin-right: 8px;
+  }
+  .schedule-status__line {
+    font-size: $font-size--medium;
+    display: flex;
+    align-items: center;
+    .ant-divider {
+      height: 20px;
+    }
+  }
+  .schedules-table__status {
+    width: fit-content;
+    font-size: $font-size--small;
+    margin-bottom: 0;
+  }
+  .schedule-status__line {
+    color: $colors--neutral-7;
+    span {
+      &:last-child {
+        margin-left: 8px;
+      }
+    }
+  }
+  .schedule-status__line--percentage {
+    display: flex;
+    align-items: center;
+    .ant-divider {
+      height: 20px;
+    }
+    span {
+      font-family: $font-family--base;
+      font-size: $font-size--medium;
+      line-height: 1.57;
+      letter-spacing: 0.1px;
+      color: $colors--neutral-7;
+      margin: 0;
+    }
+  }
+  .ant-divider {
+    margin-left: 15px;
+    margin-right: 15px;
+  }
+  .schedules-table__progress-bar {
+    width: 100%;
+  }
+  .schedules-table__duration {
+    font-size: $font-size--medium;
+    line-height: 22px;
+    color: $colors--neutral-7;
+  }
+}
+
+.inline-message {
+  margin-top: $spacing-smaller;
+  width: 100%;
+}
+
+.page--header {
+  padding: 0;
+
+  &__title {
+    font-family: $font-family--base;
+    font-size: $font-size--large;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    color: $colors--neutral-8;
+    margin-bottom: 25px;
+  }
+}
+
+.section {
+  flex: 0 0 auto;
+  padding: 12px 24px 12px 0px;
+
+  &--heading {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  &--container {
+    padding: 0 24px 0 0;
+  }
+}
+
+.cl-table__col-query-text {
+  font-family: $font-family--monospace;
+  font-size: $font-size--medium;
+  div {
+    font-size: $font-size--small;
+    @include line-clamp(2);
+  }
+}
+
+.cl-table-statistic {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 7px;
+  height: 32px;
+}
+
+.cl-count-title {
+  font-family: $font-family--base;
+  font-size: $font-size--medium;
+  padding: 0px;
+  margin: 0px;
+  color: $colors--neutral-6;
+  line-height: 1.57;
+  letter-spacing: 0.1px;
+  .label {
+    font-family: $font-family--bold;
+    color: $colors--neutral-7;
+  }
+}

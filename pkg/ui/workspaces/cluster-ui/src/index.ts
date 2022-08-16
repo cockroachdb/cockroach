@@ -34,6 +34,7 @@ export * from "./pageConfig";
 export * from "./pagination";
 export * from "./queryFilter";
 export * from "./search";
+export * from "./schedules";
 export * from "./sortedtable";
 export * from "./statementsDiagnostics";
 export * from "./statementsPage";
