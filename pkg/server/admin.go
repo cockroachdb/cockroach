@@ -2035,9 +2035,12 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 //
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
-	nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
-) map[roachpb.NodeID]livenesspb.NodeLivenessStatus {
-	livenesses := nl.GetLivenesses()
+	ctx context.Context, nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
+) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
+	livenesses, err := nl.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, err
+	}
 	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
 
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
@@ -2045,19 +2048,25 @@ func getLivenessStatusMap(
 		status := storepool.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status
 	}
-	return statusMap
+	return statusMap, nil
 }
 
 // Liveness returns the liveness state of all nodes on the cluster
 // known to gossip. To reach all nodes in the cluster, consider
 // using (statusServer).NodesWithLiveness instead.
 func (s *adminServer) Liveness(
-	context.Context, *serverpb.LivenessRequest,
+	ctx context.Context, _ *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
 	clock := s.server.clock
-	statusMap := getLivenessStatusMap(
-		s.server.nodeLiveness, clock.Now().GoTime(), s.server.st)
-	livenesses := s.server.nodeLiveness.GetLivenesses()
+	statusMap, err := getLivenessStatusMap(
+		ctx, s.server.nodeLiveness, clock.Now().GoTime(), s.server.st)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+	livenesses, err := s.server.nodeLiveness.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
 		Statuses:   statusMap,
