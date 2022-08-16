@@ -16,22 +16,7 @@ checking for feature: DROP SCHEMA
 increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
 ## StatementPhase stage 1 of 1 with 1 MutationType op
-upsert descriptor #106
-   schema:
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: sc
-  +  offlineReason: DROP SCHEMA db.sc
-     parentId: 104
-     privileges:
-  ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: OFFLINE
-  +  version: "2"
+added synthetic descriptor: name:"sc" id:106 state:DROP offline_reason:"" modification_time:<> version:2 parent_id:104 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > 
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 3 MutationType ops
@@ -67,12 +52,12 @@ upsert descriptor #106
   +    targetRanks: <redacted>
   +    targets: <redacted>
      id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: sc
-     offlineReason: DROP SCHEMA db.sc
+     modificationTime: {}
   ...
+         withGrantOption: 2
+       version: 2
+  -  state: DROP
+     version: "2"
 create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
   descriptor IDs: [104 106]
 # end PreCommitPhase
@@ -108,13 +93,10 @@ upsert descriptor #106
   -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: sc
-  -  offlineReason: DROP SCHEMA db.sc
      parentId: 104
-     privileges:
   ...
          withGrantOption: 2
        version: 2
-  -  state: OFFLINE
   -  version: "2"
   +  state: DROP
   +  version: "3"

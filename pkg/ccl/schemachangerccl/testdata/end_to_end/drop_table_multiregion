@@ -19,28 +19,7 @@ begin transaction #1
 checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 ## StatementPhase stage 1 of 1 with 1 MutationType op
-upsert descriptor #108
-  ...
-     localityConfig:
-       regionalByRow: {}
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: table_regional_by_row
-     nextColumnId: 3
-  ...
-     nextIndexId: 2
-     nextMutationId: 1
-  +  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
-     parentId: 104
-     partitionAllBy: true
-  ...
-     replacementOf:
-       time: {}
-  +  state: OFFLINE
-     unexposedParentSchemaId: 106
-  -  version: "1"
-  +  version: "2"
+added synthetic descriptor: name:"table_regional_by_row" id:108 version:2 modification_time:<> parent_id:104 unexposed_parent_schema_id:106 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"crdb_region" id:2 type:<family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100105 time_precision_is_set: false udt_metadata: <   array_type_oid: 100107 > > nullable:false default_expr:"default_to_database_primary_region(gateway_region())::@100105" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"crdb_region" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"table_regional_by_row_pkey" id:1 unique:true version:4 key_column_names:"crdb_region" key_column_names:"k" key_column_directions:ASC key_column_directions:ASC key_column_ids:2 key_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:1 num_implicit_columns:1 list:<name:"us-east1" values:"\006\001@" subpartitioning:<num_columns:0 num_implicit_columns:0 > > list:<name:"us-east2" values:"\006\001\200" subpartitioning:<num_columns:0 num_implicit_columns:0 > > list:<name:"us-east3" values:"\006\001\300" subpartitioning:<num_columns:0 num_implicit_columns:0 > > > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:1640995200000000000 constraint_id:1 not_visible:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<wall_time:1640995200000000000 > temporary:false locality_config:<regional_by_row:<> > partition_all_by:true exclude_data_from_backup:false next_constraint_id:2 import_start_wall_time:0 
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
@@ -105,14 +84,11 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-     localityConfig:
-       regionalByRow: {}
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: table_regional_by_row
-     nextColumnId: 3
-  ...
+     replacementOf:
+       time: {}
+  -  state: DROP
+     unexposedParentSchemaId: 106
+     version: "2"
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
@@ -175,15 +151,8 @@ upsert descriptor #108
      name: table_regional_by_row
      nextColumnId: 3
   ...
-     nextIndexId: 2
-     nextMutationId: 1
-  -  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
-     parentId: 104
-     partitionAllBy: true
-  ...
      replacementOf:
        time: {}
-  -  state: OFFLINE
   +  state: DROP
      unexposedParentSchemaId: 106
   -  version: "2"
