@@ -4816,8 +4816,14 @@ discard_stmt:
   {
     $$.val = &tree.Discard{Mode: tree.DiscardModeSequences}
   }
-| DISCARD TEMP { return unimplemented(sqllex, "discard temp") }
-| DISCARD TEMPORARY { return unimplemented(sqllex, "discard temp") }
+| DISCARD TEMP
+  {
+    $$.val = &tree.Discard{Mode: tree.DiscardModeTemp}
+  }
+| DISCARD TEMPORARY
+  {
+    $$.val = &tree.Discard{Mode: tree.DiscardModeTemp}
+  }
 | DISCARD error // SHOW HELP: DISCARD
 
 // %Help: DROP

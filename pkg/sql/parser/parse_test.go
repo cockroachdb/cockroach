@@ -450,8 +450,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP TRIGGER a`, 28296, `drop`, ``},
 
 		{`DISCARD PLANS`, 0, `discard plans`, ``},
-		{`DISCARD TEMP`, 0, `discard temp`, ``},
-		{`DISCARD TEMPORARY`, 0, `discard temp`, ``},
 
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
