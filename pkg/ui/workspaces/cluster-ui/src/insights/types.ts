@@ -11,6 +11,7 @@
 import { Moment } from "moment";
 import { HIGH_WAIT_CONTENTION_THRESHOLD } from "../api";
 import { Filters } from "../queryFilter";
+import { InsightType } from "../insightsTable/insightsTable";
 
 export enum InsightNameEnum {
   highWaitTime = "highWaitTime",
@@ -76,3 +77,29 @@ export type InsightEventFilters = Omit<
   | "timeNumber"
   | "timeUnit"
 >;
+
+export type SchemaInsightEventFilters = Omit<
+  Filters,
+  | "app"
+  | "sqlType"
+  | "fullScan"
+  | "distributed"
+  | "regions"
+  | "nodes"
+  | "username"
+  | "sessionStatus"
+  | "timeNumber"
+  | "timeUnit"
+>;
+
+export const schemaInsightTypeToDisplayMapping = {
+  CREATE_INDEX: "Create New Index",
+  DROP_INDEX: "Drop Unused Index",
+  REPLACE_INDEX: "Replace Index",
+};
+
+export function schemaInsightDisplayToType(display: string): string {
+  return Object.keys(schemaInsightTypeToDisplayMapping).find(
+    (type: InsightType) => schemaInsightTypeToDisplayMapping[type] === display,
+  );
+}

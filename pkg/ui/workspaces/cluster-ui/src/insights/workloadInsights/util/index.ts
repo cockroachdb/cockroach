@@ -13,4 +13,3 @@ export * from "./queriesCell";
 export * from "./emptyInsightsTablePlaceholder";
 export * from "./insightsColumns";
 export * from "./dropDownSelect";
-export * from "./workloadInsightsError";
