@@ -117,18 +117,18 @@ func decodeDescriptorDSV(t *testing.T, descriptorCSVPath string) oneLevelMapDesc
 	r := csv.NewReader(f)
 	records, err := r.ReadAll()
 	require.NoError(t, err)
-	require.Equal(t, records[0], []string{"id", "descriptor"})
+	require.Equal(t, records[0], []csv.Record{{Val: "id"}, {Val: "descriptor"}})
 	records = records[1:]
 	m := decodeCSVRecordsToDescGetter(t, records)
 	return m
 }
 
-func decodeCSVRecordsToDescGetter(t *testing.T, records [][]string) oneLevelMapDescGetter {
+func decodeCSVRecordsToDescGetter(t *testing.T, records [][]csv.Record) oneLevelMapDescGetter {
 	m := oneLevelMapDescGetter{}
 	for _, rec := range records {
-		id, err := strconv.Atoi(rec[0])
+		id, err := strconv.Atoi(rec[0].Val)
 		require.NoError(t, err)
-		decoded, err := hex.DecodeString(rec[1])
+		decoded, err := hex.DecodeString(rec[1].Val)
 		require.NoError(t, err)
 		m[descpb.ID(id)] = decoded
 	}
