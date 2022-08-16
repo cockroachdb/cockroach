@@ -14,7 +14,7 @@ import {
   ActiveStatementFilters,
   ActiveTransactionFilters,
 } from "src/activeExecutions/types";
-import { InsightEventFilters } from "../insights";
+import { InsightEventFilters, SchemaInsightEventFilters } from "../insights";
 
 // This function returns a Filters object populated with values from the URL, or null
 // if there were no filters set.
@@ -82,4 +82,21 @@ export function getInsightEventFiltersFromURL(
   if (Object.values(appFilters).every(val => !val)) return null;
 
   return appFilters;
+}
+
+export function getSchemaInsightEventFiltersFromURL(
+  location: Location,
+): Partial<SchemaInsightEventFilters> | null {
+  const filters = getFiltersFromURL(location);
+  if (!filters) return null;
+
+  const schemaFilters = {
+    database: filters.database,
+    schemaInsightType: filters.schemaInsightType,
+  };
+
+  // If every entry is null, there were no active filters. Return null.
+  if (Object.values(schemaFilters).every(val => !val)) return null;
+
+  return schemaFilters;
 }
