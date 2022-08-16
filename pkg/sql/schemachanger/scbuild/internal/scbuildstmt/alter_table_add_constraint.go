@@ -19,10 +19,10 @@ import (
 func alterTableAddConstraint(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
 ) {
-	d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
-	if !ok || !d.PrimaryKey || t.ValidationBehavior != tree.ValidationDefault {
-		panic(scerrors.NotImplementedError(t))
-	}
+	// Extra checks before reaching this point ensured that the command is
+	// an ALTER TABLE ... ADD PRIMARY KEY command.
+	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
+
 	// Ensure that there is a default rowid column.
 	oldPrimaryIndex := mustRetrievePrimaryIndexElement(b, tbl.TableID)
 	if getPrimaryIndexDefaultRowIDColumn(
