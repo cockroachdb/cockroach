@@ -65,6 +65,8 @@ import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import HotRanges from "src/views/reports/containers/hotranges";
+import SchedulesPage from "src/views/schedules/schedulesPage";
+import ScheduleDetails from "src/views/schedules/scheduleDetails";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
@@ -158,6 +160,9 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route path="/events" component={EventPage} />
                   <Route exact path="/jobs" component={JobsPage} />
                   <Route path={"/jobs/:id"} component={JobDetails} />
+
+                  <Route exact path="/schedules" component={SchedulesPage} />
+                  <Route path={"/schedules/:id"} component={ScheduleDetails} />
 
                   {/* databases */}
                   <Route exact path="/databases" component={DatabasesPage} />
