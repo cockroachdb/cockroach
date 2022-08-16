@@ -1748,6 +1748,8 @@ func init() {
 	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
 
+	DebugCmd.AddCommand(declarativeValidateCorpus)
+
 	debugStatementBundleCmd.AddCommand(statementBundleRecreateCmd)
 	DebugCmd.AddCommand(debugStatementBundleCmd)
 
