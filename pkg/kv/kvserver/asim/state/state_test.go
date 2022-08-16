@@ -40,6 +40,10 @@ func TestRangeSplit(t *testing.T) {
 
 	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID())
 
+	// Set the replica load of the existing replica to 100 write keys, to assert
+	// on the post split 50/50 load distribution.
+	s.load[r1.rangeID].ApplyLoad(workload.LoadEvent{Writes: 100, Reads: 100, WriteSize: 100, ReadSize: 100})
+
 	k2 := Key(1)
 	lhs, rhs, ok := s.SplitRange(k2)
 	require.True(t, ok)
@@ -55,6 +59,22 @@ func TestRangeSplit(t *testing.T) {
 	newRepl, ok := rhs.Replicas()[s1.StoreID()]
 	require.True(t, ok)
 	require.Equal(t, repl1.HoldsLease(), newRepl.HoldsLease())
+	// Assert that the lhs now has half the previous load counters.
+	lhsLoad := s.load[lhs.RangeID()].(*ReplicaLoadCounter)
+	rhsLoad := s.load[rhs.RangeID()].(*ReplicaLoadCounter)
+	lhsQPS, _ := lhsLoad.QPS.SumLocked()
+	rhsQPS, _ := rhsLoad.QPS.SumLocked()
+	require.Equal(t, int64(50), lhsLoad.ReadKeys)
+	require.Equal(t, int64(50), lhsLoad.WriteKeys)
+	require.Equal(t, int64(50), lhsLoad.WriteBytes)
+	require.Equal(t, int64(50), lhsLoad.ReadBytes)
+	require.Equal(t, float64(100), lhsQPS)
+	// Assert that the rhs load is identical to the lhs load.
+	require.Equal(t, lhsLoad.ReadKeys, rhsLoad.ReadKeys)
+	require.Equal(t, lhsLoad.WriteKeys, rhsLoad.WriteKeys)
+	require.Equal(t, lhsLoad.WriteBytes, lhsLoad.WriteBytes)
+	require.Equal(t, lhsLoad.ReadBytes, rhsLoad.ReadBytes)
+	require.Equal(t, lhsQPS, rhsQPS)
 }
 
 func TestRangeMap(t *testing.T) {
@@ -236,7 +256,7 @@ func TestWorkloadApply(t *testing.T) {
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
-			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{Key: key, Reads: 1}})
+			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{Key: key, Writes: 1}})
 		}
 	}
 
@@ -246,11 +266,11 @@ func TestWorkloadApply(t *testing.T) {
 
 	// Assert that the leaseholder replica load correctly matches the number of
 	// requests made.
-	require.Equal(t, float64(100), s.UsageInfo(r1.RangeID()).QueriesPerSecond)
-	require.Equal(t, float64(1000), s.UsageInfo(r2.RangeID()).QueriesPerSecond)
-	require.Equal(t, float64(10000), s.UsageInfo(r3.RangeID()).QueriesPerSecond)
+	require.Equal(t, float64(100), s.ReplicaLoad(r1.RangeID(), s1.StoreID()).Load().WritesPerSecond)
+	require.Equal(t, float64(1000), s.ReplicaLoad(r2.RangeID(), s2.StoreID()).Load().WritesPerSecond)
+	require.Equal(t, float64(10000), s.ReplicaLoad(r3.RangeID(), s3.StoreID()).Load().WritesPerSecond)
 
-	expectedLoad := roachpb.StoreCapacity{QueriesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
+	expectedLoad := roachpb.StoreCapacity{WritesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
 	_ = s.StoreDescriptors()
 	sc1 := s1.Descriptor().Capacity
 	sc2 := s2.Descriptor().Capacity
@@ -258,10 +278,41 @@ func TestWorkloadApply(t *testing.T) {
 
 	// Assert that the store load is also updated upon request GetStoreLoad.
 	require.Equal(t, expectedLoad, sc1)
-	expectedLoad.QueriesPerSecond *= 10
+	expectedLoad.WritesPerSecond *= 10
 	require.Equal(t, expectedLoad, sc2)
-	expectedLoad.QueriesPerSecond *= 10
+	expectedLoad.WritesPerSecond *= 10
 	require.Equal(t, expectedLoad, sc3)
+}
+
+// TestReplicaLoadQPS asserts that the rated replica load accounting maintains
+// the average per second corresponding to the tick clock.
+func TestReplicaLoadQPS(t *testing.T) {
+	s := NewState(config.DefaultSimulationSettings())
+	start := TestingStartTime()
+
+	n1 := s.AddNode()
+	k1 := Key(100)
+	qps := 1000
+	s1, _ := s.AddStore(n1.NodeID())
+	_, r1, _ := s.SplitRange(k1)
+	s.AddReplica(r1.RangeID(), s1.StoreID())
+
+	applyLoadToStats := func(key int64, count int) {
+		for i := 0; i < count; i++ {
+			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{Key: key, Writes: 1}})
+		}
+	}
+
+	s.TickClock(start)
+	s.ReplicaLoad(r1.RangeID(), s1.StoreID()).ResetLoad()
+	for i := 1; i < 100; i++ {
+		applyLoadToStats(int64(k1), qps)
+		s.TickClock(OffsetTick(start, int64(i)))
+	}
+
+	// Assert that the rated avg comes out to rate of queries applied per
+	// second.
+	require.Equal(t, float64(qps), s.ReplicaLoad(r1.RangeID(), s1.StoreID()).Load().QueriesPerSecond)
 }
 
 // TestKeyTranslation asserts that key encoding between roachpb keys and
