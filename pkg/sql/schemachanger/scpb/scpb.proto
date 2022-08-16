@@ -161,3 +161,21 @@ message DescriptorState {
   // Authorization is information about the creator of the schema change.
   Authorization authorization = 3 [(gogoproto.nullable) = false];
 }
+
+// CorpusState is used to serialize the current state object for the purpose,
+// of testing. See scpb.CurrentState for the object layout, this variant is
+// meant only for serialization in tests.
+message CorpusState {
+  string name = 1;
+  TargetState target_state = 2;
+  repeated Status status = 3;
+  bool revertible = 4;
+  bool in_rollback = 5;
+}
+
+// CorpusDisk is the disk format used for storing the declarative schema changer
+// corpuses.
+message CorpusDisk {
+  repeated CorpusState corpus_array = 1;
+}
+
