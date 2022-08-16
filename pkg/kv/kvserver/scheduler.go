@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -164,6 +165,17 @@ const (
 type raftScheduleState struct {
 	flags raftScheduleFlags
 	begin int64 // nanoseconds
+
+	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
+	// scheduling or processing is slow. It is limited by raftScheduler.maxTicks,
+	// so that the cost of processing all the ticks doesn't grow uncontrollably.
+	// If ticks consistently reaches maxTicks, the node/range is too slow, and it
+	// is safer to not deliver all the ticks as it may cause a cascading effect
+	// (the range events take longer and longer to process).
+	// TODO(pavelkalinnikov): add a node health metric for the ticks.
+	//
+	// INVARIANT: flags&stateRaftTick == 0 iff ticks == 0.
+	ticks int
 }
 
 type raftScheduler struct {
@@ -171,6 +183,7 @@ type raftScheduler struct {
 	processor      raftProcessor
 	latency        *metric.Histogram
 	numWorkers     int
+	maxTicks       int
 
 	mu struct {
 		syncutil.Mutex
@@ -184,13 +197,18 @@ type raftScheduler struct {
 }
 
 func newRaftScheduler(
-	ambient log.AmbientContext, metrics *StoreMetrics, processor raftProcessor, numWorkers int,
+	ambient log.AmbientContext,
+	metrics *StoreMetrics,
+	processor raftProcessor,
+	numWorkers int,
+	maxTicks int,
 ) *raftScheduler {
 	s := &raftScheduler{
 		ambientContext: ambient,
 		processor:      processor,
 		latency:        metrics.RaftSchedulerLatency,
 		numWorkers:     numWorkers,
+		maxTicks:       maxTicks,
 	}
 	s.mu.cond = sync.NewCond(&s.mu.Mutex)
 	s.mu.state = make(map[roachpb.RangeID]raftScheduleState)
@@ -297,11 +315,18 @@ func (s *raftScheduler) worker(ctx context.Context) {
 				state.flags |= stateRaftReady
 			}
 		}
+		if util.RaceEnabled { // assert the ticks invariant
+			if tick := state.flags&stateRaftTick != 0; tick != (state.ticks != 0) {
+				log.Fatalf(ctx, "stateRaftTick is %v with ticks %v", tick, state.ticks)
+			}
+		}
 		if state.flags&stateRaftTick != 0 {
-			// processRaftTick returns true if the range should perform ready
-			// processing. Do not reorder this below the call to processReady.
-			if s.processor.processTick(ctx, id) {
-				state.flags |= stateRaftReady
+			for t := state.ticks; t > 0; t-- {
+				// processRaftTick returns true if the range should perform ready
+				// processing. Do not reorder this below the call to processReady.
+				if s.processor.processTick(ctx, id) {
+					state.flags |= stateRaftReady
+				}
 			}
 		}
 		if state.flags&stateRaftReady != 0 {
@@ -344,13 +369,19 @@ func (s *raftScheduler) worker(ctx context.Context) {
 func (s *raftScheduler) enqueue1Locked(
 	addFlags raftScheduleFlags, id roachpb.RangeID, now int64,
 ) int {
+	ticks := int((addFlags & stateRaftTick) / stateRaftTick) // 0 or 1
+
 	prevState := s.mu.state[id]
-	if prevState.flags&addFlags == addFlags {
+	if prevState.flags&addFlags == addFlags && ticks == 0 {
 		return 0
 	}
 	var queued int
 	newState := prevState
 	newState.flags = newState.flags | addFlags
+	newState.ticks += ticks
+	if newState.ticks > s.maxTicks {
+		newState.ticks = s.maxTicks
+	}
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
