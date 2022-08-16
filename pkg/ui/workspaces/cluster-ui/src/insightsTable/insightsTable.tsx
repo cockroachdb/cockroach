@@ -15,8 +15,10 @@ import classNames from "classnames/bind";
 import styles from "./insightsTable.module.scss";
 import { StatementLink } from "../statementsTable";
 import IdxRecAction from "../insights/indexActionBtn";
-import { Duration, statementsRetries } from "../util";
+import {Duration, statementsRetries} from "../util";
 import { Anchor } from "../anchor";
+import { Link } from "react-router-dom";
+import { performanceTuningRecipes } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -32,11 +34,17 @@ export type InsightType =
 export interface InsightRecommendation {
   type: InsightType;
   database?: string;
-  table?: string;
-  indexID?: number;
   query?: string;
+  indexDetails?: indexDetails;
   execution?: executionDetails;
   details?: insightDetails;
+}
+
+export interface indexDetails {
+  table: string;
+  indexID: number;
+  indexName: string;
+  lastUsed?: string;
 }
 
 export interface executionDetails {
@@ -94,7 +102,7 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
 };
 
-function insightType(type: InsightType): string {
+export function insightType(type: InsightType): string {
   switch (type) {
     case "CREATE_INDEX":
       return "Create New Index";
@@ -144,7 +152,32 @@ function descriptionCell(
         </>
       );
     case "DROP_INDEX":
-      return <>{`Index ${insightRec.indexID}`}</>;
+      return (
+        <>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Index: </span>{" "}
+            <Link
+              to={`database/${insightRec.database}/table/${insightRec.indexDetails.table}/index/${insightRec.indexDetails.indexName}`}
+              className={cx("table-link")}
+            >
+              {insightRec.indexDetails.indexName}
+            </Link>
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.indexDetails?.lastUsed}
+            {" Learn more about "}
+            <Anchor
+              href={performanceTuningRecipes}
+              target="_blank"
+              className={cx("table-link")}
+            >
+              unused indexes
+            </Anchor>
+            {"."}
+          </div>
+        </>
+      );
     case "HIGH_WAIT_TIME":
       return (
         <>

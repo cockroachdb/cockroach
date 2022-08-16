@@ -39,12 +39,12 @@ import {
 import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import { getInsightEventDetailsFromState } from "../utils";
 import { EventExecution } from "../types";
-import { WorkloadInsightsError } from "../workloadInsights/util";
 
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
 import { CockroachCloudContext } from "../../contexts";
+import {InsightsError} from "../insightsErrorComponent";
 
 const tableCx = classNames.bind(insightTableStyles);
 
@@ -227,7 +227,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
             error={this.props.insightError}
             render={this.renderContent}
             renderError={() =>
-              WorkloadInsightsError({
+              InsightsError({
                 execType: "transaction insights",
               })
             }
