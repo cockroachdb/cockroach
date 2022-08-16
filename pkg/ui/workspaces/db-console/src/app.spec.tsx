@@ -39,6 +39,10 @@ stubComponentInModule(
   "src/views/insights/workloadInsightDetailsPageConnected",
   "default",
 );
+stubComponentInModule(
+  "src/views/insights/schemaInsightsPageConnected",
+  "default",
+);
 
 import React from "react";
 import { Action, Store } from "redux";
@@ -425,9 +429,13 @@ describe("Routing to", () => {
     /* insights */
   }
   describe("'/insights' path", () => {
-    test("routes to <InsightsOverviewPage> component", () => {
+    test("routes to <InsightsOverviewPage> component - workload insights page", () => {
       navigateToPath("/insights");
       screen.getByTestId("workloadInsightsPageConnected");
+    });
+    test("routes to <InsightsOverviewPage> component - schema insights page", () => {
+      navigateToPath("/insights?tab=Schema+Insights");
+      screen.getByTestId("schemaInsightsPageConnected");
     });
   });
   describe("'/insights/insightID' path", () => {
