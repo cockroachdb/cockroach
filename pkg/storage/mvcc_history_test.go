@@ -1605,16 +1605,14 @@ func cmdIterScan(e *evalCtx) error {
 	// adjust e.iterRangeKeys to comply with the previous positioning operation.
 	// The previous position already passed this check, so it doesn't matter that
 	// we're fudging e.rangeKeys.
-	if _, ok := e.bareIter().(*MVCCIncrementalIterator); !ok {
-		if e.iter.RangeKeyChanged() {
-			if e.iterRangeKeys.IsEmpty() {
-				e.iterRangeKeys = MVCCRangeKeyStack{
-					Bounds:   roachpb.Span{Key: keys.MinKey.Next(), EndKey: keys.MaxKey},
-					Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
-				}
-			} else {
-				e.iterRangeKeys.Clear()
+	if e.iter.RangeKeyChanged() {
+		if e.iterRangeKeys.IsEmpty() {
+			e.iterRangeKeys = MVCCRangeKeyStack{
+				Bounds:   roachpb.Span{Key: keys.MinKey.Next().Clone(), EndKey: keys.MaxKey.Clone()},
+				Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
 			}
+		} else {
+			e.iterRangeKeys.Clear()
 		}
 	}
 
@@ -1757,12 +1755,21 @@ func printIter(e *evalCtx) {
 }
 
 func checkAndUpdateRangeKeyChanged(e *evalCtx) bool {
-	// MVCCIncrementalIterator does not yet support RangeKeyChanged().
-	if _, ok := e.bareIter().(*MVCCIncrementalIterator); ok {
-		return false
-	}
 	rangeKeyChanged := e.iter.RangeKeyChanged()
 	rangeKeys := e.iter.RangeKeys()
+
+	// For MVCCIncrementalIterator, Next(Key)IgnoringTime() may reveal a different
+	// set of range key versions. However, RangeKeyChanged will only trigger if it
+	// actually moves onto a different MVCC range key. We always keep track of the
+	// filtered, time-bound versions here, and ignore false positives where
+	// otherwise invisible range keys are revealed.
+	if incrIter, ok := e.bareIter().(*MVCCIncrementalIterator); ok && incrIter.ignoringTime {
+		rangeKeys = incrIter.rangeKeys
+		if rangeKeys.IsEmpty() && e.iterRangeKeys.IsEmpty() {
+			rangeKeyChanged = false // override false positive
+		}
+	}
+
 	if rangeKeyChanged != !rangeKeys.Equal(e.iterRangeKeys) {
 		e.t.Fatalf("incorrect RangeKeyChanged=%t (was:%s is:%s) at %s\n",
 			rangeKeyChanged, e.iterRangeKeys, rangeKeys, e.td.Pos)
