@@ -268,10 +268,8 @@ func TestChangefeedIdleness(t *testing.T) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		currentlyIdle := registry.MetricsStruct().JobMetrics[jobspb.TypeChangefeed].CurrentlyIdle
 		waitForIdleCount := func(numIdle int64) {
-			testutils.SucceedsSoon(t, func() error {
-				if currentlyIdle.Value() != numIdle {
-					return fmt.Errorf("expected (%+v) idle changefeeds, found (%+v)", numIdle, currentlyIdle.Value())
-				}
+			testutils.DoesNotFailSoon(t, func(t testutils.TB) error {
+				require.Equal(t, numIdle, currentlyIdle.Value())
 				return nil
 			})
 		}
@@ -913,22 +911,16 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 		for i := 0; i < numRanges/2; i++ {
 			scanChan <- struct{}{}
 		}
-		testutils.SucceedsSoon(t, func() error {
-			count := pendingRanges.Value()
-			if count != int64(numRanges/2) {
-				return fmt.Errorf("range count %d should be %d", count, numRanges/2)
-			}
+		testutils.DoesNotFailSoon(t, func(t testutils.TB) error {
+			require.Equal(t, numRanges/2, pendingRanges.Value())
 			return nil
 		})
 
 		// Ensure that the pending count is cleared if the backfill completes
 		// regardless of successful scans
 		scanCancel()
-		testutils.SucceedsSoon(t, func() error {
-			count := pendingRanges.Value()
-			if count > 0 {
-				return fmt.Errorf("range count %d should be 0", count)
-			}
+		testutils.DoesNotFailSoon(t, func(t testutils.TB) error {
+			require.Zero(t, pendingRanges.Value())
 			return nil
 		})
 	}
@@ -3169,10 +3161,8 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		if strings.Contains(t.Name(), `sinkless`) {
 			return
 		}
-		testutils.SucceedsSoon(t, func() error {
-			if got := m.Failures.Count(); got != exp {
-				return errors.Errorf("expected %d failures, got %d", exp, got)
-			}
+		testutils.DoesNotFailSoon(t, func(t testutils.TB) error {
+			require.Equal(t, exp, m.Failures.Count())
 			return nil
 		})
 	}
@@ -3272,31 +3262,15 @@ func TestChangefeedMonitoring(t *testing.T) {
 		_, err = foo.Next()
 		require.NoError(t, err)
 
-		testutils.SucceedsSoon(t, func() error {
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
-				return errors.Errorf(`expected 1 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
-				return errors.Errorf(`expected 22 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 22 {
-				return errors.Errorf(`expected 22 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.running`); c != 1 {
-				return errors.Errorf(`expected 1 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
+		testutils.DoesNotFailSoon(t, func(t testutils.TB) error {
+			require.Equal(t, 1, s.Server.MustGetSQLCounter(`changefeed.emitted_messages`))
+			require.Equal(t, 22, s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`))
+			require.Equal(t, 22, s.Server.MustGetSQLCounter(`changefeed.flushed_bytes`))
+			require.Greater(t, s.Server.MustGetSQLCounter(`changefeed.flushes`), 0)
+			require.Equal(t, 1, s.Server.MustGetSQLCounter(`changefeed.running`))
+			require.Greater(t, s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`), 0)
+			require.Greater(t, s.Server.MustGetSQLCounter(`changefeed.buffer_entries.in`), 0)
+			require.Greater(t, s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`), 0)
 			return nil
 		})
 
@@ -3308,15 +3282,11 @@ func TestChangefeedMonitoring(t *testing.T) {
 		fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		_, _ = fooCopy.Next()
 		_, _ = fooCopy.Next()
-		testutils.SucceedsSoon(t, func() error {
+		testutils.DoesNotFailSoon(t, func(t testutils.TB) error {
 			// We can't assert exactly 4 or 88 in case we get (allowed) duplicates
 			// from RangeFeed.
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c < 4 {
-				return errors.Errorf(`expected >= 4 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c < 88 {
-				return errors.Errorf(`expected >= 88 got %d`, c)
-			}
+			require.GreaterOrEqual(t, s.Server.MustGetSQLCounter(`changefeed.emitted_messages`), 4)
+			require.GreaterOrEqual(t, s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`), 88)
 			return nil
 		})
 

@@ -12,12 +12,14 @@ package testutils
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -38,6 +40,22 @@ const (
 func SucceedsSoon(t TB, fn func() error) {
 	t.Helper()
 	SucceedsWithin(t, fn, succeedsSoonDuration())
+}
+
+// DoesNotFailSoon is the same as SucceedsSoon but also passes in a
+// TB instance that doesn't fail t if FailNow is called on it, so
+// that the function can use other helpers like require.
+func DoesNotFailSoon(t TB, fn func(subTest TB) error) {
+	t.Helper()
+	sentinel := newSentinelWrapper(t)
+	SucceedsSoon(sentinel, func() error {
+		if err := fn(sentinel); err != nil {
+			return err
+		}
+		err := sentinel.err
+		sentinel.err = nil
+		return err
+	})
 }
 
 // SucceedsSoonError returns an error unless the supplied function runs without
@@ -80,4 +98,45 @@ func succeedsSoonDuration() time.Duration {
 		return RaceSucceedsSoonDuration
 	}
 	return DefaultSucceedsSoonDuration
+}
+
+type sentinelWrapper struct {
+	t   TB
+	err error
+}
+
+func newSentinelWrapper(t TB) *sentinelWrapper {
+	return &sentinelWrapper{t: t}
+}
+
+// Fatal implements the TB interface.
+func (s *sentinelWrapper) Fatal(args ...interface{}) {
+	s.Helper()
+	s.err = errors.New("Fatal() was called")
+	if len(args) > 0 {
+		s.err = errors.New(fmt.Sprint(args...))
+	}
+}
+
+// Fatalf implements the TB interface.
+func (s *sentinelWrapper) Fatalf(format string, args ...interface{}) {
+	s.Helper()
+	s.err = fmt.Errorf(format, args...)
+}
+
+// Errorf implements the TB interface.
+func (s *sentinelWrapper) Errorf(format string, args ...interface{}) {
+	s.Helper()
+	s.Fatalf(format, args...)
+}
+
+// FailNow implements the TB interface.
+func (s *sentinelWrapper) FailNow() {
+	s.Helper()
+	s.err = errors.New("FailNow() was called")
+}
+
+// Helper implements the TB interface.
+func (s *sentinelWrapper) Helper() {
+	s.t.Helper()
 }
