@@ -373,7 +373,7 @@ func newInternalPlanner(
 		sessionDataMutatorBase: sessionDataMutatorBase{
 			defaults: SessionDefaults(map[string]string{
 				"application_name": "crdb-internal",
-				"database":         "system",
+				"database":         sd.SessionData.Database,
 			}),
 			settings: execCfg.Settings,
 		},
