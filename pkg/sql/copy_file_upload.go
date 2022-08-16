@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -81,6 +82,7 @@ func newFileUploadMachine(
 	n *tree.CopyFrom,
 	txnOpt copyTxnOpt,
 	execCfg *ExecutorConfig,
+	parentMon *mon.BytesMonitor,
 ) (f *fileUploadMachine, retErr error) {
 	if len(n.Columns) != 0 {
 		return nil, errors.New("expected 0 columns specified for file uploads")
@@ -146,13 +148,14 @@ func newFileUploadMachine(
 	c.resultColumns = make(colinfo.ResultColumns, 1)
 	c.resultColumns[0] = colinfo.ResultColumn{Typ: types.Bytes}
 	c.parsingEvalCtx = c.p.EvalContext()
-	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
-	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.initMonitoring(ctx, parentMon)
 	c.processRows = f.writeFile
 	c.forceNotNull = true
 	c.format = tree.CopyFormatText
 	c.null = `\N`
 	c.delimiter = '\t'
+	c.rows.Init(c.rowsMemAcc, colinfo.ColTypeInfoFromResCols(c.resultColumns), copyBatchRowSize)
+	c.scratchRow = make(tree.Datums, len(c.resultColumns))
 	return
 }
 
@@ -165,6 +168,10 @@ func CopyInFileStmt(destination, schema, table string) string {
 		pq.QuoteIdentifier(table),
 		lexbase.EscapeSQLString(destination),
 	)
+}
+
+func (f *fileUploadMachine) Close(ctx context.Context) {
+	f.c.Close(ctx)
 }
 
 func (f *fileUploadMachine) run(ctx context.Context) error {
@@ -181,7 +188,8 @@ func (f *fileUploadMachine) run(ctx context.Context) error {
 }
 
 func (f *fileUploadMachine) writeFile(ctx context.Context) error {
-	for _, r := range f.c.rows {
+	for i := 0; i < f.c.rows.Len(); i++ {
+		r := f.c.rows.At(i)
 		b := []byte(*r[0].(*tree.DBytes))
 		n, err := f.w.Write(b)
 		if err != nil {
@@ -197,8 +205,6 @@ func (f *fileUploadMachine) writeFile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	f.c.insertedRows += len(f.c.rows)
-	f.c.rows = f.c.rows[:0]
-	f.c.rowsMemAcc.Clear(ctx)
-	return nil
+	f.c.insertedRows += f.c.rows.Len()
+	return f.c.rows.UnsafeReset(ctx)
 }

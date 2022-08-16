@@ -274,6 +274,8 @@ message LocalOnlySessionData {
   // OptimizerUseNotVisibleIndexes indicates whether the optimizer can still
   // choose to use visible indexes for query plans.
   bool optimizer_use_not_visible_indexes = 74;
+  // CopyFastPathEnabled controls whether the optimized copy mode is enabled.
+  bool copy_fast_path_enabled = 75;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
