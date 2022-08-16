@@ -3,13 +3,20 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "azure",
-    srcs = ["azure_storage.go"],
+    srcs = [
+        "azure_connection.go",
+        "azure_storage.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/azure",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn",
+        "//pkg/cloud/externalconn/connectionpb",
+        "//pkg/cloud/externalconn/utils",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/util/contextutil",
