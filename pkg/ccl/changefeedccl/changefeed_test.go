@@ -7089,3 +7089,64 @@ func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
+
+func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		knobs := f.(*kafkaFeedFactory).knobs
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+		t.Run(`succeed eventually if batches are rejected by the server for being too large`, func(t *testing.T) {
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH kafka_sink_config='{"Flush": {"Mesages": 2}}'`)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{
+				`foo: [1]->{"after": {"a": 1}}`,
+				`foo: [2]->{"after": {"a": 2}}`,
+			})
+			knobs.batchesAreTooBig = true
+			knobs.allMessagesAreTooBig = false
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+			assertPayloads(t, foo, []string{
+				`foo: [3]->{"after": {"a": 3}}`,
+				`foo: [4]->{"after": {"a": 4}}`,
+			})
+			knobs.batchesAreTooBig = false
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (5)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (6)`)
+			assertPayloads(t, foo, []string{
+				`foo: [5]->{"after": {"a": 5}}`,
+				`foo: [6]->{"after": {"a": 6}}`,
+			})
+		})
+
+		t.Run(`fail permanently if individual messages are rejected by the server for being too large`, func(t *testing.T) {
+			knobs.allMessagesAreTooBig = true
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			defer closeFeed(t, foo)
+
+			feedJob := foo.(cdctest.EnterpriseTestFeed)
+
+			// check that running status correctly updates with retryable error
+			testutils.SucceedsSoon(t, func() error {
+				status, err := feedJob.FetchRunningStatus()
+				if err != nil {
+					return err
+				}
+
+				if !strings.Contains(status, "kafka server: Message was too large, server rejected it to avoid allocation error.") {
+					return errors.Errorf("expected error to contain 'kafka server: Message was too large, server rejected it to avoid allocation error.', got: \n%v\n", status)
+				}
+				return nil
+			})
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+}

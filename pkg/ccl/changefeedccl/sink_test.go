@@ -69,6 +69,29 @@ func (p *asyncProducerMock) Close() error {
 	return nil
 }
 
+type syncProducerMock struct {
+	overrideSend func(*sarama.ProducerMessage) error
+}
+
+func (p *syncProducerMock) SendMessage(
+	msg *sarama.ProducerMessage,
+) (partition int32, offset int64, err error) {
+	log.Warningf(context.Background(), "\n\x1b[33m MOCK SEND MESSAGE  \x1b[0m\n")
+	if p.overrideSend != nil {
+		return 0, 0, p.overrideSend(msg)
+	}
+	return 0, 0, nil
+}
+func (p *syncProducerMock) SendMessages(msgs []*sarama.ProducerMessage) error {
+	for _, msg := range msgs {
+		_, _, err := p.SendMessage(msg)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // consumeAndSucceed consumes input messages and sends them to successes channel.
 // Returns function that must be called to stop this consumer
 // to clean up. The cleanup function must be called before closing asyncProducerMock.
@@ -201,12 +224,13 @@ func makeTestKafkaSink(
 	require.NoError(t, err)
 
 	s = &kafkaSink{
-		ctx:      context.Background(),
-		topics:   topics,
-		producer: p,
-		metrics:  (*sliMetrics)(nil),
+		ctx:     context.Background(),
+		topics:  topics,
+		metrics: (*sliMetrics)(nil),
 	}
-	s.start()
+	s.clientMu.producer = p
+	err = s.Dial()
+	require.NoError(t, err)
 
 	return s, func() {
 		require.NoError(t, s.Close())
