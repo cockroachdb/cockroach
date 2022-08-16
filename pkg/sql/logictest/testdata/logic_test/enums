@@ -1204,6 +1204,8 @@ CREATE TYPE fakedb.typ AS ENUM ('schema')
 
 # Test the behavior of dropping a not-null enum colums
 
+skip_on_retry
+
 subtest drop_not_null
 
 statement ok
