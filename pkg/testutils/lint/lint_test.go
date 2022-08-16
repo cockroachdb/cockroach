@@ -2250,6 +2250,8 @@ func TestLint(t *testing.T) {
 			// instead of ...interface{}.
 			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
 			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepthInternal\(\): format argument is not a constant expression`),
+			// testutils/soon doesn't end in _test so can't skip this lint, but is used exclusively in tests.
+			stream.GrepNot(`pkg/testutils/soon\.go:\d+:\d+:.* argument is not a constant expression`),
 			// roachprod/logger is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
 			stream.GrepNot(`pkg/roachprod/logger/log\.go:.*format argument is not a constant expression`),

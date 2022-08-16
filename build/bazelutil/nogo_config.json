@@ -72,7 +72,8 @@
     "fmtsafe": {
         "exclude_files": {
             "cockroach/pkg/roachprod/logger/log\\.go$": "format argument is not a constant expression",
-            "cockroach/pkg/util/log/channels\\.go$": "format argument is not a constant expression"
+            "cockroach/pkg/util/log/channels\\.go$": "format argument is not a constant expression",
+            "cockroach/pkg/testutils/soon\\.go$": "argument is not a constant expression"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"

@@ -12,12 +12,14 @@ package testutils
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -38,6 +40,40 @@ const (
 func SucceedsSoon(t TB, fn func() error) {
 	t.Helper()
 	SucceedsWithin(t, fn, succeedsSoonDuration())
+}
+
+// RequireSoon is the same as SucceedsSoon but also passes in a
+// TB instance that doesn't fail t if FailNow is called on it, so
+// that the function can use other helpers like require.
+//
+// RequireSoon(t, func(t testutils.TB) error {
+//		require.Equal(t, expected, got)
+//		return nil
+// }
+//
+// is equivalent to
+//
+// SucceedsSoon(t, func() error {
+//		if expected != got {
+//			return errors.Newf("Expected %s got %s", expected, got)
+//		}
+//		return nil
+// })
+func RequireSoon(t TB, fn func(retryableT TB) error) {
+	t.Helper()
+	sentinel := newSentinelWrapper(t)
+	SucceedsSoon(t, func() (err error) {
+		defer func() {
+			if p := recover(); p != nil && p != errRetryablePanic {
+				panic(p)
+			}
+			if err == nil {
+				err = sentinel.err
+			}
+			sentinel.err = nil
+		}()
+		return fn(sentinel)
+	})
 }
 
 // SucceedsSoonError returns an error unless the supplied function runs without
@@ -80,4 +116,50 @@ func succeedsSoonDuration() time.Duration {
 		return RaceSucceedsSoonDuration
 	}
 	return DefaultSucceedsSoonDuration
+}
+
+var errRetryablePanic error = errors.New("retryable panic")
+
+type sentinelWrapper struct {
+	t   TB
+	err error
+}
+
+func newSentinelWrapper(t TB) *sentinelWrapper {
+	return &sentinelWrapper{t: t}
+}
+
+// Fatal implements the TB interface.
+func (s *sentinelWrapper) Fatal(args ...interface{}) {
+	s.Helper()
+	if len(args) > 0 {
+		s.err = errors.New(fmt.Sprint(args...))
+	} else {
+		s.err = errors.New("Fatal() was called")
+	}
+	s.FailNow()
+}
+
+// Fatalf implements the TB interface.
+func (s *sentinelWrapper) Fatalf(format string, args ...interface{}) {
+	s.Helper()
+	s.Errorf(format, args...)
+	s.FailNow()
+}
+
+// Errorf implements the TB interface.
+func (s *sentinelWrapper) Errorf(format string, args ...interface{}) {
+	s.Helper()
+	s.err = fmt.Errorf(format, args...)
+}
+
+// FailNow implements the TB interface.
+func (s *sentinelWrapper) FailNow() {
+	s.Helper()
+	panic(errRetryablePanic)
+}
+
+// Helper implements the TB interface.
+func (s *sentinelWrapper) Helper() {
+	s.t.Helper()
 }
