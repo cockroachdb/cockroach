@@ -1,3 +1,5 @@
+# cluster-opt: disable-corpus-generation
+
 subtest add_column
 
 statement ok
