@@ -353,14 +353,51 @@ type makeStoreRequesterFunc func(
 func NewGrantCoordinators(
 	ambientCtx log.AmbientContext, opts Options,
 ) (GrantCoordinators, []metric.Struct) {
+	st := opts.Settings
+
+	metrics := makeGrantCoordinatorMetrics()
+	regularCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics)
+	storeCoordinators := makeStoreGrantCoordinators(opts, st, metrics)
+
+	metricStructs := append([]metric.Struct(nil), metrics)
+	metricStructs = appendMetricStructsForQueues(metricStructs, regularCoord)
+	metricStructs = append(metricStructs, storeCoordinators.workQueueMetrics)
+	return GrantCoordinators{
+		Stores:  storeCoordinators,
+		Regular: regularCoord,
+	}, metricStructs
+}
+
+func makeStoreGrantCoordinators(opts Options, st *cluster.Settings, metrics GrantCoordinatorMetrics) *StoreGrantCoordinators {
+	// TODO(sumeerbhola): these metrics are shared across all stores and all
+	// priorities across stores (even the coarser workClasses, which are a
+	// mapping from priority, share the same metrics). Fix this by adding
+	// labeled Prometheus metrics.
+	storeWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-stores")
+	makeStoreRequester := makeStoreWorkQueue
+	if opts.makeStoreRequesterFunc != nil {
+		makeStoreRequester = opts.makeStoreRequesterFunc
+	}
+	storeCoordinators := &StoreGrantCoordinators{
+		settings:                    st,
+		makeStoreRequesterFunc:      makeStoreRequester,
+		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
+		workQueueMetrics:            storeWorkQueueMetrics,
+	}
+	return storeCoordinators
+}
+
+func makeRegularGrantCoordinator(
+	ambientCtx log.AmbientContext,
+	opts Options,
+	st *cluster.Settings,
+	metrics GrantCoordinatorMetrics,
+) *GrantCoordinator {
 	makeRequester := makeWorkQueue
 	if opts.makeRequesterFunc != nil {
 		makeRequester = opts.makeRequesterFunc
 	}
-	st := opts.Settings
 
-	metrics := makeGrantCoordinatorMetrics()
-	metricStructs := append([]metric.Struct(nil), metrics)
 	kvSlotAdjuster := &kvSlotAdjuster{
 		settings:                 st,
 		minCPUSlots:              opts.MinCPUSlots,
@@ -370,7 +407,7 @@ func NewGrantCoordinators(
 		moderateSlotsClamp:       opts.MaxCPUSlots,
 		runnableAlphaOverride:    opts.RunnableAlphaOverride,
 	}
-	coord := &GrantCoordinator{
+	regularCoord := &GrantCoordinator{
 		ambientCtx:                    ambientCtx,
 		settings:                      st,
 		cpuOverloadIndicator:          kvSlotAdjuster,
@@ -382,7 +419,7 @@ func NewGrantCoordinators(
 	}
 
 	kvg := &slotGranter{
-		coord:                  coord,
+		coord:                  regularCoord,
 		workKind:               KVWork,
 		totalHighLoadSlots:     opts.MinCPUSlots,
 		totalModerateLoadSlots: opts.MinCPUSlots,
@@ -392,12 +429,12 @@ func NewGrantCoordinators(
 
 	kvSlotAdjuster.granter = kvg
 	req := makeRequester(ambientCtx, KVWork, kvg, st, makeWorkQueueOptions(KVWork))
-	coord.queues[KVWork] = req
+	regularCoord.queues[KVWork] = req
 	kvg.requester = req
-	coord.granters[KVWork] = kvg
+	regularCoord.granters[KVWork] = kvg
 
 	tg := &tokenGranter{
-		coord:                coord,
+		coord:                regularCoord,
 		workKind:             SQLKVResponseWork,
 		availableBurstTokens: opts.SQLKVResponseBurstTokens,
 		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
@@ -405,12 +442,12 @@ func NewGrantCoordinators(
 	}
 	req = makeRequester(
 		ambientCtx, SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
-	coord.queues[SQLKVResponseWork] = req
+	regularCoord.queues[SQLKVResponseWork] = req
 	tg.requester = req
-	coord.granters[SQLKVResponseWork] = tg
+	regularCoord.granters[SQLKVResponseWork] = tg
 
 	tg = &tokenGranter{
-		coord:                coord,
+		coord:                regularCoord,
 		workKind:             SQLSQLResponseWork,
 		availableBurstTokens: opts.SQLSQLResponseBurstTokens,
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
@@ -418,12 +455,12 @@ func NewGrantCoordinators(
 	}
 	req = makeRequester(ambientCtx,
 		SQLSQLResponseWork, tg, st, makeWorkQueueOptions(SQLSQLResponseWork))
-	coord.queues[SQLSQLResponseWork] = req
+	regularCoord.queues[SQLSQLResponseWork] = req
 	tg.requester = req
-	coord.granters[SQLSQLResponseWork] = tg
+	regularCoord.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
-		coord:              coord,
+		coord:              regularCoord,
 		workKind:           SQLStatementLeafStartWork,
 		totalHighLoadSlots: opts.SQLStatementLeafStartWorkSlots,
 		cpuOverload:        kvSlotAdjuster,
@@ -431,12 +468,12 @@ func NewGrantCoordinators(
 	}
 	req = makeRequester(ambientCtx,
 		SQLStatementLeafStartWork, sg, st, makeWorkQueueOptions(SQLStatementLeafStartWork))
-	coord.queues[SQLStatementLeafStartWork] = req
+	regularCoord.queues[SQLStatementLeafStartWork] = req
 	sg.requester = req
-	coord.granters[SQLStatementLeafStartWork] = sg
+	regularCoord.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
-		coord:              coord,
+		coord:              regularCoord,
 		workKind:           SQLStatementRootStartWork,
 		totalHighLoadSlots: opts.SQLStatementRootStartWorkSlots,
 		cpuOverload:        kvSlotAdjuster,
@@ -444,30 +481,10 @@ func NewGrantCoordinators(
 	}
 	req = makeRequester(ambientCtx,
 		SQLStatementRootStartWork, sg, st, makeWorkQueueOptions(SQLStatementRootStartWork))
-	coord.queues[SQLStatementRootStartWork] = req
+	regularCoord.queues[SQLStatementRootStartWork] = req
 	sg.requester = req
-	coord.granters[SQLStatementRootStartWork] = sg
-
-	metricStructs = appendMetricStructsForQueues(metricStructs, coord)
-
-	// TODO(sumeerbhola): these metrics are shared across all stores and all
-	// priorities across stores (even the coarser workClasses, which are a
-	// mapping from priority, share the same metrics). Fix this by adding
-	// labeled Prometheus metrics.
-	storeWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-stores")
-	metricStructs = append(metricStructs, storeWorkQueueMetrics)
-	makeStoreRequester := makeStoreWorkQueue
-	if opts.makeStoreRequesterFunc != nil {
-		makeStoreRequester = opts.makeStoreRequesterFunc
-	}
-	storeCoordinators := &StoreGrantCoordinators{
-		settings:                    st,
-		makeStoreRequesterFunc:      makeStoreRequester,
-		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-		workQueueMetrics:            storeWorkQueueMetrics,
-	}
-
-	return GrantCoordinators{Stores: storeCoordinators, Regular: coord}, metricStructs
+	regularCoord.granters[SQLStatementRootStartWork] = sg
+	return regularCoord
 }
 
 // NewGrantCoordinatorSQL constructs a GrantCoordinator and WorkQueues for a
