@@ -517,6 +517,7 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			"crdb_internal.complete_replication_stream",
 			"crdb_internal.revalidate_unique_constraint",
 			"crdb_internal.request_statement_bundle",
+			"crdb_internal.set_compaction_concurrency",
 		} {
 			skip = skip || strings.Contains(def.Name, substr)
 		}
