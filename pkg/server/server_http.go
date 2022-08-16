@@ -187,7 +187,7 @@ func makeAdminAuthzCheckHandler(
 		// Check the privileges of the requester.
 		err := adminAuthzCheck.requireViewDebugPermission(authCtx)
 		if err != nil {
-			http.Error(w, "admin privilege or VIEWDEBUG system privilege required", http.StatusUnauthorized)
+			http.Error(w, "admin privilege or VIEWDEBUG global privilege required", http.StatusUnauthorized)
 			return
 		}
 		// Forward the request to the inner handler.
