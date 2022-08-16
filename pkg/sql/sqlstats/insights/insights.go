@@ -22,6 +22,16 @@ import (
 	prometheus "github.com/prometheus/client_model/go"
 )
 
+// MaxPerNode limits the number of insights retained in memory. As further
+// insights are had, the oldest ones are evicted.
+var MaxPerNode = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.insights.max_per_node",
+	"the maximum number of insights retained in memory per node",
+	1000,
+	settings.NonNegativeInt,
+).WithPublic()
+
 // LatencyThreshold configures the execution time beyond which a statement is
 // considered slow. A LatencyThreshold of 0 (the default) disables this
 // detection.
