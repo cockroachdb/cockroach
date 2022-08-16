@@ -353,14 +353,51 @@ type makeStoreRequesterFunc func(
 func NewGrantCoordinators(
 	ambientCtx log.AmbientContext, opts Options,
 ) (GrantCoordinators, []metric.Struct) {
+	st := opts.Settings
+
+	metrics := makeGrantCoordinatorMetrics()
+	regularCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics)
+	storeCoordinators := makeStoreGrantCoordinators(opts, st, metrics)
+
+	metricStructs := append([]metric.Struct(nil), metrics)
+	metricStructs = appendMetricStructsForQueues(metricStructs, regularCoord)
+	metricStructs = append(metricStructs, storeCoordinators.workQueueMetrics)
+	return GrantCoordinators{
+		Stores:  storeCoordinators,
+		Regular: regularCoord,
+	}, metricStructs
+}
+
+func makeStoreGrantCoordinators(opts Options, st *cluster.Settings, metrics GrantCoordinatorMetrics) *StoreGrantCoordinators {
+	// TODO(sumeerbhola): these metrics are shared across all stores and all
+	// priorities across stores (even the coarser workClasses, which are a
+	// mapping from priority, share the same metrics). Fix this by adding
+	// labeled Prometheus metrics.
+	storeWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-stores")
+	makeStoreRequester := makeStoreWorkQueue
+	if opts.makeStoreRequesterFunc != nil {
+		makeStoreRequester = opts.makeStoreRequesterFunc
+	}
+	storeCoordinators := &StoreGrantCoordinators{
+		settings:                    st,
+		makeStoreRequesterFunc:      makeStoreRequester,
+		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
+		workQueueMetrics:            storeWorkQueueMetrics,
+	}
+	return storeCoordinators
+}
+
+func makeRegularGrantCoordinator(
+	ambientCtx log.AmbientContext,
+	opts Options,
+	st *cluster.Settings,
+	metrics GrantCoordinatorMetrics,
+) *GrantCoordinator {
 	makeRequester := makeWorkQueue
 	if opts.makeRequesterFunc != nil {
 		makeRequester = opts.makeRequesterFunc
 	}
-	st := opts.Settings
 
-	metrics := makeGrantCoordinatorMetrics()
-	metricStructs := append([]metric.Struct(nil), metrics)
 	kvSlotAdjuster := &kvSlotAdjuster{
 		settings:                 st,
 		minCPUSlots:              opts.MinCPUSlots,
@@ -447,27 +484,7 @@ func NewGrantCoordinators(
 	coord.queues[SQLStatementRootStartWork] = req
 	sg.requester = req
 	coord.granters[SQLStatementRootStartWork] = sg
-
-	metricStructs = appendMetricStructsForQueues(metricStructs, coord)
-
-	// TODO(sumeerbhola): these metrics are shared across all stores and all
-	// priorities across stores (even the coarser workClasses, which are a
-	// mapping from priority, share the same metrics). Fix this by adding
-	// labeled Prometheus metrics.
-	storeWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-stores")
-	metricStructs = append(metricStructs, storeWorkQueueMetrics)
-	makeStoreRequester := makeStoreWorkQueue
-	if opts.makeStoreRequesterFunc != nil {
-		makeStoreRequester = opts.makeStoreRequesterFunc
-	}
-	storeCoordinators := &StoreGrantCoordinators{
-		settings:                    st,
-		makeStoreRequesterFunc:      makeStoreRequester,
-		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-		workQueueMetrics:            storeWorkQueueMetrics,
-	}
-
-	return GrantCoordinators{Stores: storeCoordinators, Regular: coord}, metricStructs
+	return coord
 }
 
 // NewGrantCoordinatorSQL constructs a GrantCoordinator and WorkQueues for a
