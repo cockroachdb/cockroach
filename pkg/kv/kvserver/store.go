@@ -125,6 +125,11 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
+var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
+	"COCKROACH_LOG_STORE_TELEMETRY_TICKS_INTERVAL",
+	6*60, // Once per hour. (tick interval = 10s) * 6 * 60 = 3600s = 1h.
+)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
@@ -3342,6 +3347,16 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		// NB: The initial blank line ensures that compaction stats display
 		// will not contain the log prefix.
 		log.Infof(ctx, "\n%s", m.Metrics)
+	}
+	// Periodically emit a store stats structured event to the TELEMETRY channel.
+	// These events are intended to be emitted at low frequency. Trigger on tick 1
+	// for the same reasons as above.
+	if tick%logStoreTelemetryTicks == 1 {
+		// The stats event is populated from a subset of the Metrics.
+		e := m.AsStoreStatsEvent()
+		e.NodeId = int32(s.NodeID())
+		e.StoreId = int32(s.StoreID())
+		log.StructuredEvent(ctx, &e)
 	}
 	return nil
 }
