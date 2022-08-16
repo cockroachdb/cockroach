@@ -28,9 +28,9 @@ import (
 // declarative schema  changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedStatement{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {alterTableAddColumn, true},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {alterTableDropColumn, true},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {alterTableAlterPrimaryKey, true},
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {alterTableAddColumn, true, nil},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {alterTableDropColumn, true, nil},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {alterTableAlterPrimaryKey, true, nil},
 }
 
 func init() {
@@ -52,6 +52,22 @@ func init() {
 	}
 }
 
+// AlterTableIsSupported determines if the entire set of alter table commands
+// are supported.
+func AlterTableIsSupported(n *tree.AlterTable) bool {
+	for _, cmd := range n.Cmds {
+		// Check if an entry exists for the statement type, in which
+		// case. It's either fully or partially supported. Check the commands
+		// first, since we don't want to do extra work in this transaction
+		// only to bail out later.
+		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+		if !ok || !info.fullySupported {
+			return false
+		}
+	}
+	return true
+}
+
 // AlterTable implements ALTER TABLE.
 func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	// Hoist the constraints to separate clauses because other code assumes that
@@ -59,22 +75,6 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	n.HoistAddColumnConstraints(func() {
 		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 	})
-	// Check if an entry exists for the statement type, in which
-	// case. It's either fully or partially supported. Check the commands
-	// first, since we don't want to do extra work in this transaction
-	// only to bail out later.
-	for _, cmd := range n.Cmds {
-		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-		if !ok {
-			panic(scerrors.NotImplementedError(cmd))
-		}
-		// Check if partially supported operations are allowed next. If an
-		// operation is not fully supported will not allow it to be run in
-		// the declarative schema changer until its fully supported.
-		if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
-			panic(scerrors.NotImplementedError(cmd))
-		}
-	}
 	tn := n.Table.ToTableName()
 	elts := b.ResolveTable(n.Table, ResolveParams{
 		IsExistenceOptional: n.IfExists,
@@ -93,7 +93,10 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	b.IncrementSchemaChangeAlterCounter("table")
 	for _, cmd := range n.Cmds {
-		info := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+		if !ok {
+			panic(scerrors.NotImplementedError(n))
+		}
 		// Invoke the callback function, with the concrete types.
 		fn := reflect.ValueOf(info.fn)
 		fn.Call([]reflect.Value{
