@@ -519,6 +519,10 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	}
 
 	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
+	var useTransactionalDescIDGenerator bool
+	if knobs, ok := ts.params.Knobs.SQLExecutor.(*sql.ExecutorTestingKnobs); ok {
+		useTransactionalDescIDGenerator = knobs.UseTransactionalDescIDGenerator
+	}
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
@@ -537,7 +541,8 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		// successfully.
 		TestingKnobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
-				DeterministicExplain: true,
+				DeterministicExplain:            true,
+				UseTransactionalDescIDGenerator: useTransactionalDescIDGenerator,
 			},
 			SQLStatsKnobs: &sqlstats.TestingKnobs{
 				AOSTClause: "AS OF SYSTEM TIME '-1us'",
