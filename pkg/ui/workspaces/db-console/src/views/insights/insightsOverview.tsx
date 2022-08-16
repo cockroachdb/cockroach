@@ -19,6 +19,7 @@ import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
 import { tabAttr, viewAttr } from "src/util/constants";
 import WorkloadInsightsPageConnected from "src/views/insights/workloadInsightsPageConnected";
+import SchemaInsightsPageConnected from "src/views/insights/schemaInsightsPageConnected";
 
 const { TabPane } = Tabs;
 
@@ -63,6 +64,9 @@ const InsightsOverviewPage = (props: RouteComponentProps) => {
       >
         <TabPane tab="Workload Insights" key="Workload Insights">
           <WorkloadInsightsPageConnected />
+        </TabPane>
+        <TabPane tab="Schema Insights" key="Schema Insights">
+          <SchemaInsightsPageConnected />
         </TabPane>
       </Tabs>
     </div>

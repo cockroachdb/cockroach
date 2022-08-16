@@ -15,7 +15,9 @@ import {
   defaultFilters,
   SortSetting,
   InsightEventFilters,
+  SchemaInsightEventFilters,
   api,
+  insightType,
 } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -55,5 +57,55 @@ export const selectInsightDetails = createSelector(
       return null;
     }
     return insight[insightId];
+  },
+);
+
+export const schemaInsightsFiltersLocalSetting = new LocalSetting<
+  AdminUIState,
+  SchemaInsightEventFilters
+>("filters/SchemaInsightsPage", (state: AdminUIState) => state.localSettings, {
+  database: defaultFilters.database,
+  schemaInsightType: defaultFilters.schemaInsightType,
+});
+
+export const schemaInsightsSortLocalSetting = new LocalSetting<
+  AdminUIState,
+  SortSetting
+>(
+  "sortSetting/SchemaInsightsPage",
+  (state: AdminUIState) => state.localSettings,
+  {
+    ascending: false,
+    columnTitle: "insights",
+  },
+);
+
+export const selectSchemaInsights = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  adminUiState => {
+    if (!adminUiState.schemaInsights) return [];
+    return adminUiState.schemaInsights.data;
+  },
+);
+
+export const selectSchemaInsightsDatabases = createSelector(
+  selectSchemaInsights,
+  schemaInsights => {
+    if (!schemaInsights) return [];
+    return Array.from(
+      new Set(schemaInsights.map(schemaInsight => schemaInsight.database)),
+    ).sort();
+  },
+);
+
+export const selectSchemaInsightsTypes = createSelector(
+  selectSchemaInsights,
+  schemaInsights => {
+    if (!schemaInsights) return [];
+    return Array.from(
+      new Set(
+        schemaInsights.map(schemaInsight => insightType(schemaInsight.type)),
+      ),
+    ).sort();
   },
 );

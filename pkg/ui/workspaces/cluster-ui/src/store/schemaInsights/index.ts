@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./insightCell";
-export * from "./queriesCell";
-export * from "./emptyInsightsTablePlaceholder";
-export * from "./insightsColumns";
-export * from "./dropDownSelect";
+export * from "./schemaInsights.reducer";
+export * from "./schemaInsights.sagas";
+export * from "./schemaInsights.selectors";

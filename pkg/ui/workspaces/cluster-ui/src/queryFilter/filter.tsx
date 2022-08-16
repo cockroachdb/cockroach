@@ -33,17 +33,20 @@ import { syncHistory } from "../util";
 interface QueryFilter {
   onSubmitFilters: (filters: Filters) => void;
   smth?: string;
-  appNames: string[];
+  appNames?: string[];
   activeFilters: number;
   filters: Filters;
   dbNames?: string[];
   usernames?: string[];
   sessionStatuses?: string[];
+  schemaInsightTypes?: string[];
   regions?: string[];
   nodes?: string[];
+  hideAppNames?: boolean;
   showDB?: boolean;
   showUsername?: boolean;
   showSessionStatus?: boolean;
+  showSchemaInsightTypes?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
   showRegions?: boolean;
@@ -71,6 +74,7 @@ export interface Filters extends Record<string, string | boolean> {
   nodes?: string;
   username?: string;
   sessionStatus?: string;
+  schemaInsightType?: string;
 }
 
 const timeUnit = [
@@ -90,6 +94,7 @@ export const defaultFilters: Required<Filters> = {
   nodes: "",
   username: "",
   sessionStatus: "",
+  schemaInsightType: "",
 };
 
 // getFullFiltersObject returns Filters with every field defined as
@@ -383,9 +388,11 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       dbNames,
       usernames,
       sessionStatuses,
+      schemaInsightTypes,
       regions,
       nodes,
       activeFilters,
+      hideAppNames,
       showDB,
       showSqlType,
       showScan,
@@ -394,6 +401,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       timeLabel,
       showUsername,
       showSessionStatus,
+      showSchemaInsightTypes,
     } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
@@ -429,11 +437,13 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       border: "none",
     });
 
-    const appsOptions = appNames.map(app => ({
-      label: app,
-      value: app,
-      isSelected: this.isOptionSelected(app, filters.app),
-    }));
+    const appsOptions = !hideAppNames
+      ? appNames.map(app => ({
+          label: app,
+          value: app,
+          isSelected: this.isOptionSelected(app, filters.app),
+        }))
+      : [];
     const appValue = appsOptions.filter(option => {
       return filters.app.split(",").includes(option.label);
     });
@@ -518,6 +528,32 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           field="sessionStatus"
           parent={this}
           value={sessionStatusValue}
+        />
+      </div>
+    );
+
+    const schemaInsightTypeOptions = showSchemaInsightTypes
+      ? schemaInsightTypes.map(schemaInsight => ({
+          label: schemaInsight,
+          value: schemaInsight,
+          isSelected: this.isOptionSelected(
+            schemaInsight,
+            filters.schemaInsightType,
+          ),
+        }))
+      : [];
+    const schemaInsightTypeValue = schemaInsightTypeOptions.filter(option => {
+      return filters.schemaInsightType.split(",").includes(option.label);
+    });
+    const schemaInsightTypeFilter = (
+      <div>
+        <div className={filterLabel.margin}>Schema Insight Type</div>
+        <MultiSelectCheckbox
+          options={schemaInsightTypeOptions}
+          placeholder="All"
+          field="schemaInsightType"
+          parent={this}
+          value={schemaInsightTypeValue}
         />
       </div>
     );
@@ -633,10 +669,11 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         </div>
         <div className={dropdownArea}>
           <div className={dropdownContentWrapper}>
-            {appFilter}
+            {!hideAppNames ? appFilter : ""}
             {showDB ? dbFilter : ""}
             {showUsername ? usernameFilter : ""}
             {showSessionStatus ? sessionStatusFilter : ""}
+            {showSchemaInsightTypes ? schemaInsightTypeFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}

@@ -21,6 +21,7 @@ describe("Test filter functions", (): void => {
         sqlType: "",
         database: "",
         regions: "",
+        schemaInsightType: "",
         sessionStatus: "",
         nodes: "",
         username: "",
@@ -39,12 +40,13 @@ describe("Test filter functions", (): void => {
       sqlType: "DML",
       database: "movr",
       regions: "us-central",
+      schemaInsightType: "Drop Unused Index",
       sessionStatus: "idle",
       nodes: "n1,n2",
       username: "root",
     };
     const resultFilters = getFiltersFromQueryString(
-      "app=%24+internal&timeNumber=1&timeUnit=milliseconds&fullScan=true&sqlType=DML&database=movr&sessionStatus=idle&username=root&regions=us-central&nodes=n1,n2",
+      "app=%24+internal&timeNumber=1&timeUnit=milliseconds&fullScan=true&sqlType=DML&database=movr&sessionStatus=idle&username=root&regions=us-central&nodes=n1,n2&schemaInsightType=Drop+Unused+Index",
     );
     expect(resultFilters).toEqual(expectedFilters);
   });
@@ -58,6 +60,7 @@ describe("Test filter functions", (): void => {
       sqlType: "",
       database: "",
       regions: "",
+      schemaInsightType: "",
       sessionStatus: "",
       nodes: "",
       username: "",
@@ -75,6 +78,7 @@ describe("Test filter functions", (): void => {
       sqlType: "",
       database: "",
       regions: "",
+      schemaInsightType: "",
       sessionStatus: "",
       nodes: "",
       username: "",
@@ -92,6 +96,7 @@ describe("Test filter functions", (): void => {
       sqlType: "",
       database: "",
       regions: "",
+      schemaInsightType: "",
       sessionStatus: "open",
       nodes: "",
       username: "",
@@ -109,6 +114,7 @@ describe("Test filter functions", (): void => {
       sqlType: "",
       database: "",
       regions: "",
+      schemaInsightType: "",
       sessionStatus: "idle",
       nodes: "",
       username: "",
@@ -126,11 +132,32 @@ describe("Test filter functions", (): void => {
       sqlType: "",
       database: "",
       regions: "",
+      schemaInsightType: "",
       sessionStatus: "closed",
       nodes: "",
       username: "",
     };
     const resultFilters = getFiltersFromQueryString("sessionStatus=closed");
+    expect(resultFilters).toEqual(expectedFilters);
+  });
+
+  it("testing schemaInsightType", (): void => {
+    const expectedFilters: Filters = {
+      app: "",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      fullScan: false,
+      sqlType: "",
+      database: "",
+      regions: "",
+      schemaInsightType: "Drop Unused Index",
+      sessionStatus: "",
+      nodes: "",
+      username: "",
+    };
+    const resultFilters = getFiltersFromQueryString(
+      "schemaInsightType=Drop+Unused+Index",
+    );
     expect(resultFilters).toEqual(expectedFilters);
   });
 });
