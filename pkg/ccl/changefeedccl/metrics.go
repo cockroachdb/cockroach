@@ -44,19 +44,21 @@ const defaultSLIScope = "default"
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
-	EmittedMessages       *aggmetric.AggCounter
-	MessageSize           *aggmetric.AggHistogram
-	EmittedBytes          *aggmetric.AggCounter
-	FlushedBytes          *aggmetric.AggCounter
-	BatchHistNanos        *aggmetric.AggHistogram
-	Flushes               *aggmetric.AggCounter
-	FlushHistNanos        *aggmetric.AggHistogram
-	CommitLatency         *aggmetric.AggHistogram
-	BackfillCount         *aggmetric.AggGauge
-	BackfillPendingRanges *aggmetric.AggGauge
-	ErrorRetries          *aggmetric.AggCounter
-	AdmitLatency          *aggmetric.AggHistogram
-	RunningCount          *aggmetric.AggGauge
+	EmittedMessages           *aggmetric.AggCounter
+	MessageSize               *aggmetric.AggHistogram
+	EmittedBytes              *aggmetric.AggCounter
+	FlushedBytes              *aggmetric.AggCounter
+	BatchHistNanos            *aggmetric.AggHistogram
+	Flushes                   *aggmetric.AggCounter
+	FlushHistNanos            *aggmetric.AggHistogram
+	CommitLatency             *aggmetric.AggHistogram
+	BackfillCount             *aggmetric.AggGauge
+	BackfillPendingRanges     *aggmetric.AggGauge
+	ErrorRetries              *aggmetric.AggCounter
+	AdmitLatency              *aggmetric.AggHistogram
+	RunningCount              *aggmetric.AggGauge
+	BatchReductionCount       *aggmetric.AggGauge
+	InternalRetryMessageCount *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -76,6 +78,7 @@ var nilMetricsRecorderBuilder metricsRecorderBuilder = func(_ bool) metricsRecor
 
 type metricsRecorder interface {
 	recordMessageSize(int64)
+	recordInternalRetry(int64, bool)
 	recordOneMessage() recordOneMessageCallback
 	recordEmittedBatch(startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
 	recordResolvedCallback() func()
@@ -92,19 +95,21 @@ func (a *AggMetrics) MetricStruct() {}
 
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
-	EmittedMessages       *aggmetric.Counter
-	MessageSize           *aggmetric.Histogram
-	EmittedBytes          *aggmetric.Counter
-	FlushedBytes          *aggmetric.Counter
-	BatchHistNanos        *aggmetric.Histogram
-	Flushes               *aggmetric.Counter
-	FlushHistNanos        *aggmetric.Histogram
-	CommitLatency         *aggmetric.Histogram
-	ErrorRetries          *aggmetric.Counter
-	AdmitLatency          *aggmetric.Histogram
-	BackfillCount         *aggmetric.Gauge
-	BackfillPendingRanges *aggmetric.Gauge
-	RunningCount          *aggmetric.Gauge
+	EmittedMessages           *aggmetric.Counter
+	MessageSize               *aggmetric.Histogram
+	EmittedBytes              *aggmetric.Counter
+	FlushedBytes              *aggmetric.Counter
+	BatchHistNanos            *aggmetric.Histogram
+	Flushes                   *aggmetric.Counter
+	FlushHistNanos            *aggmetric.Histogram
+	CommitLatency             *aggmetric.Histogram
+	ErrorRetries              *aggmetric.Counter
+	AdmitLatency              *aggmetric.Histogram
+	BackfillCount             *aggmetric.Gauge
+	BackfillPendingRanges     *aggmetric.Gauge
+	RunningCount              *aggmetric.Gauge
+	BatchReductionCount       *aggmetric.Gauge
+	InternalRetryMessageCount *aggmetric.Gauge
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -129,6 +134,18 @@ func (m *sliMetrics) recordMessageSize(sz int64) {
 	if m != nil {
 		m.MessageSize.RecordValue(sz)
 	}
+}
+
+func (m *sliMetrics) recordInternalRetry(numMessages int64, reducedBatchSize bool) {
+	if m == nil {
+		return
+	}
+
+	if reducedBatchSize {
+		m.BatchReductionCount.Inc(1)
+	}
+
+	m.InternalRetryMessageCount.Inc(numMessages)
 }
 
 func (m *sliMetrics) recordEmittedBatch(
@@ -243,6 +260,10 @@ func (w *wrappingCostController) recordEmittedBatch(
 
 func (w *wrappingCostController) recordMessageSize(sz int64) {
 	w.inner.recordMessageSize(sz)
+}
+
+func (w *wrappingCostController) recordInternalRetry(numMessages int64, reducedBatchSize bool) {
+	w.inner.recordInternalRetry(numMessages, reducedBatchSize)
 }
 
 func (w *wrappingCostController) recordResolvedCallback() func() {
@@ -411,6 +432,18 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBatchReductionCount := metric.Metadata{
+		Name:        "changefeed.batch_reduction_count",
+		Help:        "Number of times a changefeed aggregator node attempted to reduce the size of message batches it emitted to the sink",
+		Measurement: "Batch Size Reductions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaInternalRetryMessageCount := metric.Metadata{
+		Name:        "changefeed.internal_retry_message_count",
+		Help:        "Number of messages for which an attempt to retry them within an aggregator node was made",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -431,9 +464,11 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 			histogramWindow, commitLatencyMaxValue.Nanoseconds(), 1),
 		AdmitLatency: b.Histogram(metaAdmitLatency, histogramWindow,
 			admitLatencyMaxValue.Nanoseconds(), 1),
-		BackfillCount:         b.Gauge(metaChangefeedBackfillCount),
-		BackfillPendingRanges: b.Gauge(metaChangefeedBackfillPendingRanges),
-		RunningCount:          b.Gauge(metaChangefeedRunning),
+		BackfillCount:             b.Gauge(metaChangefeedBackfillCount),
+		BackfillPendingRanges:     b.Gauge(metaChangefeedBackfillPendingRanges),
+		RunningCount:              b.Gauge(metaChangefeedRunning),
+		BatchReductionCount:       b.Gauge(metaBatchReductionCount),
+		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -478,19 +513,21 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
-		EmittedMessages:       a.EmittedMessages.AddChild(scope),
-		MessageSize:           a.MessageSize.AddChild(scope),
-		EmittedBytes:          a.EmittedBytes.AddChild(scope),
-		FlushedBytes:          a.FlushedBytes.AddChild(scope),
-		BatchHistNanos:        a.BatchHistNanos.AddChild(scope),
-		Flushes:               a.Flushes.AddChild(scope),
-		FlushHistNanos:        a.FlushHistNanos.AddChild(scope),
-		CommitLatency:         a.CommitLatency.AddChild(scope),
-		ErrorRetries:          a.ErrorRetries.AddChild(scope),
-		AdmitLatency:          a.AdmitLatency.AddChild(scope),
-		BackfillCount:         a.BackfillCount.AddChild(scope),
-		BackfillPendingRanges: a.BackfillPendingRanges.AddChild(scope),
-		RunningCount:          a.RunningCount.AddChild(scope),
+		EmittedMessages:           a.EmittedMessages.AddChild(scope),
+		MessageSize:               a.MessageSize.AddChild(scope),
+		EmittedBytes:              a.EmittedBytes.AddChild(scope),
+		FlushedBytes:              a.FlushedBytes.AddChild(scope),
+		BatchHistNanos:            a.BatchHistNanos.AddChild(scope),
+		Flushes:                   a.Flushes.AddChild(scope),
+		FlushHistNanos:            a.FlushHistNanos.AddChild(scope),
+		CommitLatency:             a.CommitLatency.AddChild(scope),
+		ErrorRetries:              a.ErrorRetries.AddChild(scope),
+		AdmitLatency:              a.AdmitLatency.AddChild(scope),
+		BackfillCount:             a.BackfillCount.AddChild(scope),
+		BackfillPendingRanges:     a.BackfillPendingRanges.AddChild(scope),
+		RunningCount:              a.RunningCount.AddChild(scope),
+		BatchReductionCount:       a.BatchReductionCount.AddChild(scope),
+		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm
