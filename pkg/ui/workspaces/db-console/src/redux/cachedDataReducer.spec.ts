@@ -508,8 +508,6 @@ describe("PaginatedCachedDataReducer", function () {
         expected.valid = false;
         expected.setAt = undefined;
         expected.requestedAt = undefined;
-        console.log("state", JSON.stringify(state, undefined, 2));
-        console.log("expected", JSON.stringify(expected, undefined, 2));
         expect(state).toEqual(expected);
       });
 
