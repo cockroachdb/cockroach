@@ -296,6 +296,10 @@ const (
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
 	NoNonMVCCAddSSTable
+	// UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
+	// ids in sequences' back references and attempts a best-effort-based matching
+	// to update those column IDs.
+	UpdateInvalidColumnIDsInSequenceBackReferences
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -494,6 +498,11 @@ var versionsSingleton = keyedVersions{
 		Key:     NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
 	},
+	{
+		Key:     UpdateInvalidColumnIDsInSequenceBackReferences,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
