@@ -62,9 +62,10 @@ var (
 	testMetaEndKey = roachpb.RKey(keys.SystemPrefix)
 	// single meta1 and meta2 range with one replica.
 	TestMetaRangeDescriptor = roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
-		EndKey:   testMetaEndKey,
+		RangeID:    1,
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     testMetaEndKey,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
@@ -78,9 +79,10 @@ var (
 	//
 	// single user-space descriptor with one replica.
 	testUserRangeDescriptor = roachpb.RangeDescriptor{
-		RangeID:  2,
-		StartKey: testMetaEndKey,
-		EndKey:   roachpb.RKeyMax,
+		RangeID:    2,
+		Generation: 1,
+		StartKey:   testMetaEndKey,
+		EndKey:     roachpb.RKeyMax,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
@@ -90,9 +92,10 @@ var (
 	}
 	// single user-space descriptor with three replicas.
 	testUserRangeDescriptor3Replicas = roachpb.RangeDescriptor{
-		RangeID:  2,
-		StartKey: testMetaEndKey,
-		EndKey:   roachpb.RKeyMax,
+		RangeID:    2,
+		Generation: 1,
+		StartKey:   testMetaEndKey,
+		EndKey:     roachpb.RKeyMax,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				ReplicaID: 1,
@@ -187,7 +190,7 @@ func (l *simpleTransportAdapter) SkipReplica() {
 	l.nextReplicaIdx++
 }
 
-func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) {
+func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
 	for i := range l.replicas {
 		if l.replicas[i].IsSame(replica) {
 			// If we've already processed the replica, decrement the current
@@ -197,9 +200,10 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 			}
 			// Swap the client representing this replica to the front.
 			l.replicas[i], l.replicas[l.nextReplicaIdx] = l.replicas[l.nextReplicaIdx], l.replicas[i]
-			return
+			return true
 		}
 	}
+	return false
 }
 
 func (l *simpleTransportAdapter) Release() {}
@@ -589,8 +593,9 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		{
 			name: "leaseholder in desc",
 			nlhe: roachpb.NotLeaseHolderError{
-				RangeID: testUserRangeDescriptor3Replicas.RangeID,
-				Lease:   &roachpb.Lease{Replica: recognizedLeaseHolder, Sequence: 1},
+				RangeID:   testUserRangeDescriptor3Replicas.RangeID,
+				Lease:     &roachpb.Lease{Replica: recognizedLeaseHolder, Sequence: 1},
+				RangeDesc: testUserRangeDescriptor3Replicas,
 			},
 			expLeaseholder: &recognizedLeaseHolder,
 			expLease:       true,
@@ -600,6 +605,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			nlhe: roachpb.NotLeaseHolderError{
 				RangeID:     testUserRangeDescriptor3Replicas.RangeID,
 				LeaseHolder: &recognizedLeaseHolder,
+				RangeDesc:   testUserRangeDescriptor3Replicas,
 			},
 			expLeaseholder: &recognizedLeaseHolder,
 			expLease:       false,
@@ -607,16 +613,18 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		{
 			name: "leaseholder not in desc",
 			nlhe: roachpb.NotLeaseHolderError{
-				RangeID: testUserRangeDescriptor3Replicas.RangeID,
-				Lease:   &roachpb.Lease{Replica: unrecognizedLeaseHolder, Sequence: 2},
+				RangeID:   testUserRangeDescriptor3Replicas.RangeID,
+				Lease:     &roachpb.Lease{Replica: unrecognizedLeaseHolder, Sequence: 2},
+				RangeDesc: testUserRangeDescriptor3Replicas,
 			},
 			expLeaseholder: nil,
 		},
 		{
 			name: "leaseholder in desc with different type",
 			nlhe: roachpb.NotLeaseHolderError{
-				RangeID: testUserRangeDescriptor3Replicas.RangeID,
-				Lease:   &roachpb.Lease{Replica: recognizedLeaseHolderIncoming, Sequence: 1},
+				RangeID:   testUserRangeDescriptor3Replicas.RangeID,
+				Lease:     &roachpb.Lease{Replica: recognizedLeaseHolderIncoming, Sequence: 1},
+				RangeDesc: testUserRangeDescriptor3Replicas,
 			},
 			expLeaseholder: &recognizedLeaseHolderIncoming,
 			expLease:       true,
@@ -624,7 +632,8 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		{
 			name: "leaseholder unknown",
 			nlhe: roachpb.NotLeaseHolderError{
-				RangeID: testUserRangeDescriptor3Replicas.RangeID,
+				RangeID:   testUserRangeDescriptor3Replicas.RangeID,
+				RangeDesc: testUserRangeDescriptor3Replicas,
 			},
 			expLeaseholder: nil,
 		},
@@ -1046,115 +1055,142 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 	require.LessOrEqual(t, callsToNode2, 11)
 }
 
-// TestDistSenderIgnodesNLHEBasedOnOldRangeGeneration tests that a
+// TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration tests that a
 // NotLeaseHolderError received from a replica that has a stale range descriptor
 // version is ignored, and the next replica is attempted.
 func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tracer := tracing.NewTracer()
-	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
-		context.Background(), tracer, "test",
-	)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
-		require.NoError(t, g.AddInfoProto(
-			gossip.MakeNodeIDKey(n.NodeID),
-			newNodeDesc(n.NodeID),
-			gossip.NodeDescriptorTTL,
-		))
-	}
-
-	oldGeneration := roachpb.RangeGeneration(1)
-	newGeneration := roachpb.RangeGeneration(2)
-	desc := roachpb.RangeDescriptor{
-		RangeID:    1,
-		Generation: newGeneration,
-		StartKey:   roachpb.RKeyMin,
-		EndKey:     roachpb.RKeyMax,
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1, ReplicaID: 1},
-			{NodeID: 2, StoreID: 2, ReplicaID: 2},
-			{NodeID: 3, StoreID: 3, ReplicaID: 3},
+	for _, tc := range []struct {
+		name                string
+		nlheLeaseSequence   int // if 0, NLHE returns a speculative LeaseHolder instead of a full lease.
+		cachedLeaseSequence int
+		nlhe                *roachpb.NotLeaseHolderError
+	}{
+		{
+			name:                "speculative lease",
+			nlheLeaseSequence:   0,
+			cachedLeaseSequence: 1,
 		},
-	}
-	// Ambiguous lease refers to a replica that is incompatible with the cached
-	// range descriptor.
-	ambiguousLease := roachpb.Lease{
-		Replica: roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
-	}
-	cachedLease := roachpb.Lease{
-		Replica: desc.InternalReplicas[1],
-	}
+		{
+			name:                "non-speculative lease",
+			nlheLeaseSequence:   1,
+			cachedLeaseSequence: 2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tracer := tracing.NewTracer()
+			ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+				context.Background(), tracer, "test",
+			)
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
 
-	// The cache starts with a lease on node 2, so the first request will be
-	// routed there. That replica will reply with an NLHE with an old descriptor
-	// generation value, which should make the DistSender try the next replica.
-	var calls []roachpb.NodeID
-	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-		calls = append(calls, ba.Replica.NodeID)
-		if ba.Replica.NodeID == 2 {
-			reply := &roachpb.BatchResponse{}
-			err := &roachpb.NotLeaseHolderError{
-				Lease: &ambiguousLease,
+			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+			g := makeGossip(t, stopper, rpcContext)
+			for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
+				require.NoError(t, g.AddInfoProto(
+					gossip.MakeNodeIDKey(n.NodeID),
+					newNodeDesc(n.NodeID),
+					gossip.NodeDescriptorTTL,
+				))
+			}
+
+			oldGeneration := roachpb.RangeGeneration(1)
+			newGeneration := roachpb.RangeGeneration(2)
+			desc := roachpb.RangeDescriptor{
+				RangeID:    1,
+				Generation: newGeneration,
+				StartKey:   roachpb.RKeyMin,
+				EndKey:     roachpb.RKeyMax,
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{NodeID: 1, StoreID: 1, ReplicaID: 1},
+					{NodeID: 2, StoreID: 2, ReplicaID: 2},
+					{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				},
+			}
+
+			nlhe := &roachpb.NotLeaseHolderError{
 				RangeDesc: roachpb.RangeDescriptor{
 					Generation: oldGeneration,
 				},
 			}
-			reply.Error = roachpb.NewError(err)
-			return reply, nil
-		}
-		require.Equal(t, ba.Replica.NodeID, roachpb.NodeID(1))
-		return ba.CreateReply(), nil
+			if tc.nlheLeaseSequence != 0 {
+				nlhe.Lease = &roachpb.Lease{
+					Sequence: roachpb.LeaseSequence(tc.nlheLeaseSequence),
+					Replica:  roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
+				}
+			} else {
+				// Speculative lease -- the NLHE only carries LeaseHolder information.
+				nlhe.LeaseHolder = &roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4}
+			}
+
+			cachedLease := roachpb.Lease{
+				Replica:  desc.InternalReplicas[1],
+				Sequence: roachpb.LeaseSequence(tc.cachedLeaseSequence),
+			}
+
+			// The cache starts with a lease on node 2, so the first request will be
+			// routed there. That replica will reply with an NLHE with an old descriptor
+			// generation value, which should make the DistSender try the next replica.
+			var calls []roachpb.NodeID
+			sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+				calls = append(calls, ba.Replica.NodeID)
+				if ba.Replica.NodeID == 2 {
+					reply := &roachpb.BatchResponse{}
+					reply.Error = roachpb.NewError(nlhe)
+					return reply, nil
+				}
+				require.Equal(t, ba.Replica.NodeID, roachpb.NodeID(1))
+				return ba.CreateReply(), nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: tracer},
+				Clock:      clock,
+				NodeDescs:  g,
+				RPCContext: rpcContext,
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory: adaptSimpleTransport(sendFn),
+				},
+				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+				NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+				Settings:          cluster.MakeTestingClusterSettings(),
+			}
+			ds := NewDistSender(cfg)
+
+			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+				Desc:  desc,
+				Lease: cachedLease,
+			})
+
+			get := roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+			_, pErr := kv.SendWrapped(ctx, ds, get)
+			require.Nil(t, pErr)
+
+			require.Equal(t, int64(0), ds.Metrics().RangeLookups.Count())
+			// We expect to backoff and retry the same replica 11 times when we get an
+			// NLHE with stale info. See `sameReplicaRetryLimit`.
+			require.Equal(t, int64(11), ds.Metrics().NextReplicaErrCount.Count())
+			require.Equal(t, int64(11), ds.Metrics().NotLeaseHolderErrCount.Count())
+
+			// Ensure that we called Node 2 11 times and then finally called Node 1.
+			var expectedCalls []roachpb.NodeID
+			for i := 0; i < 11; i++ {
+				expectedCalls = append(expectedCalls, roachpb.NodeID(2))
+			}
+			expectedCalls = append(expectedCalls, roachpb.NodeID(1))
+			require.Equal(t, expectedCalls, calls)
+
+			require.Regexp(
+				t,
+				"backing off due to .* stale info",
+				finishAndGetRecording().String(),
+			)
+		})
 	}
-
-	cfg := DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracer},
-		Clock:      clock,
-		NodeDescs:  g,
-		RPCContext: rpcContext,
-		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptSimpleTransport(sendFn),
-		},
-		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
-		NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
-		Settings:          cluster.MakeTestingClusterSettings(),
-	}
-	ds := NewDistSender(cfg)
-
-	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
-		Desc:  desc,
-		Lease: cachedLease,
-	})
-
-	get := roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
-	_, pErr := kv.SendWrapped(ctx, ds, get)
-	require.Nil(t, pErr)
-
-	require.Equal(t, int64(0), ds.Metrics().RangeLookups.Count())
-	// We expect to backoff and retry the same replica 11 times when we get an
-	// NLHE with stale info. See `sameReplicaRetryLimit`.
-	require.Equal(t, int64(11), ds.Metrics().NextReplicaErrCount.Count())
-	require.Equal(t, int64(11), ds.Metrics().NotLeaseHolderErrCount.Count())
-
-	// Ensure that we called Node 2 11 times and then finally called Node 1.
-	var expectedCalls []roachpb.NodeID
-	for i := 0; i < 11; i++ {
-		expectedCalls = append(expectedCalls, roachpb.NodeID(2))
-	}
-	expectedCalls = append(expectedCalls, roachpb.NodeID(1))
-	require.Equal(t, expectedCalls, calls)
-
-	require.Regexp(
-		t,
-		"backing off due to .* stale info",
-		finishAndGetRecording().String(),
-	)
 }
 
 func TestDistSenderRetryOnTransportErrors(t *testing.T) {
@@ -4711,6 +4747,14 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				NodeID:  3,
 				Address: util.UnresolvedAddr{},
 			},
+			{
+				NodeID:  4,
+				Address: util.UnresolvedAddr{},
+			},
+			{
+				NodeID:  5,
+				Address: util.UnresolvedAddr{},
+			},
 		},
 	}
 	var desc = roachpb.RangeDescriptor{
@@ -4721,11 +4765,36 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1, ReplicaID: 1},
 			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			{NodeID: 5, StoreID: 5, ReplicaID: 5},
 		},
 	}
-	var updatedDesc = roachpb.RangeDescriptor{
+	var learnerDesc = roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			// The would be leaseholder is a learner on this range descriptor.
+			{NodeID: 4, StoreID: 4, ReplicaID: 4, Type: roachpb.LEARNER},
+		},
+	}
+	var incompatibleDescriptor = roachpb.RangeDescriptor{
 		RangeID:    roachpb.RangeID(1),
 		Generation: 2,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 5, StoreID: 5, ReplicaID: 5},
+		},
+	}
+	var compatibleDescriptor = roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 3,
 		StartKey:   roachpb.RKeyMin,
 		EndKey:     roachpb.RKeyMax,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
@@ -4736,115 +4805,156 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		// updatedDesc, if not nil, is used to update the range cache in the middle
-		// of the first RPC.
-		updatedDesc *roachpb.RangeDescriptor
+		// initialDesc is the descriptor which the range cache starts off with.
+		initialDesc roachpb.RangeDescriptor
+		// updatedDesc is either returned as part of the NotLeaseHolderError or is
+		// used to update the range cache in the middle of the first RPC (depending
+		// on the flavour of the test).
+		updatedDesc roachpb.RangeDescriptor
 		// expLeaseholder is the leaseholder that the cache is expected to be
 		// populated with after the RPC. If 0, the cache is expected to not have an
-		// entry corresponding to the descriptor in question - i.e. we expect the
-		// descriptor to have been evicted.
+		// empty leaseholder.
 		expLeaseholder roachpb.ReplicaID
+		// expCalls is the number of replicas that we expect to try before returning
+		// from sendToReplicas().
+		expReplicasTried int
 	}{
 		{
-			name: "no intervening update",
+			name:        "incompatible descriptor",
+			initialDesc: desc,
 			// In this test, the NotLeaseHolderError will point to a replica that's
-			// not part of the cached descriptor. The cached descriptor is going to be
-			// considered stale and evicted.
-			updatedDesc:    nil,
+			// not part of the cached descriptor. We expect the call to
+			// sendToReplicas() to return early, without trying all replicas on the
+			// initial descriptor.
+			updatedDesc:    incompatibleDescriptor,
 			expLeaseholder: 0,
+			// We expect sendToReplicas() to try all replicas in the transport that
+			// are still part of the freshest range descriptor (replicas 1, 2 and 5).
+			expReplicasTried: 3,
 		},
 		{
-			name: "intervening update",
+			name:        "compatible descriptor",
+			initialDesc: desc,
 			// In this test, the NotLeaseHolderError will point to a replica that's
 			// part of the cached descriptor (at the time when the DistSender gets the
 			// error). Thus, the cache entry will be updated with the lease.
-			updatedDesc:    &updatedDesc,
+			updatedDesc:    compatibleDescriptor,
 			expLeaseholder: 4,
+			// Given the leaseholder is incompatible with the original descriptor
+			// (and thus the constructed transport), we expect the test to exit early
+			// without exhausting the entire transport.
+			expReplicasTried: 1,
+		},
+		{
+			name:        "learner descriptor - compatible",
+			initialDesc: learnerDesc,
+			// In this test, the NotLeaseHolderError will point to a replica that's
+			// part of the cached descriptor (at the time when the DistSender gets the
+			// error). Thus, the cache entry will be updated with the lease.
+			updatedDesc:    compatibleDescriptor,
+			expLeaseholder: 4,
+			// Given the leaseholder was a learner on the original descriptor, and
+			// thus excluded from the transport, we expect the test to exit
+			// early without exhausting the entire transport.
+			//
+			// This serves as a regression test for the hazard described in
+			// https://github.com/cockroachdb/cockroach/issues/75742.
+			expReplicasTried: 1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st := cluster.MakeTestingClusterSettings()
-			tr := tracing.NewTracer()
-			getRangeDescCacheSize := func() int64 {
-				return 1 << 20
-			}
-			rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper, tr)
-			rc.Insert(ctx, roachpb.RangeInfo{
-				Desc: desc,
-				Lease: roachpb.Lease{
-					Replica: roachpb.ReplicaDescriptor{
-						NodeID: 1, StoreID: 1, ReplicaID: 1,
+			testutils.RunTrueAndFalse(t, "concurrent-update", func(t *testing.T, concurrentUpdate bool) {
+				// concurrentUpdate, if true, means that the descriptor was updated in
+				// the range cache by a concurrent request. This is in contrast to the
+				// updated descriptor being returned as part of the NotLeaseHolderError
+				// itself.
+
+				st := cluster.MakeTestingClusterSettings()
+				tr := tracing.NewTracer()
+				getRangeDescCacheSize := func() int64 {
+					return 1 << 20
+				}
+				rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper, tr)
+				rc.Insert(ctx, roachpb.RangeInfo{
+					Desc: tc.initialDesc,
+					Lease: roachpb.Lease{
+						Replica: roachpb.ReplicaDescriptor{
+							NodeID: 1, StoreID: 1, ReplicaID: 1,
+						},
 					},
-				},
-			})
-			ent, err := rc.Lookup(ctx, roachpb.RKeyMin)
-			require.NoError(t, err)
-			tok := rc.MakeEvictionToken(&ent)
+				})
+				ent, err := rc.Lookup(ctx, roachpb.RKeyMin)
+				require.NoError(t, err)
+				tok := rc.MakeEvictionToken(&ent)
 
-			var called bool
-			transportFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-				// We don't expect more than one RPC because we return a lease pointing
-				// to a replica that's not in the descriptor that sendToReplicas() was
-				// originally called with. sendToReplicas() doesn't deal with that; it
-				// returns a sendError and expects that caller to retry.
-				if called {
-					return nil, errors.New("unexpected 2nd call")
+				numCalled := 0
+				transportFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+					numCalled++
+					nlhe := &roachpb.NotLeaseHolderError{
+						RangeID: tc.initialDesc.RangeID,
+						Lease: &roachpb.Lease{
+							Replica: roachpb.ReplicaDescriptor{
+								NodeID:    4,
+								StoreID:   4,
+								ReplicaID: 4,
+							},
+							Sequence: 1, // we don't want the lease to be speculative.
+						},
+						CustomMsg: "injected",
+					}
+					if concurrentUpdate {
+						rc.Insert(ctx, roachpb.RangeInfo{Desc: tc.updatedDesc})
+						// Ensure the descriptor on the NLHE is compatible but older than
+						// what is in the cache.
+						nlhe.RangeDesc = tc.initialDesc
+					} else {
+						nlhe.RangeDesc = tc.updatedDesc
+					}
+					br := &roachpb.BatchResponse{}
+					br.Error = roachpb.NewError(nlhe)
+					return br, nil
 				}
-				called = true
-				nlhe := &roachpb.NotLeaseHolderError{
-					RangeID: desc.RangeID,
-					LeaseHolder: &roachpb.ReplicaDescriptor{
-						NodeID:    4,
-						StoreID:   4,
-						ReplicaID: 4,
+
+				cfg := DistSenderConfig{
+					AmbientCtx: log.MakeTestingAmbientContext(tr),
+					Clock:      clock,
+					NodeDescs:  ns,
+					RPCContext: rpcContext,
+					RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+						[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+					) {
+						// These tests only deal with the low-level sendToReplicas(). Nobody
+						// should be reading descriptor from the database, but the DistSender
+						// insists on having a non-nil one.
+						return nil, nil, errors.New("range desc db unexpectedly used")
+					}),
+					TestingKnobs: ClientTestingKnobs{
+						TransportFactory: adaptSimpleTransport(transportFn),
 					},
-					CustomMsg: "injected",
+					Settings: cluster.MakeTestingClusterSettings(),
 				}
-				if tc.updatedDesc != nil {
-					rc.Insert(ctx, roachpb.RangeInfo{Desc: *tc.updatedDesc})
-				}
-				br := &roachpb.BatchResponse{}
-				br.Error = roachpb.NewError(nlhe)
-				return br, nil
-			}
 
-			cfg := DistSenderConfig{
-				AmbientCtx: log.MakeTestingAmbientContext(tr),
-				Clock:      clock,
-				NodeDescs:  ns,
-				RPCContext: rpcContext,
-				RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
-					[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
-				) {
-					// These tests only deal with the low-level sendToReplicas(). Nobody
-					// should be reading descriptor from the database, but the DistSender
-					// insists on having a non-nil one.
-					return nil, nil, errors.New("range desc db unexpectedly used")
-				}),
-				TestingKnobs: ClientTestingKnobs{
-					TransportFactory: adaptSimpleTransport(transportFn),
-				},
-				Settings: cluster.MakeTestingClusterSettings(),
-			}
+				ds := NewDistSender(cfg)
 
-			ds := NewDistSender(cfg)
-
-			var ba roachpb.BatchRequest
-			get := &roachpb.GetRequest{}
-			get.Key = roachpb.Key("a")
-			ba.Add(get)
-			_, err = ds.sendToReplicas(ctx, ba, tok, false /* withCommit */)
-			require.IsType(t, sendError{}, err)
-			require.Regexp(t, "NotLeaseHolderError", err)
-			cached := rc.GetCached(ctx, desc.StartKey, false /* inverted */)
-			if tc.expLeaseholder == 0 {
-				// Check that the descriptor was removed from the cache.
-				require.Nil(t, cached)
-			} else {
+				var ba roachpb.BatchRequest
+				get := &roachpb.GetRequest{}
+				get.Key = roachpb.Key("a")
+				ba.Add(get)
+				_, err = ds.sendToReplicas(ctx, ba, tok, false /* withCommit */)
+				require.IsType(t, sendError{}, err)
+				require.Regexp(t, "NotLeaseHolderError", err)
+				cached := rc.GetCached(ctx, tc.initialDesc.StartKey, false /* inverted */)
 				require.NotNil(t, cached)
-				require.NotNil(t, cached.Leaseholder())
-				require.Equal(t, tc.expLeaseholder, cached.Leaseholder().ReplicaID)
-			}
+				require.Equal(t, tc.updatedDesc, *cached.Desc())
+				require.Equal(t, tc.expReplicasTried, numCalled)
+				if tc.expLeaseholder == 0 {
+					// Check that the leaseholder is cleared out.
+					require.Nil(t, cached.Leaseholder())
+				} else {
+					require.NotNil(t, cached.Leaseholder())
+					require.Equal(t, tc.expLeaseholder, cached.Leaseholder().ReplicaID)
+				}
+			})
 		})
 	}
 }
@@ -5037,4 +5147,135 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 	// Expect that the metrics for both of the returned errors were incremented.
 	require.Equal(t, ds.metrics.ErrCounts[roachpb.NotLeaseHolderErrType].Count(), int64(1))
 	require.Equal(t, ds.metrics.ErrCounts[roachpb.ConditionFailedErrType].Count(), int64(1))
+}
+
+// TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff
+// ensures that a NLHE from an uninitialized replica, which points to a replica
+// that isn't part of the range, doesn't result in the dist sender getting
+// caught in an unbounded backoff. See
+// https://github.com/cockroachdb/cockroach/issues/82802 for more details about
+// the hazard.
+func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	testutils.RunTrueAndFalse(t, "uninitialized-replica-returns-speculative-lease",
+		func(t *testing.T, returnSpeculativeLease bool) {
+
+			// We'll set things up such that the first replica on the range descriptor of
+			// the client has an uninitialized replica. We'll mimic this by returning an
+			// empty range descriptor as part of the NotLeaseHolderError it returns.
+			// We expect the client to simply reroute to the next replica.
+			//
+			// For the returnsSpeculativeLease=true version of the test the NLHE error
+			// will include a speculative lease that points to a replica that isn't
+			// part of the client's range descriptor. This is only possible in
+			// versions <= 22.1 as NLHE errors from uninitialized replicas no longer
+			// return speculative leases. Effectively, this acts as a mixed
+			// (22.1, 22.2) version test.
+
+			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+			ns := &mockNodeStore{nodes: []roachpb.NodeDescriptor{
+				{NodeID: 1, Address: util.UnresolvedAddr{}},
+				{NodeID: 2, Address: util.UnresolvedAddr{}},
+				{NodeID: 3, Address: util.UnresolvedAddr{}},
+				{NodeID: 4, Address: util.UnresolvedAddr{}},
+			}}
+
+			// Actual view of the range (descriptor + lease). The client doesn't have
+			// any knowledge about the lease, so it routes its request to the first
+			// replica on the range descriptor.
+			var desc = roachpb.RangeDescriptor{
+				RangeID:    roachpb.RangeID(1),
+				Generation: 1,
+				StartKey:   roachpb.RKeyMin,
+				EndKey:     roachpb.RKeyMax,
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{NodeID: 1, StoreID: 1, ReplicaID: 1},
+					{NodeID: 2, StoreID: 2, ReplicaID: 2},
+					{NodeID: 3, StoreID: 3, ReplicaID: 3},
+					{NodeID: 4, StoreID: 4, ReplicaID: 4},
+				},
+			}
+			leaseResp := roachpb.Lease{
+				Replica: roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
+			}
+
+			call := 0
+			var transportFn = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+				br := &roachpb.BatchResponse{}
+				switch call {
+				case 0:
+					// We return an empty range descriptor in the NLHE like an
+					// uninitialized replica would.
+					expRepl := desc.Replicas().Descriptors()[0]
+					require.Equal(t, expRepl, ba.Replica)
+					nlhe := &roachpb.NotLeaseHolderError{
+						RangeDesc: roachpb.RangeDescriptor{},
+					}
+					if returnSpeculativeLease {
+						nlhe.LeaseHolder = &roachpb.ReplicaDescriptor{NodeID: 5, StoreID: 5, ReplicaID: 5}
+					}
+					br.Error = roachpb.NewError(nlhe)
+				case 1:
+					// We expect the client to discard information from the NLHE above and
+					// instead just try the next replica.
+					expRepl := desc.Replicas().Descriptors()[1]
+					require.Equal(t, expRepl, ba.Replica)
+					br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
+						RangeDesc: desc,
+						Lease:     &leaseResp,
+					})
+				case 2:
+					// We expect the client to route to the leaseholder given it's now
+					// known.
+					expRepl := desc.Replicas().Descriptors()[3]
+					require.Equal(t, expRepl, ba.Replica)
+					br = ba.CreateReply()
+				default:
+					t.Fatal("unexpected")
+				}
+				call++
+				return br, nil
+			}
+
+			rangeLookups := 0
+			cfg := DistSenderConfig{
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
+				Clock:      clock,
+				NodeDescs:  ns,
+				RPCContext: rpcContext,
+				RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+					[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+				) {
+					switch rangeLookups {
+					case 0:
+						rangeLookups++
+						return []roachpb.RangeDescriptor{desc}, nil, nil
+					default:
+						// This doesn't run on the test's goroutine.
+						panic("unexpected")
+					}
+				}),
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory:    adaptSimpleTransport(transportFn),
+					DontReorderReplicas: true,
+				},
+				Settings: cluster.MakeTestingClusterSettings(),
+			}
+
+			ds := NewDistSender(cfg)
+			var ba roachpb.BatchRequest
+			get := &roachpb.GetRequest{}
+			get.Key = roachpb.Key("a")
+			ba.Add(get)
+
+			_, err := ds.Send(ctx, ba)
+			require.NoError(t, err.GoError())
+			require.Equal(t, 3, call)
+			require.Equal(t, 1, rangeLookups)
+		})
 }
