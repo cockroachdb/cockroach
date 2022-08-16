@@ -599,6 +599,7 @@ func NewTracer() *Tracer {
 				sp:     sp,
 			}
 			sp.i.crdb = c
+			h.childrenMetadataAlloc = make(map[string]tracingpb.OperationMetadata)
 			return h
 		},
 	}
@@ -944,6 +945,7 @@ type spanAllocHelper struct {
 	tagsAlloc             [3]attribute.KeyValue
 	childrenAlloc         [4]childRef
 	structuredEventsAlloc [3]interface{}
+	childrenMetadataAlloc map[string]tracingpb.OperationMetadata
 }
 
 // newSpan allocates a span using the Tracer's sync.Pool. A span that was
@@ -1015,6 +1017,9 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	h.tagsAlloc = [3]attribute.KeyValue{}
 	h.childrenAlloc = [4]childRef{}
 	h.structuredEventsAlloc = [3]interface{}{}
+	for op := range h.childrenMetadataAlloc {
+		delete(h.childrenMetadataAlloc, op)
+	}
 
 	release := true
 	if fn := t.testing.ReleaseSpanToPool; fn != nil {
