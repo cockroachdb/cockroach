@@ -137,12 +137,23 @@ func createTmpDir() (tmpdir string, err error) {
 	return
 }
 
-func downloadZips(tmpdir string) (map[string]downloadedModule, error) {
+func downloadZips(
+	tmpdir string, listed map[string]listedModule,
+) (map[string]downloadedModule, error) {
 	gobin, err := bazel.Runfile("bin/go")
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(gobin, "mod", "download", "-json")
+	downloadArgs := make([]string, 0, len(listed)+3)
+	downloadArgs = append(downloadArgs, "mod", "download", "-json")
+	for _, mod := range listed {
+		if mod.Replace != nil {
+			downloadArgs = append(downloadArgs, fmt.Sprintf("%s@%s", mod.Replace.Path, mod.Replace.Version))
+		} else {
+			downloadArgs = append(downloadArgs, fmt.Sprintf("%s@%s", mod.Path, mod.Version))
+		}
+	}
+	cmd := exec.Command(gobin, downloadArgs...)
 	cmd.Dir = tmpdir
 	jsonBytes, err := cmd.Output()
 	if err != nil {
@@ -428,11 +439,11 @@ func mirror() error {
 			panic(err)
 		}
 	}()
-	downloaded, err := downloadZips(tmpdir)
+	listed, err := listAllModules(tmpdir)
 	if err != nil {
 		return err
 	}
-	listed, err := listAllModules(tmpdir)
+	downloaded, err := downloadZips(tmpdir, listed)
 	if err != nil {
 		return err
 	}

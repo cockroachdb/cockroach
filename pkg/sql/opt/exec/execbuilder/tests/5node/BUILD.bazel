@@ -10,6 +10,7 @@ go_test(
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
     shard_count = 16,
+    tags = ["cpu:3"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/security/securityassets",
