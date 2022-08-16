@@ -451,8 +451,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`DISCARD PLANS`, 0, `discard plans`, ``},
 		{`DISCARD SEQUENCES`, 0, `discard sequences`, ``},
-		{`DISCARD TEMP`, 0, `discard temp`, ``},
-		{`DISCARD TEMPORARY`, 0, `discard temp`, ``},
 
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},

@@ -1,2 +1,4 @@
 discard_stmt ::=
 	'DISCARD' 'ALL'
+	| 'DISCARD' 'TEMP'
+	| 'DISCARD' 'TEMPORARY'

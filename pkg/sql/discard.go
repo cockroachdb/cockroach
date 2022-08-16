@@ -40,6 +40,19 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 
 		// DEALLOCATE ALL
 		p.preparedStatements.DeleteAll(ctx)
+
+		//	DISCARD TEMP
+		err := deleteTempTables(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+
+	case tree.DiscardModeTemp:
+		err := deleteTempTables(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+
 	default:
 		return nil, errors.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
 	}
@@ -63,6 +76,25 @@ func resetSessionVar(ctx context.Context, m sessionDataMutator, varName string) 
 			if err := v.Set(ctx, m, defVal); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func deleteTempTables(ctx context.Context, p *planner) error {
+	codec := p.execCfg.Codec
+	descCol := p.Descriptors()
+	allDbDescs, err := descCol.GetAllDatabaseDescriptors(ctx, p.Txn())
+	if err != nil {
+		return err
+	}
+	ie := p.execCfg.InternalExecutor
+
+	for _, dbDesc := range allDbDescs {
+		schemaName := p.TemporarySchemaName()
+		err = cleanupSchemaObjects(ctx, p.execCfg.Settings, p.Txn(), descCol, codec, ie, dbDesc, schemaName)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

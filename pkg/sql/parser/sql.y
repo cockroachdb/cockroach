@@ -4769,8 +4769,14 @@ discard_stmt:
   }
 | DISCARD PLANS { return unimplemented(sqllex, "discard plans") }
 | DISCARD SEQUENCES { return unimplemented(sqllex, "discard sequences") }
-| DISCARD TEMP { return unimplemented(sqllex, "discard temp") }
-| DISCARD TEMPORARY { return unimplemented(sqllex, "discard temp") }
+| DISCARD TEMP
+  {
+    $$.val = &tree.Discard{Mode: tree.DiscardModeTemp}
+  }
+| DISCARD TEMPORARY
+  {
+    $$.val = &tree.Discard{Mode: tree.DiscardModeTemp}
+  }
 | DISCARD error // SHOW HELP: DISCARD
 
 // %Help: DROP
