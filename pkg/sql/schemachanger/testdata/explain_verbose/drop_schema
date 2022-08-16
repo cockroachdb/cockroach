@@ -14,13 +14,12 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       ├── • 1 element transitioning toward ABSENT
 │       │   │
 │       │   └── • Schema:{DescID: 106}
-│       │         PUBLIC → OFFLINE
+│       │         PUBLIC → TXN_DROPPED
 │       │
 │       └── • 1 Mutation operation
 │           │
-│           └── • MarkDescriptorAsOffline
+│           └── • MarkDescriptorAsSyntheticallyDropped
 │                 DescID: 106
-│                 Reason: DROP SCHEMA db.sc
 │
 ├── • PreCommitPhase
 │   │
@@ -90,7 +89,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
     │   │   ├── • Schema:{DescID: 106}
-    │   │   │     OFFLINE → DROPPED
+    │   │   │     TXN_DROPPED → DROPPED
     │   │   │
     │   │   └── • SchemaParent:{DescID: 106, ReferencedDescID: 104}
     │   │       │ PUBLIC → ABSENT

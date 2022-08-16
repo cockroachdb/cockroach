@@ -153,11 +153,11 @@ type MarkDescriptorAsPublic struct {
 	DescID descpb.ID
 }
 
-// MarkDescriptorAsOffline changes the descriptor's state to OFFLINE.
-type MarkDescriptorAsOffline struct {
+// MarkDescriptorAsSyntheticallyDropped changes the descriptor's state to
+// DROPPED, but records that status only synthetically.
+type MarkDescriptorAsSyntheticallyDropped struct {
 	mutationOp
 	DescID descpb.ID
-	Reason string
 }
 
 // MarkDescriptorAsDropped changes the descriptor's state to DROPPED.

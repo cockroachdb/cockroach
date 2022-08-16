@@ -19,28 +19,13 @@ begin transaction #1
 checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 ## StatementPhase stage 1 of 1 with 1 MutationType op
-upsert descriptor #108
-  ...
-     localityConfig:
-       regionalByRow: {}
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: table_regional_by_row
-     nextColumnId: 3
-  ...
-     nextIndexId: 2
-     nextMutationId: 1
-  +  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
-     parentId: 104
-     partitionAllBy: true
+add synthetic descriptor #108:
   ...
      replacementOf:
        time: {}
-  +  state: OFFLINE
+  +  state: DROP
      unexposedParentSchemaId: 106
-  -  version: "1"
-  +  version: "2"
+     version: "1"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
@@ -107,12 +92,16 @@ upsert descriptor #108
   ...
      localityConfig:
        regionalByRow: {}
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
      name: table_regional_by_row
      nextColumnId: 3
   ...
+       time: {}
+     unexposedParentSchemaId: 106
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
@@ -175,15 +164,8 @@ upsert descriptor #108
      name: table_regional_by_row
      nextColumnId: 3
   ...
-     nextIndexId: 2
-     nextMutationId: 1
-  -  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
-     parentId: 104
-     partitionAllBy: true
-  ...
      replacementOf:
        time: {}
-  -  state: OFFLINE
   +  state: DROP
      unexposedParentSchemaId: 106
   -  version: "2"

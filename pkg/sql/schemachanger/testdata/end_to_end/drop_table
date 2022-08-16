@@ -20,28 +20,13 @@ begin transaction #1
 checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 ## StatementPhase stage 1 of 1 with 1 MutationType op
-upsert descriptor #107
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: t
-     nextColumnId: 4
-  ...
-     nextIndexId: 2
-     nextMutationId: 1
-  +  offlineReason: DROP TABLE db.sc.t
-     parentId: 104
-     primaryIndex:
+add synthetic descriptor #107:
   ...
      replacementOf:
        time: {}
-  +  state: OFFLINE
+  +  state: DROP
      unexposedParentSchemaId: 106
-  -  version: "1"
-  +  version: "2"
+     version: "1"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -66,12 +51,16 @@ upsert descriptor #107
   ...
      formatVersion: 3
      id: 107
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
      name: t
      nextColumnId: 4
   ...
+       time: {}
+     unexposedParentSchemaId: 106
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [107]
 # end PreCommitPhase
@@ -99,15 +88,8 @@ upsert descriptor #107
      name: t
      nextColumnId: 4
   ...
-     nextIndexId: 2
-     nextMutationId: 1
-  -  offlineReason: DROP TABLE db.sc.t
-     parentId: 104
-     primaryIndex:
-  ...
      replacementOf:
        time: {}
-  -  state: OFFLINE
   +  state: DROP
      unexposedParentSchemaId: 106
   -  version: "2"

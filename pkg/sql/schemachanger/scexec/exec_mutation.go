@@ -38,7 +38,7 @@ import (
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock())
+	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock(), deps.Catalog())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return errors.Wrapf(err, "%T: %v", op, op)
@@ -105,6 +105,7 @@ func performBatchedCatalogWrites(
 	err := modifiedDescriptors.Iterate(func(entry catalog.NameEntry) error {
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
+
 	if err != nil {
 		return err
 	}
@@ -400,7 +401,6 @@ type mutationVisitorState struct {
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
 	statsToRefresh               map[descpb.ID]struct{}
-
 	gcJobs
 }
 

@@ -28,13 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -260,4 +263,30 @@ func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
 // ClientNoticeSender implements scbuild.Dependencies.
 func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 	return &faketreeeval.DummyClientNoticeSender{}
+}
+
+func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {
+	var old protoutil.Message
+	if d, _ := s.mustReadImmutableDescriptor(desc.GetID()); d != nil {
+		old = d.DescriptorProto()
+	}
+	return sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
+		Indent:       "  ",
+		CompactLevel: 3,
+	}, func(i interface{}) {
+		scviz.RewriteEmbeddedIntoParent(i)
+		if m, ok := i.(map[string]interface{}); ok {
+			ds, exists := m["declarativeSchemaChangerState"].(map[string]interface{})
+			if !exists {
+				return
+			}
+			for _, k := range []string{
+				"currentStatuses", "targetRanks", "targets",
+			} {
+				if _, kExists := ds[k]; kExists {
+					ds[k] = "<redacted>"
+				}
+			}
+		}
+	})
 }

@@ -40,6 +40,19 @@ type Clock interface {
 	ApproximateTime() time.Time
 }
 
+// SyntheticDescriptorStateUpdater is used to update the synthetic descriptor
+// state. This state is not visible to the operations in the declarative schema
+// changer execution layer. Its only purpose is to ensure that subsequent
+// queries in the same transaction as a schema change statement behave as if the
+// schema change had already completed.
+type SyntheticDescriptorStateUpdater interface {
+
+	// AddSyntheticDescriptor sets a synthetic descriptor to shadow any existing
+	// descriptor with the same name or the same ID for the remainder of the
+	// current transaction.
+	AddSyntheticDescriptor(desc catalog.Descriptor)
+}
+
 // MutationVisitorStateUpdater is the interface for updating the visitor state.
 type MutationVisitorStateUpdater interface {
 

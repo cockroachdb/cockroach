@@ -21,95 +21,81 @@ DROP DATABASE db1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 14 MutationType ops
   transitions:
-    [[Database:{DescID: 104}, ABSENT], PUBLIC] -> OFFLINE
-    [[Schema:{DescID: 105}, ABSENT], PUBLIC] -> OFFLINE
-    [[Schema:{DescID: 106}, ABSENT], PUBLIC] -> OFFLINE
-    [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> OFFLINE
-    [[Table:{DescID: 110}, ABSENT], PUBLIC] -> OFFLINE
+    [[Database:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Schema:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Schema:{DescID: 106}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Table:{DescID: 110}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> OFFLINE
-    [[Table:{DescID: 109}, ABSENT], PUBLIC] -> OFFLINE
+    [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Table:{DescID: 109}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[View:{DescID: 111}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 111}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[View:{DescID: 112}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 112}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 112, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 112, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 112, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[View:{DescID: 113}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 113}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[View:{DescID: 114}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 114}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[EnumType:{DescID: 115}, ABSENT], PUBLIC] -> OFFLINE
-    [[AliasType:{DescID: 116}, ABSENT], PUBLIC] -> OFFLINE
-    [[View:{DescID: 117}, ABSENT], PUBLIC] -> OFFLINE
+    [[EnumType:{DescID: 115}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[AliasType:{DescID: 116}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[View:{DescID: 117}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 117, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 117, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 117, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 117, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 117, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
   ops:
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 104
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 105
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 106
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 107
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 110
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 108
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 109
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 111
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 112
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 113
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 114
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 115
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 116
-      Reason: DROP DATABASE db1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 117
-      Reason: DROP DATABASE db1 CASCADE
 PreCommitPhase stage 1 of 1 with 15 MutationType ops
   transitions:
   ops:
@@ -188,7 +174,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Database:{DescID: 104}, ABSENT], OFFLINE] -> DROPPED
+    [[Database:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
     [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT], PUBLIC] -> ABSENT
     [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -196,26 +182,26 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Schema:{DescID: 105}, ABSENT], OFFLINE] -> DROPPED
+    [[Schema:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Schema:{DescID: 106}, ABSENT], OFFLINE] -> DROPPED
+    [[Schema:{DescID: 106}, ABSENT], TXN_DROPPED] -> DROPPED
     [[SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Sequence:{DescID: 107}, ABSENT], OFFLINE] -> DROPPED
+    [[Sequence:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Table:{DescID: 110}, ABSENT], OFFLINE] -> DROPPED
+    [[Table:{DescID: 110}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
@@ -243,13 +229,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Sequence:{DescID: 108}, ABSENT], OFFLINE] -> DROPPED
+    [[Sequence:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Table:{DescID: 109}, ABSENT], OFFLINE] -> DROPPED
+    [[Table:{DescID: 109}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
@@ -278,7 +264,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 111}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -293,7 +279,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 112}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 112}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 112, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -311,7 +297,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 113}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 113}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -329,7 +315,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 114}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 114}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -348,7 +334,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[EnumType:{DescID: 115}, ABSENT], OFFLINE] -> DROPPED
+    [[EnumType:{DescID: 115}, ABSENT], TXN_DROPPED] -> DROPPED
     [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -356,13 +342,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 68 MutationType ops
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 116}, ABSENT], OFFLINE] -> DROPPED
+    [[AliasType:{DescID: 116}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 117}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 117}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 117}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 117, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT

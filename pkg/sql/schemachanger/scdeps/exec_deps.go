@@ -138,21 +138,23 @@ func (d *txnDeps) MustReadImmutableDescriptors(
 		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
+		AvoidSynthetic: true,
 	}
 	return d.descsCollection.GetImmutableDescriptorsByID(ctx, d.txn, flags, ids...)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
-	objectDesc, err := d.descsCollection.GetImmutableDescriptorByID(ctx,
-		d.txn,
-		id,
-		tree.CommonLookupFlags{
-			Required:       true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-			AvoidLeased:    true,
-		})
+	flags := tree.CommonLookupFlags{
+		Required:       true,
+		IncludeOffline: true,
+		IncludeDropped: true,
+		AvoidLeased:    true,
+		AvoidSynthetic: true,
+	}
+	objectDesc, err := d.descsCollection.GetImmutableDescriptorByID(
+		ctx, d.txn, id, flags,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -160,44 +162,30 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	// we can fetch the fully qualified names.
 	if objectDesc.DescriptorType() != catalog.Database &&
 		objectDesc.DescriptorType() != catalog.Schema {
-		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(ctx,
-			d.txn,
-			objectDesc.GetParentID(),
-			tree.CommonLookupFlags{
-				Required:       true,
-				IncludeOffline: true,
-				IncludeDropped: true,
-				AvoidLeased:    true,
-			})
+		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(
+			ctx, d.txn, objectDesc.GetParentID(), flags,
+		)
 		if err != nil {
 			return "", err
 		}
-		schemaDesc, err := d.descsCollection.GetImmutableSchemaByID(ctx, d.txn, objectDesc.GetParentSchemaID(),
-			tree.SchemaLookupFlags{
-				Required:       true,
-				IncludeOffline: true,
-				IncludeDropped: true,
-				AvoidLeased:    true,
-			})
+		schemaDesc, err := d.descsCollection.GetImmutableSchemaByID(
+			ctx, d.txn, objectDesc.GetParentSchemaID(), flags,
+		)
 		if err != nil {
 			return "", err
 		}
-		name := tree.MakeTableNameWithSchema(tree.Name(databaseDesc.GetName()),
+		name := tree.MakeTableNameWithSchema(
+			tree.Name(databaseDesc.GetName()),
 			tree.Name(schemaDesc.GetName()),
-			tree.Name(objectDesc.GetName()))
+			tree.Name(objectDesc.GetName()),
+		)
 		return name.FQString(), nil
 	} else if objectDesc.DescriptorType() == catalog.Database {
 		return objectDesc.GetName(), nil
 	} else if objectDesc.DescriptorType() == catalog.Schema {
 		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(ctx,
-			d.txn,
-			objectDesc.GetParentID(),
-			tree.CommonLookupFlags{
-				Required:       true,
-				IncludeOffline: true,
-				IncludeDropped: true,
-				AvoidLeased:    true,
-			})
+			d.txn, objectDesc.GetParentID(), flags,
+		)
 		if err != nil {
 			return "", err
 		}
@@ -211,6 +199,12 @@ func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
 	return d.descsCollection.GetMutableDescriptorByID(ctx, d.txn, id)
+}
+
+// AddSyntheticDescriptor is part of the
+// scmutationexec.SyntheticDescriptorStateUpdater interface.
+func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
+	d.descsCollection.AddSyntheticDescriptor(desc)
 }
 
 // NewCatalogChangeBatcher implements the scexec.Catalog interface.
@@ -338,8 +332,9 @@ func (d *txnDeps) GetResumeSpans(
 ) ([]roachpb.Span, error) {
 	table, err := d.descsCollection.GetImmutableTableByID(ctx, d.txn, tableID, tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
+			Required:       true,
+			AvoidLeased:    true,
+			AvoidSynthetic: true,
 		},
 	})
 	if err != nil {

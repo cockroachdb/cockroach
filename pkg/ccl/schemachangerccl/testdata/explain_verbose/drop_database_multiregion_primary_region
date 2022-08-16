@@ -16,19 +16,19 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       ├── • 9 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Database:{DescID: 104}
-│       │   │     PUBLIC → OFFLINE
+│       │   │     PUBLIC → TXN_DROPPED
 │       │   │
 │       │   ├── • Schema:{DescID: 106}
-│       │   │     PUBLIC → OFFLINE
+│       │   │     PUBLIC → TXN_DROPPED
 │       │   │
 │       │   ├── • EnumType:{DescID: 105}
-│       │   │     PUBLIC → OFFLINE
+│       │   │     PUBLIC → TXN_DROPPED
 │       │   │
 │       │   ├── • AliasType:{DescID: 107}
-│       │   │     PUBLIC → OFFLINE
+│       │   │     PUBLIC → TXN_DROPPED
 │       │   │
 │       │   ├── • Table:{DescID: 108}
-│       │   │     PUBLIC → OFFLINE
+│       │   │     PUBLIC → TXN_DROPPED
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 1}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -56,25 +56,20 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │
 │       └── • 5 Mutation operations
 │           │
-│           ├── • MarkDescriptorAsOffline
+│           ├── • MarkDescriptorAsSyntheticallyDropped
 │           │     DescID: 104
-│           │     Reason: DROP DATABASE multi_region_test_db CASCADE
 │           │
-│           ├── • MarkDescriptorAsOffline
+│           ├── • MarkDescriptorAsSyntheticallyDropped
 │           │     DescID: 106
-│           │     Reason: DROP DATABASE multi_region_test_db CASCADE
 │           │
-│           ├── • MarkDescriptorAsOffline
+│           ├── • MarkDescriptorAsSyntheticallyDropped
 │           │     DescID: 105
-│           │     Reason: DROP DATABASE multi_region_test_db CASCADE
 │           │
-│           ├── • MarkDescriptorAsOffline
+│           ├── • MarkDescriptorAsSyntheticallyDropped
 │           │     DescID: 107
-│           │     Reason: DROP DATABASE multi_region_test_db CASCADE
 │           │
-│           └── • MarkDescriptorAsOffline
+│           └── • MarkDescriptorAsSyntheticallyDropped
 │                 DescID: 108
-│                 Reason: DROP DATABASE multi_region_test_db CASCADE
 │
 ├── • PreCommitPhase
 │   │
@@ -169,7 +164,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
     │   │   ├── • Database:{DescID: 104}
-    │   │   │     OFFLINE → DROPPED
+    │   │   │     TXN_DROPPED → DROPPED
     │   │   │
     │   │   ├── • DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}
     │   │   │   │ PUBLIC → ABSENT
@@ -232,7 +227,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
     │   │   ├── • Schema:{DescID: 106}
-    │   │   │     OFFLINE → DROPPED
+    │   │   │     TXN_DROPPED → DROPPED
     │   │   │
     │   │   ├── • SchemaParent:{DescID: 106, ReferencedDescID: 104}
     │   │   │   │ PUBLIC → ABSENT
@@ -289,7 +284,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
     │   │   ├── • EnumType:{DescID: 105}
-    │   │   │     OFFLINE → DROPPED
+    │   │   │     TXN_DROPPED → DROPPED
     │   │   │
     │   │   ├── • EnumTypeValue:{DescID: 105, Name: us-east1}
     │   │   │   │ PUBLIC → ABSENT
@@ -373,7 +368,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
     │   │   ├── • AliasType:{DescID: 107}
-    │   │   │     OFFLINE → DROPPED
+    │   │   │     TXN_DROPPED → DROPPED
     │   │   │
     │   │   ├── • ObjectParent:{DescID: 107, ReferencedDescID: 106}
     │   │   │   │ PUBLIC → ABSENT
@@ -421,7 +416,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
     │   │   ├── • Table:{DescID: 108}
-    │   │   │     OFFLINE → DROPPED
+    │   │   │     TXN_DROPPED → DROPPED
     │   │   │
     │   │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 106}
     │   │   │   │ PUBLIC → ABSENT

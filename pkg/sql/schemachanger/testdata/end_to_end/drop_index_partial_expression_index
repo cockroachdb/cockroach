@@ -121,14 +121,6 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
-     indexes: []
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - direction: DROP
-  ...
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 # end PreCommitPhase
