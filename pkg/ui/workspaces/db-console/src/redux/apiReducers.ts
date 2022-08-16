@@ -403,6 +403,14 @@ const insightsReducerObj = new CachedDataReducer(
 );
 export const refreshInsights = insightsReducerObj.refresh;
 
+const schemaInsightsReducerObj = new CachedDataReducer(
+  clusterUiApi.getSchemaInsightEventState,
+  "schemaInsights",
+  moment.duration(5, "minute"),
+  moment.duration(30, "s"),
+);
+export const refreshSchemaInsights = schemaInsightsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -439,6 +447,7 @@ export interface APIReducersState {
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
   insights: CachedDataReducerState<clusterUiApi.InsightEventsResponse>;
+  schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -481,6 +490,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
   [insightsReducerObj.actionNamespace]: insightsReducerObj.reducer,
+  [schemaInsightsReducerObj.actionNamespace]: schemaInsightsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
