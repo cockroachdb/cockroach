@@ -20,221 +20,71 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     deps = select({
-        "@io_bazel_rules_go//go/platform:aix_ppc64": [
+        "@io_bazel_rules_go//go/platform:aix": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:android_386": [
+        "@io_bazel_rules_go//go/platform:android": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:android_amd64": [
+        "@io_bazel_rules_go//go/platform:darwin": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:android_arm": [
+        "@io_bazel_rules_go//go/platform:dragonfly": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:android_arm64": [
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            ":grunning",
+            "@com_github_stretchr_testify//require",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:darwin_386": [
+        "@io_bazel_rules_go//go/platform:ios": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:darwin_amd64": [
+        "@io_bazel_rules_go//go/platform:js": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:darwin_arm": [
+        "@io_bazel_rules_go//go/platform:linux": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:darwin_arm64": [
-            ":grunning",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:dragonfly_amd64": [
+        "@io_bazel_rules_go//go/platform:netbsd": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:freebsd_386": [
-            ":grunning",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:freebsd_amd64": [
-            ":grunning",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:freebsd_arm": [
-            ":grunning",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:freebsd_arm64": [
-            ":grunning",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:illumos_amd64": [
+        "@io_bazel_rules_go//go/platform:openbsd": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:ios_amd64": [
+        "@io_bazel_rules_go//go/platform:plan9": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:ios_arm64": [
-            ":grunning",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:js_wasm": [
+        "@io_bazel_rules_go//go/platform:solaris": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:linux_386": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_amd64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_arm": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_arm64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_mips": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_mips64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_mips64le": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_mipsle": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_ppc64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_ppc64le": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_riscv64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:linux_s390x": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:netbsd_386": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:netbsd_amd64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:netbsd_arm": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:netbsd_arm64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:openbsd_386": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:openbsd_amd64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:openbsd_arm": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:openbsd_arm64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:plan9_386": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:plan9_amd64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:plan9_arm": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:solaris_amd64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:windows_386": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:windows_amd64": [
-            ":grunning",
-            "//pkg/testutils/skip",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:windows_arm": [
+        "@io_bazel_rules_go//go/platform:windows": [
             ":grunning",
             "//pkg/testutils/skip",
             "@com_github_stretchr_testify//require",
