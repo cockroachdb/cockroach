@@ -2860,33 +2860,33 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	}
 	// test system privileges if valid version
 	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		sqlDB.Exec(t, "CREATE USER withvasystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvasystemprivilege")
-		sqlDB.Exec(t, "CREATE USER withvaredactedsystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedsystemprivilege")
-		sqlDB.Exec(t, "CREATE USER withvaandredactedsystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedsystemprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedsystemprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaglobalprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaredactedglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedglobalprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaandredactedglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedglobalprivilege")
 		sqlDB.Exec(t, "CREATE USER withviewclustermetadata")
 		sqlDB.Exec(t, "GRANT SYSTEM VIEWCLUSTERMETADATA TO withviewclustermetadata")
 		sqlDB.Exec(t, "CREATE USER withviewdebug")
 		sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
 
-		withVaSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvasystemprivilege")
-		withVaRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedsystemprivilege")
-		withVaAndRedactedSystemPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedsystemprivilege")
+		withVaGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaglobalprivilege")
+		withVaRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedglobalprivilege")
+		withVaAndRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedglobalprivilege")
 		withviewclustermetadata := username.MakeSQLUsernameFromPreNormalizedString("withviewclustermetadata")
 		withViewDebug := username.MakeSQLUsernameFromPreNormalizedString("withviewdebug")
 
-		tests[0].usernameWantErr[withVaSystemPrivilege] = false
-		tests[1].usernameWantErr[withVaSystemPrivilege] = false
-		tests[2].usernameWantErr[withVaSystemPrivilege] = false
-		tests[0].usernameWantErr[withVaRedactedSystemPrivilege] = true
-		tests[1].usernameWantErr[withVaRedactedSystemPrivilege] = false
-		tests[2].usernameWantErr[withVaRedactedSystemPrivilege] = true
-		tests[0].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
-		tests[1].usernameWantErr[withVaAndRedactedSystemPrivilege] = false
-		tests[2].usernameWantErr[withVaAndRedactedSystemPrivilege] = true
+		tests[0].usernameWantErr[withVaGlobalPrivilege] = false
+		tests[1].usernameWantErr[withVaGlobalPrivilege] = false
+		tests[2].usernameWantErr[withVaGlobalPrivilege] = false
+		tests[0].usernameWantErr[withVaRedactedGlobalPrivilege] = true
+		tests[1].usernameWantErr[withVaRedactedGlobalPrivilege] = false
+		tests[2].usernameWantErr[withVaRedactedGlobalPrivilege] = true
+		tests[0].usernameWantErr[withVaAndRedactedGlobalPrivilege] = false
+		tests[1].usernameWantErr[withVaAndRedactedGlobalPrivilege] = false
+		tests[2].usernameWantErr[withVaAndRedactedGlobalPrivilege] = true
 		tests[3].usernameWantErr[withviewclustermetadata] = false
 		tests[4].usernameWantErr[withViewDebug] = false
 
