@@ -560,9 +560,18 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
+// AddSyntheticDescriptor is part of the scexec.Catalog interface.
+func (s *TestState) AddSyntheticDescriptor(desc catalog.MutableDescriptor) {
+	s.LogSideEffectf("added synthetic descriptor: %v", desc)
+	s.synthetic.UpsertDescriptorEntry(desc)
+}
+
 // mustReadImmutableDescriptor looks up a descriptor and returns a immutable
 // deep copy.
 func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descriptor, error) {
+	if u := s.synthetic.LookupDescriptorEntry(id); u != nil {
+		return u.NewBuilder().BuildImmutable(), nil
+	}
 	if u := s.uncommitted.LookupDescriptorEntry(id); u != nil {
 		return u.NewBuilder().BuildImmutable(), nil
 	}
