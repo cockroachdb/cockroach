@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -497,6 +498,10 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			s, db, cleanup := setup(t)
 			now := s.Clock().Now().GoTime()
 			defer cleanup()
+
+			// Need events to be written ASAP for checks below.
+			sql.EventLogSyncWritesToSystemTableEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
 			tdb := sqlutils.MakeSQLRunner(db)
 			descs.ValidateOnWriteEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 			for _, op := range tc.before {

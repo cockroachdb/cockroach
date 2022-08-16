@@ -1054,6 +1054,11 @@ USE drop_region_db
 statement error pgcode 42P12 cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE drop_region_db PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
+# Need sync writes to ensure the event is in the eventlog
+# as soon as the next statement completes.
+statement ok
+SET CLUSTER SETTING server.eventlog.sync_writes.enabled = true
+
 query T noticetrace
 ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
 ----

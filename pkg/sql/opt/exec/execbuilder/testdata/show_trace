@@ -1,5 +1,9 @@
 # LogicTest: local
 
+# Need the events to be written ASAP for the tests below.
+statement ok
+SET CLUSTER SETTING server.eventlog.sync_writes.enabled = true
+
 # Check SHOW KV TRACE FOR SESSION.
 
 let $trace_query

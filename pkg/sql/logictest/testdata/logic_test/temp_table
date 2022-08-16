@@ -1,3 +1,7 @@
+# Need the events to be written ASAP for the tests below.
+statement ok
+SET CLUSTER SETTING server.eventlog.sync_writes.enabled = true
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 

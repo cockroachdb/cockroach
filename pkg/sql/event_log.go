@@ -420,11 +420,12 @@ var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
-var eventLogSyncWritesToSystemTableEnabled = settings.RegisterBoolSetting(
+// EventLogSyncWritesToSystemTableEnabled is exported for use in tests.
+var EventLogSyncWritesToSystemTableEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"server.eventlog.sync_writes.enabled",
 	"if set, writes to system.eventlog are synchronous in the issuing transaction",
-	true,
+	false,
 )
 
 // LogEventDestination indicates for InsertEventRecords where the
@@ -553,7 +554,7 @@ func insertEventRecords(
 	}
 
 	// Are we doing synchronous writes?
-	if txn != nil && eventLogSyncWritesToSystemTableEnabled.Get(&execCfg.Settings.SV) {
+	if txn != nil && EventLogSyncWritesToSystemTableEnabled.Get(&execCfg.Settings.SV) {
 		// Yes, do it now.
 		return writeToSystemEventsTable(ctx, execCfg, txn, entries)
 	}

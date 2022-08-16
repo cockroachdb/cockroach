@@ -10,6 +10,10 @@ SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = FALSE
 statement ok
 SET CLUSTER SETTING sql.stats.post_events.enabled = TRUE
 
+# Need the events to be written ASAP for the test below.
+statement ok
+SET CLUSTER SETTING server.eventlog.sync_writes.enabled = true
+
 statement ok
 CREATE TABLE a (id INT PRIMARY KEY, x INT, y INT, INDEX x_idx (x, y))
 
