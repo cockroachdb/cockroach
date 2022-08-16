@@ -17,41 +17,11 @@ import { StatementLink } from "../statementsTable";
 import IdxRecAction from "../insights/indexActionBtn";
 import { Duration, statementsRetries } from "../util";
 import { Anchor } from "../anchor";
+import { Link } from "react-router-dom";
+import { performanceTuningRecipes } from "../util";
+import { InsightRecommendation, insightType } from "../insights";
 
 const cx = classNames.bind(styles);
-
-export type InsightType =
-  | "DROP_INDEX"
-  | "CREATE_INDEX"
-  | "REPLACE_INDEX"
-  | "HIGH_WAIT_TIME"
-  | "HIGH_RETRIES"
-  | "SUBOPTIMAL_PLAN"
-  | "FAILED";
-
-export interface InsightRecommendation {
-  type: InsightType;
-  database?: string;
-  table?: string;
-  indexID?: number;
-  query?: string;
-  execution?: executionDetails;
-  details?: insightDetails;
-}
-
-export interface executionDetails {
-  statement?: string;
-  summary?: string;
-  fingerprintID?: string;
-  implicit?: boolean;
-  retries?: number;
-  indexRecommendations?: string[];
-}
-
-export interface insightDetails {
-  duration: number;
-  description: string;
-}
 
 export class InsightsSortedTable extends SortedTable<InsightRecommendation> {}
 
@@ -94,27 +64,6 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
 };
 
-function insightType(type: InsightType): string {
-  switch (type) {
-    case "CREATE_INDEX":
-      return "Create New Index";
-    case "DROP_INDEX":
-      return "Drop Unused Index";
-    case "REPLACE_INDEX":
-      return "Replace Index";
-    case "HIGH_WAIT_TIME":
-      return "High Wait Time";
-    case "HIGH_RETRIES":
-      return "High Retry Counts";
-    case "SUBOPTIMAL_PLAN":
-      return "Sub-Optimal Plan";
-    case "FAILED":
-      return "Failed Execution";
-    default:
-      return "Insight";
-  }
-}
-
 function typeCell(value: string): React.ReactElement {
   return <div className={cx("insight-type")}>{value}</div>;
 }
@@ -144,7 +93,32 @@ function descriptionCell(
         </>
       );
     case "DROP_INDEX":
-      return <>{`Index ${insightRec.indexID}`}</>;
+      return (
+        <>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Index: </span>{" "}
+            <Link
+              to={`database/${insightRec.database}/table/${insightRec.indexDetails.table}/index/${insightRec.indexDetails.indexName}`}
+              className={cx("table-link")}
+            >
+              {insightRec.indexDetails.indexName}
+            </Link>
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.indexDetails?.lastUsed}
+            {" Learn more about "}
+            <Anchor
+              href={performanceTuningRecipes}
+              target="_blank"
+              className={cx("table-link")}
+            >
+              unused indexes
+            </Anchor>
+            {"."}
+          </div>
+        </>
+      );
     case "HIGH_WAIT_TIME":
       return (
         <>

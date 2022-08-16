@@ -22,6 +22,9 @@ import {
   InsightEvent,
   InsightEventFilters,
   InsightEventDetails,
+  SchemaInsightEventFilters,
+  InsightType,
+  InsightRecommendation,
 } from "./types";
 
 export const getInsights = (
@@ -144,4 +147,77 @@ export function getAppsFromTransactionInsights(
   );
 
   return Array.from(uniqueAppNames).sort();
+}
+
+export const filterSchemaInsights = (
+  schemaInsights: InsightRecommendation[],
+  filters: SchemaInsightEventFilters,
+  search?: string,
+): InsightRecommendation[] => {
+  if (schemaInsights == null) return [];
+
+  let filteredSchemaInsights = schemaInsights;
+
+  if (filters.database) {
+    const databases =
+      filters.database.toString().length > 0
+        ? filters.database.toString().split(",")
+        : [];
+    if (databases.includes(unset)) {
+      databases.push("");
+    }
+    filteredSchemaInsights = filteredSchemaInsights.filter(
+      schemaInsight =>
+        databases.length === 0 || databases.includes(schemaInsight.database),
+    );
+  }
+
+  if (filters.schemaInsightType) {
+    const schemaInsightTypes =
+      filters.schemaInsightType.toString().length > 0
+        ? filters.schemaInsightType.toString().split(",")
+        : [];
+    if (schemaInsightTypes.includes(unset)) {
+      schemaInsightTypes.push("");
+    }
+    filteredSchemaInsights = filteredSchemaInsights.filter(
+      schemaInsight =>
+        schemaInsightTypes.length === 0 ||
+        schemaInsightTypes.includes(insightType(schemaInsight.type)),
+    );
+  }
+
+  if (search) {
+    search = search.toLowerCase();
+    filteredSchemaInsights = filteredSchemaInsights.filter(
+      schemaInsight =>
+        schemaInsight.query?.toLowerCase().includes(search) ||
+        schemaInsight.indexDetails?.indexName?.toLowerCase().includes(search) ||
+        schemaInsight.execution?.statement.toLowerCase().includes(search) ||
+        schemaInsight.execution?.summary.toLowerCase().includes(search) ||
+        schemaInsight.execution?.fingerprintID.toLowerCase().includes(search),
+    );
+  }
+  return filteredSchemaInsights;
+};
+
+export function insightType(type: InsightType): string {
+  switch (type) {
+    case "CREATE_INDEX":
+      return "Create New Index";
+    case "DROP_INDEX":
+      return "Drop Unused Index";
+    case "REPLACE_INDEX":
+      return "Replace Index";
+    case "HIGH_WAIT_TIME":
+      return "High Wait Time";
+    case "HIGH_RETRIES":
+      return "High Retry Counts";
+    case "SUBOPTIMAL_PLAN":
+      return "Sub-Optimal Plan";
+    case "FAILED":
+      return "Failed Execution";
+    default:
+      return "Insight";
+  }
 }

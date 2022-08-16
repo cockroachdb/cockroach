@@ -131,3 +131,47 @@ export type InsightEventFilters = Omit<
   | "timeNumber"
   | "timeUnit"
 >;
+
+export type SchemaInsightEventFilters = Pick<
+  Filters,
+  "database" | "schemaInsightType"
+>;
+
+export type InsightType =
+  | "DROP_INDEX"
+  | "CREATE_INDEX"
+  | "REPLACE_INDEX"
+  | "HIGH_WAIT_TIME"
+  | "HIGH_RETRIES"
+  | "SUBOPTIMAL_PLAN"
+  | "FAILED";
+
+export interface InsightRecommendation {
+  type: InsightType;
+  database?: string;
+  query?: string;
+  indexDetails?: indexDetails;
+  execution?: executionDetails;
+  details?: insightDetails;
+}
+
+export interface indexDetails {
+  table: string;
+  indexID: number;
+  indexName: string;
+  lastUsed?: string;
+}
+
+export interface executionDetails {
+  statement?: string;
+  summary?: string;
+  fingerprintID?: string;
+  implicit?: boolean;
+  retries?: number;
+  indexRecommendations?: string[];
+}
+
+export interface insightDetails {
+  duration: number;
+  description: string;
+}
