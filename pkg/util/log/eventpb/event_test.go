@@ -52,6 +52,12 @@ func TestEventJSON(t *testing.T) {
 
 		// Integer and boolean fields are not redactable in any case.
 		{&UnsafeDeleteDescriptor{ParentID: 123, Force: true}, `"ParentID":123,"Force":true`},
+
+		// Primitive fields without an `omitempty` annotation will emit their zero
+		// value. Zero valued fields with the annotation are skipped. In this case,
+		// `SnapshotID` and `NumRecords` do not have the `omitempty` annotation,
+		// whereas `AsOfTimestamp` does.
+		{&SchemaSnapshotMetadata{SnapshotID: "", NumRecords: 0, AsOfTimestamp: 0}, `"SnapshotID":"","NumRecords":0`},
 	}
 
 	for _, tc := range testCases {

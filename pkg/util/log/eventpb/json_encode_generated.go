@@ -641,14 +641,12 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
 
-	if m.TotalReadCount != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"TotalReadCount\":"...)
-		b = strconv.AppendUint(b, uint64(m.TotalReadCount), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"TotalReadCount\":"...)
+	b = strconv.AppendUint(b, uint64(m.TotalReadCount), 10)
 
 	if m.LastRead != "" {
 		if printComma {
@@ -660,23 +658,19 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, '"')
 	}
 
-	if m.TableID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"TableID\":"...)
-		b = strconv.AppendUint(b, uint64(m.TableID), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"TableID\":"...)
+	b = strconv.AppendUint(b, uint64(m.TableID), 10)
 
-	if m.IndexID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"IndexID\":"...)
-		b = strconv.AppendUint(b, uint64(m.IndexID), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"IndexID\":"...)
+	b = strconv.AppendUint(b, uint64(m.IndexID), 10)
 
 	if m.DatabaseName != "" {
 		if printComma {
@@ -2365,65 +2359,53 @@ func (m *DebugRecoverReplica) AppendJSONFields(printComma bool, b redact.Redacta
 
 	printComma, b = m.CommonDebugEventDetails.AppendJSONFields(printComma, b)
 
-	if m.RangeID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"RangeID\":"...)
-		b = strconv.AppendInt(b, int64(m.RangeID), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"RangeID\":"...)
+	b = strconv.AppendInt(b, int64(m.RangeID), 10)
 
-	if m.StoreID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"StoreID\":"...)
-		b = strconv.AppendInt(b, int64(m.StoreID), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"StoreID\":"...)
+	b = strconv.AppendInt(b, int64(m.StoreID), 10)
 
-	if m.SurvivorReplicaID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"SurvivorReplicaID\":"...)
-		b = strconv.AppendInt(b, int64(m.SurvivorReplicaID), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"SurvivorReplicaID\":"...)
+	b = strconv.AppendInt(b, int64(m.SurvivorReplicaID), 10)
 
-	if m.UpdatedReplicaID != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"UpdatedReplicaID\":"...)
-		b = strconv.AppendInt(b, int64(m.UpdatedReplicaID), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"UpdatedReplicaID\":"...)
+	b = strconv.AppendInt(b, int64(m.UpdatedReplicaID), 10)
 
-	if m.StartKey != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"StartKey\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.StartKey)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"StartKey\":\""...)
+	b = append(b, redact.StartMarker()...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.StartKey)))))
+	b = append(b, redact.EndMarker()...)
+	b = append(b, '"')
 
-	if m.EndKey != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"EndKey\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.EndKey)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"EndKey\":\""...)
+	b = append(b, redact.StartMarker()...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.EndKey)))))
+	b = append(b, redact.EndMarker()...)
+	b = append(b, '"')
 
 	return printComma, b
 }
@@ -3875,15 +3857,13 @@ func (m *SchemaDescriptor) AppendJSONFields(printComma bool, b redact.Redactable
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
 
-	if m.SnapshotID != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"SnapshotID\":\""...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SnapshotID)))
-		b = append(b, '"')
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"SnapshotID\":\""...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SnapshotID)))
+	b = append(b, '"')
 
 	if m.ParentDatabaseID != 0 {
 		if printComma {
@@ -3903,15 +3883,13 @@ func (m *SchemaDescriptor) AppendJSONFields(printComma bool, b redact.Redactable
 		b = strconv.AppendUint(b, uint64(m.ParentSchemaID), 10)
 	}
 
-	if m.Name != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"Name\":\""...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Name)))
-		b = append(b, '"')
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"Name\":\""...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Name)))
+	b = append(b, '"')
 
 	if m.DescID != 0 {
 		if printComma {
@@ -3942,24 +3920,20 @@ func (m *SchemaSnapshotMetadata) AppendJSONFields(printComma bool, b redact.Reda
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
 
-	if m.SnapshotID != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"SnapshotID\":\""...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SnapshotID)))
-		b = append(b, '"')
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"SnapshotID\":\""...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SnapshotID)))
+	b = append(b, '"')
 
-	if m.NumRecords != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"NumRecords\":"...)
-		b = strconv.AppendUint(b, uint64(m.NumRecords), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"NumRecords\":"...)
+	b = strconv.AppendUint(b, uint64(m.NumRecords), 10)
 
 	if m.AsOfTimestamp != 0 {
 		if printComma {
