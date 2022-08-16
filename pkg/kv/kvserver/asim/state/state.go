@@ -15,12 +15,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 type (
@@ -122,9 +122,9 @@ type State interface {
 	// likewise modified to reflect this in it's Capacity, held in the
 	// StoreDescriptor.
 	ApplyLoad(workload.LoadBatch)
-	// UsageInfo returns the usage information for the Range with ID
-	// RangeID.
-	UsageInfo(RangeID) allocator.RangeUsageInfo
+	// ReplicaLoad returns the usage information for the Range with ID
+	// RangeID on the store with ID StoreID.
+	ReplicaLoad(RangeID, StoreID) ReplicaLoad
 	// ClusterUsageInfo returns the usage information for the entire cluster.
 	ClusterUsageInfo() *ClusterUsageInfo
 	// TickClock modifies the state Clock time to Tick.
@@ -153,6 +153,9 @@ type State interface {
 	MakeAllocator(StoreID) allocatorimpl.Allocator
 	// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
 	LoadSplitterFor(StoreID) LoadSplitter
+	// RaftStatus returns the current raft status for the replica of the Range
+	// with ID RangeID, on the store with ID StoreID.
+	RaftStatus(RangeID, StoreID) *raft.Status
 }
 
 // Node is a container for stores and is part of a cluster.
@@ -214,6 +217,8 @@ type Replica interface {
 	Range() RangeID
 	// HoldsLease returns whether this replica holds the lease for the range.
 	HoldsLease() bool
+	// String returns a string representing the state of the replica.
+	String() string
 }
 
 // ManualSimClock implements the WallClock interface in the hlc pkg. This clock

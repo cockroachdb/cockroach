@@ -41,7 +41,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, settings, m)
+	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, exchange, changer, settings, m)
 	sim.RunSim(ctx)
 }
 
@@ -93,7 +93,8 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 
 	// Run each simulation for 5 minutes.
 	end := start.Add(5 * time.Minute)
-	interval := 10 * time.Second
+	bgInterval := 10 * time.Second
+	interval := 2 * time.Second
 	preGossipStart := start.Add(-settings.StateExchangeInterval - settings.StateExchangeDelay)
 
 	stores := 32
@@ -128,7 +129,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 
 		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
 		testPreGossipStores(s, exchange, preGossipStart)
-		sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, settings, m)
+		sim := asim.NewSimulator(start, end, interval, bgInterval, rwg, s, exchange, changer, settings, m)
 
 		startTime := timeutil.Now()
 		sim.RunSim(ctx)
@@ -139,7 +140,9 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	// estimate here of performance, as any additional time over the minimum is
 	// noise in a run.
 	minRunTime := int64(math.MaxInt64)
-	requiredRunTime := 20 * time.Second.Nanoseconds()
+	// TODO(kvoli): Hit perf wall again when running at a lower tick rate on
+	// selected operartions.
+	requiredRunTime := 25 * time.Second.Nanoseconds()
 	samples := 5
 	for i := 0; i < samples; i++ {
 		if sampledRun := sample(); sampledRun < minRunTime {
