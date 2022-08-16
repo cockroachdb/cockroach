@@ -1605,16 +1605,15 @@ func cmdIterScan(e *evalCtx) error {
 	// adjust e.iterRangeKeys to comply with the previous positioning operation.
 	// The previous position already passed this check, so it doesn't matter that
 	// we're fudging e.rangeKeys.
-	if _, ok := e.bareIter().(*MVCCIncrementalIterator); !ok {
-		if e.iter.RangeKeyChanged() {
-			if e.iterRangeKeys.IsEmpty() {
-				e.iterRangeKeys = MVCCRangeKeyStack{
-					Bounds:   roachpb.Span{Key: keys.MinKey.Next(), EndKey: keys.MaxKey},
-					Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
-				}
-			} else {
-				e.iterRangeKeys.Clear()
+	if e.iter.RangeKeyChanged() {
+		if e.iterRangeKeys.IsEmpty() {
+			e.iterRangeKeys = MVCCRangeKeyStack{
+				// NB: Clone MinKey/MaxKey, since we write into these byte slices later.
+				Bounds:   roachpb.Span{Key: keys.MinKey.Next().Clone(), EndKey: keys.MaxKey.Clone()},
+				Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
 			}
+		} else {
+			e.iterRangeKeys.Clear()
 		}
 	}
 
@@ -1757,12 +1756,15 @@ func printIter(e *evalCtx) {
 }
 
 func checkAndUpdateRangeKeyChanged(e *evalCtx) bool {
-	// MVCCIncrementalIterator does not yet support RangeKeyChanged().
-	if _, ok := e.bareIter().(*MVCCIncrementalIterator); ok {
-		return false
-	}
 	rangeKeyChanged := e.iter.RangeKeyChanged()
 	rangeKeys := e.iter.RangeKeys()
+
+	// For MVCCIncrementalIterator, Next(Key)IgnoringTime() may reveal additional
+	// range key versions, but RangeKeyChanged only applies to the filtered set.
+	if incrIter, ok := e.bareIter().(*MVCCIncrementalIterator); ok && incrIter.ignoringTime {
+		rangeKeys = incrIter.rangeKeys
+	}
+
 	if rangeKeyChanged != !rangeKeys.Equal(e.iterRangeKeys) {
 		e.t.Fatalf("incorrect RangeKeyChanged=%t (was:%s is:%s) at %s\n",
 			rangeKeyChanged, e.iterRangeKeys, rangeKeys, e.td.Pos)
