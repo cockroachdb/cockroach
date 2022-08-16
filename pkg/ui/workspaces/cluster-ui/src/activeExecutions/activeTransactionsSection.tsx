@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useMemo, useContext } from "react";
 import classNames from "classnames/bind";
 import {
   ActiveStatementFilters,
@@ -25,11 +25,14 @@ import {
   SortSetting,
 } from "../sortedtable/sortedtable";
 import {
-  ActiveTransactionsTable,
+  makeActiveTransactionsColumns,
   getColumnOptions,
 } from "./activeTransactionsTable";
 import { TransactionViewType } from "src/transactionsPage/transactionsPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
+import { CockroachCloudContext } from "src/contexts";
+import { isSelectedColumn } from "src/columnsSelector/utils";
+import { SortedTable } from "src/sortedtable";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -58,7 +61,18 @@ export const ActiveTransactionsSection: React.FC<
   onClearFilters,
   onColumnsSelect,
 }) => {
-  const tableColumns: SelectOption[] = getColumnOptions(selectedColumns);
+  const isCockroachCloud = useContext(CockroachCloudContext);
+
+  const columns = useMemo(
+    () => makeActiveTransactionsColumns(isCockroachCloud),
+    [isCockroachCloud],
+  ).filter(col => isSelectedColumn(selectedColumns, col));
+
+  const tableColumns: SelectOption[] = getColumnOptions(
+    columns,
+    selectedColumns,
+  );
+
   const activeFilters = calculateActiveFilters(filters);
 
   return (
@@ -77,9 +91,9 @@ export const ActiveTransactionsSection: React.FC<
           onClearFilters={onClearFilters}
         />
       </div>
-      <ActiveTransactionsTable
+      <SortedTable
         data={transactions}
-        selectedColumns={selectedColumns}
+        columns={columns}
         sortSetting={sortSetting}
         onChangeSortSetting={onChangeSortSetting}
         renderNoResult={
