@@ -188,6 +188,8 @@
 /pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs @cockroachdb/server-prs
 
 /pkg/gen/                    @cockroachdb/dev-inf
+/pkg/gen/*.bzl               @cockroachdb/dev-inf-noreview
+/pkg/gen/gen.bzl             @cockroachdb/dev-inf
 
 /pkg/acceptance/             @cockroachdb/sql-experience
 /pkg/base/                   @cockroachdb/unowned @cockroachdb/kv-prs @cockroachdb/server-prs

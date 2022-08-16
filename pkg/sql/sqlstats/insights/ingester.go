@@ -55,7 +55,7 @@ type event struct {
 	statement   *Statement
 }
 
-func (i concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stopper) {
+func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stopper) {
 	// This task pulls buffers from the channel and forwards them along to the
 	// underlying Registry.
 	_ = stopper.RunAsyncTask(ctx, "insights-ingester", func(ctx context.Context) {
@@ -86,7 +86,7 @@ func (i concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stopp
 	})
 }
 
-func (i concurrentBufferIngester) ingest(events *eventBuffer) {
+func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 	for _, e := range events {
 		// Because an eventBuffer is a fixed-size array, rather than a slice,
 		// we do not know how full it is until we hit a nil entry.
@@ -101,7 +101,7 @@ func (i concurrentBufferIngester) ingest(events *eventBuffer) {
 	}
 }
 
-func (i concurrentBufferIngester) ObserveStatement(
+func (i *concurrentBufferIngester) ObserveStatement(
 	sessionID clusterunique.ID, statement *Statement,
 ) {
 	if !i.enabled() {
@@ -115,7 +115,7 @@ func (i concurrentBufferIngester) ObserveStatement(
 	})
 }
 
-func (i concurrentBufferIngester) ObserveTransaction(
+func (i *concurrentBufferIngester) ObserveTransaction(
 	sessionID clusterunique.ID, transaction *Transaction,
 ) {
 	if !i.enabled() {
@@ -129,13 +129,13 @@ func (i concurrentBufferIngester) ObserveTransaction(
 	})
 }
 
-func (i concurrentBufferIngester) IterateInsights(
+func (i *concurrentBufferIngester) IterateInsights(
 	ctx context.Context, visitor func(context.Context, *Insight),
 ) {
 	i.delegate.IterateInsights(ctx, visitor)
 }
 
-func (i concurrentBufferIngester) enabled() bool {
+func (i *concurrentBufferIngester) enabled() bool {
 	return i.delegate.enabled()
 }
 
