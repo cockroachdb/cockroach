@@ -33,6 +33,7 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectStatementsLastUpdated,
 } from "./statementsPage.selectors";
 import {
   selectIsTenant,
@@ -99,6 +100,7 @@ export const ConnectedStatementsPage = withRouter(
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         statements: selectStatements(state, props),
+        lastUpdated: selectStatementsLastUpdated(state),
         statementsError: selectStatementsLastError(state),
         totalFingerprints: selectTotalFingerprints(state),
       },

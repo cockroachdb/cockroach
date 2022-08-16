@@ -39,13 +39,14 @@ import {
   mapStateToActiveTransactionsPageProps,
 } from "./activeTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
+import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
 export const selectData = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data || state.inFlight || !state.valid) return null;
+    if (!state.data || !state.valid) return null;
     return state.data;
   },
 );
@@ -139,6 +140,7 @@ const TransactionsPageConnected = withRouter(
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
         data: selectData(state),
+        lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
         filters: filtersLocalSetting.selector(state),

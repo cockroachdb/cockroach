@@ -13,6 +13,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../../timeScaleDropdown";
+import moment from "moment";
 
 export type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
@@ -20,12 +21,14 @@ export type SQLStatsState = {
   data: StatementsResponse;
   lastError: Error;
   valid: boolean;
+  lastUpdated: moment.Moment | null;
 };
 
 const initialState: SQLStatsState = {
   data: null,
   lastError: null,
-  valid: true,
+  valid: false,
+  lastUpdated: null,
 };
 
 export type UpdateTimeScalePayload = {
@@ -40,10 +43,12 @@ const sqlStatsSlice = createSlice({
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
+      state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
       state.lastError = action.payload;
+      state.lastUpdated = moment.utc();
     },
     invalidated: state => {
       state.valid = false;

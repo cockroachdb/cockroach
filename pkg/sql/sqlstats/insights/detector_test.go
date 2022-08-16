@@ -199,8 +199,10 @@ func BenchmarkLatencyQuantileDetector(b *testing.B) {
 }
 
 func TestLatencyThresholdDetector(t *testing.T) {
-	t.Run("enabled false by default", func(t *testing.T) {
-		detector := latencyThresholdDetector{st: cluster.MakeTestingClusterSettings()}
+	t.Run("enabled false with zero threshold", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(context.Background(), &st.SV, 0)
+		detector := latencyThresholdDetector{st: st}
 		require.False(t, detector.enabled())
 	})
 
@@ -212,7 +214,9 @@ func TestLatencyThresholdDetector(t *testing.T) {
 	})
 
 	t.Run("examine nil when disabled", func(t *testing.T) {
-		detector := latencyThresholdDetector{st: cluster.MakeTestingClusterSettings()}
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(context.Background(), &st.SV, 0)
+		detector := latencyThresholdDetector{st: st}
 		require.Empty(t, detector.examine(&Statement{LatencyInSeconds: 1}))
 	})
 

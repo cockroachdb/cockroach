@@ -46,6 +46,11 @@ export interface StatementsSummaryData {
   stats: StatementStatistics[];
 }
 
+export const selectStatementsLastUpdated = createSelector(
+  sqlStatsSelector,
+  sqlStats => sqlStats.lastUpdated,
+);
+
 // selectApps returns the array of all apps with statement statistics present
 // in the data.
 export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
