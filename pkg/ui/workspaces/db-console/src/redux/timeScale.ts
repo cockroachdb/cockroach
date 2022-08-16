@@ -14,18 +14,24 @@
  */
 
 import { Action } from "redux";
+import { put, takeEvery } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 import _ from "lodash";
 import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
 import moment from "moment";
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
+import {
+  getValueFromSessionStorage,
+  setLocalSetting,
+} from "src/redux/localsettings";
 
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
 export const SET_METRICS_MOVING_WINDOW =
   "cockroachui/timewindow/SET_METRICS_MOVING_WINDOW";
 export const SET_METRICS_FIXED_WINDOW =
   "cockroachui/timewindow/SET_METRICS_FIXED_WINDOW";
+const TIME_SCALE_SESSION_STORAGE_KEY = "time_scale";
 
 /**
  * TimeWindow represents an absolute window of time, defined with a start and
@@ -86,7 +92,15 @@ export class TimeScaleState {
   };
 
   constructor() {
-    this.scale = {
+    let timeScale: TimeScale;
+    try {
+      timeScale = getValueFromSessionStorage(TIME_SCALE_SESSION_STORAGE_KEY);
+    } catch {
+      console.warn(
+        `Couldn't retrieve or parse TimeScale options from SessionStorage`,
+      );
+    }
+    this.scale = timeScale || {
       ...defaultTimeScaleOptions["Past 10 Minutes"],
       key: "Past 10 Minutes",
       fixedWindowEnd: false,
@@ -226,3 +240,9 @@ export const adjustTimeScale = (
   }
   return result;
 };
+
+export function* timeScaleSaga() {
+  yield takeEvery(SET_SCALE, function*({ payload }: PayloadAction<TimeScale>) {
+    yield put(setLocalSetting(TIME_SCALE_SESSION_STORAGE_KEY, payload));
+  });
+}
