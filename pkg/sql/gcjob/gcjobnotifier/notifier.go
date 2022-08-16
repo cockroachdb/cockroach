@@ -144,12 +144,13 @@ func (n *Notifier) Start(ctx context.Context) {
 func (n *Notifier) run(_ context.Context) {
 	defer n.markStopped()
 	systemConfigUpdateCh, _ := n.provider.RegisterSystemConfigChannel()
-	var haveNotified bool
+	var haveNotified syncutil.AtomicBool
 	versionSettingChanged := make(chan struct{}, 1)
 	versionBeingWaited := clusterversion.ByKey(clusterversion.UseDelRangeInGCJob)
 	n.settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
-		if !haveNotified && versionBeingWaited.LessEq(newVersion.Version) {
-			haveNotified = true
+		if !haveNotified.Get() &&
+			versionBeingWaited.LessEq(newVersion.Version) &&
+			!haveNotified.Swap(true) {
 			versionSettingChanged <- struct{}{}
 		}
 	})
