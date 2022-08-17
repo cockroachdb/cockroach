@@ -29,7 +29,7 @@ func registerSecure(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("smoketest/secure/nodes=%d", numNodes),
 			Tags:    []string{"smoketest", "weekly"},
-			Owner:   registry.OwnerKV, // TODO: OwnerTestEng once the open PR that introduces it has merged
+			Owner:   registry.OwnerTestEng,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
