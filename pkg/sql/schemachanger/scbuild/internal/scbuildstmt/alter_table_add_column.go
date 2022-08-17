@@ -103,6 +103,10 @@ func alterTableAddColumn(
 				"regional by row partitioning is not supported"))
 		}
 	}
+	// We don't support handling zone config related properties for tables, so
+	// throw an unsupported
+	fallBackIfZoneConfigExists(b, d, tbl.TableID)
+
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx())
 	if err != nil {
 		panic(err)
