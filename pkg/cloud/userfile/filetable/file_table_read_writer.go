@@ -253,15 +253,15 @@ func NewFileToTableSystem(
 		}
 
 		if !tablesExist {
-			if err := f.createFileAndPayloadTables(ctx, txn, e.ie); err != nil {
+			if err := f.createFileAndPayloadTables(ctx, nil /* txn */, e.ie); err != nil {
 				return err
 			}
 
-			if err := f.grantCurrentUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.grantCurrentUserTablePrivileges(ctx, nil /* txn */, e.ie); err != nil {
 				return err
 			}
 
-			if err := f.revokeOtherUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.revokeOtherUserTablePrivileges(ctx, nil /* txn */, e.ie); err != nil {
 				return err
 			}
 		}
@@ -365,7 +365,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 	if err := e.db.Txn(ctx,
 		func(ctx context.Context, txn *kv.Txn) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := e.ie.ExecEx(ctx, "drop-payload-table", txn,
+			_, err := e.ie.ExecEx(ctx, "drop-payload-table", nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropPayloadTableQuery)
 			if err != nil {
@@ -373,7 +373,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 			}
 
 			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
-			_, err = e.ie.ExecEx(ctx, "drop-file-table", txn,
+			_, err = e.ie.ExecEx(ctx, "drop-file-table", nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropFileTableQuery)
 			if err != nil {
