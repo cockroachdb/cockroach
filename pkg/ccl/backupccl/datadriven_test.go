@@ -19,12 +19,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -70,6 +72,10 @@ var localityCfgs = map[string]roachpb.Locality{
 	},
 }
 
+var clusterVersionKeys = map[string]clusterversion.Key{
+	"Start22_2": clusterversion.Start22_2,
+}
+
 type sqlDBKey struct {
 	server string
 	user   string
@@ -111,12 +117,13 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 type serverCfg struct {
-	name       string
-	iodir      string
-	nodes      int
-	splits     int
-	ioConf     base.ExternalIODirConfig
-	localities string
+	name          string
+	iodir         string
+	nodes         int
+	splits        int
+	ioConf        base.ExternalIODirConfig
+	localities    string
+	beforeVersion string
 }
 
 func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
@@ -129,6 +136,23 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	}
 
 	settings := cluster.MakeTestingClusterSettings()
+
+	if cfg.beforeVersion != "" {
+		beforeKey, ok := clusterVersionKeys[cfg.beforeVersion]
+		if !ok {
+			t.Fatalf("clusterVersion %s does not exist in data driven global map", cfg.beforeVersion)
+		}
+		beforeKey--
+		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
+			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
+			DisableAutomaticVersionUpgrade: make(chan struct{})}
+		settings = cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.TestingBinaryVersion,
+			clusterversion.ByKey(beforeKey),
+			false,
+		)
+	}
+
 	closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
@@ -225,6 +249,15 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   + nodes: specifies the number of nodes in the test cluster.
 //
 //   + splits: specifies the number of ranges the bank table is split into.
+//
+//   + before-version=<beforeVersion>: creates a mixed version cluster where all
+//   nodes running the test server binary think the clusterVersion is one
+//   version before the passed in <beforeVersion> key. See cockroach_versions.go
+//   for possible values.
+//
+// - "upgrade-server version=<version>"
+//    Upgrade the cluster version of the active server to the passed in
+//    clusterVersion key. See cockroach_versions.go for possible values.
 //
 // - "exec-sql [server=<name>] [user=<name>] [args]"
 //   Executes the input SQL query on the target server. By default, server is
@@ -342,7 +375,7 @@ func TestDataDriven(t *testing.T) {
 				return ""
 
 			case "new-server":
-				var name, shareDirWith, iodir, localities string
+				var name, shareDirWith, iodir, localities, beforeVersion string
 				var splits int
 				nodes := singleNode
 				var io base.ExternalIODirConfig
@@ -368,15 +401,19 @@ func TestDataDriven(t *testing.T) {
 				if d.HasArg("splits") {
 					d.ScanArgs(t, "splits", &splits)
 				}
+				if d.HasArg("beforeVersion") {
+					d.ScanArgs(t, "beforeVersion", &beforeVersion)
+				}
 
 				lastCreatedServer = name
 				cfg := serverCfg{
-					name:       name,
-					iodir:      iodir,
-					nodes:      nodes,
-					splits:     splits,
-					ioConf:     io,
-					localities: localities,
+					name:          name,
+					iodir:         iodir,
+					nodes:         nodes,
+					splits:        splits,
+					ioConf:        io,
+					localities:    localities,
+					beforeVersion: beforeVersion,
 				}
 				err := ds.addServer(t, cfg)
 				if err != nil {
@@ -388,6 +425,23 @@ func TestDataDriven(t *testing.T) {
 				var name string
 				d.ScanArgs(t, "name", &name)
 				lastCreatedServer = name
+				return ""
+
+			case "upgrade-server":
+				server := lastCreatedServer
+				user := "root"
+
+				var version string
+				if d.HasArg("version") {
+					d.ScanArgs(t, "version", &version)
+				}
+				key, ok := clusterVersionKeys[version]
+				if !ok {
+					t.Fatalf("clusterVersion %s does not exist in data driven global map", version)
+				}
+				clusterVersion := clusterversion.ByKey(key)
+				_, err := ds.getSQLDB(t, server, user).Exec("SET CLUSTER SETTING version = $1", clusterVersion.String())
+				require.NoError(t, err)
 				return ""
 
 			case "exec-sql":
