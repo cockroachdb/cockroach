@@ -84,18 +84,9 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 		want sstable.TableFormat
 	}{
 		{
-			name: "before feature gate",
-			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.EnablePebbleFormatVersionBlockProperties-1),
-				clusterversion.TestingBinaryMinSupportedVersion,
-				true,
-			),
-			want: sstable.TableFormatRocksDBv2,
-		},
-		{
 			name: "at feature gate",
 			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.EnablePebbleFormatVersionBlockProperties),
+				clusterversion.ByKey(clusterversion.TODOPreV22_1),
 				clusterversion.TestingBinaryMinSupportedVersion,
 				true,
 			),
