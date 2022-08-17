@@ -32,7 +32,7 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 
 	staticLogTags := logtags.Buffer{}
 	staticLogTags.Add("foo", "bar")
-	mockListener := []EventListener{&mockEventListener{}}
+	mockListener := &mockEventListener{}
 
 	for _, tc := range []struct {
 		name              string
@@ -120,7 +120,7 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 	skip.UnderDeadlock(b, "span reuse triggers false-positives in the deadlock detector")
 	ev := &types.Int32Value{Value: 5}
-	mockListener := []EventListener{&mockEventListener{}}
+	mockListener := &mockEventListener{}
 
 	for _, tc := range []struct {
 		name              string

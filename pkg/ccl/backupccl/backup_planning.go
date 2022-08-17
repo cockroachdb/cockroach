@@ -1467,5 +1467,5 @@ func updateBackupDetails(
 }
 
 func init() {
-	sql.AddPlanHook("backup", backupPlanHook)
+	sql.AddPlanHook("backupccl.backupPlanHook", backupPlanHook)
 }

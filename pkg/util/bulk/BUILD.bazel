@@ -1,0 +1,27 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bulk",
+    srcs = ["tracing_aggregator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/bulk",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+    ],
+)
+
+go_test(
+    name = "bulk_test",
+    srcs = ["tracing_aggregator_test.go"],
+    deps = [
+        ":bulk",
+        "//pkg/ccl/backupccl/backuppb",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

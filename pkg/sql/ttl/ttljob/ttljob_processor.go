@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -73,7 +74,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		deleteRateLimit,
 	)
 
-	rowCount := int64(0)
+	processorRowCount := int64(0)
 
 	var relationName string
 	var pkColumns []string
@@ -151,7 +152,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 						ttlSpec.PreSelectStatement,
 					)
 					// add before returning err in case of partial success
-					atomic.AddInt64(&rowCount, rangeRowCount)
+					atomic.AddInt64(&processorRowCount, rangeRowCount)
 					metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
 					if err != nil {
 						// Continue until channel is fully read.
@@ -224,18 +225,26 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		return err
 	}
 
-	job, err := serverCfg.JobRegistry.LoadJob(ctx, ttlSpec.JobID)
-	if err != nil {
-		return err
-	}
-	return db.Txn(ctx, func(_ context.Context, txn *kv.Txn) error {
-		return job.Update(ctx, txn, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	jobID := ttlSpec.JobID
+	return serverCfg.JobRegistry.UpdateJobWithTxn(
+		ctx,
+		jobID,
+		nil,  /* txn */
+		true, /* useReadLock */
+		func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
-			progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += rowCount
+			existingRowCount := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount
+			progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += processorRowCount
 			ju.UpdateProgress(progress)
+			log.VInfof(
+				ctx,
+				2, /* level */
+				"TTL processorRowCount updated jobID=%d processorID=%d tableID=%d existingRowCount=%d processorRowCount=%d progress=%s",
+				jobID, ttl.ProcessorID, details.TableID, existingRowCount, processorRowCount, progress,
+			)
 			return nil
-		})
-	})
+		},
+	)
 }
 
 // rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
@@ -348,13 +357,13 @@ func runTTLOnRange(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				rowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				batchRowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
 				if err != nil {
 					return err
 				}
 
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
-				rangeRowCount += int64(rowCount)
+				rangeRowCount += int64(batchRowCount)
 				return nil
 			}); err != nil {
 				return rangeRowCount, errors.Wrapf(err, "error during row deletion")

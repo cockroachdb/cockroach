@@ -5726,7 +5726,7 @@ func MVCCExportToSST(
 	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
 ) (roachpb.BulkOpSummary, MVCCKey, error) {
 	var span *tracing.Span
-	ctx, span = tracing.ChildSpan(ctx, "MVCCExportToSST")
+	ctx, span = tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
 	defer span.Finish()
 	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
 	defer sstWriter.Close()
