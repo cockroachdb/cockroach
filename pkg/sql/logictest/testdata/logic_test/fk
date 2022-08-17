@@ -948,6 +948,8 @@ CREATE TABLE tx_leg (
   tx_id INT NOT NULL REFERENCES tx
 )
 
+skip_on_retry
+
 statement ok
 BEGIN TRANSACTION
 
