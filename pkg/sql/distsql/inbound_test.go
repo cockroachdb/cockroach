@@ -112,7 +112,10 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	consumer := distsqlutils.NewRowBuffer(types.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
 	connectionInfo := map[execinfrapb.StreamID]*flowinfra.InboundStreamInfo{
 		streamID: flowinfra.NewInboundStreamInfo(
-			flowinfra.RowInboundStreamHandler{RowReceiver: consumer},
+			flowinfra.RowInboundStreamHandler{
+				RowReceiver: consumer,
+				Types:       types.OneIntCol,
+			},
 			wg,
 		),
 	}
