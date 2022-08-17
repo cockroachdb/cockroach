@@ -169,7 +169,6 @@ func TestPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 86102)
 	skip.UnderRace(t)
 	runPebbleEquivalenceTest(t)
 }
