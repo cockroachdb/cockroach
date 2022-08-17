@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -298,7 +299,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 					mrc := &execinfra.RowChannel{}
 					mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 					for _, s := range is.Streams {
-						if err := f.setupInboundStream(ctx, s, mrc); err != nil {
+						if err := f.setupInboundStream(ctx, s, mrc, is.ColumnTypes); err != nil {
 							return nil, err
 						}
 					}
@@ -317,7 +318,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 				for i, s := range is.Streams {
 					rowChan := &execinfra.RowChannel{}
 					rowChan.InitWithNumSenders(is.ColumnTypes, 1 /* numSenders */)
-					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
+					if err := f.setupInboundStream(ctx, s, rowChan, is.ColumnTypes); err != nil {
 						return nil, err
 					}
 					streams[i] = rowChan
@@ -341,7 +342,10 @@ func (f *rowBasedFlow) setupInputSyncs(
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *rowBasedFlow) setupInboundStream(
-	ctx context.Context, spec execinfrapb.StreamEndpointSpec, receiver execinfra.RowReceiver,
+	ctx context.Context,
+	spec execinfrapb.StreamEndpointSpec,
+	receiver execinfra.RowReceiver,
+	types []*types.T,
 ) error {
 	sid := spec.StreamID
 	switch spec.Type {
@@ -356,7 +360,10 @@ func (f *rowBasedFlow) setupInboundStream(
 			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
 		f.AddRemoteStream(sid, flowinfra.NewInboundStreamInfo(
-			flowinfra.RowInboundStreamHandler{RowReceiver: receiver},
+			flowinfra.RowInboundStreamHandler{
+				RowReceiver: receiver,
+				Types:       types,
+			},
 			f.GetWaitGroup(),
 		))
 

@@ -62,6 +62,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []*types.T, records []ro
 	numMeta := 0
 
 	se.Init(types)
+	sd.Init(types)
 
 	for rowIdx := 0; rowIdx <= len(records); rowIdx++ {
 		if rowIdx < len(records) {
@@ -220,6 +221,7 @@ func BenchmarkStreamDecoder(b *testing.B) {
 
 			for i := 0; i < b.N; i++ {
 				var sd flowinfra.StreamDecoder
+				sd.Init(colTypes)
 				if err := sd.AddMessage(ctx, msg); err != nil {
 					b.Fatal(err)
 				}
