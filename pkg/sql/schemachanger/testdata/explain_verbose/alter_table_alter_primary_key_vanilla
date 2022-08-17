@@ -381,35 +381,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │
     ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 4 elements transitioning toward ABSENT
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │     PUBLIC → WRITE_ONLY
-    │   │   │
-    │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
-    │   │       │ PUBLIC → ABSENT
-    │   │       │
-    │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │             rule: "index no longer public before dependents"
-    │   │
     │   ├── • 4 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -473,6 +444,35 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}
     │   │         WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │
+    │   ├── • 4 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │   │     rule: "index no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │   │     rule: "index no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │     PUBLIC → WRITE_ONLY
+    │   │   │
+    │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │             rule: "index no longer public before dependents"
+    │   │
     │   └── • 10 Mutation operations
     │       │
     │       ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
@@ -529,11 +529,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 1 element transitioning toward ABSENT
-    │   │   │
-    │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │         WRITE_ONLY → DELETE_ONLY
-    │   │
     │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
@@ -547,6 +542,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   │
     │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}
     │   │         TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+    │   │
+    │   ├── • 1 element transitioning toward ABSENT
+    │   │   │
+    │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │         WRITE_ONLY → DELETE_ONLY
     │   │
     │   └── • 7 Mutation operations
     │       │
