@@ -14,6 +14,7 @@ go_library(
         "admission_control_multi_store_overload.go",
         "admission_control_snapshot_overload.go",
         "admission_control_tpcc_overload.go",
+        "allocation_bench.go",
         "allocator.go",
         "alterpk.go",
         "asyncpg.go",
