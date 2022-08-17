@@ -239,7 +239,7 @@ message ProducerMessage {
   // length rows will be sent.
   // TODO(yuzefovich): it should be possible to determine this information
   // statically instead of passing in the first message.
-  repeated sqlbase.DatumEncoding encoding = 4 [(gogoproto.nullable) = false];
+  repeated sqlbase.DatumEncoding encoding = 4;
 
   reserved 2;
 }
