@@ -348,9 +348,8 @@ func RegisterJepsen(r registry.Registry) {
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
 			s := registry.TestSpec{
-				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
-				// We don't run jepsen on older releases due to the high rate of flakes.
-				Owner: registry.OwnerKV,
+				Name:  fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
+				Owner: registry.OwnerTestEng,
 				// The Jepsen tests do funky things to machines, like muck with the
 				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when
