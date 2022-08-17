@@ -55,7 +55,7 @@ func runQuitTransfersLeases(
 }
 
 func (q *quitTest) init(ctx context.Context) {
-	q.args = []string{"--vmodule=store=1,replica=1,replica_proposal=1"}
+	q.args = []string{"--vmodule=replica_proposal=1,allocator=3,allocator_scorer=3"}
 	q.env = []string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}
 	q.c.Put(ctx, q.t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings(install.EnvOption(q.env))
