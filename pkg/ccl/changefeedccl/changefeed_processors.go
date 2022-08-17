@@ -731,10 +731,7 @@ const (
 
 // jobState encapsulates changefeed job state.
 type jobState struct {
-	// job is set for changefeeds other than core/sinkless changefeeds.
-	job *jobs.Job
-	// coreProgress is set for only core/sinkless changefeeds.
-	coreProgress *coreChangefeedProgress
+	progressTracker changefeedProgressTracker
 
 	settings *cluster.Settings
 	metrics  *Metrics
@@ -750,14 +747,110 @@ type jobState struct {
 	progressUpdatesSkipped bool
 }
 
+type changefeedProgressTracker interface {
+	updateProgress(ctx context.Context,
+		frontier hlc.Timestamp,
+		checkpoint jobspb.ChangefeedProgress_Checkpoint,
+		updateRunStatus bool,
+		timestampManager func(ctx context.Context, txn *kv.Txn, progress *jobspb.ChangefeedProgress) error) (bool, error)
+
+	markIdle(isIdle bool)
+}
+
+type changefeedJobProgressTracker struct {
+	job *jobs.Job
+}
+
+type coreChangefeedProgressTracker struct {
+	coreProgress *coreChangefeedProgress
+}
+
+// updateProgress implements the changefeedProgressTracker interface.
+func (cpt *coreChangefeedProgressTracker) updateProgress(
+	ctx context.Context,
+	frontier hlc.Timestamp,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	updateRunStatus bool,
+	timestampManager func(ctx context.Context, txn *kv.Txn, progress *jobspb.ChangefeedProgress) error,
+) (bool, error) {
+	cpt.coreProgress.SetHighwater(frontier)
+	cpt.coreProgress.SetCheckpoint(checkpoint.Spans, checkpoint.Timestamp)
+	return true, nil
+}
+
+func (cpt *coreChangefeedProgressTracker) markIdle(isIdle bool) {}
+
+// updateFrontier implements the changefeedProgressTracker interface.
+func (cpt *changefeedJobProgressTracker) updateProgress(
+	ctx context.Context,
+	frontier hlc.Timestamp,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	updateRunStatus bool,
+	timestampManager func(ctx context.Context, txn *kv.Txn, progress *jobspb.ChangefeedProgress) error,
+) (bool, error) {
+	var updateSkipped error
+	if err := cpt.job.Update(ctx, nil, func(
+		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		// If we're unable to update the job due to the job state, such as during
+		// pause-requested, simply skip the checkpoint
+		if err := md.CheckRunningOrReverting(); err != nil {
+			updateSkipped = err
+			return nil
+		}
+
+		// Advance resolved timestamp.
+		progress := md.Progress
+		progress.Progress = &jobspb.Progress_HighWater{
+			HighWater: &frontier,
+		}
+
+		changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
+		changefeedProgress.Checkpoint = &checkpoint
+
+		if updateRunStatus {
+			md.Progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
+		}
+
+		ju.UpdateProgress(progress)
+
+		if err := timestampManager(ctx, txn, changefeedProgress); err != nil {
+			log.Warningf(ctx, "error managing protected timestamp record: %v", err)
+			return err
+		}
+
+		// Reset RunStats.NumRuns to 1 since the changefeed is
+		// now running. By resetting the NumRuns, we avoid
+		// future job system level retries from having large
+		// backoffs because of past failures.
+		if md.RunStats != nil {
+			ju.UpdateRunStats(1, md.RunStats.LastRun)
+		}
+
+		return nil
+	}); err != nil {
+		return false, err
+	}
+
+	if updateSkipped != nil {
+		log.Warningf(ctx, "skipping changefeed checkpoint: %s", updateSkipped)
+		return false, nil
+	}
+	return true, nil
+}
+
+func (cpt *changefeedJobProgressTracker) markIdle(isIdle bool) {
+	cpt.job.MarkIdle(isIdle)
+}
+
 type coreChangefeedProgress struct {
 	progress jobspb.Progress
 }
 
 // SetHighwater implements the eval.ChangefeedState interface.
-func (cp *coreChangefeedProgress) SetHighwater(frontier *hlc.Timestamp) {
+func (cp *coreChangefeedProgress) SetHighwater(frontier hlc.Timestamp) {
 	cp.progress.Progress = &jobspb.Progress_HighWater{
-		HighWater: frontier,
+		HighWater: &frontier,
 	}
 }
 
@@ -771,15 +864,13 @@ func (cp *coreChangefeedProgress) SetCheckpoint(spans []roachpb.Span, timestamp 
 }
 
 func newJobState(
-	j *jobs.Job,
-	coreProgress *coreChangefeedProgress,
+	progressTracker changefeedProgressTracker,
 	st *cluster.Settings,
 	metrics *Metrics,
 	ts timeutil.TimeSource,
 ) *jobState {
 	return &jobState{
-		job:                j,
-		coreProgress:       coreProgress,
+		progressTracker:    progressTracker,
 		settings:           st,
 		metrics:            metrics,
 		ts:                 ts,
@@ -928,7 +1019,7 @@ func (cf *changeFrontier) MustBeStreaming() bool {
 
 // Start is part of the RowSource interface.
 func (cf *changeFrontier) Start(ctx context.Context) {
-	if cf.spec.JobID != 0 {
+	if !cf.isSinkless() {
 		ctx = logtags.AddTag(ctx, "job", cf.spec.JobID)
 	}
 	// StartInternal called at the beginning of the function because there are
@@ -968,13 +1059,13 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
-	if cf.spec.JobID != 0 {
+	if !cf.isSinkless() {
 		job, err := cf.flowCtx.Cfg.JobRegistry.LoadClaimedJob(ctx, cf.spec.JobID)
 		if err != nil {
 			cf.MoveToDraining(err)
 			return
 		}
-		cf.js = newJobState(job, nil, cf.flowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
+		cf.js = newJobState(&changefeedJobProgressTracker{job: job}, cf.flowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 
 		if changefeedbase.FrontierCheckpointFrequency.Get(&cf.flowCtx.Cfg.Settings.SV) == 0 {
 			log.Warning(ctx,
@@ -1006,8 +1097,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			cf.js.lastRunStatusUpdate = timeutil.Now()
 		}
 	} else {
-		cf.js = newJobState(nil,
-			cf.EvalCtx.ChangefeedState.(*coreChangefeedProgress),
+		cf.js = newJobState(&coreChangefeedProgressTracker{coreProgress: cf.EvalCtx.ChangefeedState.(*coreChangefeedProgress)},
 			cf.flowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 	}
 
@@ -1207,7 +1297,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 }
 
 func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
-	if cf.spec.JobID == 0 {
+	if cf.isSinkless() {
 		return
 	}
 
@@ -1221,7 +1311,7 @@ func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
 	}
 
 	isIdle := timeutil.Since(cf.frontier.latestKV) > idleTimeout
-	cf.js.job.MarkIdle(isIdle)
+	cf.js.progressTracker.MarkIdle(isIdle)
 }
 
 func (cf *changeFrontier) maybeCheckpointJob(
@@ -1273,66 +1363,15 @@ func (cf *changeFrontier) checkpointJobProgress(
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
 	cf.metrics.FrontierUpdates.Inc(1)
-	var updateSkipped error
-	if cf.js.job != nil {
 
-		if err := cf.js.job.Update(cf.Ctx, nil, func(
-			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-		) error {
-			// If we're unable to update the job due to the job state, such as during
-			// pause-requested, simply skip the checkpoint
-			if err := md.CheckRunningOrReverting(); err != nil {
-				updateSkipped = err
-				return nil
-			}
-
-			// Advance resolved timestamp.
-			progress := md.Progress
-			progress.Progress = &jobspb.Progress_HighWater{
-				HighWater: &frontier,
-			}
-
-			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
-			changefeedProgress.Checkpoint = &checkpoint
-
-			timestampManager := cf.manageProtectedTimestamps
-			// TODO(samiskin): Remove this conditional and the associated deprecated
-			// methods once we're confident in ActiveProtectedTimestampsEnabled
-			if !changefeedbase.ActiveProtectedTimestampsEnabled.Get(&cf.flowCtx.Cfg.Settings.SV) {
-				timestampManager = cf.deprecatedManageProtectedTimestamps
-			}
-			if err := timestampManager(cf.Ctx, txn, changefeedProgress); err != nil {
-				log.Warningf(cf.Ctx, "error managing protected timestamp record: %v", err)
-				return err
-			}
-
-			if updateRunStatus {
-				md.Progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
-			}
-
-			ju.UpdateProgress(progress)
-
-			// Reset RunStats.NumRuns to 1 since the changefeed is
-			// now running. By resetting the NumRuns, we avoid
-			// future job system level retries from having large
-			// backoffs because of past failures.
-			if md.RunStats != nil {
-				ju.UpdateRunStats(1, md.RunStats.LastRun)
-			}
-
-			return nil
-		}); err != nil {
-			return false, err
-		}
-	} else {
-		cf.js.coreProgress.SetHighwater(&frontier)
-		cf.js.coreProgress.SetCheckpoint(checkpoint.Spans, checkpoint.Timestamp)
+	timestampManager := cf.manageProtectedTimestamps
+	// TODO(samiskin): Remove this conditional and the associated deprecated
+	// methods once we're confident in ActiveProtectedTimestampsEnabled
+	if !changefeedbase.ActiveProtectedTimestampsEnabled.Get(&cf.flowCtx.Cfg.Settings.SV) {
+		timestampManager = cf.deprecatedManageProtectedTimestamps
 	}
 
-	if updateSkipped != nil {
-		log.Warningf(cf.Ctx, "skipping changefeed checkpoint: %s", updateSkipped)
-		return false, nil
-	}
+	cf.js.progressTracker.updateProgress(cf.Ctx, frontier, checkpoint, updateRunStatus, timestampManager)
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
