@@ -1,5 +1,6 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
 
 filegroup(
     name = "testdata",
@@ -7,13 +8,19 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "end_to_end_testdata",
+    srcs = glob(["testdata/end_to_end/**"]),
+    visibility = ["//visibility:public"],
+)
+
 go_test(
     name = "schemachanger_test",
     size = "large",
     srcs = [
-        "end_to_end_test.go",
         "main_test.go",
         "schemachanger_test.go",
+        ":test_gen",  # keep
     ],
     data = [":testdata"],
     shard_count = 16,
@@ -32,15 +39,13 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/rowenc",
-        "//pkg/sql/schemachanger/corpus",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scplan",
-        "//pkg/sql/schemachanger/sctest",
+        "//pkg/sql/schemachanger/sctest",  # keep
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
@@ -55,6 +60,25 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_sync//errgroup",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen",
+    out = "sctest_generated_test.go",
+    ccl = False,
+    new_cluster_func = "sctest.SingleNodeCluster",
+    package = "schemachanger",
+    test_data = glob(["testdata/end_to_end/**"]),
+    tests = [
+        "EndToEndSideEffects",
+        "GenerateSchemaChangeCorpus",
+        "Pause",
+        "Rollback",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
 
