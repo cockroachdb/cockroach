@@ -95,10 +95,6 @@ type FlowCtx struct {
 	// DiskMonitor is this flow's disk monitor. All disk usage for this flow must
 	// be registered through this monitor.
 	DiskMonitor *mon.BytesMonitor
-
-	// PreserveFlowSpecs is true when the flow setup code needs to be careful
-	// when modifying the specifications of processors.
-	PreserveFlowSpecs bool
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
