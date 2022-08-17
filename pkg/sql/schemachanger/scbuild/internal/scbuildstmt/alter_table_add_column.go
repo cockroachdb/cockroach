@@ -96,13 +96,10 @@ func alterTableAddColumn(
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
-	{
-		tableElts := b.QueryByID(tbl.TableID)
-		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
-			panic(scerrors.NotImplementedErrorf(d,
-				"regional by row partitioning is not supported"))
-		}
-	}
+	// We don't support handling zone config related properties for tables, so
+	// throw an unsupported
+	fallBackIfZoneConfigExists(b, d, tbl.TableID)
+
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx())
 	if err != nil {
 		panic(err)

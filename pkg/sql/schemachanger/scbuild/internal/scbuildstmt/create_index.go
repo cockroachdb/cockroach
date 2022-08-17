@@ -102,7 +102,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 		}
 	})
-
+	fallBackIfZoneConfigExists(b, n, index.TableID)
 	if n.Unique {
 		index.ConstraintID = b.NextTableConstraintID(index.TableID)
 	}

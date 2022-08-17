@@ -116,6 +116,9 @@ func dropAnIndex(
 			"use CASCADE if you really want to drop it.",
 		))
 	}
+	// Disable dropping indexes if the table could have zone configuration
+	// settings.
+	fallBackIfZoneConfigExists(b, nil, sie.TableID)
 	dropSecondaryIndex(b, index, dropBehavior, sie, toBeDroppedIndexElms)
 }
 
