@@ -79,7 +79,7 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot get pwd"))
 	}
 
-	fsnotifyPath := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))), "docker-fsnotify")
+	binPath := filepath.Join(pwd, "docker-fsnotify/docker-fsnotify-bin")
 
 	var dockerTests = []singleNodeDockerTest{
 		{
@@ -93,7 +93,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				},
 				volSetting: []string{
 					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
-					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+					fmt.Sprintf("%s:/cockroach/docker-fsnotify", binPath),
 				},
 				cmd: []string{"start-single-node", "--certs-dir=certs"},
 			},
@@ -119,7 +119,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				},
 				volSetting: []string{
 					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
-					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+					fmt.Sprintf("%s:/cockroach/docker-fsnotify", binPath),
 				},
 				cmd: []string{"start-single-node", "--insecure"},
 			},
@@ -146,7 +146,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				},
 				volSetting: []string{
 					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
-					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+					fmt.Sprintf("%s:/cockroach/docker-fsnotify", binPath),
 				},
 				cmd: []string{"start-single-node", "--insecure", "--store=type=mem,size=0.25"},
 			},
