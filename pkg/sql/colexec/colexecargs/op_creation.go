@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -65,6 +66,7 @@ type NewColOperatorArgs struct {
 	ExprHelper             *ExprHelper
 	Factory                coldata.ColumnFactory
 	MonitorRegistry        *MonitorRegistry
+	TypeResolver           *descs.DistSQLTypeResolver
 	TestingKnobs           struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.

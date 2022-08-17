@@ -716,6 +716,9 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
+			if err := execinfra.HydrateTypesInDatumInfo(ctx, args.TypeResolver, core.Values.Columns); err != nil {
+				return r, err
+			}
 			if core.Values.NumRows == 0 || len(core.Values.Columns) == 0 {
 				// To simplify valuesOp we handle some special cases with
 				// fixedNumTuplesNoInputOp.
@@ -747,7 +750,7 @@ func NewColOperator(
 			estimatedRowCount := spec.EstimatedRowCount
 			scanOp, err := colfetcher.NewColBatchScan(
 				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
-				flowCtx, core.TableReader, post, estimatedRowCount,
+				flowCtx, core.TableReader, post, estimatedRowCount, args.TypeResolver,
 			)
 			if err != nil {
 				return r, err
@@ -785,7 +788,8 @@ func NewColOperator(
 				ctx, getStreamingAllocator(ctx, args),
 				colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
 				kvFetcherMemAcc, streamerBudgetAcc, flowCtx,
-				inputs[0].Root, core.JoinReader, post, inputTypes, streamerDiskMonitor,
+				inputs[0].Root, core.JoinReader, post, inputTypes,
+				streamerDiskMonitor, args.TypeResolver,
 			)
 			if err != nil {
 				return r, err

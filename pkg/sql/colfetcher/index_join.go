@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -459,6 +460,7 @@ func NewColIndexJoin(
 	post *execinfrapb.PostProcessSpec,
 	inputTypes []*types.T,
 	diskMonitor *mon.BytesMonitor,
+	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColIndexJoin, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
@@ -474,7 +476,7 @@ func NewColIndexJoin(
 		return nil, errors.AssertionFailedf("non-empty ON expressions are not supported for index joins")
 	}
 
-	tableArgs, err := populateTableArgs(ctx, flowCtx, &spec.FetchSpec)
+	tableArgs, err := populateTableArgs(ctx, &spec.FetchSpec, typeResolver)
 	if err != nil {
 		return nil, err
 	}

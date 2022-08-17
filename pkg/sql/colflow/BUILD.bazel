@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util",

@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -61,7 +61,7 @@ func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
 
 // populateTableArgs fills in cFetcherTableArgs.
 func populateTableArgs(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, fetchSpec *descpb.IndexFetchSpec,
+	ctx context.Context, fetchSpec *descpb.IndexFetchSpec, typeResolver *descs.DistSQLTypeResolver,
 ) (_ *cFetcherTableArgs, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
 
@@ -73,14 +73,13 @@ func populateTableArgs(
 	// they are hydrated. In row execution engine it is done during the processor
 	// initialization, but neither ColBatchScan nor cFetcher are processors, so we
 	// need to do the hydration ourselves.
-	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
 	for i := range args.spec.FetchedColumns {
-		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.FetchedColumns[i].Type, &resolver); err != nil {
+		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.FetchedColumns[i].Type, typeResolver); err != nil {
 			return nil, err
 		}
 	}
 	for i := range args.spec.KeyAndSuffixColumns {
-		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.KeyAndSuffixColumns[i].Type, &resolver); err != nil {
+		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.KeyAndSuffixColumns[i].Type, typeResolver); err != nil {
 			return nil, err
 		}
 	}
