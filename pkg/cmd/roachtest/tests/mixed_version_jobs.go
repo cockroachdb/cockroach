@@ -242,9 +242,7 @@ func runJobsMixedVersions(
 		preventAutoUpgradeStep(1),
 
 		backgroundTPCC.launch,
-		func(ctx context.Context, _ test.Test, u *versionUpgradeTest) {
-			time.Sleep(10 * time.Second)
-		},
+		sleepStep(10*time.Second),
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 

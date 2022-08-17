@@ -183,8 +183,9 @@ func (u *versionUpgradeTest) run(ctx context.Context, t test.Test) {
 		}
 	}()
 
-	for _, step := range u.steps {
+	for i, step := range u.steps {
 		if step != nil {
+			t.Status(fmt.Sprintf("versionUpgrateTest: starting step %d", i+1))
 			step(ctx, t, u)
 		}
 	}
@@ -694,5 +695,11 @@ func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption)
 				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")
 		})
 		m.Wait()
+	}
+}
+
+func sleepStep(d time.Duration) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		time.Sleep(d)
 	}
 }
