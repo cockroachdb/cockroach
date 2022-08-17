@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -98,6 +99,12 @@ func Build(
 		}
 	})
 	return scpb.CurrentState{TargetState: ts, Current: current}, nil
+}
+
+// CheckIfSupported returns if a statement is fully supported by the declarative
+// schema changer.
+func CheckIfSupported(statement tree.Statement) bool {
+	return scbuildstmt.CheckIfStmtIsSupported(statement, sessiondatapb.UseNewSchemaChangerOn)
 }
 
 // Export dependency interfaces.

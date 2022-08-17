@@ -54,6 +54,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -522,6 +525,10 @@ var (
 		"print-blocklist-issues", false,
 		"for any test files that contain a blocklist directive, print a link to the associated issue",
 	)
+	saveDeclarativeCorpus = flag.String(
+		"declarative-corpus", "",
+		"enables generation and storage of a declarative schema changer corpus",
+	)
 )
 
 type testClusterConfig struct {
@@ -569,6 +576,9 @@ type testClusterConfig struct {
 	// disableDeclarativeSchemaChanger will disable the declarative schema changer
 	// for logictest.
 	disableDeclarativeSchemaChanger bool
+	// declarativeCorpusCollection corpus will be collected for the declarative
+	// schema changer.
+	declarativeCorpusCollection bool
 }
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -727,15 +737,18 @@ var multiregion15node5region3azsLocalities = map[int]roachpb.Locality{
 
 // logicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
-//   # LogicTest: default distsql
+//
+//	# LogicTest: default distsql
+//
 // The test is run once on each configuration (in different subtests).
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
 	{
-		name:                "local",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
+		name:                        "local",
+		numNodes:                    1,
+		overrideDistSQLMode:         "off",
+		declarativeCorpusCollection: true,
 	},
 	{
 		name:                            "local-legacy-schema-changer",
@@ -847,9 +860,10 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes: 3,
 		// overrideAutoStats will disable automatic stats on the cluster this tenant
 		// is connected to.
-		overrideAutoStats: "false",
-		useTenant:         true,
-		isCCLConfig:       true,
+		overrideAutoStats:           "false",
+		useTenant:                   true,
+		isCCLConfig:                 true,
+		declarativeCorpusCollection: true,
 	},
 	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
 	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
@@ -901,17 +915,19 @@ var logicTestConfigs = []testClusterConfig{
 		},
 	},
 	{
-		name:              "multiregion-9node-3region-3azs",
-		numNodes:          9,
-		overrideAutoStats: "false",
-		localities:        multiregion9node3region3azsLocalities,
+		name:                        "multiregion-9node-3region-3azs",
+		numNodes:                    9,
+		overrideAutoStats:           "false",
+		localities:                  multiregion9node3region3azsLocalities,
+		declarativeCorpusCollection: true,
 	},
 	{
-		name:              "multiregion-9node-3region-3azs-tenant",
-		numNodes:          9,
-		overrideAutoStats: "false",
-		localities:        multiregion9node3region3azsLocalities,
-		useTenant:         true,
+		name:                        "multiregion-9node-3region-3azs-tenant",
+		numNodes:                    9,
+		overrideAutoStats:           "false",
+		localities:                  multiregion9node3region3azsLocalities,
+		useTenant:                   true,
+		declarativeCorpusCollection: true,
 	},
 	{
 		name:              "multiregion-9node-3region-3azs-vec-off",
@@ -921,10 +937,11 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize: "off",
 	},
 	{
-		name:              "multiregion-15node-5region-3azs",
-		numNodes:          15,
-		overrideAutoStats: "false",
-		localities:        multiregion15node5region3azsLocalities,
+		name:                        "multiregion-15node-5region-3azs",
+		numNodes:                    15,
+		overrideAutoStats:           "false",
+		localities:                  multiregion15node5region3azsLocalities,
+		declarativeCorpusCollection: true,
 	},
 	{
 		name:                "local-mixed-21.2-22.1",
@@ -1256,28 +1273,32 @@ func valueSort(numCols int, values []string) {
 // This is useful when comparing results for a statement that guarantees a
 // partial, but not a total order. Consider:
 //
-//   SELECT a, b FROM ab ORDER BY a
+//	SELECT a, b FROM ab ORDER BY a
 //
 // Some possible outputs for the same data:
-//   1 2        1 5        1 2
-//   1 5        1 4        1 4
-//   1 4   or   1 2   or   1 5
-//   2 3        2 2        2 3
-//   2 2        2 3        2 2
+//
+//	1 2        1 5        1 2
+//	1 5        1 4        1 4
+//	1 4   or   1 2   or   1 5
+//	2 3        2 2        2 3
+//	2 2        2 3        2 2
 //
 // After a partialSort with orderedCols = {0} all become:
-//   1 2
-//   1 4
-//   1 5
-//   2 2
-//   2 3
+//
+//	1 2
+//	1 4
+//	1 5
+//	2 2
+//	2 3
 //
 // An incorrect output like:
-//   1 5                          1 2
-//   1 2                          1 5
-//   2 3          becomes:        2 2
-//   2 2                          2 3
-//   1 4                          1 4
+//
+//	1 5                          1 2
+//	1 2                          1 5
+//	2 3          becomes:        2 2
+//	2 2                          2 3
+//	1 4                          1 4
+//
 // and it is detected as different.
 func partialSort(numCols int, orderedCols []int, values []string) {
 	// We use rowSorter here only as a container.
@@ -1501,6 +1522,10 @@ type logicTest struct {
 	// entire test to be skipped and the below skippedOnRetry to be set to true.
 	skipOnRetry    bool
 	skippedOnRetry bool
+
+	// declarativeCorpusCollector used to save declarative schema changer state
+	// to disk.
+	declarativeCorpusCollector *corpus.Collector
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1673,6 +1698,10 @@ func (t *logicTest) newCluster(
 	clusterOpts []clusterOpt,
 	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
 ) {
+	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
+	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
+		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
+	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
@@ -1711,6 +1740,9 @@ func (t *logicTest) newCluster(
 				},
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+				},
+				SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+					BeforeStage: corpusCollectionCallback,
 				},
 			},
 			ClusterName:   "testclustername",
@@ -2112,6 +2144,7 @@ func (t *logicTest) setup(
 ) {
 	t.cfg = cfg
 	t.serverArgs = &serverArgs
+	t.serverArgs.DeclarativeCorpusCollection = cfg.declarativeCorpusCollection
 	t.clusterOpts = clusterOpts[:]
 	t.tenantClusterSettingOverrideOpts = tenantClusterSettingOverrideOpts[:]
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
@@ -2242,7 +2275,8 @@ func processConfigs(
 // configurations.
 //
 // Example:
-//   # LogicTest: default distsql
+//
+//	# LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
 func readTestFileConfigs(
@@ -2364,6 +2398,14 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
 }
 
+type clusterOptDisableCorpusGeneration struct{}
+
+var _ clusterOpt = clusterOptDisableCorpusGeneration{}
+
+func (c clusterOptDisableCorpusGeneration) apply(args *base.TestServerArgs) {
+	args.Knobs.SQLDeclarativeSchemaChanger = nil
+}
+
 // parseDirectiveOptions looks around the beginning of the file for a line
 // looking like:
 // # <directiveName>: opt1 opt2 ...
@@ -2461,6 +2503,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		case "disable-corpus-generation":
+			res = append(res, clusterOptDisableCorpusGeneration{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
@@ -2927,7 +2971,7 @@ func (t *logicTest) processSubtest(
 					buildArgumentTokens := func(argToken string) {
 						for i := 0; i < len(tokens)-1; i++ {
 							if strings.HasPrefix(tokens[i], argToken+"(") && !strings.HasSuffix(tokens[i], ")") {
-								// Merge this token with the next.
+								// UpdateCorpus this token with the next.
 								tokens[i] = tokens[i] + "," + tokens[i+1]
 								// Delete tokens[i+1].
 								copy(tokens[i+1:], tokens[i+2:])
@@ -4239,6 +4283,9 @@ type TestServerArgs struct {
 	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
 	// to use the non-test value.
 	forceProductionBatchSizes bool
+	// DeclarativeCorpusCollection corpus will be collected for the declarative
+	// schema changer.
+	DeclarativeCorpusCollection bool
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
@@ -4297,6 +4344,21 @@ func RunLogicTestWithDefaultConfig(
 		lastProgress                       time.Time
 	}{
 		lastProgress: timeutil.Now(),
+	}
+
+	var cc *corpus.Collector
+	if *saveDeclarativeCorpus != "" {
+		var err error
+		cc, err = corpus.NewCorpusCollector(*saveDeclarativeCorpus)
+		if err != nil {
+			t.Fatalf("failed to create collector %v", err)
+		}
+		defer func() {
+			err := cc.UpdateCorpus()
+			if err != nil {
+				t.Fatalf("failed writing decalarative schema changer corpus: %v", err)
+			}
+		}()
 	}
 
 	// Read the configuration directives from all the files and accumulate a list
@@ -4408,10 +4470,11 @@ func RunLogicTestWithDefaultConfig(
 					}
 					rng, _ := randutil.NewTestRand()
 					lt := logicTest{
-						rootT:           t,
-						verbose:         verbose,
-						perErrorSummary: make(map[string][]string),
-						rng:             rng,
+						rootT:                      t,
+						verbose:                    verbose,
+						perErrorSummary:            make(map[string][]string),
+						rng:                        rng,
+						declarativeCorpusCollector: cc,
 					}
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
@@ -4454,7 +4517,7 @@ func RunLogicTestWithDefaultConfig(
 // RunSQLLiteLogicTest is the main entry point to run the suite of SQLLite logic
 // tests. It runs logic tests from CockroachDB's fork of sqllogictest:
 //
-//   https://www.sqlite.org/sqllogictest/doc/trunk/about.wiki
+//	https://www.sqlite.org/sqllogictest/doc/trunk/about.wiki
 //
 // This fork contains many generated tests created by the SqlLite project that
 // ensure the tested SQL database returns correct statement and query output.
