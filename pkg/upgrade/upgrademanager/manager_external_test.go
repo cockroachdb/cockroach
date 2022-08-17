@@ -525,7 +525,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 2
 		return version
 	}
-	v0 := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	v0 := clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V22_1)}
 	v1 := next(v0)
 	v2 := next(v1)
 	versions := []clusterversion.ClusterVersion{v0, v1, v2}
