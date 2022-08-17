@@ -658,8 +658,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-176       test_serial_b_seq  PUBLIC  175
-175       test_serial        PUBLIC  NULL
+161       test_serial_b_seq  PUBLIC  160
+160       test_serial        PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;
@@ -691,8 +691,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-178       test_serial_b_seq  PUBLIC  177
-177       test_serial        PUBLIC  NULL
+163       test_serial_b_seq  PUBLIC  162
+162       test_serial        PUBLIC  NULL
 
 statement ok
 ALTER TABLE test_serial DROP COLUMN b;
@@ -707,7 +707,7 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name         state   refobjid
-177       test_serial  PUBLIC  NULL
+162       test_serial  PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;

@@ -8,4 +8,3 @@ ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 
 statement error setting sql.zone_configs.allow_for_secondary_tenant.enabled is only settable by the operator
 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true
-

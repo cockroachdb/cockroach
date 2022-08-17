@@ -355,12 +355,12 @@ WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 't')
 ORDER BY 1,2,3
 ----
 indexrelid  indrelid  indkey  indclass  indoption  indcollation
-2342807456  111       3       0         2          0
-2342807457  111       4       0         2          0
-2342807459  111       1       0         2          0
-2342807460  111       5       0         2          0
-2342807462  111       2 3 4   0 0 0     2 2 2      0 0 0
-2342807463  111       6       0         2          0
+3428148192  107       5       0         2          0
+3428148194  107       2 3 4   0 0 0     2 2 2      0 0 0
+3428148195  107       6       0         2          0
+3428148196  107       3       0         2          0
+3428148197  107       4       0         2          0
+3428148199  107       1       0         2          0
 
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
