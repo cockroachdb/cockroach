@@ -135,8 +135,20 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer closeFn()
+	conn, err := runBundleRecreateOpen(cmd, args, bundle)
+	if err != nil {
+		return err
+	}
+
+	return sqlCtx.Run(context.Background(), conn)
+}
+
+func runBundleRecreateOpen(cmd *cobra.Command, args []string, bundle *statementBundle) (clisqlclient.Conn, error) {
+	zipdir := args[0]
 	ctx := context.Background()
-	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
+	dctx := &demoCtx.Context
+	dctx.Multitenant = false
+	c, err := democluster.NewDemoCluster(ctx, dctx,
 		log.Infof,
 		log.Warningf,
 		log.Ops.Shoutf,
@@ -155,29 +167,33 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 	)
 	if err != nil {
 		c.Close(ctx)
-		return err
+		return nil, err
 	}
 	defer c.Close(ctx)
 
 	initGEOS(ctx)
 
 	if err := c.Start(ctx, runInitialSQL); err != nil {
-		return clierrorplus.CheckAndMaybeShout(err)
+		return nil, clierrorplus.CheckAndMaybeShout(err)
 	}
 	conn, err := sqlCtx.MakeConn(c.GetConnURL())
 	if err != nil {
-		return err
+		return nil, err
 	}
+	// This forces a prepare path which SHOW LAST QUERY STATISTICS doesn't
+	// support (because we only intercept observer statements in execStmt and
+	// not execPrepare).
+	conn.SetAlwaysInferResultTypes(false)
 	// Disable autostats collection, which will override the injected stats.
 	if err := conn.Exec(ctx,
 		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`); err != nil {
-		return err
+		return nil, err
 	}
 	var initStmts = [][]byte{bundle.env, bundle.schema}
 	initStmts = append(initStmts, bundle.stats...)
 	for _, a := range initStmts {
 		if err := conn.Exec(ctx, string(a)); err != nil {
-			return errors.Wrapf(err, "failed to run %s", a)
+			return nil, errors.Wrapf(err, "failed to run %s", a)
 		}
 	}
 
@@ -195,17 +211,17 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 		for _, placeholderPairStr := range placeholderPairs {
 			pair := strings.Split(placeholderPairStr, "=")
 			if len(pair) != 2 {
-				return errors.New("use --placeholder='1=schema.table.col' --placeholder='2=schema.table.col...'")
+				return nil, errors.New("use --placeholder='1=schema.table.col' --placeholder='2=schema.table.col...'")
 			}
 			n, err := strconv.Atoi(pair[0])
 			if err != nil {
-				return err
+				return nil, err
 			}
 			placeholderToColMap[n] = pair[1]
 		}
 		inputs, outputs, err := getExplainCombinations(conn, explainPrefix, placeholderToColMap, bundle)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		cliCtx.PrintfUnlessEmbedded("found %d unique explains:\n\n", len(inputs))
@@ -215,7 +231,8 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 	}
 
 	sqlCtx.ShellCtx.DemoCluster = c
-	return sqlCtx.Run(ctx, conn)
+
+	return conn, nil
 }
 
 // placeholderRe matches the placeholder format at the bottom of statement.txt
