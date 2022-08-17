@@ -1926,6 +1926,13 @@ func TestTenantLogic_typing(
 	runLogicTest(t, "typing")
 }
 
+func TestTenantLogic_udf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf")
+}
+
 func TestTenantLogic_union(
 	t *testing.T,
 ) {
@@ -2176,4 +2183,11 @@ func TestTenantExecBuild_distsql_tenant(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_tenant")
+}
+
+func TestTenantExecBuild_udf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "udf")
 }

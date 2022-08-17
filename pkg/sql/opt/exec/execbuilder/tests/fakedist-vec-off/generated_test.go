@@ -87,3 +87,10 @@ func TestExecBuild_geospatial(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "geospatial")
 }
+
+func TestExecBuild_udf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "udf")
+}
