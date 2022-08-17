@@ -13,8 +13,6 @@ package flowinfra
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -61,11 +59,7 @@ type StreamDecoder struct {
 // msg.Data.Metadata until all the rows in the message are retrieved with GetRow.
 //
 // If an error is returned, no records have been buffered in the StreamDecoder.
-//
-// flowCtx can be nil in tests.
-func (sd *StreamDecoder) AddMessage(
-	ctx context.Context, msg *execinfrapb.ProducerMessage, flowCtx *execinfra.FlowCtx,
-) error {
+func (sd *StreamDecoder) AddMessage(ctx context.Context, msg *execinfrapb.ProducerMessage) error {
 	if msg.Header != nil {
 		if sd.headerReceived {
 			return errors.Errorf("received multiple headers")
@@ -78,16 +72,6 @@ func (sd *StreamDecoder) AddMessage(
 		}
 		sd.typingReceived = true
 		sd.typing = msg.Typing
-		if flowCtx != nil {
-			// Before we can safely use types, we need to make sure they are
-			// hydrated.
-			resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
-			for i := range sd.typing {
-				if err := typedesc.EnsureTypeIsHydrated(ctx, sd.typing[i].Type, &resolver); err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	if len(msg.Data.RawBytes) > 0 {
@@ -172,9 +156,9 @@ func (sd *StreamDecoder) GetRow(
 	return rowBuf, nil, nil
 }
 
-// types returns the types of the columns; can only be used after we received at
+// Types returns the types of the columns; can only be used after we received at
 // least one row.
-func (sd *StreamDecoder) types() []*types.T {
+func (sd *StreamDecoder) Types() []*types.T {
 	types := make([]*types.T, len(sd.typing))
 	for i := range types {
 		types[i] = sd.typing[i].Type

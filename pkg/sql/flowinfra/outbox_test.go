@@ -152,7 +152,7 @@ func TestOutbox(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(context.Background(), msg, &flowCtx)
+		err = decoder.AddMessage(context.Background(), msg)
 		if err != nil {
 			t.Fatal(err)
 		}
