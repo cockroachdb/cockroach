@@ -969,3 +969,21 @@ func (node *ShowCreateFunction) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = &ShowCreateFunction{}
+
+// ShowCreateExternalConnections represents a SHOW CREATE EXTERNAL CONNECTION
+// statement.
+type ShowCreateExternalConnections struct {
+	ConnectionLabel Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateExternalConnections) Format(ctx *FmtCtx) {
+	if node.ConnectionLabel != nil {
+		ctx.WriteString("SHOW CREATE EXTERNAL CONNECTION ")
+		ctx.FormatNode(node.ConnectionLabel)
+		return
+	}
+	ctx.Printf("SHOW CREATE ALL EXTERNAL CONNECTIONS")
+}
+
+var _ Statement = &ShowCreateExternalConnections{}

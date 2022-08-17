@@ -257,6 +257,7 @@ show_stmt ::=
 	| show_constraints_stmt
 	| show_create_stmt
 	| show_create_schedules_stmt
+	| show_create_external_connections_stmt
 	| show_local_or_tenant_csettings_stmt
 	| show_databases_stmt
 	| show_enums_stmt
@@ -777,6 +778,10 @@ show_create_schedules_stmt ::=
 	'SHOW' 'CREATE' 'ALL' 'SCHEDULES'
 	| 'SHOW' 'CREATE' 'SCHEDULE' a_expr
 
+show_create_external_connections_stmt ::=
+	'SHOW' 'CREATE' 'ALL' 'EXTERNAL' 'CONNECTIONS'
+	| 'SHOW' 'CREATE' 'EXTERNAL' 'CONNECTION' string_or_placeholder
+
 show_local_or_tenant_csettings_stmt ::=
 	show_csettings_stmt
 	| show_csettings_stmt 'FOR' 'TENANT' d_expr
@@ -1008,6 +1013,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
 	| 'CONNECTION'
+	| 'CONNECTIONS'
 	| 'CONSTRAINTS'
 	| 'CONTROLCHANGEFEED'
 	| 'CONTROLJOB'
@@ -1764,14 +1770,14 @@ drop_table_stmt ::=
 	| 'DROP' 'TABLE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
 
 drop_view_stmt ::=
-	'DROP' 'VIEW' table_name_list opt_drop_behavior
-	| 'DROP' 'VIEW' 'IF' 'EXISTS' table_name_list opt_drop_behavior
-	| 'DROP' 'MATERIALIZED' 'VIEW' table_name_list opt_drop_behavior
-	| 'DROP' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+	'DROP' 'VIEW' view_name_list opt_drop_behavior
+	| 'DROP' 'VIEW' 'IF' 'EXISTS' view_name_list opt_drop_behavior
+	| 'DROP' 'MATERIALIZED' 'VIEW' view_name_list opt_drop_behavior
+	| 'DROP' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' view_name_list opt_drop_behavior
 
 drop_sequence_stmt ::=
-	'DROP' 'SEQUENCE' table_name_list opt_drop_behavior
-	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+	'DROP' 'SEQUENCE' sequence_name_list opt_drop_behavior
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' sequence_name_list opt_drop_behavior
 
 drop_schema_stmt ::=
 	'DROP' 'SCHEMA' schema_name_list opt_drop_behavior
@@ -2480,7 +2486,13 @@ table_index_name_list ::=
 	( table_index_name ) ( ( ',' table_index_name ) )*
 
 table_name_list ::=
-	( table_name ) ( ( ',' table_name ) )*
+	db_object_name_list
+
+view_name_list ::=
+	db_object_name_list
+
+sequence_name_list ::=
+	db_object_name_list
 
 non_reserved_word ::=
 	'identifier'
@@ -3034,6 +3046,9 @@ sortby ::=
 only_signed_fconst ::=
 	'+' 'FCONST'
 	| '-' 'FCONST'
+
+db_object_name_list ::=
+	( db_object_name ) ( ( ',' db_object_name ) )*
 
 scrub_option ::=
 	'INDEX' 'ALL'

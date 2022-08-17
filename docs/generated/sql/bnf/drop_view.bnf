@@ -1,5 +1,5 @@
 drop_view_stmt ::=
-	'DROP' 'VIEW' ( ( table_name ) ( ( ',' table_name ) )* ) ( 'CASCADE' | 'RESTRICT' |  )
-	| 'DROP' 'VIEW' 'IF' 'EXISTS' ( ( table_name ) ( ( ',' table_name ) )* ) ( 'CASCADE' | 'RESTRICT' |  )
-	| 'DROP' 'MATERIALIZED' 'VIEW' ( ( table_name ) ( ( ',' table_name ) )* ) ( 'CASCADE' | 'RESTRICT' |  )
-	| 'DROP' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' ( ( table_name ) ( ( ',' table_name ) )* ) ( 'CASCADE' | 'RESTRICT' |  )
+	'DROP' 'VIEW' view_name_list ( 'CASCADE' | 'RESTRICT' |  )
+	| 'DROP' 'VIEW' 'IF' 'EXISTS' view_name_list ( 'CASCADE' | 'RESTRICT' |  )
+	| 'DROP' 'MATERIALIZED' 'VIEW' view_name_list ( 'CASCADE' | 'RESTRICT' |  )
+	| 'DROP' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' view_name_list ( 'CASCADE' | 'RESTRICT' |  )

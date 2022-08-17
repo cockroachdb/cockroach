@@ -23,6 +23,17 @@ func (d *ConnectionDetails) Type() ConnectionType {
 	case ConnectionProvider_kafka:
 		return TypeStorage
 	default:
-		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %T", d.Provider.String()))
+		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %s", d.Provider.String()))
+	}
+}
+
+// UnredactedURI returns the unredacted URI of the resource represented by the
+// External Connection.
+func (d *ConnectionDetails) UnredactedURI() string {
+	switch c := d.Details.(type) {
+	case *ConnectionDetails_SimpleURI:
+		return c.SimpleURI.URI
+	default:
+		panic(errors.AssertionFailedf("ConnectionDetails.UnredactedURI called on details with an unknown type: %s", d.Provider.String()))
 	}
 }
