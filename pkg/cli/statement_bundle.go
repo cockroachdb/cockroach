@@ -168,12 +168,20 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// This forces a prepare path which SHOW LAST QUERY STATISTICS doesn't
+	// support (because we only intercept observer statements in execStmt and
+	// not execPrepare).
+	conn.SetAlwaysInferResultTypes(false)
 	// Disable autostats collection, which will override the injected stats.
 	if err := conn.Exec(ctx,
 		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`); err != nil {
 		return err
 	}
-	var initStmts = [][]byte{bundle.env, bundle.schema}
+	// env.sql frequently does nothing and has syntax errors so just warn.
+	if err := conn.Exec(ctx, string(bundle.env)); err != nil {
+		cliCtx.PrintfUnlessEmbedded("WARNING: env.sql didn't load: %v", err)
+	}
+	var initStmts = [][]byte{bundle.schema}
 	initStmts = append(initStmts, bundle.stats...)
 	for _, a := range initStmts {
 		if err := conn.Exec(ctx, string(a)); err != nil {
