@@ -12,54 +12,67 @@ package tests
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/montanaflynn/stats"
 )
 
 var (
-	qpsStat = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_queriespersecond"}
-	wpsStat = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_writespersecond"}
-	rpsStat = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_readspersecond"}
+	qpsStat = clusterstats.ClusterStat{LabelName: "node", Query: "rebalancing_queriespersecond"}
+	wpsStat = clusterstats.ClusterStat{LabelName: "node", Query: "rebalancing_writespersecond"}
+	rpsStat = clusterstats.ClusterStat{LabelName: "node", Query: "rebalancing_readspersecond"}
 	// NB: CPU is fractional, roachperf will only take integers on a detailed
 	//     view. Scale by 100 to get % here. When aggregating on cpu, measure
 	//     of distribution that are normalized are preferred, due to scale.
-	cpuStat = clusterstats.ClusterStat{LabelName: "instance", Query: "sys_cpu_combined_percent_normalized * 100"}
+	cpuStat = clusterstats.ClusterStat{LabelName: "node", Query: "avg_over_time(sys_cpu_combined_percent_normalized[5m]) * 100"}
 	// NB: These are recorded as counters. These are then rated, as we are
 	//     interested in the progression at points in time.
-	ioReadStat  = clusterstats.ClusterStat{LabelName: "instance", Query: "rate(sys_host_disk_read_bytes[5m])"}
-	ioWriteStat = clusterstats.ClusterStat{LabelName: "instance", Query: "rate(sys_host_disk_write_bytes[5m])"}
+	ioWriteStat = clusterstats.ClusterStat{LabelName: "node", Query: divQuery("rate(sys_host_disk_write_bytes[5m])", 1<<20)}
 
-	rangeRebalancesStat = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_range_rebalances"}
-	leaseTransferStat   = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_lease_transfers"}
-	rangeSplitStat      = clusterstats.ClusterStat{LabelName: "store", Query: "range_splits"}
+	rangeRebalancesStat = clusterstats.ClusterStat{LabelName: "node", Query: "rebalancing_range_rebalances"}
+	leaseTransferStat   = clusterstats.ClusterStat{LabelName: "node", Query: "rebalancing_lease_transfers"}
+	rangeSplitStat      = clusterstats.ClusterStat{LabelName: "node", Query: "range_splits"}
 
-	rebalanceSnapshotSentStat = clusterstats.ClusterStat{LabelName: "store", Query: "rate(range_snapshots_rebalancing_sent_bytes[5m]) / (1024 * 1024)"}
-	rebalanceSnapshotRcvdStat = clusterstats.ClusterStat{LabelName: "store", Query: "rate(range_snapshots_rebalancing_rcvd_bytes[5m]) / (1024 * 1024)"}
-	recoverySnapshotSentStat  = clusterstats.ClusterStat{LabelName: "store", Query: "rate(range_snapshots_recovery_sent_bytes[5m]) / (1024 * 1024)"}
-	recoverySnapshotRcvdStat  = clusterstats.ClusterStat{LabelName: "store", Query: "rate(range_snapshots_recovery_rcvd_bytes[5m]) / (1024 * 1024)"}
+	rebalanceSnapshotSentStat = clusterstats.ClusterStat{
+		LabelName: "node", Query: divQuery("rate(range_snapshots_rebalancing_sent_bytes[5m])", 1<<20)}
+	rebalanceSnapshotRcvdStat = clusterstats.ClusterStat{
+		LabelName: "node", Query: divQuery("rate(range_snapshots_rebalancing_rcvd_bytes[5m])", 1<<20)}
+
+	admissionAvgWaitSecs = clusterstats.ClusterStat{
+		LabelName: "node",
+		Query:     multiQuery("rate(admission_wait_durations_kv_sum[1m])", int(time.Second.Nanoseconds())),
+	}
+	admissionControlIOOverload = clusterstats.ClusterStat{
+		LabelName: "node",
+		Query:     "admission_io_overload * 100",
+	}
 
 	actionsSummary = []clusterstats.AggQuery{
-		{Stat: rangeRebalancesStat, Query: "sum(rebalancing_range_rebalances)"},
-		{Stat: leaseTransferStat, Query: "sum(rebalancing_lease_transfers)"},
-		{Stat: rangeSplitStat, Query: "sum(range_splits)"},
+		{Stat: rangeRebalancesStat, Query: applyAggQuery("sum", rangeRebalancesStat.Query)},
+		{Stat: leaseTransferStat, Query: applyAggQuery("sum", leaseTransferStat.Query)},
+		{Stat: rangeSplitStat, Query: applyAggQuery("sum", rangeSplitStat.Query)},
 	}
-	snapshotCostSummary = []clusterstats.AggQuery{
-		{Stat: rebalanceSnapshotSentStat, Query: "sum(rate(range_snapshots_rebalancing_sent_bytes[5m])) / (1024 * 1024)"},
-		{Stat: rebalanceSnapshotRcvdStat, Query: "sum(rate(range_snapshots_rebalancing_rcvd_bytes[5m])) / (1024 * 1024)"},
-		{Stat: recoverySnapshotSentStat, Query: "sum(rate(range_snapshots_recovery_sent_bytes[5m])) / (1024 * 1024)"},
-		{Stat: recoverySnapshotRcvdStat, Query: "sum(rate(range_snapshots_recovery_rcvd_bytes[5m])) / (1024 * 1024)"},
+	rebalanceCostSummary = []clusterstats.AggQuery{
+		{Stat: rebalanceSnapshotSentStat, Query: applyAggQuery("sum", rebalanceSnapshotSentStat.Query)},
 	}
 	resourceBalanceSummary = []clusterstats.AggQuery{
 		// NB: cv is an abbreviation for coefficient of variation.
 		{Stat: cpuStat, AggFn: distributionAggregate},
 		{Stat: ioWriteStat, AggFn: distributionAggregate},
-		{Stat: ioReadStat, AggFn: distributionAggregate},
 	}
 	requestBalanceSummary = []clusterstats.AggQuery{
 		{Stat: qpsStat, AggFn: distributionAggregate},
 		{Stat: wpsStat, AggFn: distributionAggregate},
 		{Stat: rpsStat, AggFn: distributionAggregate},
+	}
+	resourceMinMaxSummary = []clusterstats.AggQuery{
+		{Stat: cpuStat, Query: minMaxAggQuery(divQuery(cpuStat.Query, 100 /* 100% */))},
+		{Stat: ioWriteStat, Query: minMaxAggQuery(divQuery(ioWriteStat.Query, 400 /* 400mb */))},
+	}
+	overloadMaxSummary = []clusterstats.AggQuery{
+		{Stat: admissionAvgWaitSecs, Query: applyAggQuery("max", admissionAvgWaitSecs.Query)},
+		{Stat: admissionControlIOOverload, Query: applyAggQuery("max", admissionControlIOOverload.Query)},
 	}
 )
 
@@ -69,6 +82,28 @@ func joinSummaryQueries(queries ...[]clusterstats.AggQuery) []clusterstats.AggQu
 		ret = append(ret, q...)
 	}
 	return ret
+}
+
+func applyAggQuery(agg string, query string) string {
+	return fmt.Sprintf("%s(%s)", agg, query)
+}
+
+func divQuery(query string, val int) string {
+	return fmt.Sprintf("%s / %d", query, val)
+}
+
+func multiQuery(query string, val int) string {
+	return fmt.Sprintf("%s * %d", query, val)
+}
+
+// minMaxAggQuery returns the maximum within a series vector minus the minimum
+// of each series vector, scaled by 100. It is intended to be used for queries
+// which return a relative utilization (%) between 0-1.
+func minMaxAggQuery(query string) string {
+	return fmt.Sprintf("(%s - %s) * 100",
+		applyAggQuery("max", query),
+		applyAggQuery("min", query),
+	)
 }
 
 func distributionAggregate(query string, series [][]float64) (string, []float64) {

@@ -16,6 +16,7 @@ go_library(
         "admission_control_multitenant_fairness.go",
         "admission_control_snapshot_overload.go",
         "admission_control_tpcc_overload.go",
+        "allocation_bench.go",
         "allocator.go",
         "alterpk.go",
         "asyncpg.go",
@@ -264,6 +265,7 @@ go_library(
 go_test(
     name = "tests_test",
     srcs = [
+        "allocation_bench_test.go",
         "blocklist_test.go",
         "drt_test.go",
         "tpcc_test.go",
@@ -273,6 +275,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":tests"],
     deps = [
+        "//pkg/cmd/roachtest/clusterstats",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/spec",
         "//pkg/roachprod/logger",
