@@ -366,6 +366,12 @@ ALTER DATABASE db DROP SECONDARY REGION
 statement error pq: database .* doesn't have a secondary region defined
 ALTER DATABASE db DROP SECONDARY REGION
 
+query T noticetrace
+ALTER DATABASE db DROP SECONDARY REGION IF EXISTS
+----
+ NOTICE: No secondary region is not defined on the database; skipping
+
+
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
 ----
@@ -404,3 +410,55 @@ PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" 
                                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                  voter_constraints = '{+region=ca-central-1: 2}',
                                                  lease_preferences = '[[+region=ca-central-1]]'
+
+
+# Verify super region interactions
+statement ok
+SET enable_super_regions = 'on'
+
+# Primary in super region
+statement ok
+CREATE DATABASE mr1 PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "us-central-1","ca-central-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr1 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
+
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE mr1 SET SECONDARY REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE mr1 SET SECONDARY REGION "us-west-1"
+
+# Primary outside super region
+statement ok
+CREATE DATABASE mr2 PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "us-central-1","ca-central-1", "us-east-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr2 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
+
+statement error pq: the secondary region can not be in a super region, unless the primary is also within a super region
+ALTER DATABASE mr2 SET SECONDARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE mr2 SET SECONDARY REGION "ca-central-1"
+
+# Multiple super region
+statement ok
+CREATE DATABASE mr3 PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-central-1","ca-central-1", "us-east-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr3 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
+
+statement ok
+ALTER DATABASE mr3 ADD SUPER REGION "test2" VALUES "us-central-1", "ca-central-1"
+
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE mr3 SET SECONDARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE mr3 SET SECONDARY REGION "us-central-1"
+
+
+# Make sure a secondary region can not be removed from a super region
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE mr1 ALTER SUPER REGION "test1" VALUES "us-east-1"

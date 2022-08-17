@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package randgen
+package randgen_test
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -48,9 +49,9 @@ func TestPopulateTableWithRandData(t *testing.T) {
 	tablePrefix := "table"
 	numTables := 10
 
-	stmts := RandCreateTables(rng, tablePrefix, numTables, false, /* isMultiRegion */
-		PartialIndexMutator,
-		ForeignKeyMutator,
+	stmts := randgen.RandCreateTables(rng, tablePrefix, numTables, false, /* isMultiRegion */
+		randgen.PartialIndexMutator,
+		randgen.ForeignKeyMutator,
 	)
 
 	var sb strings.Builder
@@ -66,7 +67,7 @@ func TestPopulateTableWithRandData(t *testing.T) {
 	for i := 1; i <= numTables; i++ {
 		tableName := tablePrefix + fmt.Sprint(i)
 		numRows := 30
-		numRowsInserted, err := PopulateTableWithRandData(rng, dbConn, tableName, numRows)
+		numRowsInserted, err := randgen.PopulateTableWithRandData(rng, dbConn, tableName, numRows)
 		require.NoError(t, err)
 		res := sqlDB.QueryStr(t, fmt.Sprintf("SELECT count(*) FROM %s", tableName))
 		require.Equal(t, fmt.Sprint(numRowsInserted), res[0][0])

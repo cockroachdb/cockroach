@@ -183,9 +183,9 @@ func zoneConfigForMultiRegionDatabase(
 func addConstraintsForSuperRegion(
 	zc *zonepb.ZoneConfig, regionConfig multiregion.RegionConfig, affinityRegion catpb.RegionName,
 ) error {
-	regions, err := regionConfig.GetSuperRegionRegionsForRegion(affinityRegion)
-	if err != nil {
-		return err
+	regions, ok := regionConfig.GetSuperRegionRegionsForRegion(affinityRegion)
+	if !ok {
+		return errors.AssertionFailedf("region %s is not part of a super region", affinityRegion)
 	}
 	_, numReplicas := getNumVotersAndNumReplicas(regionConfig.WithRegions(regions))
 

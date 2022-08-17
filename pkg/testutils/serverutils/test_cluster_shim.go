@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -84,7 +85,7 @@ type TestClusterInterface interface {
 
 	// AddNonVoters adds non-voting replicas for a range on a set of stores.
 	//
-	//This method blocks until the new replicas become a part of the Raft group.
+	// This method blocks until the new replicas become a part of the Raft group.
 	AddNonVoters(
 		startKey roachpb.Key,
 		targets ...roachpb.ReplicationTarget,
@@ -217,6 +218,23 @@ type TestClusterInterface interface {
 	// whether ServerConn is returning a connection to the storage cluster or a
 	// secondary tenant.
 	StorageClusterConn() *gosql.DB
+
+	// SplitTable splits a range in the table, creates a replica for the right
+	// side of the split on TargetNodeIdx, and moves the lease for the right
+	// side of the split to TargetNodeIdx for each SplitPoint. This forces the
+	// querying against the table to be distributed.
+	//
+	// TODO(radu): we should verify that the queries in tests using SplitTable
+	// are indeed distributed as intended.
+	SplitTable(t *testing.T, desc catalog.TableDescriptor, sps []SplitPoint)
+}
+
+// SplitPoint describes a split point that is passed to SplitTable.
+type SplitPoint struct {
+	// TargetNodeIdx is the node that will have the lease for the new range.
+	TargetNodeIdx int
+	// Vals is list of values forming a primary key for the table.
+	Vals []interface{}
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

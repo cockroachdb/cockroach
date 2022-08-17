@@ -191,9 +191,9 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 
 	split := func(tableDesc catalog.TableDescriptor, idx catalog.Index) {
 		numSplits := 25
-		var sps []sql.SplitPoint
+		var sps []serverutils.SplitPoint
 		for i := 0; i < numSplits; i++ {
-			sps = append(sps, sql.SplitPoint{TargetNodeIdx: 0, Vals: []interface{}{((rowCount * 2) / numSplits) * i}})
+			sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: 0, Vals: []interface{}{((rowCount * 2) / numSplits) * i}})
 		}
 		require.NoError(t, splitIndex(tc, tableDesc, idx, sps))
 	}
@@ -356,9 +356,9 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 			return err
 		}
 
-		var sps []sql.SplitPoint
+		var sps []serverutils.SplitPoint
 		for i := 0; i < numNodes; i++ {
-			sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue/numNodes*i + 5*maxValue}})
+			sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue/numNodes*i + 5*maxValue}})
 		}
 
 		return splitIndex(tc, tableDesc, tempIdx, sps)
@@ -635,7 +635,7 @@ func splitIndex(
 	tc serverutils.TestClusterInterface,
 	desc catalog.TableDescriptor,
 	index catalog.Index,
-	sps []sql.SplitPoint,
+	sps []serverutils.SplitPoint,
 ) error {
 	if tc.ReplicationMode() != base.ReplicationManual {
 		return errors.Errorf("splitIndex called on a test cluster that was not in manual replication mode")

@@ -142,7 +142,7 @@ func TestTenantTempTableCleanup(t *testing.T) {
 	// two clean up cycles just in case, so that we have
 	// stable timing.
 	waitForCleanup()
-	tenantSQL.CheckQueryResults(t, "SELECT table_name FROM [SHOW TABLES]",
+	tenantSQL.CheckQueryResultsRetry(t, "SELECT table_name FROM [SHOW TABLES]",
 		[][]string{
 			{"temp_table"},
 		})

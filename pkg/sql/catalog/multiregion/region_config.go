@@ -86,15 +86,15 @@ func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bo
 // error.
 func (r *RegionConfig) GetSuperRegionRegionsForRegion(
 	region catpb.RegionName,
-) (catpb.RegionNames, error) {
+) (catpb.RegionNames, bool) {
 	for _, superRegion := range r.SuperRegions() {
 		for _, regionOfSuperRegion := range superRegion.Regions {
 			if region == regionOfSuperRegion {
-				return superRegion.Regions, nil
+				return superRegion.Regions, true
 			}
 		}
 	}
-	return nil, errors.AssertionFailedf("region %s is not part of a super region", region)
+	return nil, false
 }
 
 // IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
