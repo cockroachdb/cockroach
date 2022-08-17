@@ -592,8 +592,145 @@ scan c
  ├── columns: h:1
  ├── constraint: /1: [/'1988-08-07 00:00:00+00:00' - ]
  ├── stats: [rows=24, distinct(1)=24, null(1)=0, avgsize(1)=7]
- │   histogram(1)=  0               1               5               1               5               1               5               1               4               1
+ │   histogram(1)=  0               1               5               1               5               1               5               1               5               0
  │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
  ├── cost: 39.7
  ├── key: (1)
  └── distribution: test
+
+# Test for issue 86344.
+
+statement ok
+CREATE TABLE x (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false);
+
+statement ok
+ALTER TABLE x INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2020-03-13 00:00:00.000000",
+          "distinct_count": 4,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "4"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "7"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "10"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 4
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2020-03-14 00:00:00.000000",
+          "distinct_count": 4,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "7"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "10"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "13"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 4
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2020-03-15 00:00:00.000000",
+          "distinct_count": 4,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "10"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "13"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "16"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 4
+      }
+]';
+
+query T
+SELECT jsonb_pretty(stat->'histo_buckets')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE x WITH FORECAST]
+)
+WHERE stat->>'name' = '__forecast__';
+----
+[
+    {
+        "distinct_range": 0,
+        "num_eq": 0,
+        "num_range": 0,
+        "upper_bound": "13"
+    },
+    {
+        "distinct_range": 2,
+        "num_eq": 0,
+        "num_range": 2,
+        "upper_bound": "16"
+    },
+    {
+        "distinct_range": 2,
+        "num_eq": 0,
+        "num_range": 2,
+        "upper_bound": "19"
+    }
+]

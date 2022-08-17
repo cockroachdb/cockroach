@@ -282,15 +282,6 @@ func (q quantile) toHistogram(colType *types.T, rowCount float64) (histogram, er
 		if !isValidCount(numEq) {
 			return errors.AssertionFailedf("invalid histogram NumEq: %v", numEq)
 		}
-		if numEq < 1 && currentBucket.NumRange+numEq >= 2 {
-			// Steal from NumRange so that NumEq is at least 1, if it wouldn't make
-			// NumRange 0. This makes the histogram look more like something
-			// EquiDepthHistogram would produce.
-			// TODO(michae2): Consider removing this logic if statistics_builder
-			// doesn't need it.
-			currentBucket.NumRange -= 1 - numEq
-			numEq = 1
-		}
 		currentBucket.NumEq = numEq
 
 		// Calculate DistinctRange for this bucket now that NumRange is finalized.
