@@ -25,9 +25,9 @@ import (
 
 // docsIssue contains details about each formatted commit to be committed to the docs repo
 type docsIssue struct {
-	crdbSha    string
-	issueTitle string
-	issueBody  string
+	sourceCommitSha string
+	title           string
+	body            string
 }
 
 // pr contains details about the cockroach pull request
@@ -37,8 +37,7 @@ type pr struct {
 	docsIssues  []docsIssue
 }
 
-// ghSearch contains a list of search items (in this case, cockroach PRs) from the GitHub API.
-// This struct holds the search results of all PRs based on a given commit.
+// ghSearch contains a list of search items (in this case, cockroach PRs) based on a given commit from the GitHub API.
 type ghSearch struct {
 	Items []ghSearchItem `json:"items"`
 }
@@ -46,7 +45,7 @@ type ghSearch struct {
 // ghSearchItem contains details about a specific cockroach PR,
 // including its number, from the GitHub API.
 type ghSearchItem struct {
-	Number      int            `json:"number"` // PR number
+	PRNumber    int            `json:"number"`
 	PullRequest ghSearchItemPr `json:"pull_request"`
 }
 
@@ -55,7 +54,9 @@ type ghSearchItemPr struct {
 	MergedAt *time.Time `json:"merged_at"`
 }
 
-// this struct holds the base branch for a cockroach PR from the GitHub API
+// ghPull holds the base branch for a cockroach PR from the GitHub API.
+// It directly mirrors the structure of the PR where the branch name
+// field (Ref) is nested within the Base field.
 type ghPull struct {
 	Base struct {
 		Ref string `json:"ref"` // this is the destination branch of the PR
@@ -64,8 +65,8 @@ type ghPull struct {
 
 // ghPullCommit holds the SHA and commit message for a particular commit, from the GitHub API
 type ghPullCommit struct {
-	CRDBSha       string          `json:"crdbSha"`
-	CRDBCommitMsg ghPullCommitMsg `json:"commit"`
+	Sha    string          `json:"sha"`
+	Commit ghPullCommitMsg `json:"commit"`
 }
 
 // ghPullCommitMsg holds the commit message in the cockroach PR from the GitHub API
@@ -79,22 +80,34 @@ type parameters struct {
 	Sha   string
 }
 
-// the heart of the script to fetch and manipulate all data and create the individual docs docsIssues
+// the heart of the script to fetch and manipulate all data and create the individual docs issues
 func docsIssueGeneration(params parameters) {
 	var search ghSearch // a search for all PRs based on a given commit SHA
 	var prs []pr
-	if err := httpGet("https://api.github.com/search/docsIssues?q=crdbSha:"+params.Sha+"+repo:cockroachdb/cockroach+is:merged", params.Token, &search); err != nil {
+	if err := httpGet(
+		"https://api.github.com/search/issues?q=sha:"+params.Sha+"+repo:cockroachdb/cockroach+is:merged",
+		params.Token,
+		&search,
+	); err != nil {
 		log.Fatal(err)
 	}
 	prs = prNums(search)     // populate slice of PRs of type pr
 	for _, pr := range prs { // for each PR in the list, get the merge branch and the list of eligible commits
 		var pull ghPull
-		if err := httpGet("https://api.github.com/repos/cockroachdb/cockroach/pulls/"+strconv.Itoa(pr.number), params.Token, &pull); err != nil {
+		if err := httpGet(
+			"https://api.github.com/repos/cockroachdb/cockroach/pulls/"+strconv.Itoa(pr.number),
+			params.Token,
+			&pull,
+		); err != nil {
 			log.Fatal(err)
 		}
 		pr.mergeBranch = pull.Base.Ref
 		var commits []ghPullCommit
-		if err := httpGet("https://api.github.com/repos/cockroachdb/cockroach/pulls/"+strconv.Itoa(pr.number)+"/commits?per_page:250", params.Token, &commits); err != nil {
+		if err := httpGet(
+			"https://api.github.com/repos/cockroachdb/cockroach/pulls/"+strconv.Itoa(pr.number)+"/commits?per_page:250",
+			params.Token,
+			&commits,
+		); err != nil {
 			log.Fatal(err)
 		}
 		pr.docsIssues = getIssues(commits, pr.number)
@@ -117,7 +130,8 @@ func httpGet(url string, token string, out interface{}) error {
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(bs, out); err != nil { // unmarshal (convert) the byte slice into an interface
+	// unmarshal (convert) the byte slice into an interface
+	if err := json.Unmarshal(bs, out); err != nil {
 		return err
 	}
 	return nil
@@ -126,26 +140,30 @@ func httpGet(url string, token string, out interface{}) error {
 // prNums returns an array of PRS for the given GH search of PRs against a given commit.
 func prNums(search ghSearch) []pr {
 	var result []pr
-	for _, x := range search.Items { // each PR returned from the search is iterated through, and a new pr object is created for each
+	// each PR returned from the search is iterated through, and a new pr object is created for each
+	for _, x := range search.Items {
 		if x.PullRequest.MergedAt != nil {
-			result = append(result, pr{number: x.Number}) // a new object of type pr containing the PR number is appended to the result slice
+			// a new object of type pr containing the PR number is appended to the result slice
+			result = append(result, pr{number: x.PRNumber})
 		}
 	}
 	return result // return a slice of prs
 }
 
-// getIssues takes a list of commits from GitHub as well as the PR associated with those commits and outputs a formatted list of commits with valid release notes on that PR
+// getIssues takes a list of commits from GitHub as well as the PR number associated with those commits and outputs a
+// formatted list of docs issues with valid release notes
 func getIssues(pullCommit []ghPullCommit, prNumber int) []docsIssue {
 	var result []docsIssue
 	for _, c := range pullCommit {
-		message := c.CRDBCommitMsg.Message
-		rns := formatReleaseNotes(message, prNumber, c.CRDBSha) // return a slice of data that locates every instance of the phrase "release note (", case insensitive
+		message := c.Commit.Message
+		// return a slice of data that locates every instance of the phrase "release note (", case insensitive
+		rns := formatReleaseNotes(message, prNumber, c.Sha)
 		for i, rn := range rns {
 			{ // checks to make sure a match was returned
 				x := docsIssue{ // declare a new commit object
-					crdbSha:    c.CRDBSha,
-					issueTitle: formatTitle(message, prNumber, i+1, len(rns)),
-					issueBody:  rn,
+					sourceCommitSha: c.Sha,
+					title:           formatTitle(message, prNumber, i+1, len(rns)),
+					body:            rn,
 				}
 				result = append(result, x)
 			}
@@ -154,70 +172,70 @@ func getIssues(pullCommit []ghPullCommit, prNumber int) []docsIssue {
 	return result
 }
 
+var (
+	noRN                   = regexp.MustCompile(`[rR]elease [nN]ote: [nN]one`)
+	allRNRE                = regexp.MustCompile(`[rR]elease [nN]ote \(.*`)
+	bugFixRNRE             = regexp.MustCompile(`([rR]elease [nN]ote \(bug fix\):.*)`)
+	releaseJustificationRE = regexp.MustCompile(`[rR]elease [jJ]ustification:.*`)
+)
+
+// formatReleaseNotes generates a list of docsIssue bodies for the docs repo based on a given CRDB sha
 func formatReleaseNotes(message string, prNumber int, crdbSha string) []string {
-	// formatReleaseNotes generates a list of docsIssue bodies for the docs repo
-	// based on a given crdbSha
 	rnBodySlice := []string{}
-	noRN := regexp.MustCompile(`[rR]elease [nN]ote: [nN]one`)
 	if !noRN.MatchString(message) {
-		splitString := strings.Split(message, "\n")
-		allRNRE := regexp.MustCompile(`[rR]elease [nN]ote \(.*`)
-		bugFixRNRE := regexp.MustCompile(`([rR]elease [nN]ote \(bug fix\):.*)`)
-		releaseJustificationRE := regexp.MustCompile(`[rR]elease [jJ]ustification:.*`)
-		buffer := ""
-		for _, x := range splitString {
-			validRn := allRNRE.MatchString(x)
-			bufferNotEmpty := buffer != ""
-			bugFixRn := bugFixRNRE.MatchString(x)
-			releaseJustification := releaseJustificationRE.MatchString(x)
-			if bufferNotEmpty && (validRn || releaseJustification) {
-				rnBodySlice = append(rnBodySlice, strings.TrimSuffix(fmt.Sprintf(
-					"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\nCommit: https://github.com/cockroachdb/cockroach/commit/%s\n\n---\n\n%s",
-					strconv.Itoa(prNumber),
-					crdbSha,
-					buffer,
-				),
-					"\n",
-				),
-				)
-				buffer = ""
-			}
-			if (validRn && !bugFixRn) || (bufferNotEmpty && !bugFixRn && !releaseJustification) {
-				buffer += x + "\n"
-			}
-		}
-		if buffer != "" { // commit whatever is left in the buffer to the rnBodySlice set
-			rnBodySlice = append(rnBodySlice, strings.TrimSuffix(fmt.Sprintf(
-				"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\nCommit: https://github.com/cockroachdb/cockroach/commit/%s\n\n---\n\n%s",
+		return rnBodySlice
+	}
+	splitString := strings.Split(message, "\n")
+	releaseNoteLines := []string{}
+	var rnBody string
+	for _, x := range splitString {
+		validRn := allRNRE.MatchString(x)
+		bufferNotEmpty := len(releaseNoteLines) > 0
+		bugFixRn := bugFixRNRE.MatchString(x)
+		releaseJustification := releaseJustificationRE.MatchString(x)
+		// if the buffer isn't empty and the next line is either a release justification or a new RN, write the buffer
+		// to rnBodySlice and flush the buffer
+		if bufferNotEmpty && (validRn || releaseJustification) {
+			rnBody = fmt.Sprintf(
+				"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\n"+
+					"Commit: https://github.com/cockroachdb/cockroach/commit/%s\n"+
+					"\n---\n\n%s",
 				strconv.Itoa(prNumber),
 				crdbSha,
-				buffer,
-			),
-				"\n",
-			),
+				strings.Join(releaseNoteLines, "\n"),
 			)
+			rnBodySlice = append(rnBodySlice, strings.TrimSuffix(rnBody, "\n"))
+			rnBody = ""
+			releaseNoteLines = []string{}
 		}
+		if (validRn && !bugFixRn) || (bufferNotEmpty && !bugFixRn && !releaseJustification) {
+			releaseNoteLines = append(releaseNoteLines, x)
+		}
+	}
+	if len(releaseNoteLines) > 0 { // commit whatever is left in the buffer to the rnBodySlice set
+		rnBody = fmt.Sprintf(
+			"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\n"+
+				"Commit: https://github.com/cockroachdb/cockroach/commit/%s\n"+
+				"\n---\n\n%s",
+			strconv.Itoa(prNumber),
+			crdbSha,
+			strings.Join(releaseNoteLines, "\n"),
+		)
+		rnBodySlice = append(rnBodySlice, strings.TrimSuffix(rnBody, "\n"))
 	}
 	return rnBodySlice
 }
 
 func formatTitle(message string, prNumber int, index int, totalLength int) string {
-	var result string
+	var commitTitle string
 	if i := strings.IndexRune(message, '\n'); i > 0 { //
-		result = message[:i]
+		commitTitle = message[:i]
 	} else {
-		result = message
+		commitTitle = message
 	}
-	result = fmt.Sprintf("PR #%d - %s",
-		prNumber,
-		result,
-	)
+	result := fmt.Sprintf("PR #%d - %s", prNumber, commitTitle)
 	if totalLength > 1 {
-		result += fmt.Sprintf(
-			" (%d of %d)",
-			index,
-			totalLength,
-		)
+		result += fmt.Sprintf(" (%d of %d)", index, totalLength)
 	}
 	return result
 }
@@ -226,9 +244,9 @@ func (p pr) createDocsIssues(token string) {
 	postURL := "https://api.github.com/repos/cockroachdb/docs/docsIssues"
 	for _, issue := range p.docsIssues {
 		reqBody, err := json.Marshal(map[string]interface{}{
-			"issueTitle": issue.issueTitle,
-			"labels":     []string{"C-product-change", p.mergeBranch},
-			"body":       issue.issueBody,
+			"title":  issue.title,
+			"labels": []string{"C-product-change", p.mergeBranch},
+			"body":   issue.body,
 		})
 		if err != nil {
 			log.Fatal(err)

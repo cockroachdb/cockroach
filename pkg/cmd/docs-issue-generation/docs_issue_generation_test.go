@@ -166,27 +166,27 @@ func TestGetIssues(t *testing.T) {
 			prNumber: 66328,
 			issues: []docsIssue{
 				{
-					crdbSha:    "0f329965acccb3e771ec1657c7def9e881dc78bb",
+					sourceCommitSha:    "0f329965acccb3e771ec1657c7def9e881dc78bb",
 					issueTitle: "PR #66328 - util/log: report the logging format at the start of new files",
 					issueBody:  "Related PR: https://github.com/cockroachdb/cockroach/pull/66328\nCommit: https://github.com/cockroachdb/cockroach/commit/0f329965acccb3e771ec1657c7def9e881dc78bb\n\n---\n\nRelease note (cli change): When log entries are written to disk,\nthe first few header lines written at the start of every new file\nnow report the configured logging format.",
 				},
 				{
-					crdbSha:    "e22a0ebb46806a0054115edbeef0d6205203eef5",
+					sourceCommitSha:    "e22a0ebb46806a0054115edbeef0d6205203eef5",
 					issueTitle: "PR #66328 - util/log,logspy: make the logspy mechanism better (1 of 2)",
 					issueBody:  "Related PR: https://github.com/cockroachdb/cockroach/pull/66328\nCommit: https://github.com/cockroachdb/cockroach/commit/e22a0ebb46806a0054115edbeef0d6205203eef5\n\n---\n\nRelease note (security update): All the logging output to files\nor network sinks was previously disabled temporarily while an operator\nwas using the `/debug/logspy` HTTP API, resulting in lost entries\nand a breach of auditability guarantees. This behavior has been corrected.\n",
 				},
 				{
-					crdbSha:    "e22a0ebb46806a0054115edbeef0d6205203eef5",
+					sourceCommitSha:    "e22a0ebb46806a0054115edbeef0d6205203eef5",
 					issueTitle: "PR #66328 - util/log,logspy: make the logspy mechanism better (2 of 2)",
 					issueBody:  "Related PR: https://github.com/cockroachdb/cockroach/pull/66328\nCommit: https://github.com/cockroachdb/cockroach/commit/e22a0ebb46806a0054115edbeef0d6205203eef5\n\n---\n\nRelease note (api change): The `/debug/logspy` HTTP API has changed.\nThe endpoint now returns JSON data by default.\nThis change is motivated as follows:\n\n- the previous format, `crdb-v1`, cannot be parsed reliably.\n- using JSON entries guarantees that the text of each entry\n  all fits on a single line of output (newline characters\n  inside the messages are escaped). This makes filtering\n  easier and more reliable.\n- using JSON enables the user to apply `jq` on the output, for\n  example via `curl -s .../debug/logspy | jq ...`\n\nIf the previous format is desired, the user can pass the query\nargument `&flatten=1` to the `logspy` URL to obtain the previous flat\ntext format (`crdb-v1`) instead.\n\nCo-authored-by: Yevgeniy Miretskiy <yevgeniy@cockroachlabs.com>",
 				},
 				{
-					crdbSha:    "44836265f924a14f8c996a714d954e0e7e35dff7",
+					sourceCommitSha:    "44836265f924a14f8c996a714d954e0e7e35dff7",
 					issueTitle: "PR #66328 - util/log,server/debug: new API `/debug/vmodule`, change `logspy` (1 of 2)",
 					issueBody:  "Related PR: https://github.com/cockroachdb/cockroach/pull/66328\nCommit: https://github.com/cockroachdb/cockroach/commit/44836265f924a14f8c996a714d954e0e7e35dff7\n\n---\n\nRelease note (api change): The `/debug/logspy` API does not any more\nenable maximum logging verbosity automatically. To change the\nverbosity, use the new `/debug/vmodule` endpoint or pass the\n`&vmodule=` query parameter to the `/debug/logspy` endpoint.\n\nFor example, suppose you wish to run a 20s logspy session:\n\n- Before:\n\n  ```\n  curl 'https://.../debug/logspy?duration=20s&...'\n  ```\n\n- Now:\n\n  ```\n  curl 'https://.../debug/logspy?duration=20s&vmodule=...'\n  ```\n\n  OR\n\n  ```\n  curl 'https://.../debug/vmodule?duration=22s&vmodule=...'\n  curl 'https://.../debug/logspy?duration=20s'\n  ```\n\nAs for the regular `vmodule` command-line flag, the maximum verbosity\nacross all the source code can be selected with the pattern `*=4`.\n\nNote: at most one in-flight HTTP API request is allowed to modify the\n`vmodule` parameter. This maintain the invariant that the\nconfiguration restored at the end of each request is the same as when\nthe request started.\n",
 				},
 				{
-					crdbSha:    "44836265f924a14f8c996a714d954e0e7e35dff7",
+					sourceCommitSha:    "44836265f924a14f8c996a714d954e0e7e35dff7",
 					issueTitle: "PR #66328 - util/log,server/debug: new API `/debug/vmodule`, change `logspy` (2 of 2)",
 					issueBody:  "Related PR: https://github.com/cockroachdb/cockroach/pull/66328\nCommit: https://github.com/cockroachdb/cockroach/commit/44836265f924a14f8c996a714d954e0e7e35dff7\n\n---\n\nRelease note (api change): The new `/debug/vmodule` API makes it\npossible for an operator to configure the logging verbosity in a\nsimilar way as the SQL built-in function\n`crdb_internal.set_vmodule()`, or to query the current configuration\nas in `crdb_internal.get_vmodule()`. Additionally, any configuration\nchange performed via this API can be automatically reverted after a\nconfigurable delay. The API forms are:\n\n- `/debug/vmodule` - retrieve the current configuration.\n- `/debug/vmodule?set=[vmodule config]&duration=[duration]` - change\n  the configuration to `[vmodule config]` . The previous configuration\n  at the time the `/debug/vmodule` request started is restored after\n  `[duration]`. This duration, if not specified, defaults to twice the\n  default duration of a `logspy` request (currently, the `logspy`\n  default duration is 5s, so the `vmodule` default duration is 10s).\n  If the duration is zero or negative, the previous configuration\n  is never restored.",
 				},
