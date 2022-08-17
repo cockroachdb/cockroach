@@ -121,6 +121,7 @@ func (s *Container) RecordStatement(
 	} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {
 		stats.mu.data.MaxRetries = int64(value.AutoRetryCount)
 	}
+
 	stats.mu.data.SQLType = value.StatementType.String()
 	stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
 	stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatency)
@@ -175,6 +176,11 @@ func (s *Container) RecordStatement(
 		autoRetryReason = value.AutoRetryReason.Error()
 	}
 
+	var contention *time.Duration
+	if value.ExecStats != nil {
+		contention = &value.ExecStats.ContentionTime
+	}
+
 	s.outliersRegistry.ObserveStatement(value.SessionID, &insights.Statement{
 		ID:               value.StatementID,
 		FingerprintID:    stmtFingerprintID,
@@ -193,6 +199,7 @@ func (s *Container) RecordStatement(
 		RowsRead:         value.RowsRead,
 		RowsWritten:      value.RowsWritten,
 		Nodes:            value.Nodes,
+		Contention:       contention,
 	})
 
 	return stats.ID, nil

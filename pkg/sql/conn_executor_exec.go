@@ -1226,7 +1226,8 @@ func populateQueryLevelStats(ctx context.Context, p *planner) {
 	var err error
 	queryLevelStats, err := execstats.GetQueryLevelStats(
 		trace, p.execCfg.TestingKnobs.DeterministicExplain, flowsMetadata)
-	ih.queryLevelStatsWithErr = execstats.MakeQueryLevelStatsWithErr(queryLevelStats, err)
+	queryLevelStatsWithErr := execstats.MakeQueryLevelStatsWithErr(queryLevelStats, err)
+	ih.queryLevelStatsWithErr = &queryLevelStatsWithErr
 	if err != nil {
 		const msg = "error getting query level stats for statement: %s: %+v"
 		if buildutil.CrdbTestBuild {
