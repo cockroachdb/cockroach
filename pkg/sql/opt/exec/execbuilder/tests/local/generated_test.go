@@ -536,6 +536,13 @@ func TestExecBuild_tuple(
 	runExecBuildLogicTest(t, "tuple")
 }
 
+func TestExecBuild_udf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "udf")
+}
+
 func TestExecBuild_union(
 	t *testing.T,
 ) {
