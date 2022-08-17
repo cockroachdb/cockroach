@@ -1372,6 +1372,23 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 		)
 	}
 
+	// Check if the primary and secondary regions are members of this super region.
+	regionConfig, err := SynthesizeRegionConfig(
+		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+
+	if regionConfig.HasSecondaryRegion() {
+		primaryRegion := regionConfig.PrimaryRegionString()
+		regions := nameToRegionName(n.n.Regions)
+		err := validateSecondaryRegion(catpb.RegionName(primaryRegion), regionConfig.SecondaryRegion(), regions)
+		if err != nil {
+			return err
+		}
+	}
+
 	typeID, err := n.desc.MultiRegionEnumID()
 	if err != nil {
 		return err
@@ -1595,6 +1612,22 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Check that the secondary region isn't being dropped from this super region.
+	regionConfig, err := SynthesizeRegionConfig(
+		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+
+	if regionConfig.HasSecondaryRegion() {
+		regions := nameToRegionName(n.n.Regions)
+		err = validateSecondaryRegion(regionConfig.PrimaryRegion(), typeDesc.RegionConfig.SecondaryRegion, regions)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Remove the old super region.
 	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
 	if !dropped {
@@ -1753,6 +1786,18 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		)
 	}
 
+	regions, ok := prevRegionConfig.GetSuperRegionRegionsForRegion(prevRegionConfig.PrimaryRegion())
+	if !ok && prevRegionConfig.IsMemberOfExplicitSuperRegion(catpb.RegionName(n.n.SecondaryRegion)) {
+		return pgerror.New(pgcode.InvalidDatabaseDefinition,
+			"the secondary region can not be in a super region, unless the primary is also "+
+				"within a super region",
+		)
+	}
+	err = validateSecondaryRegion(prevRegionConfig.PrimaryRegion(), catpb.RegionName(n.n.SecondaryRegion), regions)
+	if err != nil {
+		return err
+	}
+
 	// Get the type descriptor for the multi-region enum.
 	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 		params.ctx,
@@ -1849,8 +1894,14 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		)
 	}
 
-	// TODO(e-mbrown): Add DROP SECONDARY REGION IF EXIST syntax
 	if n.desc.RegionConfig.SecondaryRegion == "" {
+		if n.n.IfExists {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("No secondary region is not defined on the database; skipping"),
+			)
+			return nil
+		}
 		return pgerror.Newf(pgcode.UndefinedParameter,
 			"database %s doesn't have a secondary region defined", n.desc.GetName(),
 		)
@@ -1908,6 +1959,42 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 	}
 
 	return nil
+}
+
+// validateSecondaryRegion ensures the primary region and the secondary region
+// are both inside or both outside a super region. The primary region and secondary
+// region should also be within the same super region.
+func validateSecondaryRegion(
+	primaryRegion catpb.RegionName, secondaryRegion catpb.RegionName, regions catpb.RegionNames,
+) error {
+
+	secondaryInCurrSuper, primaryInCurrSuper := false, false
+	for _, region := range regions {
+		if region == secondaryRegion {
+			secondaryInCurrSuper = true
+		}
+		if region == primaryRegion {
+			primaryInCurrSuper = true
+		}
+	}
+
+	if primaryInCurrSuper == secondaryInCurrSuper {
+		return nil
+	}
+
+	return pgerror.New(pgcode.InvalidDatabaseDefinition,
+		"the secondary region must be in the same super region as the current primary region",
+	)
+}
+
+// nameToRegionName returns a slice of region names.
+func nameToRegionName(regions tree.NameList) []catpb.RegionName {
+	regionList := make([]catpb.RegionName, len(regions))
+	for i, region := range regions {
+		regionList[i] = catpb.RegionName(region)
+	}
+
+	return regionList
 }
 
 func (n *alterDatabaseDropSecondaryRegion) Next(runParams) (bool, error) { return false, nil }

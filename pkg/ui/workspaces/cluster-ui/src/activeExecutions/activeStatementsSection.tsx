@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useContext, useMemo } from "react";
 import classNames from "classnames/bind";
 import {
   ActiveStatement,
@@ -22,14 +22,17 @@ import { EmptyStatementsPlaceholder } from "src/statementsPage/emptyStatementsPl
 import { TableStatistics } from "src/tableStatistics";
 import {
   ISortedTablePagination,
+  SortedTable,
   SortSetting,
 } from "../sortedtable/sortedtable";
 import {
-  ActiveStatementsTable,
   getColumnOptions,
+  makeActiveStatementsColumns,
 } from "./activeStatementsTable";
 import { StatementViewType } from "src/statementsPage/statementPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
+import { CockroachCloudContext } from "src/contexts";
+import { isSelectedColumn } from "src/columnsSelector/utils";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -58,7 +61,20 @@ export const ActiveStatementsSection: React.FC<
   onChangeSortSetting,
   onColumnsSelect,
 }) => {
-  const tableColumns: SelectOption[] = getColumnOptions(selectedColumns);
+  const isCockroachCloud = useContext(CockroachCloudContext);
+
+  const columns = useMemo(
+    () => makeActiveStatementsColumns(isCockroachCloud),
+    [isCockroachCloud],
+  );
+  const shownColumns = columns.filter(col =>
+    isSelectedColumn(selectedColumns, col),
+  );
+
+  const tableColumns: SelectOption[] = getColumnOptions(
+    columns,
+    selectedColumns,
+  );
   const activeFilters = calculateActiveFilters(filters);
 
   return (
@@ -77,9 +93,10 @@ export const ActiveStatementsSection: React.FC<
           onClearFilters={onClearFilters}
         />
       </div>
-      <ActiveStatementsTable
+      <SortedTable
+        className="statements-table"
         data={statements}
-        selectedColumns={selectedColumns}
+        columns={shownColumns}
         sortSetting={sortSetting}
         onChangeSortSetting={onChangeSortSetting}
         renderNoResult={
