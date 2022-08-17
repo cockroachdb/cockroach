@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -189,6 +190,7 @@ func NewColBatchScan(
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	estimatedRowCount uint64,
+	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchScan, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
@@ -212,7 +214,7 @@ func NewColBatchScan(
 	}
 
 	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
-	tableArgs, err := populateTableArgs(ctx, flowCtx, &spec.FetchSpec)
+	tableArgs, err := populateTableArgs(ctx, &spec.FetchSpec, typeResolver)
 	if err != nil {
 		return nil, err
 	}
