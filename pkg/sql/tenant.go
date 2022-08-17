@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -67,7 +68,11 @@ func rejectIfSystemTenant(tenID uint64, op string) error {
 // span config (in system.span_configurations) for it. It also initializes the
 // usage data in system.tenant_usage if info.Usage is set.
 func CreateTenantRecord(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfoWithUsage,
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	info *descpb.TenantInfoWithUsage,
+	initialTenantZoneConfig *zonepb.ZoneConfig,
 ) error {
 	const op = "create"
 	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
@@ -141,11 +146,7 @@ func CreateTenantRecord(
 	//      boundaries. Whatever is inserted will get cleared out by the
 	//      tenant's reconciliation process.
 
-	// TODO(irfansharif): What should this initial default be? Could be this
-	// static one, could use host's RANGE TENANT or host's RANGE DEFAULT?
-	// Does it even matter given it'll disappear as soon as tenant starts
-	// reconciling?
-	tenantSpanConfig := execCfg.DefaultZoneConfig.AsSpanConfig()
+	tenantSpanConfig := initialTenantZoneConfig.AsSpanConfig()
 	// Make sure to enable rangefeeds; the tenant will need them on its system
 	// tables as soon as it starts up. It's not unsafe/buggy if we didn't do this,
 	// -- the tenant's span config reconciliation process would eventually install
@@ -231,16 +232,22 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 			State: descpb.TenantInfo_ACTIVE,
 		},
 	}
-	if err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info); err != nil {
+
+	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
+	if err != nil {
 		return err
 	}
 
-	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenID))
+	if err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info, initialTenantZoneConfig); err != nil {
+		return err
+	}
+
 	// Initialize the tenant's keyspace.
+	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenID))
 	schema := bootstrap.MakeMetadataSchema(
 		codec,
-		p.ExtendedEvalContext().ExecCfg.DefaultZoneConfig, /* defaultZoneConfig */
-		nil, /* defaultSystemZoneConfig */
+		initialTenantZoneConfig, /* defaultZoneConfig */
+		initialTenantZoneConfig, /* defaultSystemZoneConfig */
 	)
 	kvs, splits := schema.GetInitialValues()
 
