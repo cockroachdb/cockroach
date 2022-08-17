@@ -265,20 +265,20 @@ AND t.state = 'PUBLIC'
 AND r.split_enforced_until IS NOT NULL;
 ----
 name        table_id  index_name                start_pretty               end_pretty
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2               /Table/116/2/"new york"/0
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/0  /Table/116/2/"new york"/1
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/1  /Table/116/2/"new york"/2
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/2  /Table/116/2/"new york"/3
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/3  /Table/116/2/"new york"/4
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/4  /Table/116/2/"new york"/5
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/5  /Table/116/2/"new york"/6
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/6  /Table/116/2/"new york"/7
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/7  /Table/116/2/"seattle"/0
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/0   /Table/116/2/"seattle"/1
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/1   /Table/116/2/"seattle"/2
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/2   /Table/116/2/"seattle"/3
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/3   /Table/116/2/"seattle"/4
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/4   /Table/116/2/"seattle"/5
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/5   /Table/116/2/"seattle"/6
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/6   /Table/116/2/"seattle"/7
-t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/7   /Table/116/3/"new york"/0
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2               /Table/112/2/"new york"/0
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/0  /Table/112/2/"new york"/1
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/1  /Table/112/2/"new york"/2
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/2  /Table/112/2/"new york"/3
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/3  /Table/112/2/"new york"/4
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/4  /Table/112/2/"new york"/5
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/5  /Table/112/2/"new york"/6
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/6  /Table/112/2/"new york"/7
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/7  /Table/112/2/"seattle"/0
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/0   /Table/112/2/"seattle"/1
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/1   /Table/112/2/"seattle"/2
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/2   /Table/112/2/"seattle"/3
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/3   /Table/112/2/"seattle"/4
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/4   /Table/112/2/"seattle"/5
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/5   /Table/112/2/"seattle"/6
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/6   /Table/112/2/"seattle"/7
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/7   /Table/112/3/"new york"/0
