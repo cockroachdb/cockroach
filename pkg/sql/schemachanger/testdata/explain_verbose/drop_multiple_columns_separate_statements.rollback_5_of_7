@@ -12,26 +12,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 4 elements transitioning toward ABSENT
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-    │   │   │     MERGE_ONLY → DELETE_ONLY
-    │   │   │
-    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-    │   │         WRITE_ONLY → DELETE_ONLY
-    │   │
     │   ├── • 8 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 3}
@@ -121,6 +101,26 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │   │   │
     │   │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
     │   │         ABSENT → PUBLIC
+    │   │
+    │   ├── • 4 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │     MERGE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │         WRITE_ONLY → DELETE_ONLY
     │   │
     │   └── • 15 Mutation operations
     │       │

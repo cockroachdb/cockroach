@@ -9,11 +9,6 @@ EXPLAIN (ddl) rollback at post-commit stage 1 of 7;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE; ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹k› CASCADE; 
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward ABSENT
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-           │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
            ├── 8 elements transitioning toward PUBLIC
            │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104, ColumnID: 3}
            │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: k, ColumnID: 3}
@@ -23,6 +18,11 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
            │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
            │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
            │    └── ABSENT        → PUBLIC IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+           ├── 4 elements transitioning toward ABSENT
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+           │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
            └── 17 Mutation operations
                 ├── SetColumnName {"ColumnID":3,"Name":"k","TableID":104}
                 ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}

@@ -296,7 +296,6 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 }
 
 func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
-
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
@@ -305,21 +304,9 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
-	kafka := kafkaManager{
-		t:     t,
-		c:     c,
-		nodes: kafkaNode,
-	}
-	kafka.install(ctx)
-	if !c.IsLocal() {
-		// TODO(dan): This test currently connects to kafka from the test
-		// runner, so kafka needs to advertise the external address. Better
-		// would be a binary we could run on one of the roachprod machines.
-		c.Run(ctx, kafka.nodes, `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
-			filepath.Join(kafka.configDir(), "server.properties"))
-	}
-	kafka.start(ctx, "kafka")
-	defer kafka.stop(ctx)
+
+	kafka, cleanup := setupKafka(ctx, t, c, kafkaNode)
+	defer cleanup()
 
 	t.Status("creating kafka topic")
 	if err := kafka.createTopic(ctx, "bank"); err != nil {
@@ -417,7 +404,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return errors.Wrap(err, "CREATE TABLE failed")
 		}
 
-		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
+		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0, false)
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
@@ -1832,6 +1819,31 @@ func stopFeeds(db *gosql.DB) {
 	_, _ = db.Exec(`CANCEL JOBS (
 			SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'
 		)`)
+}
+
+// setupKafka installs Kafka on the cluster and configures it so that
+// the test runner can connect to it. Returns a function to be called
+// at the end of the test for stopping Kafka.
+func setupKafka(
+	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+) (kafkaManager, func()) {
+	kafka := kafkaManager{
+		t:     t,
+		c:     c,
+		nodes: nodes,
+	}
+
+	kafka.install(ctx)
+	if !c.IsLocal() {
+		// TODO(dan): This test currently connects to kafka from the test
+		// runner, so kafka needs to advertise the external address. Better
+		// would be a binary we could run on one of the roachprod machines.
+		c.Run(ctx, kafka.nodes, `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
+			filepath.Join(kafka.configDir(), "server.properties"))
+	}
+
+	kafka.start(ctx, "kafka")
+	return kafka, func() { kafka.stop(ctx) }
 }
 
 type topicConsumer struct {

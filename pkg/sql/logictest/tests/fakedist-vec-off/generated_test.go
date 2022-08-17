@@ -1913,6 +1913,13 @@ func TestLogic_typing(
 	runLogicTest(t, "typing")
 }
 
+func TestLogic_udf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf")
+}
+
 func TestLogic_union(
 	t *testing.T,
 ) {

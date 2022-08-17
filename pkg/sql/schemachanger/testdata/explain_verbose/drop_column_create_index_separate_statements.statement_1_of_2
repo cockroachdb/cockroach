@@ -10,38 +10,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 6 elements transitioning toward ABSENT
-│       │   │
-│       │   ├── • Column:{DescID: 104, ColumnID: 2}
-│       │   │     PUBLIC → WRITE_ONLY
-│       │   │
-│       │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
-│       │   │         rule: "column no longer public before dependents"
-│       │   │
-│       │   ├── • Column:{DescID: 104, ColumnID: 4}
-│       │   │   │ PUBLIC → WRITE_ONLY
-│       │   │   │
-│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │   │         rule: "secondary indexes containing column as key reach write-only before column"
-│       │   │
-│       │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
-│       │   │         rule: "column no longer public before dependents"
-│       │   │
-│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │   │     PUBLIC → VALIDATED
-│       │   │
-│       │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
-│       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │             rule: "index no longer public before dependents"
-│       │
 │       ├── • 3 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
@@ -75,6 +43,38 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
+│       │
+│       ├── • 6 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • Column:{DescID: 104, ColumnID: 2}
+│       │   │     PUBLIC → WRITE_ONLY
+│       │   │
+│       │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
+│       │   │
+│       │   ├── • Column:{DescID: 104, ColumnID: 4}
+│       │   │   │ PUBLIC → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │         rule: "secondary indexes containing column as key reach write-only before column"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
+│       │   │         rule: "column no longer public before dependents"
+│       │   │
+│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │     PUBLIC → VALIDATED
+│       │   │
+│       │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │             rule: "index no longer public before dependents"
 │       │
 │       └── • 14 Mutation operations
 │           │
@@ -341,6 +341,47 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │
     ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
     │   │
+    │   ├── • 2 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   │ VALIDATED → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │   │     rule: "primary index swap"
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │     rule: "index named right before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+    │   │   │         rule: "index dependents exist before index becomes public"
+    │   │   │
+    │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
+    │   │       │ ABSENT → PUBLIC
+    │   │       │
+    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │             rule: "index existence precedes index dependents"
+    │   │
+    │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │   │   │ PUBLIC → TRANSIENT_ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → TRANSIENT_ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+    │   │       │ PUBLIC → TRANSIENT_ABSENT
+    │   │       │
+    │   │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
+    │   │             rule: "skip index-column removal ops on index removal"
+    │   │
     │   ├── • 11 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
@@ -421,47 +462,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │         VALIDATED → DELETE_ONLY
     │   │
-    │   ├── • 2 elements transitioning toward PUBLIC
-    │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-    │   │   │   │ VALIDATED → PUBLIC
-    │   │   │   │
-    │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "primary index swap"
-    │   │   │   │
-    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
-    │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │     rule: "index named right before index becomes public"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-    │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-    │   │   │         rule: "index dependents exist before index becomes public"
-    │   │   │
-    │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
-    │   │       │ ABSENT → PUBLIC
-    │   │       │
-    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-    │   │             rule: "index existence precedes index dependents"
-    │   │
-    │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
-    │   │   │
-    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-    │   │   │     WRITE_ONLY → TRANSIENT_DELETE_ONLY
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-    │   │   │   │ PUBLIC → TRANSIENT_ABSENT
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
-    │   │       │ PUBLIC → TRANSIENT_ABSENT
-    │   │       │
-    │   │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
-    │   │
     │   └── • 10 Mutation operations
     │       │
     │       ├── • MakeDroppedColumnDeleteOnly
@@ -516,6 +516,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
+    │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
+    │   │   │
+    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+    │   │       │
+    │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │       │     rule: "dependents removed before index"
+    │   │       │
+    │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+    │   │             rule: "dependents removed before index"
+    │   │
     │   ├── • 4 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 4}
@@ -556,17 +567,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │   │       │     rule: "dependents removed before index"
     │   │       │
     │   │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
-    │   │             rule: "dependents removed before index"
-    │   │
-    │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
-    │   │   │
-    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-    │   │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
-    │   │       │
-    │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-    │   │       │     rule: "dependents removed before index"
-    │   │       │
-    │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
     │   │             rule: "dependents removed before index"
     │   │
     │   └── • 9 Mutation operations

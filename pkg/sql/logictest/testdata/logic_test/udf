@@ -1,5 +1,3 @@
-# LogicTest: local-udf
-
 statement ok
 CREATE TABLE ab (
 a INT PRIMARY KEY,
@@ -1222,8 +1220,9 @@ query TT
                         $test_alter_sc_f_test_sc
                     )
            )
-SELECT fn->'id', fn->'parentSchemaId'
-  FROM fns;
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
 ----
 170  105
 171  105
@@ -1254,8 +1253,9 @@ query TT
                         $test_alter_sc_f_test_sc
                     )
            )
-SELECT fn->'id', fn->'parentSchemaId'
-  FROM fns;
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
 ----
 170  105
 171  105
@@ -1303,8 +1303,9 @@ query TT
                         $test_alter_sc_f_test_sc
                     )
            )
-SELECT fn->'id', fn->'parentSchemaId'
-  FROM fns;
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
 ----
 170  105
 171  172

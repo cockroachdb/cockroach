@@ -11,6 +11,23 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
+    │   ├── • 2 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 104, ColumnID: 2}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
+    │   │   │         rule: "column dependents exist before column becomes public"
+    │   │   │
+    │   │   └── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+    │   │         ABSENT → PUBLIC
+    │   │
     │   ├── • 4 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -36,23 +53,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │       │
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
-    │   │
-    │   ├── • 2 elements transitioning toward PUBLIC
-    │   │   │
-    │   │   ├── • Column:{DescID: 104, ColumnID: 2}
-    │   │   │   │ WRITE_ONLY → PUBLIC
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
-    │   │   │   │     rule: "column dependents exist before column becomes public"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
-    │   │   │   │     rule: "column dependents exist before column becomes public"
-    │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
-    │   │   │         rule: "column dependents exist before column becomes public"
-    │   │   │
-    │   │   └── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
-    │   │         ABSENT → PUBLIC
     │   │
     │   └── • 8 Mutation operations
     │       │
