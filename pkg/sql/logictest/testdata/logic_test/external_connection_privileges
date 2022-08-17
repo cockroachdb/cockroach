@@ -24,6 +24,7 @@ GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
 query TTTT
 SELECT * FROM system.privileges
 ----
+root      /externalconn/foo  {ALL}         {}
 testuser  /externalconn/foo  {DROP,USAGE}  {}
 
 statement ok
@@ -32,6 +33,7 @@ REVOKE USAGE,DROP ON EXTERNAL CONNECTION foo FROM testuser
 query TTTT
 SELECT * FROM system.privileges
 ----
+root  /externalconn/foo  {ALL}  {}
 
 statement ok
 GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
@@ -62,6 +64,7 @@ query TTTT
 SELECT * FROM system.privileges ORDER BY username
 ----
 bar       /externalconn/foo  {DROP,USAGE}  {}
+root      /externalconn/foo  {ALL}         {}
 testuser  /externalconn/foo  {DROP,USAGE}  {DROP,USAGE}
 
 # Invalid grants on external connections.
