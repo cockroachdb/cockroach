@@ -13,6 +13,7 @@ package sctest
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -49,34 +50,32 @@ import (
 // previous test and setup blocks combined.
 func cumulativeTest(
 	t *testing.T,
-	dir string,
+	relPath string,
 	tf func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement),
 ) {
-	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-		var setup []parser.Statement
+	path := testdataPath(t, relPath)
+	var setup []parser.Statement
+	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+		stmts, err := parser.Parse(d.Input)
+		require.NoError(t, err)
+		require.NotEmpty(t, stmts)
 
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			stmts, err := parser.Parse(d.Input)
-			require.NoError(t, err)
-			require.NotEmpty(t, stmts)
-
-			switch d.Cmd {
-			case "setup":
-				// no-op
-			case "test":
-				var lines []string
-				for _, stmt := range stmts {
-					lines = append(lines, stmt.SQL)
-				}
-				t.Run(strings.Join(lines, "; "), func(t *testing.T) {
-					tf(t, path, d.Rewrite, setup, stmts)
-				})
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
+		switch d.Cmd {
+		case "setup":
+			// no-op
+		case "test":
+			var lines []string
+			for _, stmt := range stmts {
+				lines = append(lines, stmt.SQL)
 			}
-			setup = append(setup, stmts...)
-			return d.Expected
-		})
+			t.Run(strings.Join(lines, "; "), func(t *testing.T) {
+				tf(t, path, d.Rewrite, setup, stmts)
+			})
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+		setup = append(setup, stmts...)
+		return d.Expected
 	})
 }
 
@@ -86,7 +85,7 @@ func cumulativeTest(
 // Rollback tests that the schema changer job rolls back properly.
 // This data-driven test uses the same input as EndToEndSideEffects
 // but ignores the expected output.
-func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
+func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	countRevertiblePostCommitStages := func(
 		t *testing.T, setup, stmts []parser.Statement,
 	) (n int) {
@@ -181,7 +180,7 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 			require.NotZero(t, atomic.LoadUint32(&numCheckedExplainInRollback))
 		}
 	}
-	cumulativeTest(t, dir, testFunc)
+	cumulativeTest(t, relPath, testFunc)
 }
 
 const fetchDescriptorStateQuery = `
@@ -200,7 +199,7 @@ ORDER BY
 // Pause tests that the schema changer can handle being paused and resumed
 // correctly. This data-driven test uses the same input as EndToEndSideEffects
 // but ignores the expected output.
-func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
+func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	skip.UnderRace(t)
 	var postCommit, nonRevertible int
 	countStages := func(
@@ -290,16 +289,24 @@ func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 		))
 		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))
 	}
-	cumulativeTest(t, dir, testFunc)
+	cumulativeTest(t, relPath, testFunc)
+}
+
+// Used for saving corpus information in TestGenerateCorpus
+var corpusPath string
+
+func init() {
+	flag.StringVar(&corpusPath, "declarative-corpus", "", "path to the corpus file")
 }
 
 // GenerateSchemaChangeCorpus executes each post commit stage of a given set of
 // statements and writes them into a corpus file. This file can be later used to
 // validate mixed version / forward compatibility.
-func GenerateSchemaChangeCorpus(
-	t *testing.T, dir string, corpusPath string, newCluster NewClusterFunc,
-) {
+func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewClusterFunc) {
 	skip.UnderRace(t)
+	if corpusPath == "" {
+		skip.IgnoreLintf(t, "requires declarative-corpus path parameter")
+	}
 	cc, err := corpus.NewCorpusCollector(corpusPath)
 	if err != nil {
 		t.Fatalf("failed to create collection %v", err)
@@ -337,7 +344,7 @@ func GenerateSchemaChangeCorpus(
 			context.Background(), t, setup, stmts, db, nil, nil, nil,
 		))
 	}
-	cumulativeTest(t, dir, testFunc)
+	cumulativeTest(t, path, testFunc)
 }
 
 // Backup tests that the schema changer can handle being backed up and
@@ -345,7 +352,7 @@ func GenerateSchemaChangeCorpus(
 // EndToEndSideEffects but ignores the expected output. Note that the
 // cluster constructor needs to provide a cluster with CCL BACKUP/RESTORE
 // functionality enabled.
-func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
+func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 	skip.UnderRace(t)
 	skip.UnderStress(t)
 	var after [][]string
@@ -573,7 +580,7 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 			}
 		}
 	}
-	cumulativeTest(t, dir, testFunc)
+	cumulativeTest(t, path, testFunc)
 }
 
 func maybeGetDatabaseForIDs(

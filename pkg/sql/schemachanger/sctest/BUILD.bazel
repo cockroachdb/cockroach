@@ -7,11 +7,13 @@ go_library(
         "cumulative.go",
         "decomp.go",
         "end_to_end.go",
+        "testdata_path_helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
