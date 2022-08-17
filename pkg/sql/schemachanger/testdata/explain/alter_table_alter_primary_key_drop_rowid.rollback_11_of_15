@@ -8,6 +8,11 @@ EXPLAIN (ddl) rollback at post-commit stage 11 of 15;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›); 
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 4 elements transitioning toward PUBLIC
+      │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 104, ColumnID: 2}
+      │    │    ├── ABSENT        → PUBLIC      ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+      │    │    ├── VALIDATED     → PUBLIC      PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+      │    │    └── ABSENT        → PUBLIC      IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
       │    ├── 11 elements transitioning toward ABSENT
       │    │    ├── PUBLIC        → WRITE_ONLY  PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
       │    │    ├── PUBLIC        → ABSENT      IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
@@ -20,11 +25,6 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
       │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
       │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
-      │    ├── 4 elements transitioning toward PUBLIC
-      │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 104, ColumnID: 2}
-      │    │    ├── ABSENT        → PUBLIC      ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
-      │    │    ├── VALIDATED     → PUBLIC      PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-      │    │    └── ABSENT        → PUBLIC      IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
       │    └── 13 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"rowid","TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"t_pkey","TableID":104}
