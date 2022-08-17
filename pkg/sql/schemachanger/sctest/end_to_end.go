@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
@@ -39,7 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -59,6 +62,9 @@ func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, fun
 		Knobs: base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
 			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				UseTransactionalDescIDGenerator: true,
+			},
 		},
 	})
 	return db, func() {
@@ -72,88 +78,88 @@ func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, fun
 // test file.
 //
 // It shares a data-driven format with Rollback.
-func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
+func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc) {
+	skip.UnderStress(t)
+	skip.UnderStressRace(t)
 	ctx := context.Background()
-	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-
-		// Create a test cluster.
-		db, cleanup := newCluster(t, nil /* knobs */)
-		tdb := sqlutils.MakeSQLRunner(db)
-		defer cleanup()
-		numTestStatementsObserved := 0
-		var setupStmts parser.Statements
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			stmts, err := parser.Parse(d.Input)
-			require.NoError(t, err)
-			require.NotEmpty(t, stmts)
-			execStmts := func() {
-				for _, stmt := range stmts {
-					tdb.Exec(t, stmt.SQL)
-				}
-				waitForSchemaChangesToSucceed(t, tdb)
+	path := testutils.RewritableDataPath(t, relPath)
+	// Create a test cluster.
+	db, cleanup := newCluster(t, nil /* knobs */)
+	tdb := sqlutils.MakeSQLRunner(db)
+	defer cleanup()
+	numTestStatementsObserved := 0
+	var setupStmts parser.Statements
+	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+		stmts, err := parser.Parse(d.Input)
+		require.NoError(t, err)
+		require.NotEmpty(t, stmts)
+		execStmts := func() {
+			for _, stmt := range stmts {
+				tdb.Exec(t, stmt.SQL)
 			}
+			waitForSchemaChangesToSucceed(t, tdb)
+		}
 
-			switch d.Cmd {
-			case "setup":
-				a := prettyNamespaceDump(t, tdb)
-				execStmts()
-				b := prettyNamespaceDump(t, tdb)
-				setupStmts = stmts
-				return sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
+		switch d.Cmd {
+		case "setup":
+			a := prettyNamespaceDump(t, tdb)
+			execStmts()
+			b := prettyNamespaceDump(t, tdb)
+			setupStmts = stmts
+			return sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
 
-			case "test":
-				require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
-				numTestStatementsObserved++
-				stmtSqls := make([]string, 0, len(stmts))
-				for _, stmt := range stmts {
-					stmtSqls = append(stmtSqls, stmt.SQL)
-				}
-				// Keep test cluster in sync.
-				defer execStmts()
-
-				// Wait for any jobs due to previous schema changes to finish.
-				sctestdeps.WaitForNoRunningSchemaChanges(t, tdb)
-				var deps *sctestdeps.TestState
-				// Create test dependencies and execute the schema changer.
-				// The schema changer test dependencies do not hold any reference to the
-				// test cluster, here the SQLRunner is only used to populate the mocked
-				// catalog state.
-				deps = sctestdeps.NewTestDependencies(
-					sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
-					sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
-					sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
-					sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
-						sd *sessiondata.SessionData,
-					) {
-						// For setting up a builder inside tests we will ensure that the new schema
-						// changer will allow non-fully implemented operations.
-						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
-						sd.ApplicationName = ""
-					})),
-					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
-						BeforeStage: func(p scplan.Plan, stageIdx int) error {
-							deps.LogSideEffectf("## %s", p.Stages[stageIdx].String())
-							return nil
-						},
-					}),
-					sctestdeps.WithStatements(stmtSqls...),
-					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
-				)
-				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
-				var fileNameSuffix string
-				const inRollback = false
-				for i, stmt := range stmts {
-					if len(stmts) > 1 {
-						fileNameSuffix = fmt.Sprintf(".statement_%d_of_%d", i+1, len(stmts))
-					}
-					checkExplainDiagrams(t, path, setupStmts, stmts[:i], stmt.SQL, fileNameSuffix, stmtStates[i], inRollback, d.Rewrite)
-				}
-				return replaceNonDeterministicOutput(deps.SideEffectLog())
-
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
+		case "test":
+			require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
+			numTestStatementsObserved++
+			stmtSqls := make([]string, 0, len(stmts))
+			for _, stmt := range stmts {
+				stmtSqls = append(stmtSqls, stmt.SQL)
 			}
-		})
+			// Keep test cluster in sync.
+			defer execStmts()
+
+			// Wait for any jobs due to previous schema changes to finish.
+			sctestdeps.WaitForNoRunningSchemaChanges(t, tdb)
+			var deps *sctestdeps.TestState
+			// Create test dependencies and execute the schema changer.
+			// The schema changer test dependencies do not hold any reference to the
+			// test cluster, here the SQLRunner is only used to populate the mocked
+			// catalog state.
+			deps = sctestdeps.NewTestDependencies(
+				sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
+				sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
+				sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
+				sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
+					sd *sessiondata.SessionData,
+				) {
+					// For setting up a builder inside tests we will ensure that the new schema
+					// changer will allow non-fully implemented operations.
+					sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+					sd.ApplicationName = ""
+				})),
+				sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
+					BeforeStage: func(p scplan.Plan, stageIdx int) error {
+						deps.LogSideEffectf("## %s", p.Stages[stageIdx].String())
+						return nil
+					},
+				}),
+				sctestdeps.WithStatements(stmtSqls...),
+				sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
+			)
+			stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
+			var fileNameSuffix string
+			const inRollback = false
+			for i, stmt := range stmts {
+				if len(stmts) > 1 {
+					fileNameSuffix = fmt.Sprintf(".statement_%d_of_%d", i+1, len(stmts))
+				}
+				checkExplainDiagrams(t, path, setupStmts, stmts[:i], stmt.SQL, fileNameSuffix, stmtStates[i], inRollback, d.Rewrite)
+			}
+			return replaceNonDeterministicOutput(deps.SideEffectLog())
+
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
 	})
 }
 
@@ -175,6 +181,7 @@ func checkExplainDiagrams(
 	state scpb.CurrentState,
 	inRollback, rewrite bool,
 ) {
+
 	testDataDir := filepath.Dir(filepath.Dir(path))
 	mkdir := func(name string) string {
 		dir := filepath.Join(testDataDir, name)
