@@ -11,13 +11,27 @@
 package schemachanger_test
 
 import (
+	"flag"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
+
+// Used for saving corpus information in TestGenerateCorpus
+var corpusPath string
+
+func init() {
+	flag.StringVar(&corpusPath, "declarative-corpus", "", "Path to the corpus file")
+}
 
 func endToEndPath(t *testing.T) string {
 	return testutils.TestDataPath(t, "end_to_end")
@@ -41,4 +55,47 @@ func TestPause(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sctest.Pause(t, endToEndPath(t), sctest.SingleNodeCluster)
+}
+
+// TestGenerateCorpus generates a corpus based on the end to end test files.
+func TestGenerateCorpus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	if corpusPath == "" {
+		skip.IgnoreLintf(t, "requires declarative-corpus path parameter")
+	}
+	sctest.GenerateSchemaChangeCorpus(t, testutils.TestDataPath(t), corpusPath, sctest.SingleNodeCluster)
+}
+
+// TestValidateCorpuses validates that any generated corpus file on disk, a
+// path needs to be specified.
+func TestValidateCorpuses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if corpusPath == "" {
+		skip.IgnoreLintf(t, "requires decalarative-corpus path parameter")
+	}
+	t.Run("corpus-validation", func(t *testing.T) {
+		cr, err := corpus.NewCorpusReader(corpusPath)
+		require.NoError(t, err)
+		require.NoError(t, cr.ReadCorpus())
+
+		for idx := 0; idx < cr.GetNumEntries(); idx++ {
+			entryName, state := cr.GetCorpus(idx)
+			t.Run(entryName, func(t *testing.T) {
+				jobID := jobspb.JobID(0)
+				params := scplan.Params{
+					InRollback:     state.InRollback,
+					ExecutionPhase: scop.LatestPhase,
+					SchemaChangerJobIDSupplier: func() jobspb.JobID {
+						jobID++
+						return jobID
+					},
+				}
+				_, err := scplan.MakePlan(*state, params)
+				require.NoError(t, err)
+			})
+		}
+	})
 }
