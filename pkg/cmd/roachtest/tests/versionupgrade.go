@@ -80,6 +80,15 @@ DROP TABLE test.t;
 	`),
 }
 
+// setupPersistentDB is a test step when running on a new cluster to
+// make it look like the fixtures.
+var setupPersistentDB = versionFeatureStep{
+	stmtFeatureTest("Create database and table", v201, `
+	create database persistent_db;
+	create table persistent_db.persistent_table(a int);
+	show tables from persistent_db;`),
+}
+
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
 	if err != nil {
@@ -365,6 +374,16 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		startOpts.RoachprodOpts.Sequential = false
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
 		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
+	}
+}
+
+func uploadAndStartEmptyCluster(nodes option.NodeListOption, v string) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
+
+		// Put and start the binary.
+		args := u.uploadVersion(ctx, t, nodes, v)
+		u.c.Start(ctx, nodes, args)
 	}
 }
 
@@ -695,4 +714,53 @@ func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption)
 		})
 		m.Wait()
 	}
+}
+
+func runPatchUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, offset int) {
+	predecessorVersions := RecentPatchVersions(*t.BuildVersion(), offset+1)
+	if len(predecessorVersions) < offset+1 {
+		t.L().Printf("No recent patch versions for this version")
+		return
+	}
+
+	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
+
+	predecessorVersion := predecessorVersions[offset]
+
+	// The steps below start a cluster at predecessorVersion,
+	// then fully upgrade to the current version,
+	// then roll back, then roll one node forward again.
+	// Between each step, we run the feature tests defined in
+	// versionUpgradeTestFeatures (which aren't particularly
+	// appropriate here, but we just need arbitrary operations.)
+	u := newVersionUpgradeTest(c,
+		// Start a cluster from a previous patch version.
+		uploadAndStartEmptyCluster(c.All(), predecessorVersion),
+		setupPersistentDB.step(c.All().RandNode()),
+		uploadAndInitSchemaChangeWorkload(),
+		waitForUpgradeStep(c.All()),
+		testFeaturesStep,
+
+		// Roll nodes forward to the current build being tested.
+		binaryUpgradeStep(c.All(), ""),
+		testFeaturesStep,
+		// Since we've done nothing to stop it, the cluster version
+		// should be updated if it's going to, but let's make sure.
+		waitForUpgradeStep(c.All()),
+		// Roll back again. That this is allowed for patch versions
+		// is the key invariant being tested (and a regression test for 21.1.8).
+		binaryUpgradeStep(c.All(), predecessorVersion),
+		testFeaturesStep,
+		// Roll a single node forward so we can spend more time in a mixed state.
+		binaryUpgradeStep(c.All().RandNode(), ""),
+		testFeaturesStep,
+		// Turn tracing on globally to give it a fighting chance at exposing any
+		// crash-inducing incompatibilities or horrendous memory leaks. (It won't
+		// catch most memory leaks since this test doesn't run for too long or do
+		// too much work). Then, run the previous tests again.
+		enableTracingGloballyStep,
+		testFeaturesStep,
+	)
+
+	u.run(ctx, t)
 }

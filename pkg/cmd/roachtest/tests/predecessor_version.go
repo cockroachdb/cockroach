@@ -61,3 +61,16 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	}
 	return v, nil
 }
+
+// RecentPatchVersions returns up to n version strings from the same minor release as buildVersion
+func RecentPatchVersions(buildVersion version.Version, n int) []string {
+	current := buildVersion.Patch()
+	if current < n {
+		n = current
+	}
+	versions := make([]string, n)
+	for i := 0; i < n; i++ {
+		versions[i] = fmt.Sprintf("%d.%d.%d", buildVersion.Major(), buildVersion.Minor(), current-i)
+	}
+	return versions
+}
