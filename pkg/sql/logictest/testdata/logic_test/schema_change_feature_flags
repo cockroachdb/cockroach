@@ -310,3 +310,30 @@ COMMENT ON TABLE t IS 'comment'
 # Reset feature flag to true so that test objects can be dropped.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE
+
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = FALSE
+
+statement error pq: feature CREATE FUNCTION is part of the schema change category, which was disabled by the database administrator
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: feature CREATE FUNCTION is part of the schema change category, which was disabled by the database administrator
+CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: feature DROP FUNCTION is part of the schema change category, which was disabled by the database administrator
+DROP FUNCTION f()
+
+statement error pq: feature ALTER FUNCTION is part of the schema change category, which was disabled by the database administrator
+ALTER FUNCTION f() IMMUTABLE;
+
+statement error pq: feature ALTER FUNCTION is part of the schema change category, which was disabled by the database administrator
+ALTER FUNCTION f() RENAME TO g;
+
+statement error pq: feature ALTER FUNCTION is part of the schema change category, which was disabled by the database administrator
+ALTER FUNCTION f() OWNER TO new_owner;
+
+statement error pq: feature ALTER FUNCTION is part of the schema change category, which was disabled by the database administrator
+ALTER FUNCTION f() SET SCHEMA new_schema;
+
+statement ok
+SET CLUSTER SETTING feature.schema_change.enabled = TRUE
