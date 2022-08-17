@@ -614,8 +614,8 @@ SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_uniq
  WHERE descriptor_name = 'poor_t'
 ----
 descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded  shard_bucket_count
-127            poor_t           1         poor_t_pkey  primary     true       false        false       NULL
-127            poor_t           2         t_idx_b      secondary   false      false        true        8
+121            poor_t           1         poor_t_pkey  primary     true       false        false       NULL
+121            poor_t           2         t_idx_b      secondary   false      false        true        8
 
 statement ok
 DROP TABLE poor_t
@@ -832,15 +832,15 @@ AND t.state = 'PUBLIC'
 AND r.split_enforced_until IS NOT NULL;
 ----
 name              table_id  index_name              start_pretty    end_pretty
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2    /Table/139/2/0
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/0  /Table/139/2/1
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/1  /Table/139/2/2
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/2  /Table/139/2/3
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/3  /Table/139/2/4
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/4  /Table/139/2/5
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/5  /Table/139/2/6
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/6  /Table/139/2/7
-t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/7  /Table/139/3/0
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2    /Table/133/2/0
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/0  /Table/133/2/1
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/1  /Table/133/2/2
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/2  /Table/133/2/3
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/3  /Table/133/2/4
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/4  /Table/133/2/5
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/5  /Table/133/2/6
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/6  /Table/133/2/7
+t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/7  /Table/133/3/0
 
 subtest test_default_bucket_count
 
