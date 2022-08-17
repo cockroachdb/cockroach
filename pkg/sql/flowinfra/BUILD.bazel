@@ -25,7 +25,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfra/execreleasable",
