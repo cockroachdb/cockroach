@@ -39,6 +39,7 @@ func alterTableDropColumn(
 		return
 	}
 	checkColumnNotInaccessible(col, n)
+	fallBackIfZoneConfigExists(b, n, tbl.TableID)
 	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
 }
 

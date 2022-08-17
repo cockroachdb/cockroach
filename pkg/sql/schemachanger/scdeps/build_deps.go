@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -399,6 +400,10 @@ func (d *buildDeps) IncrementDropOwnedByCounter() {
 
 func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+}
+
+func (d *buildDeps) ZoneConfigReader() scbuild.ZoneConfigReader {
+	return zoneconfig.NewZoneConfigReader(d.internalExecutor, d.txn)
 }
 
 // ClientNoticeSender implements the scbuild.Dependencies interface.

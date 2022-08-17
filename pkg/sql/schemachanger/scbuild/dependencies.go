@@ -73,6 +73,9 @@ type Dependencies interface {
 	// Implementation.
 	DescriptorCommentCache() CommentCache
 
+	// ZoneConfigReader returns a zone config reader.
+	ZoneConfigReader() ZoneConfigReader
+
 	ClientNoticeSender() eval.ClientNoticeSender
 }
 
@@ -191,6 +194,9 @@ type CommentCache interface {
 	// of object id of a descriptor type.
 	LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error
 }
+
+// ZoneConfigReader see scdecomp.ZoneConfigReader
+type ZoneConfigReader scdecomp.ZoneConfigReader
 
 // SchemaResolverFactory is used to construct a new schema resolver with
 // injected dependencies.
