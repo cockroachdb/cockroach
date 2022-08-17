@@ -190,8 +190,11 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 	// Generate format string for printing element status transition.
 	fmtCompactTransition := fmt.Sprintf("%%-%ds → %%-%ds %%s", beforeMaxLen, afterMaxLen)
 	// Go over each target grouping.
-	targetTypeMap.ForEach(func(key, numTransitions int) {
-		ts := scpb.TargetStatus(key)
+	for _, ts := range []scpb.TargetStatus{scpb.ToPublic, scpb.Transient, scpb.ToAbsent} {
+		numTransitions := targetTypeMap.GetDefault(int(ts))
+		if numTransitions == 0 {
+			continue
+		}
 		plural := "s"
 		if numTransitions == 1 {
 			plural = ""
@@ -233,7 +236,7 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 				}
 			}
 		}
-	})
+	}
 	return nil
 }
 

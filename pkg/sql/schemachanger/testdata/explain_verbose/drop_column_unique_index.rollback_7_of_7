@@ -14,6 +14,26 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
+    │   ├── • 2 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 106, ColumnID: 3}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}
+    │   │   │         rule: "column dependents exist before column becomes public"
+    │   │   │
+    │   │   └── • ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
+    │   │         ABSENT → PUBLIC
+    │   │
     │   ├── • 8 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
@@ -57,26 +77,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │       │
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
-    │   │
-    │   ├── • 2 elements transitioning toward PUBLIC
-    │   │   │
-    │   │   ├── • Column:{DescID: 106, ColumnID: 3}
-    │   │   │   │ WRITE_ONLY → PUBLIC
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
-    │   │   │   │     rule: "column dependents exist before column becomes public"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
-    │   │   │   │     rule: "column dependents exist before column becomes public"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
-    │   │   │   │     rule: "column dependents exist before column becomes public"
-    │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}
-    │   │   │         rule: "column dependents exist before column becomes public"
-    │   │   │
-    │   │   └── • ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
-    │   │         ABSENT → PUBLIC
     │   │
     │   └── • 7 Mutation operations
     │       │

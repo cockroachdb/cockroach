@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,6 +64,8 @@ var NoOpValidator = &noOpValidator{}
 var _ Validator = &orderValidator{}
 var _ Validator = &noOpValidator{}
 var _ StreamValidator = &orderValidator{}
+
+var retryDuration = 2 * time.Minute
 
 type noOpValidator struct{}
 
@@ -343,6 +347,11 @@ type fingerprintValidator struct {
 	fprintTestColumns int
 	buffer            []validatorRow
 
+	// shouldRetry indicates whether row updates should be retried (for
+	// a fixed duration). Typically used when the transient errors are
+	// expected (e.g., if performing an upgrade)
+	shouldRetry bool
+
 	failures []string
 }
 
@@ -353,7 +362,11 @@ type fingerprintValidator struct {
 // will modify `fprint`'s schema to add `maxTestColumnCount` columns to avoid having to
 // accommodate schema changes on the fly.
 func NewFingerprintValidator(
-	sqlDB *gosql.DB, origTable, fprintTable string, partitions []string, maxTestColumnCount int,
+	sqlDB *gosql.DB,
+	origTable, fprintTable string,
+	partitions []string,
+	maxTestColumnCount int,
+	shouldRetry bool,
 ) (Validator, error) {
 	// Fetch the primary keys though information_schema schema inspections so we
 	// can use them to construct the SQL for DELETEs and also so we can verify
@@ -395,6 +408,7 @@ func NewFingerprintValidator(
 		primaryKeyCols:    primaryKeyCols,
 		fprintOrigColumns: fprintOrigColumns,
 		fprintTestColumns: maxTestColumnCount,
+		shouldRetry:       shouldRetry,
 	}
 	v.partitionResolved = make(map[string]hlc.Timestamp)
 	for _, partition := range partitions {
@@ -475,10 +489,16 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 			return err
 		}
 
-		if string(primaryKeyJSON) != row.key {
+		rowKey := row.key
+		if len(primaryKeyDatums) > 1 {
+			// format the key using the Go marshaller; otherwise, differences
+			// in formatting could lead to the comparison below failing
+			rowKey = asGoJSON(row.key)
+		}
+		if string(primaryKeyJSON) != rowKey {
 			v.failures = append(v.failures,
 				fmt.Sprintf(`key %s did not match expected key %s for value %s`,
-					row.key, primaryKeyJSON, row.value))
+					rowKey, primaryKeyJSON, row.value))
 		}
 	} else {
 		// DELETE
@@ -491,8 +511,11 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 			args = append(args, datum)
 		}
 	}
-	_, err := v.sqlDB.Exec(stmtBuf.String(), args...)
-	return err
+
+	return v.maybeRetry(func() error {
+		_, err := v.sqlDB.Exec(stmtBuf.String(), args...)
+		return err
+	})
 }
 
 // NoteResolved implements the Validator interface.
@@ -533,6 +556,9 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 			break
 		}
 		row := v.buffer[0]
+		// NOTE: changes to the validator's state before `applyRowUpdate`
+		// are safe because, if the operation can fail, the caller should
+		// be setting the `shouldRetry` field accordingly
 		v.buffer = v.buffer[1:]
 
 		// If we've processed all row updates belonging to the previous row's timestamp,
@@ -568,15 +594,19 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 
 func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 	var orig string
-	if err := v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
+	if err := v.maybeRetry(func() error {
+		return v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
 		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.origTable + `
-	] AS OF SYSTEM TIME '` + ts.AsOfSystemTime() + `'`).Scan(&orig); err != nil {
+	] AS OF SYSTEM TIME '` + ts.AsOfSystemTime() + `'`).Scan(&orig)
+	}); err != nil {
 		return err
 	}
 	var check string
-	if err := v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
+	if err := v.maybeRetry(func() error {
+		return v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
 		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.fprintTable + `
-	]`).Scan(&check); err != nil {
+	]`).Scan(&check)
+	}); err != nil {
 		return err
 	}
 	if orig != check {
@@ -589,6 +619,17 @@ func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 // Failures implements the Validator interface.
 func (v *fingerprintValidator) Failures() []string {
 	return v.failures
+}
+
+// maybeRetry will retry the function passed if the fingerprint was
+// created with `shouldRetry` set to `true`. Every access to `sqlDB`
+// should be made my closures passed to this function
+func (v *fingerprintValidator) maybeRetry(f func() error) error {
+	if v.shouldRetry {
+		return retry.ForDuration(retryDuration, f)
+	}
+
+	return f()
 }
 
 // Validators abstracts over running multiple `Validator`s at once on the same
@@ -730,4 +771,23 @@ func fetchPrimaryKeyCols(sqlDB *gosql.DB, tableStr string) ([]string, error) {
 		return nil, errors.Errorf("no primary key information found for %s", tableStr)
 	}
 	return primaryKeyCols, nil
+}
+
+// asGoJSON tries to unmarshal the given string as JSON; if
+// successful, the struct is marshalled back to JSON. This is to
+// enforce the default formatting of the standard library marshaller,
+// allowing comparisons of JSON strings when we don't control the
+// formatting of the strings.
+func asGoJSON(s string) string {
+	var obj interface{}
+	if err := gojson.Unmarshal([]byte(s), &obj); err != nil {
+		return s
+	}
+
+	blob, err := gojson.Marshal(obj)
+	if err != nil {
+		return s
+	}
+
+	return string(blob)
 }
