@@ -10223,3 +10223,48 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 		}
 	}
 }
+
+// In the old protected timestamp subsystem where protection records were
+// written on keyspans, it should be incorrect to protect the empty span
+// corresponding to a view. However, because we do not split ranges at view
+// boundaries, it is possible that the range the view belongs to is shared by
+// another object in the cluster (that we may or may not be backing up) that
+// might have its own bespoke zone configurations, namely one with a short GC
+// TTL. This could lead to a situation where the short GC TTL on the range we
+// are not backing up causes our protectedts verification to fail when
+// attempting to backup the view span.
+//
+// This test verifies that backups succeed on a database with a view that's on
+// another database's range because we are no longer backing up that view's
+// span.
+func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+
+	s0 := tc.Servers[0]
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE da;
+		CREATE TABLE da.t1 (k INT PRIMARY KEY, v INT);
+		CREATE DATABASE db;
+		CREATE TABLE db.t2 (k INT PRIMARY KEY, v INT);
+		CREATE TABLE da.t2 (k INT PRIMARY KEY, v INT);
+		CREATE VIEW db.dbview AS SELECT k, v FROM db.t2;
+		ALTER DATABASE da CONFIGURE ZONE USING gc.ttlseconds=1;
+
+		INSERT INTO da.t2 VALUES (1, 100), (2, 200), (3, 300);
+		UPDATE da.t2 SET v = 101 WHERE k = 1;
+
+		BACKUP DATABASE db INTO 'userfile:///a' WITH revision_history;
+  `)
+
+	time.Sleep(5 * time.Second)
+
+	err := s0.ForceTableGC(context.Background(), "da", "t2", s0.Clock().Now().Add(-int64(1*time.Second), 0))
+	require.NoError(t, err)
+
+	sqlDB.Exec(t, `BACKUP database db into latest in 'userfile:///a' with revision_history;`)
+}
