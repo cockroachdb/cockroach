@@ -161,3 +161,18 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
 # to, the background generators would conflict with an error.
 statement ok
 SELECT a.* FROM crdb_internal.partitions AS a JOIN crdb_internal.partitions AS b ON a.table_id = b.table_id
+
+subtest replication-builtins
+
+user testuser
+
+query error pq: crdb_internal\.stream_ingestion_stats_json\(\): replication restricted to ADMIN role
+SELECT crdb_internal.stream_ingestion_stats_json(unique_rowid());
+
+user root
+
+query error pq: crdb_internal\.stream_ingestion_stats_json\(\): job.*does not exist
+SELECT crdb_internal.stream_ingestion_stats_json(unique_rowid());
+
+query error pq: crdb_internal\.stream_ingestion_stats_json\(\): job.*is not a stream ingestion job
+SELECT crdb_internal.stream_ingestion_stats_json(id) FROM (SELECT id FROM system.jobs LIMIT 1);
