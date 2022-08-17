@@ -94,31 +94,26 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		require.NoError(t, err)
 		require.NoError(t, rows.Close())
 	}
-
-	require.NoError(
-		t,
-		s.ExecutorConfig().(ExecutorConfig).CollectionFactory.Txn(
+	ec := s.ExecutorConfig().(ExecutorConfig)
+	require.NoError(t, ec.CollectionFactory.Txn(ctx, kvDB, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		execCfg := s.ExecutorConfig().(ExecutorConfig)
+		defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, namesToID["defaultdb"])
+		require.NoError(t, err)
+		err = cleanupSchemaObjects(
 			ctx,
+			execCfg.Settings,
+			txn,
+			descsCol,
+			execCfg.Codec,
 			s.InternalExecutor().(*InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				execCfg := s.ExecutorConfig().(ExecutorConfig)
-				defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, namesToID["defaultdb"])
-				require.NoError(t, err)
-				err = cleanupSchemaObjects(
-					ctx,
-					execCfg.Settings,
-					txn,
-					descsCol,
-					execCfg.Codec,
-					s.InternalExecutor().(*InternalExecutor),
-					defaultDB,
-					tempSchemaName,
-				)
-				require.NoError(t, err)
-				return nil
-			}),
-	)
+			defaultDB,
+			tempSchemaName,
+		)
+		require.NoError(t, err)
+		return nil
+	}))
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
 

@@ -44,70 +44,14 @@ var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violat
 // Deprecated: Use cf.TxnWithExecutor().
 func (cf *CollectionFactory) Txn(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
 ) error {
-	// Waits for descriptors that were modified, skipping
-	// over ones that had their descriptor wiped.
-	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
-		// Wait for a single version on leased descriptors.
-		for _, ld := range modifiedDescriptors {
-			waitForNoVersion := deletedDescs.Contains(ld.ID)
-			retryOpts := retry.Options{
-				InitialBackoff: time.Millisecond,
-				Multiplier:     1.5,
-				MaxBackoff:     time.Second,
-			}
-			// Detect unpublished ones.
-			if waitForNoVersion {
-				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
-				if err != nil {
-					return err
-				}
-			} else {
-				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	var modifiedDescriptors []lease.IDVersion
-	var deletedDescs catalog.DescriptorIDSet
-	var descsCol *Collection
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		modifiedDescriptors = nil
-		deletedDescs = catalog.DescriptorIDSet{}
-		descsCol = cf.NewCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
-		defer descsCol.ReleaseAll(ctx)
-		if err := f(ctx, txn, descsCol); err != nil {
-			return err
-		}
-
-		if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
-			return err
-		}
-		modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
-
-		if err := CheckSpanCountLimit(
-			ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
-		); err != nil {
-			return err
-		}
-		retryErr, err := CheckTwoVersionInvariant(
-			ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
-		if retryErr {
-			return errTwoVersionInvariantViolated
-		}
-		deletedDescs = descsCol.deletedDescs
-		return err
+	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descriptors *Collection, _ sqlutil.InternalExecutor,
+	) error {
+		return f(ctx, txn, descriptors)
 	})
-	if err == nil {
-		err = waitForDescriptors(modifiedDescriptors, deletedDescs)
-	}
-	return err
 }
 
 // TxnWithExecutor enables callers to run transactions with a *Collection such that all
@@ -153,35 +97,30 @@ func (cf *CollectionFactory) TxnWithExecutor(
 		}
 		return nil
 	}
-	for {
-		var modifiedDescriptors []lease.IDVersion
-		var deletedDescs catalog.DescriptorIDSet
-		var descsCol *Collection
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			modifiedDescriptors = nil
-			deletedDescs = catalog.DescriptorIDSet{}
-			descsCol = cf.NewCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
-			defer func() {
-				descsCol.ReleaseAll(ctx)
-			}()
+	var modifiedDescriptors []lease.IDVersion
+	var deletedDescs catalog.DescriptorIDSet
+	var descsCol *Collection
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		modifiedDescriptors = nil
+		deletedDescs = catalog.DescriptorIDSet{}
+		descsCol = cf.NewCollection(ctx, nil /* temporarySchemaProvider */, cf.ieFactoryWithTxn.Monitor())
+		defer func() {
+			descsCol.ReleaseAll(ctx)
+		}()
 
-			ie, commitTxnFn := cf.ieFactoryWithTxn.NewInternalExecutorWithTxn(sd, &cf.settings.SV, txn, descsCol)
-			if err := f(ctx, txn, descsCol, ie); err != nil {
-				return err
-			}
-
-			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
-			deletedDescs = descsCol.deletedDescs
-			return commitTxnFn(ctx)
-		}); errors.Is(err, errTwoVersionInvariantViolated) {
-			continue
-		} else {
-			if err == nil {
-				err = waitForDescriptors(modifiedDescriptors, deletedDescs)
-			}
+		ie, commitTxnFn := cf.ieFactoryWithTxn.NewInternalExecutorWithTxn(sd, &cf.settings.SV, txn, descsCol)
+		if err := f(ctx, txn, descsCol, ie); err != nil {
 			return err
 		}
+
+		modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+		deletedDescs = descsCol.deletedDescs
+		return commitTxnFn(ctx)
+	})
+	if err == nil {
+		err = waitForDescriptors(modifiedDescriptors, deletedDescs)
 	}
+	return err
 }
 
 // CheckTwoVersionInvariant checks whether any new schema being modified written

@@ -50,6 +50,8 @@ type InternalExecutorFactoryWithTxn interface {
 		txn *kv.Txn,
 		descCol *Collection,
 	) (sqlutil.InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc)
+
+	Monitor() *mon.BytesMonitor
 }
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto

@@ -581,7 +581,7 @@ func (sc *TableStatisticsCache) parseStats(
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			//
 			// TODO(ajwerner): We now do delete members from enum types. See #67050.
-			if err := sc.collectionFactory.Txn(ctx, sc.SQLExecutor, sc.ClientDB, func(
+			if err := sc.collectionFactory.Txn(ctx, sc.ClientDB, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) error {
 				resolver := descs.NewDistSQLTypeResolver(descriptors, txn)

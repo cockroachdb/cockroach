@@ -1286,3 +1286,8 @@ func (ief *InternalExecutorFactory) RunWithoutTxn(
 	ie := ief.NewInternalExecutor(nil /* sessionData */)
 	return run(ctx, ie)
 }
+
+// Monitor returns the BytesMonitor for use with the constructed InternalExecutor.
+func (ief *InternalExecutorFactory) Monitor() *mon.BytesMonitor {
+	return ief.monitor
+}
