@@ -10,6 +10,7 @@ package schemachangerccl
 
 import (
 	gosql "database/sql"
+	"flag"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -19,9 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// Used for saving corpus information in TestGenerateCorpus
+var corpusPath string
+
+func init() {
+	flag.StringVar(&corpusPath, "declarative-corpus", "", "Path to the corpus file")
+}
 
 func newCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -79,6 +88,16 @@ func TestPause(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sctest.Pause(t, endToEndPath(t), newCluster)
+}
+
+// TestGenerateCorpus generates a corpus based on the end to end test files.
+func TestGenerateCorpus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	if corpusPath == "" {
+		skip.IgnoreLintf(t, "requires declarative-corpus path parameter")
+	}
+	sctest.GenerateSchemaChangeCorpus(t, endToEndPath(t), corpusPath, newCluster)
 }
 
 func TestDecomposeToElements(t *testing.T) {

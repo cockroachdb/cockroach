@@ -52,6 +52,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -523,6 +526,10 @@ var (
 		"optimizer-cost-perturbation", 0,
 		"randomly perturb the estimated cost of each expression in the query tree by at most the "+
 			"given fraction for the purpose of creating alternate query plans in the optimizer.")
+	saveDeclarativeCorpus = flag.String(
+		"declarative-corpus", "",
+		"enables generation and storage of a declarative schema changer	corpus",
+	)
 )
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -734,28 +741,32 @@ func valueSort(numCols int, values []string) {
 // This is useful when comparing results for a statement that guarantees a
 // partial, but not a total order. Consider:
 //
-//   SELECT a, b FROM ab ORDER BY a
+//	SELECT a, b FROM ab ORDER BY a
 //
 // Some possible outputs for the same data:
-//   1 2        1 5        1 2
-//   1 5        1 4        1 4
-//   1 4   or   1 2   or   1 5
-//   2 3        2 2        2 3
-//   2 2        2 3        2 2
+//
+//	1 2        1 5        1 2
+//	1 5        1 4        1 4
+//	1 4   or   1 2   or   1 5
+//	2 3        2 2        2 3
+//	2 2        2 3        2 2
 //
 // After a partialSort with orderedCols = {0} all become:
-//   1 2
-//   1 4
-//   1 5
-//   2 2
-//   2 3
+//
+//	1 2
+//	1 4
+//	1 5
+//	2 2
+//	2 3
 //
 // An incorrect output like:
-//   1 5                          1 2
-//   1 2                          1 5
-//   2 3          becomes:        2 2
-//   2 2                          2 3
-//   1 4                          1 4
+//
+//	1 5                          1 2
+//	1 2                          1 5
+//	2 3          becomes:        2 2
+//	2 2                          2 3
+//	1 4                          1 4
+//
 // and it is detected as different.
 func partialSort(numCols int, orderedCols []int, values []string) {
 	// We use rowSorter here only as a container.
@@ -979,6 +990,10 @@ type logicTest struct {
 	// entire test to be skipped and the below skippedOnRetry to be set to true.
 	skipOnRetry    bool
 	skippedOnRetry bool
+
+	// declarativeCorpusCollector used to save declarative schema changer state
+	// to disk.
+	declarativeCorpusCollector *corpus.Collector
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1151,6 +1166,10 @@ func (t *logicTest) newCluster(
 	clusterOpts []clusterOpt,
 	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
 ) {
+	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
+	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
+		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
+	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
@@ -1191,6 +1210,9 @@ func (t *logicTest) newCluster(
 				},
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+				},
+				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+					BeforeStage: corpusCollectionCallback,
 				},
 			},
 			ClusterName:   "testclustername",
@@ -1610,6 +1632,7 @@ func (t *logicTest) setup(
 ) {
 	t.cfg = cfg
 	t.serverArgs = &serverArgs
+	t.serverArgs.DeclarativeCorpusCollection = cfg.DeclarativeCorpusCollection
 	t.clusterOpts = clusterOpts[:]
 	t.tenantClusterSettingOverrideOpts = tenantClusterSettingOverrideOpts[:]
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
@@ -1739,6 +1762,16 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
 }
 
+// clusterOptDisableCorpusGeneration disables corpus generation for declarative
+// schema changer.
+type clusterOptDisableCorpusGeneration struct{}
+
+var _ clusterOpt = clusterOptDisableCorpusGeneration{}
+
+func (c clusterOptDisableCorpusGeneration) apply(args *base.TestServerArgs) {
+	args.Knobs.SQLDeclarativeSchemaChanger = nil
+}
+
 // parseDirectiveOptions looks around the beginning of the file for a line
 // looking like:
 // # <directiveName>: opt1 opt2 ...
@@ -1836,6 +1869,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		case "disable-corpus-generation":
+			res = append(res, clusterOptDisableCorpusGeneration{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
@@ -3691,6 +3726,9 @@ type TestServerArgs struct {
 	ForceProductionValues bool
 	// If set, then sql.distsql.temp_storage.workmem is not randomized.
 	DisableWorkmemRandomization bool
+	// DeclarativeCorpusCollection corpus will be collected for the declarative
+	// schema changer.
+	DeclarativeCorpusCollection bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
@@ -3752,12 +3790,28 @@ func RunLogicTest(
 		skip.IgnoreLint(t, "config does not match env var")
 	}
 
+	var cc *corpus.Collector
+	if *saveDeclarativeCorpus != "" {
+		var err error
+		cc, err = corpus.NewCorpusCollector(*saveDeclarativeCorpus)
+		if err != nil {
+			t.Fatalf("failed to create collector %v", err)
+		}
+		defer func() {
+			err := cc.UpdateCorpus()
+			if err != nil {
+				t.Fatalf("failed writing decalarative schema changer corpus: %v", err)
+			}
+		}()
+	}
+
 	rng, _ := randutil.NewTestRand()
 	lt := logicTest{
-		rootT:           t,
-		verbose:         verbose,
-		perErrorSummary: make(map[string][]string),
-		rng:             rng,
+		rootT:                      t,
+		verbose:                    verbose,
+		perErrorSummary:            make(map[string][]string),
+		rng:                        rng,
+		declarativeCorpusCollector: cc,
 	}
 	if *printErrorSummary {
 		defer lt.printErrorSummary()

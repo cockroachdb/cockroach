@@ -88,6 +88,9 @@ type TestClusterConfig struct {
 	//
 	// TODO(ajwerner,chengxiong-ruan): Remove this before 22.2 is released.
 	SkipDropDatabases bool
+	// DeclarativeCorpusCollection enables support for collecting corpuses
+	// for the declarative schema changer.
+	DeclarativeCorpusCollection bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -244,7 +247,9 @@ var multiregion15node5region3azsLocalities = map[int]roachpb.Locality{
 
 // LogicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
-//   # LogicTest: default distsql
+//
+//	# LogicTest: default distsql
+//
 // The test is run once on each configuration (in different subtests).
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
@@ -255,7 +260,8 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideDistSQLMode: "off",
 		// local is the configuration where we run all tests which have bad
 		// interactions with the default test tenant.
-		DisableDefaultTestTenant: true,
+		DisableDefaultTestTenant:    true,
+		DeclarativeCorpusCollection: true,
 	},
 	{
 		Name:                            "local-legacy-schema-changer",
@@ -321,11 +327,12 @@ var LogicTestConfigs = []TestClusterConfig{
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
 		// dev testlogic ccl --files 3node-tenant --subtest $SUBTEST
-		Name:                threeNodeTenantConfigName,
-		NumNodes:            3,
-		UseTenant:           true,
-		IsCCLConfig:         true,
-		OverrideDistSQLMode: "on",
+		Name:                        threeNodeTenantConfigName,
+		NumNodes:                    3,
+		UseTenant:                   true,
+		IsCCLConfig:                 true,
+		OverrideDistSQLMode:         "on",
+		DeclarativeCorpusCollection: true,
 	},
 	{
 		// 3node-tenant-multiregion is a config that runs the test as a SQL tenant
@@ -334,12 +341,13 @@ var LogicTestConfigs = []TestClusterConfig{
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
 		// dev testlogic ccl --files 3node-tenant-multiregion --subtests $SUBTESTS
-		Name:                 "3node-tenant-multiregion",
-		NumNodes:             3,
-		UseTenant:            true,
-		IsCCLConfig:          true,
-		OverrideDistSQLMode:  "on",
-		AllowSplitAndScatter: true,
+		Name:                        "3node-tenant-multiregion",
+		NumNodes:                    3,
+		UseTenant:                   true,
+		IsCCLConfig:                 true,
+		OverrideDistSQLMode:         "on",
+		AllowSplitAndScatter:        true,
+		DeclarativeCorpusCollection: true,
 		Localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
@@ -385,8 +393,9 @@ var LogicTestConfigs = []TestClusterConfig{
 		},
 	},
 	{
-		Name:     "multiregion-3node-3superlongregions",
-		NumNodes: 3,
+		Name:                        "multiregion-3node-3superlongregions",
+		NumNodes:                    3,
+		DeclarativeCorpusCollection: true,
 		Localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
@@ -412,13 +421,15 @@ var LogicTestConfigs = []TestClusterConfig{
 		// Need to disable the default test tenant here until we have the
 		// locality optimized search working in multi-tenant configurations.
 		// Tracked with #80678.
-		DisableDefaultTestTenant: true,
+		DisableDefaultTestTenant:    true,
+		DeclarativeCorpusCollection: true,
 	},
 	{
-		Name:       "multiregion-9node-3region-3azs-tenant",
-		NumNodes:   9,
-		Localities: multiregion9node3region3azsLocalities,
-		UseTenant:  true,
+		Name:                        "multiregion-9node-3region-3azs-tenant",
+		NumNodes:                    9,
+		Localities:                  multiregion9node3region3azsLocalities,
+		UseTenant:                   true,
+		DeclarativeCorpusCollection: true,
 	},
 	{
 		Name:              "multiregion-9node-3region-3azs-vec-off",
@@ -449,12 +460,13 @@ var LogicTestConfigs = []TestClusterConfig{
 		DisableUpgrade:           true,
 	},
 	{
-		Name:                "local-mixed-22.1-22.2",
-		NumNodes:            1,
-		OverrideDistSQLMode: "off",
-		BootstrapVersion:    roachpb.Version{Major: 22, Minor: 1},
-		BinaryVersion:       roachpb.Version{Major: 22, Minor: 2},
-		DisableUpgrade:      true,
+		Name:                        "local-mixed-22.1-22.2",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            roachpb.Version{Major: 22, Minor: 1},
+		BinaryVersion:               roachpb.Version{Major: 22, Minor: 2},
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
 	},
 	{
 		Name:     "local-udf",
@@ -580,7 +592,8 @@ func (l stdlogger) Logf(format string, args ...interface{}) {
 // configurations.
 //
 // Example:
-//   # LogicTest: default distsql
+//
+//	# LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
 func ReadTestFileConfigs(
