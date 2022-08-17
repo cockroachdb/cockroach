@@ -850,7 +850,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONNECTION CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
+%token <str> CONFLICT CONNECTION CONNECTIONS CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
 %token <str> CONVERSION CONVERT COPY COST COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -1177,6 +1177,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_create_schedules_stmt
+%type <tree.Statement> show_create_external_connections_stmt
 %type <tree.Statement> show_csettings_stmt show_local_or_tenant_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_default_privileges_stmt
@@ -1351,7 +1352,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.From> from_clause
 %type <tree.TableExprs> from_list rowsfrom_list opt_from_list
 %type <tree.TablePatterns> table_pattern_list
-%type <tree.TableNames> table_name_list opt_locked_rels
+%type <tree.TableNames> db_object_name_list table_name_list view_name_list sequence_name_list opt_locked_rels
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
@@ -4833,15 +4834,15 @@ drop_ddl_stmt:
 // %Text: DROP [MATERIALIZED] VIEW [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
 // %SeeAlso: WEBDOCS/drop-index.html
 drop_view_stmt:
-  DROP VIEW table_name_list opt_drop_behavior
+  DROP VIEW view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{Names: $3.tableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
+| DROP VIEW IF EXISTS view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
-| DROP MATERIALIZED VIEW table_name_list opt_drop_behavior
+| DROP MATERIALIZED VIEW view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{
       Names: $4.tableNames(),
@@ -4850,7 +4851,7 @@ drop_view_stmt:
       IsMaterialized: true,
     }
   }
-| DROP MATERIALIZED VIEW IF EXISTS table_name_list opt_drop_behavior
+| DROP MATERIALIZED VIEW IF EXISTS view_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{
       Names: $6.tableNames(),
@@ -4866,11 +4867,11 @@ drop_view_stmt:
 // %Text: DROP SEQUENCE [IF EXISTS] <sequenceName> [, ...] [CASCADE | RESTRICT]
 // %SeeAlso: DROP
 drop_sequence_stmt:
-  DROP SEQUENCE table_name_list opt_drop_behavior
+  DROP SEQUENCE sequence_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSequence{Names: $3.tableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP SEQUENCE IF EXISTS table_name_list opt_drop_behavior
+| DROP SEQUENCE IF EXISTS sequence_name_list opt_drop_behavior
   {
     $$.val = &tree.DropSequence{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
@@ -5014,17 +5015,26 @@ drop_role_stmt:
   }
 | DROP role_or_group_or_user error // SHOW HELP: DROP ROLE
 
-table_name_list:
-  table_name
+db_object_name_list:
+  db_object_name
   {
     name := $1.unresolvedObjectName().ToTableName()
     $$.val = tree.TableNames{name}
   }
-| table_name_list ',' table_name
+| db_object_name_list ',' db_object_name
   {
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = append($1.tableNames(), name)
   }
+
+table_name_list:
+  db_object_name_list
+
+sequence_name_list:
+  db_object_name_list
+
+view_name_list:
+  db_object_name_list
 
 // %Help: ANALYZE - collect table statistics
 // %Category: Misc
@@ -6159,13 +6169,15 @@ zone_value:
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
-// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
+// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS,
+// SHOW CREATE EXTERNAL CONNECTIONS
 show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
 | show_constraints_stmt      // EXTEND WITH HELP: SHOW CONSTRAINTS
 | show_create_stmt           // EXTEND WITH HELP: SHOW CREATE
 | show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
+| show_create_external_connections_stmt // EXTEND WITH HELP: SHOW CREATE EXTERNAL CONNECTIONS
 | show_local_or_tenant_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
@@ -7234,7 +7246,7 @@ show_create_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeView, Name: $4.unresolvedObjectName()}
 	}
-| SHOW CREATE SEQUENCE table_name
+| SHOW CREATE SEQUENCE sequence_name
 	{
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSequence, Name: $4.unresolvedObjectName()}
@@ -7284,6 +7296,23 @@ show_create_schedules_stmt:
     $$.val = &tree.ShowCreateSchedules{ScheduleID: $4.expr()}
   }
 | SHOW CREATE SCHEDULE error // SHOW HELP: SHOW CREATE SCHEDULES
+
+// %Help: SHOW CREATE EXTERNAL CONNECTIONS - list CREATE statements for external connections
+// %Category: DDL
+// %Text:
+// SHOW CREATE ALL EXTERNAL CONNECTIONS
+// SHOW CREATE EXTERNAL CONNECTION <connection_name>
+show_create_external_connections_stmt:
+  SHOW CREATE ALL EXTERNAL CONNECTIONS
+  {
+    $$.val = &tree.ShowCreateExternalConnections{}
+  }
+| SHOW CREATE ALL EXTERNAL CONNECTIONS error // SHOW HELP: SHOW CREATE EXTERNAL CONNECTIONS
+| SHOW CREATE EXTERNAL CONNECTION string_or_placeholder
+ {
+   $$.val = &tree.ShowCreateExternalConnections{ConnectionLabel: $5.expr()}
+ }
+| SHOW CREATE EXTERNAL CONNECTION error // SHOW HELP: SHOW CREATE EXTERNAL CONNECTIONS
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv
@@ -15018,6 +15047,7 @@ unreserved_keyword:
 | CONFIGURATIONS
 | CONFIGURE
 | CONNECTION
+| CONNECTIONS
 | CONSTRAINTS
 | CONTROLCHANGEFEED
 | CONTROLJOB
