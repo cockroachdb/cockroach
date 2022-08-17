@@ -214,8 +214,15 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		if err != nil {
 			return err
 		}
-		if knobs.RequireMultipleSpanPartitions && len(spanPartitions) == 0 {
-			return errors.New("multiple span partitions required")
+		expectedNumSpanPartitions := knobs.ExpectedNumSpanPartitions
+		if expectedNumSpanPartitions != 0 {
+			actualNumSpanPartitions := len(spanPartitions)
+			if expectedNumSpanPartitions != actualNumSpanPartitions {
+				return errors.AssertionFailedf(
+					"incorrect number of span partitions expected=%d actual=%d",
+					expectedNumSpanPartitions, actualNumSpanPartitions,
+				)
+			}
 		}
 
 		sqlInstanceIDToTTLSpec := make(map[base.SQLInstanceID]*execinfrapb.TTLSpec)
