@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -1512,10 +1513,11 @@ func runExportToSst(
 	engine := emk(b, dir)
 	defer engine.Close()
 
-	batch := engine.NewUnindexedBatch(true /* writeOnly */)
+	batch := engine.NewBatch()
 	for i := 0; i < numKeys; i++ {
-		key := make([]byte, 16)
-		key = append(key, 'a', 'a', 'a')
+		var key []byte
+		key = append(key, keys.LocalMax...)
+		key = append(key, bytes.Repeat([]byte{'a'}, 19)...)
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
 
 		for j := 0; j < numRevisions; j++ {
