@@ -102,7 +102,7 @@ func TestParseAzureURL(t *testing.T) {
 	})
 
 	t.Run("Can Override AZURE_ENVIRONMENT", func(t *testing.T) {
-		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key&AZURE_ENVIRONMENT=AzureUSGovernmentCloud")
+		u, err := url.Parse("azure-storage://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key&AZURE_ENVIRONMENT=AzureUSGovernmentCloud")
 		require.NoError(t, err)
 
 		sut, err := parseAzureURL(cloud.ExternalStorageURIContext{}, u)

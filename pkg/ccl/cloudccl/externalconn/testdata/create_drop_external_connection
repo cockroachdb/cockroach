@@ -302,3 +302,41 @@ enable-check-external-storage
 ----
 
 subtest end
+
+subtest basic-azure
+
+disable-check-external-storage
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-azure" AS 'azure-storage://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud'
+----
+
+# Reject invalid azure external connections.
+exec-sql
+CREATE EXTERNAL CONNECTION "invalid-param-azure" AS 'azure-storage://bucket/path?INVALIDPARAM=baz'
+----
+pq: failed to construct External Connection details: failed to create azure external connection: unknown azure query parameters: INVALIDPARAM
+
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-azure" AS 'azure-storage://bucket/path?&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud'
+----
+pq: failed to construct External Connection details: failed to create azure external connection: azure uri missing "AZURE_ACCOUNT_NAME" parameter
+
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-azure" AS 'azure-storage://bucket/path?&AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=random-env'
+----
+pq: failed to construct External Connection details: failed to create azure external connection: azure environment: autorest/azure: There is no cloud environment matching the name "RANDOM-ENV"
+
+inspect-system-table
+----
+foo-azure STORAGE {"provider": "azure_storage", "simpleUri": {"uri": "azure-storage://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud"}}
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-azure";
+----
+
+enable-check-external-storage
+----
+
+subtest end

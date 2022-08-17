@@ -18,6 +18,7 @@ package providers
 import (
 	// import all the cloud provider packages to register them.
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/amazon"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/userfile"
