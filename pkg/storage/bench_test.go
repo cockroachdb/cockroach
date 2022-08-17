@@ -1616,15 +1616,24 @@ func runMVCCExportToSST(b *testing.B, numKeys int, numRevisions int, exportAllRe
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	batch := engine.NewBatch()
-	for i := 0; i < numKeys; i++ {
+	mkKey := func(i int) roachpb.Key {
 		var key []byte
 		key = append(key, keys.LocalMax...)
 		key = append(key, bytes.Repeat([]byte{'a'}, 19)...)
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
+		return key
+	}
+
+	mkWall := func(j int) int64 {
+		return int64(j + 1)
+	}
+
+	batch := engine.NewBatch()
+	for i := 0; i < numKeys; i++ {
+		key := mkKey(i)
 
 		for j := 0; j < numRevisions; j++ {
-			mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}
+			mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: mkWall(j), Logical: 0}}
 			mvccValue := MVCCValue{Value: roachpb.MakeValueFromString("foobar")}
 			err := batch.PutMVCC(mvccKey, mvccValue)
 			if err != nil {
@@ -1648,8 +1657,8 @@ func runMVCCExportToSST(b *testing.B, numKeys int, numRevisions int, exportAllRe
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 		b.StartTimer()
-		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
-		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
+		startTS := hlc.Timestamp{WallTime: mkWall(numRevisions/2 - 1)}
+		endTS := hlc.Timestamp{WallTime: mkWall(numRevisions + 1)}
 		_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
 			StartKey:           MVCCKey{Key: keys.LocalMax},
 			EndKey:             roachpb.KeyMax,
