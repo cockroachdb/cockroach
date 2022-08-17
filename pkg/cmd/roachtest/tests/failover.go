@@ -397,7 +397,7 @@ func runFailoverLiveness(
 	m.Wait()
 
 	// Export roachperf metrics from Prometheus.
-	require.NoError(t, statsCollector.Exporter().Export(ctx, c, t, startTime, timeutil.Now(),
+	_, err = statsCollector.Exporter().Export(ctx, c, t, false /* dryRun */, startTime, timeutil.Now(),
 		[]clusterstats.AggQuery{
 			{
 				Stat: clusterstats.ClusterStat{
@@ -420,7 +420,8 @@ func runFailoverLiveness(
 			t.Status(fmt.Sprintf("Max invalid leases: %d", int64(max)))
 			return "Max invalid leases", max
 		},
-	))
+	)
+	require.NoError(t, err)
 }
 
 // runFailoverSystemNonLiveness benchmarks the maximum duration of range

@@ -103,7 +103,7 @@ func (ct *cdcTester) startStatsCollection() func() {
 	startTime := timeutil.Now()
 	return func() {
 		endTime := timeutil.Now()
-		err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t,
+		_, err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t, false, /* dryRun */
 			startTime,
 			endTime,
 			[]clusterstats.AggQuery{sqlServiceLatencyAgg, changefeedThroughputAgg, cpuUsageAgg},
