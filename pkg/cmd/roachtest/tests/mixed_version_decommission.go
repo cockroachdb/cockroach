@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 )
 
 // runDecommissionMixedVersions runs through randomized
@@ -65,7 +66,7 @@ func runDecommissionMixedVersions(
 		// use the predecessor CLI to do so.
 		partialDecommissionStep(h.getRandNode(), h.getRandNode(), predecessorVersion),
 		checkOneDecommissioning(h.getRandNode()),
-		checkOneMembership(pinnedUpgrade, "decommissioning"),
+		checkOneMembership(pinnedUpgrade, "decommissioning", "decommissioned"),
 
 		// Recommission all nodes, including the partially decommissioned
 		// one, from a random node. Use the predecessor CLI to do so.
@@ -199,13 +200,13 @@ func checkNoDecommissioning(from int) versionStep {
 // crdb_internal.gossip_liveness, asserting that only one node is marked with
 // the specified membership status. This check can be only be run against
 // servers running v20.2 and beyond.
-func checkOneMembership(from int, membership string) versionStep {
+func checkOneMembership(from int, membership ...string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 			db := u.conn(ctx, t, from)
 			var count int
 			if err := db.QueryRow(
-				`select count(*) from crdb_internal.gossip_liveness where membership = $1;`, membership).Scan(&count); err != nil {
+				`select count(*) from crdb_internal.gossip_liveness where membership = any($1);`, pq.Array(membership)).Scan(&count); err != nil {
 				t.Fatal(err)
 			}
 
