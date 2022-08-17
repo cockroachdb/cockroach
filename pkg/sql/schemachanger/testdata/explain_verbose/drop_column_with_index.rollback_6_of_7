@@ -11,26 +11,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 4 elements transitioning toward ABSENT
-    │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-    │   │   │     MERGE_ONLY → DELETE_ONLY
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-    │   │   │     WRITE_ONLY → DELETE_ONLY
-    │   │   │
-    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-    │   │       │ PUBLIC → ABSENT
-    │   │       │
-    │   │       └── • skip PUBLIC → ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
-    │   │
     │   ├── • 4 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
@@ -66,6 +46,26 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   │
     │   │   └── • IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
     │   │         ABSENT → PUBLIC
+    │   │
+    │   ├── • 4 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │     MERGE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • skip PUBLIC → ABSENT operations
+    │   │             rule: "skip index-column removal ops on index removal"
     │   │
     │   └── • 9 Mutation operations
     │       │

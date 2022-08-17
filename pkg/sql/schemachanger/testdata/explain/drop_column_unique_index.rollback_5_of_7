@@ -11,6 +11,9 @@ EXPLAIN (ddl) rollback at post-commit stage 5 of 7;
 Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP COLUMN ‹pi›; 
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 106, ColumnID: 3}
+      │    │    └── ABSENT     → PUBLIC      ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
       │    ├── 8 elements transitioning toward ABSENT
       │    │    ├── MERGE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
@@ -20,9 +23,6 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
       │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 5}
-      │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 106, ColumnID: 3}
-      │    │    └── ABSENT     → PUBLIC      ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
       │    └── 7 Mutation operations
       │         ├── SetColumnName {"ColumnID":3,"Name":"pi","TableID":106}
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":5,"TableID":106}
