@@ -253,15 +253,23 @@ func s3KeyRelease(o opts) (string, string) {
 
 func putRelease(svc s3I, o opts) {
 	release.PutRelease(svc, release.PutReleaseOptions{
-		BucketName: o.BucketName,
-		NoCache:    false,
-		Platform:   o.Platform,
-		VersionStr: o.VersionStr,
+		BucketName:    o.BucketName,
+		NoCache:       false,
+		Platform:      o.Platform,
+		VersionStr:    o.VersionStr,
+		ArchivePrefix: "cockroach",
 		Files: append(
 			[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach")},
 			release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
 		),
-		ExtraFiles: []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")},
+	})
+	release.PutRelease(svc, release.PutReleaseOptions{
+		BucketName:    o.BucketName,
+		NoCache:       false,
+		Platform:      o.Platform,
+		VersionStr:    o.VersionStr,
+		ArchivePrefix: "cockroach-sql",
+		Files:         []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach-sql")},
 	})
 }
 
