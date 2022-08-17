@@ -108,6 +108,7 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 }
 
 func BenchmarkMVCCExportToSST(b *testing.B) {
+	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 
 	numKeys := []int{64, 512, 1024, 8192, 65536}
