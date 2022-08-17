@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -129,7 +130,17 @@ func ingestionPlanHook(
 				State: descpb.TenantInfo_ADD,
 			},
 		}
-		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo); err != nil {
+
+		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForNamedZone(
+			ctx,
+			p.Txn(),
+			keys.SystemSQLCodec,
+			zonepb.TenantsZoneName,
+		)
+		if err != nil {
+			return err
+		}
+		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo, initialTenantZoneConfig); err != nil {
 			return err
 		}
 

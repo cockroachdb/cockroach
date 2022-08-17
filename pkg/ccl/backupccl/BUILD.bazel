@@ -50,6 +50,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/clusterversion",
+        "//pkg/config/zonepb",
         "//pkg/featureflag",
         "//pkg/gossip",
         "//pkg/jobs",

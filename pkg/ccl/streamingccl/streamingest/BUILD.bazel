@@ -23,6 +23,7 @@ go_library(
         "//pkg/ccl/streamingccl/streamclient",
         "//pkg/ccl/streamingccl/streampb",
         "//pkg/ccl/utilccl",
+        "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
