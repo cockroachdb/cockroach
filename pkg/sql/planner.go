@@ -909,6 +909,7 @@ func initInternalExecutor(ctx context.Context, p *planner) sqlutil.InternalExecu
 		jobs:                   p.extendedEvalCtx.Jobs,
 		schemaChangeJobRecords: p.extendedEvalCtx.SchemaChangeJobRecords,
 		schemaChangerState:     p.extendedEvalCtx.SchemaChangerState,
+		explicitTxn:            !p.extendedEvalCtx.TxnImplicit,
 	}
 	return ie
 }

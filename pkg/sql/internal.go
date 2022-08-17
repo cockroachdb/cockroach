@@ -816,6 +816,12 @@ func (ie *InternalExecutor) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
+	if ie.extraTxnState != nil {
+		if txn != nil && txn != ie.extraTxnState.txn {
+			return nil, errors.New("the txn is inconsistent with the txn when constructing the internal executor")
+		}
+	}
+
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
@@ -871,6 +877,17 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
+	// Add restriction to execute DDL statement with an internal executor.
+	// We should only allow DDL if
+	// 1. the txn-related info are correctly set up, and not in an explicit txn, or
+	// 2. not in an outer txn.
+	if tree.CanModifySchema(parsed.AST) && txn != nil {
+		if ie.extraTxnState == nil || ie.extraTxnState.descCollection == nil {
+			return nil, errors.New("DDL statement cannot be executed without binding the internal executor with caller's txn-related metedata")
+		} else if ie.extraTxnState.explicitTxn {
+			return nil, errors.New("DDL statement is disallowed with internal executor in explicit txn")
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1211,6 +1228,9 @@ type extraTxnState struct {
 	jobs                   *jobsCollection
 	schemaChangeJobRecords map[descpb.ID]*jobs.Record
 	schemaChangerState     *SchemaChangerState
+	// explicitTxn is true when the SQL transaction associated with the internal
+	// executor is explicit.
+	explicitTxn bool
 }
 
 // InternalExecutorFactory stored information needed to construct a new
