@@ -438,6 +438,13 @@ func (tc *Collection) SetSession(session sqlliveness.Session) {
 	tc.sqlLivenessSession = session
 }
 
+// SetTemporarySchema is used to set the temporary schema provider for the
+// collection. This is a low-level operation exposed only for use in the
+// temporary schema cleaner.
+func (tc *Collection) SetTemporarySchema(provider TemporarySchemaProvider) {
+	tc.temporary = makeTemporaryDescriptors(tc.settings, tc.codec(), provider)
+}
+
 // MakeTestCollection makes a Collection that can be used for tests.
 func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collection {
 	settings := cluster.MakeTestingClusterSettings()

@@ -74,45 +74,40 @@ func (cf *CollectionFactory) Txn(
 		}
 		return nil
 	}
-	for {
-		var modifiedDescriptors []lease.IDVersion
-		var deletedDescs catalog.DescriptorIDSet
-		var descsCol *Collection
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			modifiedDescriptors = nil
-			deletedDescs = catalog.DescriptorIDSet{}
-			descsCol = cf.NewCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
-			defer descsCol.ReleaseAll(ctx)
-			if err := f(ctx, txn, descsCol); err != nil {
-				return err
-			}
-
-			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
-				return err
-			}
-			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
-
-			if err := CheckSpanCountLimit(
-				ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
-			); err != nil {
-				return err
-			}
-			retryErr, err := CheckTwoVersionInvariant(
-				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
-			if retryErr {
-				return errTwoVersionInvariantViolated
-			}
-			deletedDescs = descsCol.deletedDescs
-			return err
-		}); errors.Is(err, errTwoVersionInvariantViolated) {
-			continue
-		} else {
-			if err == nil {
-				err = waitForDescriptors(modifiedDescriptors, deletedDescs)
-			}
+	var modifiedDescriptors []lease.IDVersion
+	var deletedDescs catalog.DescriptorIDSet
+	var descsCol *Collection
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		modifiedDescriptors = nil
+		deletedDescs = catalog.DescriptorIDSet{}
+		descsCol = cf.NewCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
+		defer descsCol.ReleaseAll(ctx)
+		if err := f(ctx, txn, descsCol); err != nil {
 			return err
 		}
+
+		if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
+			return err
+		}
+		modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+
+		if err := CheckSpanCountLimit(
+			ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
+		); err != nil {
+			return err
+		}
+		retryErr, err := CheckTwoVersionInvariant(
+			ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
+		if retryErr {
+			return errTwoVersionInvariantViolated
+		}
+		deletedDescs = descsCol.deletedDescs
+		return err
+	})
+	if err == nil {
+		err = waitForDescriptors(modifiedDescriptors, deletedDescs)
 	}
+	return err
 }
 
 // TxnWithExecutor enables callers to run transactions with a *Collection such that all
@@ -175,27 +170,9 @@ func (cf *CollectionFactory) TxnWithExecutor(
 				return err
 			}
 
-			if err := commitTxnFn(ctx); err != nil {
-				return err
-			}
-
-			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
-				return err
-			}
 			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
-
-			if err := CheckSpanCountLimit(
-				ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
-			); err != nil {
-				return err
-			}
-			retryErr, err := CheckTwoVersionInvariant(
-				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
-			if retryErr {
-				return errTwoVersionInvariantViolated
-			}
 			deletedDescs = descsCol.deletedDescs
-			return err
+			return commitTxnFn(ctx)
 		}); errors.Is(err, errTwoVersionInvariantViolated) {
 			continue
 		} else {

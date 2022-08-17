@@ -177,11 +177,12 @@ func cleanupSessionTempObjects(
 	cf *descs.CollectionFactory,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	ie sqlutil.InternalExecutor,
 	sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return cf.Txn(ctx, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+	return cf.TxnWithExecutor(ctx, db, &sessiondata.SessionData{}, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
@@ -285,7 +286,13 @@ func cleanupSchemaObjects(
 		User:                     username.RootUserName(),
 		DatabaseIDToTempSchemaID: databaseIDToTempSchemaID,
 	}
-
+	tsp := descs.NewTemporarySchemaProvider(sessiondata.NewStack(&sessiondata.SessionData{
+		SearchPath: searchPath,
+		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
+			DatabaseIDToTempSchemaID: databaseIDToTempSchemaID,
+		},
+	}))
+	descsCol.SetTemporarySchema(tsp)
 	for _, toDelete := range []struct {
 		// typeName is the type of table being deleted, e.g. view, table, sequence
 		typeName string
@@ -587,7 +594,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	}
 
 	// Clean up temporary data for inactive sessions.
-	ie := c.makeSessionBoundInternalExecutor.NewInternalExecutor(&sessiondata.SessionData{})
 	for sessionID := range sessionIDs {
 		if _, ok := activeSessions[sessionID.Uint128]; !ok {
 			log.Eventf(ctx, "cleaning up temporary object for session %q", sessionID)
@@ -602,7 +608,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 					c.collectionFactory,
 					c.db,
 					c.codec,
-					ie,
 					sessionID,
 				)
 			}); err != nil {

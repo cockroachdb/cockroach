@@ -1095,17 +1095,12 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType})
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
-		ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, ex.server.cfg.Settings)
-		ieMon.StartNoReserved(ctx, ex.server.GetBytesMonitor())
-		defer ieMon.Stop(ctx)
-		ie := MakeInternalExecutor(ex.server, MemoryMetrics{}, ieMon)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
 			ex.server.cfg.CollectionFactory,
 			ex.server.cfg.DB,
 			ex.server.cfg.Codec,
-			&ie,
 			ex.sessionID,
 		)
 		if err != nil {
