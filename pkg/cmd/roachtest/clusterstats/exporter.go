@@ -250,13 +250,17 @@ func (cs *clusterStatCollector) getStatSummary(
 	for labelName, series := range labelNameSeries {
 		streamSize := n
 		ret.Tagged[labelName] = make([]float64, streamSize)
-		if streamSize != len(series) {
+		if streamSize > len(series) {
 			return ret, errors.Newf(
 				"Differing lengths on stream size on query %s, expected %d, actual %d",
 				summaryQuery.Stat.Query,
 				streamSize,
 				len(series),
 			)
+		} else if streamSize < len(series) {
+			// When the new series is longer than the expected, we are able to
+			// trim it to the expected length by discarding values at the end.
+			series = series[:streamSize]
 		}
 
 		for i, val := range series {

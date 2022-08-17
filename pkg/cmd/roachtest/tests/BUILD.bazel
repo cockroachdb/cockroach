@@ -8,6 +8,7 @@ go_library(
         "acceptance.go",
         "activerecord.go",
         "activerecord_blocklist.go",
+        "allocation_bench.go",
         "allocator.go",
         "alterpk.go",
         "asyncpg.go",
