@@ -716,6 +716,9 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
+			if err := execinfra.HydrateTypesInDatumInfo(ctx, flowCtx, core.Values.Columns); err != nil {
+				return r, err
+			}
 			if core.Values.NumRows == 0 || len(core.Values.Columns) == 0 {
 				// To simplify valuesOp we handle some special cases with
 				// fixedNumTuplesNoInputOp.
