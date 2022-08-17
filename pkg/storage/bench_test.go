@@ -1535,8 +1535,14 @@ func runExportToSst(
 		b.Fatal(err)
 	}
 
+	var buf bytes.Buffer
+	buf.Grow(1 << 20)
 	b.ResetTimer()
+	b.StopTimer()
+	var assertLen int // buf.Len shouldn't change between runs
 	for i := 0; i < b.N; i++ {
+		buf.Reset()
+		b.StartTimer()
 		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
 		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
 		_, _, _, err := engine.ExportMVCCToSst(context.Background(), ExportOptions{
@@ -1549,18 +1555,20 @@ func runExportToSst(
 			MaxSize:            0,
 			StopMidKey:         false,
 			UseTBI:             useTBI,
-		}, noopWriter{})
+		}, &buf)
 		if err != nil {
 			b.Fatal(err)
 		}
+		b.StopTimer()
+
+		if i == 0 {
+			require.NotZero(b, buf.Len())
+			assertLen = buf.Len()
+		}
+
+		require.Equal(b, assertLen, buf.Len())
 	}
-	b.StopTimer()
 }
-
-type noopWriter struct{}
-
-func (noopWriter) Close() error                { return nil }
-func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 func runCheckSSTConflicts(
 	b *testing.B, numEngineKeys, numVersions, numSstKeys int, overlap, usePrefixSeek bool,
