@@ -743,6 +743,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
+	skip.WithIssue(t, 86287)
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
@@ -930,6 +931,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
+	skip.WithIssue(t, 86206)
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
