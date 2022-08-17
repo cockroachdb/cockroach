@@ -42,6 +42,7 @@ type InboundStreamHandler interface {
 // It is exported since it is the default for the flow infrastructure.
 type RowInboundStreamHandler struct {
 	execinfra.RowReceiver
+	Types []*types.T
 }
 
 var _ InboundStreamHandler = RowInboundStreamHandler{}
@@ -53,7 +54,7 @@ func (s RowInboundStreamHandler) Run(
 	firstMsg *execinfrapb.ProducerMessage,
 	f *FlowBase,
 ) error {
-	return processInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
+	return processInboundStream(ctx, stream, firstMsg, s.RowReceiver, f, s.Types)
 }
 
 // Timeout is part of the InboundStreamHandler interface.
@@ -75,9 +76,10 @@ func processInboundStream(
 	firstMsg *execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
 	f *FlowBase,
+	types []*types.T,
 ) error {
 
-	err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f)
+	err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f, types)
 
 	// err, if set, will also be propagated to the producer
 	// as the last record that the producer gets.
@@ -97,9 +99,11 @@ func processInboundStreamHelper(
 	firstMsg *execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
 	f *FlowBase,
+	types []*types.T,
 ) error {
 	draining := false
 	var sd StreamDecoder
+	sd.Init(types)
 
 	sendErrToConsumer := func(err error) {
 		if err != nil {
@@ -212,7 +216,6 @@ func processProducerMessage(
 			return processMessageResult{err: err, consumerClosed: false}
 		}
 	}
-	var types []*types.T
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {
@@ -224,10 +227,7 @@ func processProducerMessage(
 		}
 
 		if log.V(3) && row != nil {
-			if types == nil {
-				types = sd.Types()
-			}
-			log.Infof(ctx, "inbound stream pushing row %s", row.String(types))
+			log.Infof(ctx, "inbound stream pushing row %s", row.String(sd.types))
 		}
 		if *draining && meta == nil {
 			// Don't forward data rows when we're draining.
