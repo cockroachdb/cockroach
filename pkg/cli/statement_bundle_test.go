@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -87,4 +88,23 @@ func TestRunExplainCombinations(t *testing.T) {
 		assert.Equal(t, test.expectedInputs, inputs)
 		assert.Equal(t, test.expectedOutputs, outputs)
 	}
+}
+
+func TestBasicRecreate(t *testing.T) {
+	bundir := testutils.TestDataPath(t, "explain-bundle", "bundle")
+	bundle, err := loadStatementBundle(bundir)
+	assert.NoError(t, err)
+	closeFn, err := sqlCtx.Open(os.Stdin)
+	assert.NoError(t, err)
+	defer closeFn()
+
+	// These need to be set after "Open" above to recreate the issue with
+	// running observer statements being run with a prepared query.
+	cliCtx.IsInteractive = true
+	// Need these to avoid errors about not having certs.
+	demoCtx.Context.Multitenant = false
+	demoCtx.Context.Insecure = true
+
+	_, err = runBundleRecreateOpen(&cobra.Command{}, []string{bundir}, bundle)
+	assert.NoError(t, err)
 }
