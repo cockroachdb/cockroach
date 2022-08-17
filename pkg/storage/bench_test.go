@@ -1616,10 +1616,11 @@ func runMVCCExportToSST(b *testing.B, numKeys int, numRevisions int, exportAllRe
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	batch := engine.NewUnindexedBatch(true /* writeOnly */)
+	batch := engine.NewBatch()
 	for i := 0; i < numKeys; i++ {
-		key := make([]byte, 16)
-		key = append(key, 'a', 'a', 'a')
+		var key []byte
+		key = append(key, keys.LocalMax...)
+		key = append(key, bytes.Repeat([]byte{'a'}, 19)...)
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
 
 		for j := 0; j < numRevisions; j++ {
