@@ -3644,9 +3644,6 @@ SELECT encode(descriptor, 'hex') AS descriptor
 }
 
 func (t *logicTest) maybeDropDatabases() error {
-	if t.cfg.SkipDropDatabases {
-		return nil
-	}
 	var dbNames pq.StringArray
 	if err := t.db.QueryRow(
 		`SELECT array_agg(database_name) FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres')`,

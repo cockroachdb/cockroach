@@ -270,6 +270,10 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 			v.err = newQueryNotSupportedErrorf("function %s cannot be executed with distsql", t)
 			return false, expr
 		}
+	case *tree.RoutineExpr:
+		// TODO(86310): enable UDFs in DistSQL.
+		v.err = newQueryNotSupportedErrorf("user-defined routine %s cannot be executed with distsql", t)
+		return false, expr
 	case *tree.DOid:
 		v.err = newQueryNotSupportedError("OID expressions are not supported by distsql")
 		return false, expr
