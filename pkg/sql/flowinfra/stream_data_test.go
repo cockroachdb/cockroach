@@ -81,7 +81,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []*types.T, records []ro
 			msg := se.FormMessage(context.Background())
 			// Make a copy of the data buffer.
 			msg.Data.RawBytes = append([]byte(nil), msg.Data.RawBytes...)
-			err := sd.AddMessage(context.Background(), msg, nil /* flowCtx */)
+			err := sd.AddMessage(context.Background(), msg)
 			if err != nil {
 				tb.Fatal(err)
 			}
@@ -138,7 +138,7 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 	var se flowinfra.StreamEncoder
 	var sd flowinfra.StreamDecoder
 	msg := se.FormMessage(context.Background())
-	if err := sd.AddMessage(context.Background(), msg, nil /* flowCtx */); err != nil {
+	if err := sd.AddMessage(context.Background(), msg); err != nil {
 		t.Fatal(err)
 	}
 	if msg.Header == nil {
@@ -220,7 +220,7 @@ func BenchmarkStreamDecoder(b *testing.B) {
 
 			for i := 0; i < b.N; i++ {
 				var sd flowinfra.StreamDecoder
-				if err := sd.AddMessage(ctx, msg, nil /* flowCtx */); err != nil {
+				if err := sd.AddMessage(ctx, msg); err != nil {
 					b.Fatal(err)
 				}
 				for j := 0; j < flowinfra.OutboxBufRows; j++ {
