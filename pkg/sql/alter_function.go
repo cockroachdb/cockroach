@@ -52,6 +52,14 @@ type alterFunctionDepExtensionNode struct {
 func (p *planner) AlterFunctionOptions(
 	ctx context.Context, n *tree.AlterFunctionOptions,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER FUNCTION",
+	); err != nil {
+		return nil, err
+	}
+
 	return &alterFunctionOptionsNode{n: n}, nil
 }
 
@@ -90,6 +98,14 @@ func (n *alterFunctionOptionsNode) Close(ctx context.Context)           {}
 func (p *planner) AlterFunctionRename(
 	ctx context.Context, n *tree.AlterFunctionRename,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER FUNCTION",
+	); err != nil {
+		return nil, err
+	}
+
 	return &alterFunctionRenameNode{n: n}, nil
 }
 
@@ -141,6 +157,14 @@ func (n *alterFunctionRenameNode) Close(ctx context.Context)           {}
 func (p *planner) AlterFunctionSetOwner(
 	ctx context.Context, n *tree.AlterFunctionSetOwner,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER FUNCTION",
+	); err != nil {
+		return nil, err
+	}
+
 	return &alterFunctionSetOwnerNode{n: n}, nil
 }
 
@@ -181,6 +205,14 @@ func (n *alterFunctionSetOwnerNode) Close(ctx context.Context)           {}
 func (p *planner) AlterFunctionSetSchema(
 	ctx context.Context, n *tree.AlterFunctionSetSchema,
 ) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER FUNCTION",
+	); err != nil {
+		return nil, err
+	}
+
 	return &alterFunctionSetSchemaNode{n: n}, nil
 }
 
