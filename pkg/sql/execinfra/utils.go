@@ -11,6 +11,11 @@
 package execinfra
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -31,4 +36,17 @@ func DecodeDatum(datumAlloc *tree.DatumAlloc, typ *types.T, data []byte) (tree.D
 			"%d trailing bytes in encoded value", errors.Safe(len(rem)))
 	}
 	return datum, nil
+}
+
+// HydrateTypesInDatumInfo hydrates all user-defined types in the provided
+// DatumInfo slice.
+func HydrateTypesInDatumInfo(
+	ctx context.Context, resolver *descs.DistSQLTypeResolver, info []execinfrapb.DatumInfo,
+) error {
+	for i := range info {
+		if err := typedesc.EnsureTypeIsHydrated(ctx, info[i].Type, resolver); err != nil {
+			return err
+		}
+	}
+	return nil
 }

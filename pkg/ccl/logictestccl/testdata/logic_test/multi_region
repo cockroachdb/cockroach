@@ -107,9 +107,9 @@ JOIN system.namespace parent ON (e."parentID" = parent.id)
 WHERE e.name='crdb_internal_region'
 ----
 parentSchemaID  db_name                                       enum_name
-114             multi_region_test_db                          crdb_internal_region
-118             multi_region_test_explicit_primary_region_db  crdb_internal_region
-110             region_test_db                                crdb_internal_region
+112             multi_region_test_db                          crdb_internal_region
+116             multi_region_test_explicit_primary_region_db  crdb_internal_region
+108             region_test_db                                crdb_internal_region
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public

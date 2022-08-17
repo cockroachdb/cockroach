@@ -141,6 +141,7 @@ func TestOutbox(t *testing.T) {
 
 	// Consume everything that the outbox sends on the stream.
 	var decoder flowinfra.StreamDecoder
+	decoder.Init(types.OneIntCol)
 	var rows rowenc.EncDatumRows
 	var metas []execinfrapb.ProducerMetadata
 	drainSignalSent := false
