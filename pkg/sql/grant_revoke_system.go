@@ -224,13 +224,13 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 		var ret []syntheticprivilege.Object
 		for _, externalConnectionName := range n.targets.ExternalConnections {
 			// Ensure that an External Connection of this name actually exists.
-			if _, err := externalconn.LoadExternalConnection(ctx, externalConnectionName.String(),
+			if _, err := externalconn.LoadExternalConnection(ctx, string(externalConnectionName),
 				p.ExecCfg().InternalExecutor, p.Txn()); err != nil {
 				return nil, errors.Wrap(err, "failed to resolve External Connection")
 			}
 
 			ret = append(ret, &syntheticprivilege.ExternalConnectionPrivilege{
-				ConnectionName: externalConnectionName.String(),
+				ConnectionName: string(externalConnectionName),
 			})
 		}
 		return ret, nil

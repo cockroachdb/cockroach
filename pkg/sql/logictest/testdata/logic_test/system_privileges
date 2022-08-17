@@ -39,7 +39,8 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-testuser  /global/  {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+testuser  /externalconn/foo  {ALL}                                      {}
+testuser  /global/           {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
 
 query TT
 SELECT connection_name, connection_type FROM system.external_connections
@@ -51,6 +52,11 @@ REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
 statement ok
 REVOKE SYSTEM EXTERNALCONNECTION FROM testuser
+
+# testuser is granted ALL privileges on the External Connection they create,
+# revoke that.
+statement ok
+REVOKE ALL ON EXTERNAL CONNECTION foo FROM testuser
 
 user testuser
 
@@ -119,7 +125,7 @@ REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}
 
 # test VIEWCLUSTERSETTING
 user testuser
@@ -158,7 +164,7 @@ user root
 query TTTT
 SELECT * FROM system.privileges
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}
 
 # test VIEWACTIVITY
 user testuser
@@ -197,7 +203,7 @@ user root
 query TTTT
 SELECT * FROM system.privileges
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}
 
 # test VIEWACTIVITYREDACTED
 user testuser
@@ -220,8 +226,8 @@ user root
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root     /global/  {MODIFYCLUSTERSETTING}  {}
-testuser /global/  {VIEWACTIVITYREDACTED}   {}
+root      /global/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {VIEWACTIVITYREDACTED}  {}
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
@@ -236,4 +242,4 @@ user root
 query TTTT
 SELECT * FROM system.privileges
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}
