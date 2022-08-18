@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -115,10 +116,10 @@ func (p *planner) waitForDescriptorSchemaChanges(
 
 	// Drop all leases and locks due to the current transaction, and, in the
 	// process, abort the transaction.
+	retryErr := p.txn.GenerateRetryableAbortedError(ctx,
+		fmt.Sprintf("schema change waiting for concurrent schema changes on descriptor %d", descID))
+	p.txn.CleanupOnError(ctx, retryErr)
 	p.Descriptors().ReleaseAll(ctx)
-	if err := p.txn.Rollback(ctx); err != nil {
-		return err
-	}
 
 	// Wait for the descriptor to no longer be claimed by a schema change.
 	start := timeutil.Now()

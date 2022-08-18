@@ -1454,12 +1454,12 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 	return txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
-// GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError that will
+// GenerateRetryableAbortedError returns a TransactionRetryWithProtoRefreshError that will
 // cause the txn to be aborted and retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on aborted errors.
-func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
+func (txn *Txn) GenerateRetryableAbortedError(ctx context.Context, msg string) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	txn.resetDeadlineLocked()

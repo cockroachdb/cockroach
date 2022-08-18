@@ -84,13 +84,11 @@ func TestGenerateForcedRetryableErrorInTxn(t *testing.T) {
 		// not cleaning up the first time to make sure the transaction's writes
 		// are no longer visible.
 		if i++; i < 3 {
+			retryErr := txn.GenerateRetryableAbortedError(ctx, "force retry")
 			if i == 1 {
-				if err := txn.Rollback(ctx); err != nil {
-					return err
-				}
+				txn.CleanupOnError(ctx, retryErr)
 			}
-
-			return txn.GenerateForcedRetryableError(ctx, "force retry")
+			return retryErr
 		}
 		return txn.Put(ctx, mkKey("b"), 2)
 	}))

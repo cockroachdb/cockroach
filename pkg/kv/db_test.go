@@ -710,7 +710,7 @@ func TestDBDecommissionedOperations(t *testing.T) {
 	}
 }
 
-// TestGenerateForcedRetryableError verifies that GenerateForcedRetryableError
+// TestGenerateForcedRetryableError verifies that GenerateRetryableAbortedError
 // returns an error with a transaction that had the epoch bumped (and not epoch 0).
 func TestGenerateForcedRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -720,7 +720,7 @@ func TestGenerateForcedRetryableError(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	txn := db.NewTxn(ctx, "test: TestGenerateForcedRetryableError")
 	require.Equal(t, 0, int(txn.Epoch()))
-	err := txn.GenerateForcedRetryableError(ctx, "testing TestGenerateForcedRetryableError")
+	err := txn.GenerateRetryableAbortedError(ctx, "testing TestGenerateForcedRetryableError")
 	var retryErr *roachpb.TransactionRetryWithProtoRefreshError
 	require.True(t, errors.As(err, &retryErr))
 	require.Equal(t, 1, int(retryErr.Transaction.Epoch))

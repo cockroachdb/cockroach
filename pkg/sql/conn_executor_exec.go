@@ -715,7 +715,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
 			payload := eventRetriableErrPayload{
-				err:    txn.GenerateForcedRetryableError(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
+				err:    txn.GenerateRetryableAbortedError(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
 				rewCap: rc,
 			}
 			return ev, payload, nil
@@ -1162,7 +1162,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
 			planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
 			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
-				retryErr := planner.Txn().GenerateForcedRetryableError(
+				retryErr := planner.Txn().GenerateRetryableAbortedError(
 					ctx, "injected by `inject_retry_errors_enabled` session variable")
 				res.SetError(retryErr)
 			} else {

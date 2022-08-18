@@ -227,7 +227,7 @@ func CheckTwoVersionInvariant(
 			onRetryBackoff()
 		}
 	}
-	return true, txn.GenerateForcedRetryableError(ctx,
+	return true, txn.GenerateRetryableAbortedError(ctx,
 		fmt.Sprintf(
 			`cannot publish new versions for descriptors: %v, old versions still in use`,
 			descs))
