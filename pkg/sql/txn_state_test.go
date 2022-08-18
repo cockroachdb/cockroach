@@ -412,7 +412,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
@@ -436,7 +436,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
@@ -462,7 +462,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
@@ -487,7 +487,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
@@ -511,7 +511,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
@@ -536,7 +536,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
@@ -565,7 +565,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.True}, b
@@ -605,7 +605,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
 				b := eventRetriableErrPayload{
-					err:    ts.mu.txn.PrepareRetryableError(ctx, "test retriable err"),
+					err:    ts.mu.txn.GenerateForcedRetryableError(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b

@@ -284,7 +284,7 @@ func CheckTwoVersionInvariant(
 	// Restart the transaction so that it is able to replay itself at a newer timestamp
 	// with the hope that the next time around there will be leases only at the current
 	// version.
-	retryErr := txn.PrepareRetryableError(ctx,
+	retryErr := txn.GenerateForcedRetryableError(ctx,
 		fmt.Sprintf(
 			`cannot publish new versions for descriptors: %v, old versions still in use`,
 			descs))

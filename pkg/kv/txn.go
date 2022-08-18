@@ -1463,21 +1463,6 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	return txn.mu.sender.PrepareRetryableError(ctx, msg)
 }
 
-// PrepareRetryableError returns a
-// TransactionRetryWithProtoRefreshError that will cause the txn to be
-// retried. The current txn parameters are used. The txn remains valid
-// for use.
-func (txn *Txn) PrepareRetryableError(ctx context.Context, msg string) error {
-	if txn.typ != RootTxn {
-		return errors.WithContextTags(
-			errors.AssertionFailedf("PrepareRetryableError() called on leaf txn"), ctx)
-	}
-
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.mu.sender.PrepareRetryableError(ctx, msg)
-}
-
 // ManualRestart bumps the transactions epoch, and can upgrade the timestamp.
 // An uninitialized timestamp can be passed to leave the timestamp alone.
 //
