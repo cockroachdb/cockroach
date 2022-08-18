@@ -54,6 +54,15 @@ func (cf *CollectionFactory) Txn(
 	})
 }
 
+// TxnWithExecutorFunc is used to run a transaction in the context of a
+// Collection and an InternalExecutor.
+type TxnWithExecutorFunc = func(
+	ctx context.Context,
+	txn *kv.Txn,
+	descriptors *Collection,
+	ie sqlutil.InternalExecutor,
+) error
+
 // TxnWithExecutor enables callers to run transactions with a *Collection such that all
 // retrieved immutable descriptors are properly leased and all mutable
 // descriptors are handled. The function deals with verifying the two version
@@ -66,10 +75,7 @@ func (cf *CollectionFactory) Txn(
 // The passed transaction is pre-emptively anchored to the system config key on
 // the system tenant.
 func (cf *CollectionFactory) TxnWithExecutor(
-	ctx context.Context,
-	db *kv.DB,
-	sd *sessiondata.SessionData,
-	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection, ie sqlutil.InternalExecutor) error,
+	ctx context.Context, db *kv.DB, sd *sessiondata.SessionData, f TxnWithExecutorFunc,
 ) error {
 	// Waits for descriptors that were modified, skipping
 	// over ones that had their descriptor wiped.
