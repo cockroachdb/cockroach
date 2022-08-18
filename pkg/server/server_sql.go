@@ -309,6 +309,8 @@ type sqlServerArgs struct {
 	// internalExecutorFactory is to initialize an internal executor.
 	internalExecutorFactory sqlutil.InternalExecutorFactory
 
+	collectionFactory *descs.CollectionFactory // empty initially
+
 	// Stores and deletes expired liveness sessions.
 	sqlLivenessProvider sqlliveness.Provider
 
@@ -986,6 +988,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.registry.AddMetricStruct(m)
 	}
 	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
+	*cfg.collectionFactory = *collectionFactory
 	cfg.internalExecutorFactory = ieFactory
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(

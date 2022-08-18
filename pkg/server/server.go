@@ -1072,6 +1072,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.nodeDialer,
 		s.cfg.TestingKnobs,
 		&fileTableInternalExecutor,
+		s.sqlServer.execCfg.CollectionFactory,
 		s.db,
 		nil, /* TenantExternalIORecorder */
 	)
