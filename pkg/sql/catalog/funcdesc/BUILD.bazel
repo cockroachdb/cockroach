@@ -45,6 +45,7 @@ go_test(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",

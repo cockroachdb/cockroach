@@ -218,8 +218,8 @@ func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return ret, nil
 }
 
-// ValidateCrossReferences implements the catalog.Descriptor interface.
-func (desc *immutable) ValidateCrossReferences(
+// ValidateForwardReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateForwardReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check schema parent reference.
@@ -232,8 +232,38 @@ func (desc *immutable) ValidateCrossReferences(
 		vea.Report(errors.AssertionFailedf("parent database %q (%d) is dropped",
 			db.GetName(), db.GetID()))
 	}
+}
 
-	// Check that all functions exist
+// ValidateBackReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateBackReferences(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+	// Check that parent database has correct entry in schemas mapping.
+	if db, err := vdg.GetDatabaseDescriptor(desc.GetParentID()); err == nil {
+		isInDBSchemas := false
+		_ = db.ForEachSchema(func(id descpb.ID, name string) error {
+			if id == desc.GetID() {
+				if name != desc.GetName() {
+					vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but under name %q",
+						desc.GetParentID(), errors.Safe(name)))
+					return nil
+				}
+				isInDBSchemas = true
+				return nil
+			}
+			if name == desc.GetName() {
+				vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but name maps to other schema [%d]",
+					desc.GetParentID(), id))
+			}
+			return nil
+		})
+		if !isInDBSchemas {
+			vea.Report(errors.AssertionFailedf("not present in parent database [%d] schemas mapping",
+				desc.GetParentID()))
+		}
+	}
+
+	// Check that all functions exist.
 	for _, function := range desc.Functions {
 		for _, overload := range function.Overloads {
 			_, err := vdg.GetFunctionDescriptor(overload.ID)
@@ -242,29 +272,6 @@ func (desc *immutable) ValidateCrossReferences(
 					overload.ID, desc.GetName(), desc.GetID()))
 			}
 		}
-	}
-
-	// Check that parent has correct entry in schemas mapping.
-	isInDBSchemas := false
-	_ = db.ForEachSchema(func(id descpb.ID, name string) error {
-		if id == desc.GetID() {
-			if name != desc.GetName() {
-				vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but under name %q",
-					desc.GetParentID(), errors.Safe(name)))
-				return nil
-			}
-			isInDBSchemas = true
-			return nil
-		}
-		if name == desc.GetName() {
-			vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but name maps to other schema [%d]",
-				desc.GetParentID(), id))
-		}
-		return nil
-	})
-	if !isInDBSchemas {
-		vea.Report(errors.AssertionFailedf("not present in parent database [%d] schemas mapping",
-			desc.GetParentID()))
 	}
 }
 
