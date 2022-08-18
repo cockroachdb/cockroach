@@ -671,13 +671,6 @@ func maybeRemoveDuplicateIDsInRefs(d *descpb.TableDescriptor) (hasChanged bool) 
 	for i := range d.DependedOnBy {
 		ref := &d.DependedOnBy[i]
 		s := catalog.MakeTableColSet(ref.ColumnIDs...).Ordered()
-		// Also strip away O-IDs, which may have made their way in here in the past.
-		// But only strip them if they're not the only ID. Otherwise this will
-		// make for an even more confusing validation failure (we check that IDs
-		// are not zero).
-		if len(s) > 1 && s[0] == 0 {
-			s = s[1:]
-		}
 		if len(s) < len(ref.ColumnIDs) {
 			ref.ColumnIDs = s
 			hasChanged = true
