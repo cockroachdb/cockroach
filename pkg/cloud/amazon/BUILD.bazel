@@ -5,6 +5,7 @@ go_library(
     name = "amazon",
     srcs = [
         "aws_kms.go",
+        "aws_kms_connection.go",
         "s3_connection.go",
         "s3_storage.go",
     ],
