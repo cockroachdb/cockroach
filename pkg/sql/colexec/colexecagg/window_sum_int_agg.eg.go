@@ -114,7 +114,7 @@ func (a *sumIntInt16WindowAgg) Compute(
 	}
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -277,7 +277,7 @@ func (a *sumIntInt32WindowAgg) Compute(
 	}
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -440,7 +440,7 @@ func (a *sumIntInt64WindowAgg) Compute(
 	}
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 

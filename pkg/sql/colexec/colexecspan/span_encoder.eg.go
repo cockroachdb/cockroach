@@ -285,7 +285,7 @@ func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *c
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -364,7 +364,7 @@ func (op *spanEncoderBytesAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -445,7 +445,7 @@ func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int)
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -526,7 +526,7 @@ func (op *spanEncoderInt16Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -607,7 +607,7 @@ func (op *spanEncoderInt32Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -688,7 +688,7 @@ func (op *spanEncoderInt64Asc) next(batch coldata.Batch, startIdx, endIdx int) *
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -769,7 +769,7 @@ func (op *spanEncoderFloat64Asc) next(batch coldata.Batch, startIdx, endIdx int)
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -850,7 +850,7 @@ func (op *spanEncoderTimestampAsc) next(batch coldata.Batch, startIdx, endIdx in
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -955,7 +955,7 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1058,7 +1058,7 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1167,7 +1167,7 @@ func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1246,7 +1246,7 @@ func (op *spanEncoderBytesDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1327,7 +1327,7 @@ func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1408,7 +1408,7 @@ func (op *spanEncoderInt16Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1489,7 +1489,7 @@ func (op *spanEncoderInt32Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1570,7 +1570,7 @@ func (op *spanEncoderInt64Desc) next(batch coldata.Batch, startIdx, endIdx int) 
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1651,7 +1651,7 @@ func (op *spanEncoderFloat64Desc) next(batch coldata.Batch, startIdx, endIdx int
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1732,7 +1732,7 @@ func (op *spanEncoderTimestampDesc) next(batch coldata.Batch, startIdx, endIdx i
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1837,7 +1837,7 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
@@ -1940,7 +1940,7 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 

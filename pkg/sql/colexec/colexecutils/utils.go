@@ -331,7 +331,7 @@ func AccountForMetadata(allocator *colmem.Allocator, meta []execinfrapb.Producer
 		// since it might be of non-trivial size.
 		if ltfs := meta[i].LeafTxnFinalState; ltfs != nil {
 			memUsage := roachpb.Spans(ltfs.RefreshSpans).MemUsage()
-			allocator.AdjustMemoryUsage(memUsage)
+			allocator.AdjustMemoryUsageAfterAllocation(memUsage)
 		}
 	}
 }

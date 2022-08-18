@@ -76,7 +76,7 @@ func (a *boolAndWindowAgg) Compute(
 	}
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -172,7 +172,7 @@ func (a *boolOrWindowAgg) Compute(
 	}
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 

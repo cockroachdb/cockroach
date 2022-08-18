@@ -339,7 +339,7 @@ func (hj *hashJoiner) build() {
 		// to fallback to disk, thus, we use the unlimited allocator.
 		newAccountedFor := memsize.Uint64 * int64(cap(hj.ht.Same))
 		// hj.ht.Same will never shrink, so the delta is non-negative.
-		hj.outputUnlimitedAllocator.AdjustMemoryUsage(newAccountedFor - hj.accountedFor.hashtableSame)
+		hj.outputUnlimitedAllocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableSame)
 		hj.accountedFor.hashtableSame = newAccountedFor
 	}
 	if !hj.spec.rightDistinct || hj.spec.JoinType.IsSetOpJoin() {
@@ -351,7 +351,7 @@ func (hj *hashJoiner) build() {
 		// to fallback to disk, thus, we use the unlimited allocator.
 		newAccountedFor := memsize.Bool * int64(cap(hj.ht.Visited))
 		// hj.ht.Visited will never shrink, so the delta is non-negative.
-		hj.outputUnlimitedAllocator.AdjustMemoryUsage(newAccountedFor - hj.accountedFor.hashtableVisited)
+		hj.outputUnlimitedAllocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableVisited)
 		hj.accountedFor.hashtableVisited = newAccountedFor
 		// Since keyID = 0 is reserved for end of list, it can be marked as visited
 		// at the beginning.

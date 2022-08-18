@@ -68,7 +68,7 @@ func TestAdjustMemoryUsage(t *testing.T) {
 
 	// Now exceed the limit "after" making an allocation and ensure that the
 	// unlimited account has been grown.
-	err = colexecerror.CatchVectorizedRuntimeError(func() { allocator.adjustMemoryUsageAfterAllocation(limit) })
+	err = colexecerror.CatchVectorizedRuntimeError(func() { allocator.AdjustMemoryUsageAfterAllocation(limit) })
 	require.NotNil(t, err)
 	require.True(t, strings.Contains(err.Error(), limitedMemMonitorName))
 	require.Equal(t, limit/2, limitedMemAcc.Used())
@@ -76,7 +76,7 @@ func TestAdjustMemoryUsage(t *testing.T) {
 
 	// Ensure that the error from the unlimited memory account is returned when
 	// it cannot be grown.
-	err = colexecerror.CatchVectorizedRuntimeError(func() { allocator.adjustMemoryUsageAfterAllocation(math.MaxInt64) })
+	err = colexecerror.CatchVectorizedRuntimeError(func() { allocator.AdjustMemoryUsageAfterAllocation(math.MaxInt64) })
 	require.NotNil(t, err)
 	require.False(t, strings.Contains(err.Error(), limitedMemMonitorName))
 	require.Equal(t, limit/2, limitedMemAcc.Used())

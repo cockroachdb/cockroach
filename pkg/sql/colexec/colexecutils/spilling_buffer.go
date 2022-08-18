@@ -275,7 +275,7 @@ func (b *SpillingBuffer) GetVecWithTuple(
 			// it, then account for the current one.
 			b.unlimitedAllocator.ReleaseMemory(b.lastDequeuedBatchMemUsage)
 			b.lastDequeuedBatchMemUsage = colmem.GetBatchMemSize(b.dequeueScratch)
-			b.unlimitedAllocator.AdjustMemoryUsage(b.lastDequeuedBatchMemUsage)
+			b.unlimitedAllocator.AdjustMemoryUsageAfterAllocation(b.lastDequeuedBatchMemUsage)
 			return b.dequeueScratch.ColVec(colIdx), rowIdx, b.dequeueScratch.Length()
 		}
 		// The requested tuple must be located further into the disk queue.

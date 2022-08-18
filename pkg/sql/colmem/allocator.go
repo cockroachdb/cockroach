@@ -140,7 +140,8 @@ func NewAllocator(
 // limited memory account. The unlimited memory account is optional, and it'll
 // be used only for the allocations that are denied by the limited memory
 // account when using Allocator.PerformAppend, Allocator.PerformOperation, and
-// SetAccountingHelper.AccountForSet.
+// SetAccountingHelper.AccountForSet as well as
+// Allocator.AdjustMemoryUsageAfterAllocation.
 func NewLimitedAllocator(
 	ctx context.Context, limitedAcc, unlimitedAcc *mon.BoundAccount, factory coldata.ColumnFactory,
 ) *Allocator {
@@ -379,7 +380,7 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	operation()
 	after := getVecsMemoryFootprint(destVecs)
 
-	a.adjustMemoryUsageAfterAllocation(after - before)
+	a.AdjustMemoryUsageAfterAllocation(after - before)
 }
 
 // PerformAppend is used to account for memory usage during calls to
@@ -413,7 +414,7 @@ func (a *Allocator) PerformAppend(batch coldata.Batch, operation func()) {
 			after += getVecMemoryFootprint(dest)
 		}
 	}
-	a.adjustMemoryUsageAfterAllocation(after - before)
+	a.AdjustMemoryUsageAfterAllocation(after - before)
 }
 
 // Used returns the number of bytes currently allocated through this allocator.
@@ -457,7 +458,13 @@ func (a *Allocator) AdjustMemoryUsage(delta int64) {
 	a.adjustMemoryUsage(delta, false /* afterAllocation */)
 }
 
-func (a *Allocator) adjustMemoryUsageAfterAllocation(delta int64) {
+// AdjustMemoryUsageAfterAllocation is similar to AdjustMemoryUsage with a
+// difference that if 1) the allocator was created via NewLimitedAllocator, and
+// 2) the allocation is denied by the limited memory account, then the unlimited
+// account will be grown. The memory error is still thrown. It should be used
+// whenever the caller has already incurred an allocation of delta bytes, and it
+// is desirable to account for that allocation against some budget.
+func (a *Allocator) AdjustMemoryUsageAfterAllocation(delta int64) {
 	a.adjustMemoryUsage(delta, true /* afterAllocation */)
 }
 
@@ -876,7 +883,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 
 	if len(h.bytesLikeVectors) > 0 {
 		newBytesLikeTotalSize := h.getBytesLikeTotalSize()
-		h.helper.allocator.adjustMemoryUsageAfterAllocation(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
+		h.helper.allocator.AdjustMemoryUsageAfterAllocation(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
 		h.prevBytesLikeTotalSize = newBytesLikeTotalSize
 	}
 
@@ -886,7 +893,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 			d := decimalVec.Get(rowIdx)
 			newDecimalSizes += int64(d.Size())
 		}
-		h.helper.allocator.adjustMemoryUsageAfterAllocation(newDecimalSizes - h.decimalSizes[rowIdx])
+		h.helper.allocator.AdjustMemoryUsageAfterAllocation(newDecimalSizes - h.decimalSizes[rowIdx])
 		h.decimalSizes[rowIdx] = newDecimalSizes
 	}
 
@@ -898,7 +905,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 			// was already included in EstimateBatchSizeBytes.
 			newVarLengthDatumSize += int64(datumSize)
 		}
-		h.helper.allocator.adjustMemoryUsageAfterAllocation(newVarLengthDatumSize)
+		h.helper.allocator.AdjustMemoryUsageAfterAllocation(newVarLengthDatumSize)
 	}
 
 	// The allocator is not shared with any other components, so we can just use

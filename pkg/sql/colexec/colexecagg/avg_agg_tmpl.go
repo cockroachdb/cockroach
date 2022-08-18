@@ -181,7 +181,7 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 	// {{end}}
 	execgen.SETVARIABLESIZE(newCurSumSize, a.curSum)
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 

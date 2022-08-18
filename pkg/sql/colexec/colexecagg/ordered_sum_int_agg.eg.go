@@ -237,7 +237,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 	)
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -472,7 +472,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 	)
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
@@ -707,7 +707,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 	)
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
