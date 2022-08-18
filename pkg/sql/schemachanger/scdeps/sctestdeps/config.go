@@ -79,6 +79,13 @@ func WithSessionData(sessionData sessiondata.SessionData) Option {
 	})
 }
 
+// WithZoneConfigs sets the TestStates zone config map to the provided value.
+func WithZoneConfigs(zoneConfigs map[catid.DescID]*zonepb.ZoneConfig) Option {
+	return optionFunc(func(state *TestState) {
+		state.zoneConfigs = zoneConfigs
+	})
+}
+
 // WithTestingKnobs sets the TestState testing knobs to the provided value.
 func WithTestingKnobs(testingKnobs *scexec.TestingKnobs) Option {
 	return optionFunc(func(state *TestState) {

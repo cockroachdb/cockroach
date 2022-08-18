@@ -11,6 +11,7 @@ COMMENT ON TABLE tbl IS 'tbl is good table';
 COMMENT ON INDEX tbl@tbl_pkey IS 'tbl_pkey is a primary key';
 COMMENT ON COLUMN tbl.id IS 'id is a identifier';
 COMMENT ON CONSTRAINT myfk ON tbl IS 'must have a parent';
+ALTER TABLE tbl CONFIGURE ZONE USING gc.ttlseconds=10;
 ----
 
 decompose
@@ -303,6 +304,9 @@ ElementState:
   Status: PUBLIC
 - TableComment:
     comment: tbl is good table
+    tableId: 105
+  Status: PUBLIC
+- TableZoneConfig:
     tableId: 105
   Status: PUBLIC
 - ColumnName:

@@ -278,6 +278,35 @@ func init() {
 	)
 }
 
+// Skip all removal ops for table zone configs.
+func init() {
+	desc := mkNodeVars("desc")
+	dep := mkNodeVars("dep")
+	descID := rel.Var("desc-id")
+
+	registerOpRule(
+		"skip table zone config removal ops on descriptor drop",
+		dep.node,
+		screl.MustQuery(
+			desc.Type(
+				(*scpb.Table)(nil),
+				(*scpb.View)(nil),
+				(*scpb.Sequence)(nil),
+			),
+			dep.Type(
+				(*scpb.TableZoneConfig)(nil),
+			),
+
+			joinOnDescID(desc, dep, descID),
+
+			desc.joinTarget(),
+			desc.targetStatus(scpb.ToAbsent),
+			dep.joinTargetNode(),
+			dep.targetStatus(scpb.ToAbsent),
+		),
+	)
+}
+
 // TODO(fqazi): For create operations we will need to have the ability
 // to have transformations that will combine transitions into a single
 // stage for execution. For example, a newly CREATE TABLE will be represented

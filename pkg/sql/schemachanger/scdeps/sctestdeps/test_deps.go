@@ -1048,7 +1048,7 @@ func (s *TestState) DeleteDescriptorComment(
 	return nil
 }
 
-//UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
+// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) UpsertConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
 ) error {
@@ -1057,7 +1057,7 @@ func (s *TestState) UpsertConstraintComment(
 	return nil
 }
 
-//DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
+// DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) DeleteConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID,
 ) error {
@@ -1186,4 +1186,14 @@ func (s *TestState) ResolveFunctionByOID(
 		}
 	}
 	return "", nil, errors.Newf("function %d not found", oid)
+}
+
+// ZoneConfigGetter implement scexec.Dependencies.
+func (s *TestState) ZoneConfigGetter() scbuild.ZoneConfigGetter {
+	return s
+}
+
+// GetZoneConfig implements scexec.Dependencies.
+func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
+	return s.zoneConfigs[id], nil
 }
