@@ -1449,8 +1449,9 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 // cause the txn to be retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
-// TxnCoordSender does on retriable errors. The transaction's timestamp is only
-// bumped to the extent that txn.ReadTimestamp is racheted up to txn.WriteTimestamp.
+// TxnCoordSender does on retriable errors. The transaction's timestamp is
+// bumped to the current clock timestamp.
+//
 // TODO(andrei): This method should take in an up-to-date timestamp, but
 // unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
