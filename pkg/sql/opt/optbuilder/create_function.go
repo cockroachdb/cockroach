@@ -11,8 +11,6 @@
 package optbuilder
 
 import (
-	"reflect"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -61,16 +59,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		panic(unimplemented.New("CREATE FUNCTION sql_body", "CREATE FUNCTION...sql_body unimplemented"))
 	}
 
+	if err := tree.ValidateFuncOptions(cf.Options); err != nil {
+		panic(err)
+	}
+
 	// Look for function body string from function options.
 	// Note that function body can be an empty string.
 	funcBodyFound := false
 	languageFound := false
 	var funcBodyStr string
-	options := make(map[string]struct{})
 	for _, option := range cf.Options {
-		if _, ok := options[reflect.TypeOf(option).Name()]; ok {
-			panic(pgerror.New(pgcode.Syntax, "conflicting or redundant options"))
-		}
 		switch opt := option.(type) {
 		case tree.FunctionBodyStr:
 			funcBodyFound = true

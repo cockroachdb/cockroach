@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -72,19 +71,20 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 	// referenced by other objects. This is needed when want to allow function
 	// references. Need to think about in what condition a function can be altered
 	// or not.
-	options := make(map[string]struct{})
+	if err := tree.ValidateFuncOptions(n.n.Options); err != nil {
+		return err
+	}
 	for _, option := range n.n.Options {
-		optTypeName := reflect.TypeOf(option).Name()
-		if _, ok := options[optTypeName]; ok {
-			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
-		}
 		// Note that language and function body cannot be altered, and it's blocked
 		// from parser level with "common_func_opt_item" syntax.
 		err := setFuncOption(params, fnDesc, option)
 		if err != nil {
 			return err
 		}
-		options[optTypeName] = struct{}{}
+	}
+
+	if err := funcdesc.CheckLeakProofVolatility(fnDesc); err != nil {
+		return err
 	}
 
 	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)

@@ -4,11 +4,35 @@ a INT PRIMARY KEY,
 b INT
 )
 
-statement error pq: cannot create leakproof function with non-immutable volatility: STABLE
+statement error pq: cannot set leakproof on function with non-immutable volatility: STABLE
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$
+
+statement error pq: STABLE: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE STABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: STRICT: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT CALLED ON NULL INPUT STABLE STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: RETURNS NULL ON NULL INPUT: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT CALLED ON NULL INPUT STABLE RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: NOT LEAKPROOF: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT LEAKPROOF NOT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: AS \$\$ SELECT 2 \$\$: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$ AS $$ SELECT 2 $$;
+
+statement error pq: LANGUAGE SQL: conflicting or redundant options
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: no language specified
+CREATE FUNCTION f() RETURNS INT IMMUTABLE AS $$ SELECT 1 $$;
+
+statement error pq: no function body specified
+CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL;
 
 statement ok
 CREATE FUNCTION a(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i'
@@ -812,8 +836,11 @@ CREATE FUNCTION public.f_test_alter_opt(IN INT8)
   SELECT 1;
 $$
 
-statement error pq: conflicting or redundant options
+statement error pq: IMMUTABLE: conflicting or redundant options
 ALTER FUNCTION f_test_alter_opt IMMUTABLE IMMUTABLE
+
+statement error pq: cannot set leakproof on function with non-immutable volatility: STABLE
+ALTER FUNCTION f_test_alter_opt STABLE LEAKPROOF
 
 statement ok
 ALTER FUNCTION f_test_alter_opt IMMUTABLE LEAKPROOF STRICT;
@@ -1165,7 +1192,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LAN
 statement error pq: cannot change return type of existing function
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
-statement error pq: cannot create leakproof function with non-immutable volatility: VOLATILE
+statement error pq: cannot set leakproof on function with non-immutable volatility: VOLATILE
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
 
 query T
