@@ -45,6 +45,7 @@ go_proto_library(
 go_test(
     name = "lock_test",
     srcs = ["lock_waiter_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         ":lock",
         "//pkg/roachpb",

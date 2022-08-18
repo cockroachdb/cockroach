@@ -46,6 +46,7 @@ go_library(
 go_test(
     name = "backfill_test",
     srcs = ["index_backfiller_cols_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":backfill"],
     deps = [
         "//pkg/sql/catalog",

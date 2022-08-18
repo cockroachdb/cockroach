@@ -101,6 +101,7 @@ go_test(
         "name_resolution_test.go",
         "union_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":optbuilder"],
     deps = [

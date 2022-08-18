@@ -38,6 +38,7 @@ go_test(
         "clusterversion_test.go",
         "cockroach_versions_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":clusterversion"],
     deps = [
         "//pkg/roachpb",

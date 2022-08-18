@@ -27,6 +27,7 @@ go_test(
         "main_test.go",
         "tracedumper_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":tracedumper"],
     deps = [
         "//pkg/security/securityassets",

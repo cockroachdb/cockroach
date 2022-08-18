@@ -30,6 +30,7 @@ go_test(
         "crash_reporting_unix_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":logcrash"],
     deps = [
         "//pkg/base",

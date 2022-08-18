@@ -21,6 +21,7 @@ go_library(
 go_test(
     name = "loopvarcapture_test",
     srcs = ["loopvarcapture_test.go"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],

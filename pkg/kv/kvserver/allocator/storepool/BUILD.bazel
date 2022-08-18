@@ -35,6 +35,7 @@ go_library(
 go_test(
     name = "storepool_test",
     srcs = ["store_pool_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":storepool"],
     deps = [
         "//pkg/kv/kvserver/liveness/livenesspb",

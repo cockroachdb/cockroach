@@ -245,7 +245,7 @@
 /pkg/cmd/generate-logictest/       @cockroachdb/dev-inf
 /pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-experience
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/geospatial
-/pkg/cmd/generate-test-suites/ @cockroachdb/dev-inf
+/pkg/cmd/generate-bazel-extra/ @cockroachdb/dev-inf
 /pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
 /pkg/cmd/geoviz/             @cockroachdb/geospatial
 /pkg/cmd/github-post/        @cockroachdb/test-eng

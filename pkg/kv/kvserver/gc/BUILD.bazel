@@ -41,6 +41,7 @@ go_test(
         "gc_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=895s"],
     embed = [":gc"],
     deps = [
         "//pkg/keys",

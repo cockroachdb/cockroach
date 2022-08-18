@@ -33,6 +33,7 @@ go_test(
         "hlc_test.go",
         "timestamp_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":hlc"],
     deps = [
         "//pkg/cli/exit",

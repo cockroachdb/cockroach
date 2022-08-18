@@ -36,6 +36,7 @@ go_test(
     name = "eventpb_test",
     size = "small",
     srcs = ["event_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":eventpb"],
     deps = [
         "//pkg/util/log/logpb",

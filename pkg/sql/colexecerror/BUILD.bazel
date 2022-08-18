@@ -17,6 +17,7 @@ go_library(
 go_test(
     name = "colexecerror_test",
     srcs = ["error_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         ":colexecerror",
         "//pkg/util/leaktest",

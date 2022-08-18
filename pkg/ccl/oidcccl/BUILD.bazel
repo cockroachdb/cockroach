@@ -37,6 +37,7 @@ go_test(
         "authentication_oidc_test.go",
         "settings_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":oidcccl"],
     deps = [
         "//pkg/base",

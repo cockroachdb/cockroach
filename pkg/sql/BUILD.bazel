@@ -632,6 +632,7 @@ go_test(
         "zone_config_test.go",
         "zone_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]) + [
         "//c-deps:libgeos",
         "//pkg/sql:information_schema.go",

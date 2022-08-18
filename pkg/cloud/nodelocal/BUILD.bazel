@@ -32,6 +32,7 @@ go_library(
 go_test(
     name = "nodelocal_test",
     srcs = ["nodelocal_storage_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":nodelocal"],
     deps = [
         "//pkg/cloud/cloudtestutils",

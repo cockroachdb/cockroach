@@ -76,10 +76,13 @@ else
   bazel run pkg/gen/genbzl --run_under="cd $PWD && " -- --out-dir pkg/gen
 fi
 
-if files_unchanged_from_upstream $(find_relevant ./pkg/cmd/generate-test-suites -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg -name BUILD.bazel) $(find_relevant ./pkg -name '*.bzl'); then
-  echo "Skipping //pkg/cmd/generate-test-suites (relevant files are unchanged from upstream)."
-else
+if ! (files_unchanged_from_upstream $(find_relevant ./pkg -name BUILD.bazel) $(find_relevant ./pkg/cmd/generate-bazel-extra -name BUILD.bazel -or -name '*.go')); then
   bazel build @com_github_bazelbuild_buildtools//buildozer:buildozer
-  CONTENTS=$(bazel run //pkg/cmd/generate-test-suites --run_under="cd $PWD && ")
-  echo "$CONTENTS" > pkg/BUILD.bazel
+  bazel run //pkg/cmd/generate-bazel-extra --run_under="cd $PWD && " -- -gen_test_suites -gen_tests_timeouts
+elif files_unchanged_from_upstream $(find_relevant ./pkg -name '*.bzl'); then
+  echo "Skipping //pkg/cmd/generate-bazel-extra (relevant files are unchanged from upstream)."
+else
+  echo "Skipping `generate tests timeouts` from //pkg/cmd/generate-bazel-extra (relevant files are unchanged from upstream)."
+  bazel build @com_github_bazelbuild_buildtools//buildozer:buildozer
+  bazel run //pkg/cmd/generate-bazel-extra --run_under="cd $PWD && " -- -gen_test_suites
 fi

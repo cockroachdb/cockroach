@@ -37,6 +37,7 @@ go_test(
         "main_test.go",
         "manager_external_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

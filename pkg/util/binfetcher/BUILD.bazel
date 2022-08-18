@@ -21,6 +21,7 @@ go_test(
     name = "binfetcher_test",
     size = "small",
     srcs = ["binfetcher_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":binfetcher"],
     deps = [
         "//pkg/testutils",

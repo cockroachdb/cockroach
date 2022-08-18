@@ -33,6 +33,7 @@ go_test(
         "external_sst_reader_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=895s"],
     embed = [":storageccl"],
     deps = [
         "//pkg/base",

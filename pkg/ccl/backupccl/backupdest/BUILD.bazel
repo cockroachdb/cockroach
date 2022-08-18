@@ -41,6 +41,7 @@ go_test(
         "incrementals_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":backupdest"],
     deps = [
         "//pkg/ccl/backupccl/backupbase",

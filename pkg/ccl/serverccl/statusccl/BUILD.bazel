@@ -8,6 +8,7 @@ go_test(
         "tenant_grpc_test.go",
         "tenant_status_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

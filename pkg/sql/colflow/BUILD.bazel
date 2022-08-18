@@ -83,6 +83,7 @@ go_test(
         "vectorized_meta_propagation_test.go",
         "vectorized_panic_propagation_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":colflow"],
     tags = ["no-remote"],
     deps = [

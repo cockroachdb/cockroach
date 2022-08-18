@@ -71,6 +71,7 @@ go_test(
         "statistics_builder_test.go",
         "typing_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
         "//c-deps:libgeos",
         "//pkg/sql/opt/testutils/opttester:testfixtures",

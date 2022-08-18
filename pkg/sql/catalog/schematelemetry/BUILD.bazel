@@ -50,6 +50,7 @@ go_test(
         "main_test.go",
         "schema_telemetry_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
         "//pkg/jobs",

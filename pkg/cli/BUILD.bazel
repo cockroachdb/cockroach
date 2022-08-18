@@ -338,6 +338,7 @@ go_test(
         "zip_tenant_test.go",
         "zip_test.go",
     ],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":cli"],
     shard_count = 16,

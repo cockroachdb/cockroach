@@ -25,6 +25,7 @@ go_test(
     name = "txnrecovery_test",
     size = "small",
     srcs = ["manager_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":txnrecovery"],
     deps = [
         "//pkg/kv",

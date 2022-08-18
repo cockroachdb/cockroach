@@ -17,6 +17,7 @@ go_test(
     name = "cgroups_test",
     size = "small",
     srcs = ["cgroups_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":cgroups"],
     deps = [
         "//pkg/testutils",

@@ -66,6 +66,7 @@ go_library(
 go_test(
     name = "delegate_test",
     srcs = ["show_completions_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":delegate"],
 )
 

@@ -56,6 +56,7 @@ go_test(
         "window_framer_test.go",
         "window_functions_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":colexecwindow"],
     tags = ["no-remote"],
     deps = [

@@ -23,6 +23,7 @@ go_test(
         "decider_test.go",
         "finder_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":split"],
     deps = [
         "//pkg/keys",

@@ -37,6 +37,7 @@ go_test(
         "interval_skl_test.go",
         "tree_impl_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":tscache"],
     deps = [
         "//pkg/roachpb",

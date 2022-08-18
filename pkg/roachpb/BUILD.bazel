@@ -82,6 +82,7 @@ go_test(
         "tenant_test.go",
         "version_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":roachpb"],
     tags = ["no-remote"],

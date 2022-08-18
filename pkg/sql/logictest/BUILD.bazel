@@ -79,6 +79,7 @@ go_test(
         "main_test.go",
         "parallel_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = [":testdata"],
     embed = [":logictest"],
     deps = [

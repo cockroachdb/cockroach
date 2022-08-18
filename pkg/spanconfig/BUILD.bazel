@@ -41,6 +41,7 @@ go_test(
         "record_test.go",
         "target_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":spanconfig"],
     deps = [
         "//pkg/jobs/jobsprotectedts",

@@ -12,6 +12,7 @@ go_test(
         "temp_table_clean_test.go",
         "tenant_gc_test.go",
     ],
+    args = ["-test.timeout=295s"],
     shard_count = 16,
     deps = [
         "//pkg/base",

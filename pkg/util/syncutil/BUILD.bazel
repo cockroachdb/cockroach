@@ -27,6 +27,7 @@ go_test(
         "int_map_test.go",
         "mutex_sync_race_test.go",  # keep
     ],
+    args = ["-test.timeout=55s"],
     embed = [":syncutil"],
     deps = ["@com_github_stretchr_testify//require"],
 )

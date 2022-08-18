@@ -39,6 +39,7 @@ go_test(
         "tenant_side_test.go",
         "token_bucket_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tenantcostclient"],
     deps = [

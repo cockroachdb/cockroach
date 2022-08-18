@@ -35,6 +35,7 @@ go_test(
         "show_test.go",
         "unique_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":multiregionccl"],
     shard_count = 16,

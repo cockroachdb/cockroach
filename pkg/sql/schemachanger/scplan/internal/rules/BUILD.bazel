@@ -41,6 +41,7 @@ go_test(
         "assertions_test.go",
         "rules_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":rules"],
     deps = [

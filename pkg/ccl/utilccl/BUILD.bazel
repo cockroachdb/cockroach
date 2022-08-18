@@ -32,6 +32,7 @@ go_test(
         "license_check_test.go",
         "license_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":utilccl"],
     deps = [
         "//pkg/base",

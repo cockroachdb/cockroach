@@ -53,6 +53,7 @@ go_test(
         "lock_table_waiter_test.go",
         ":lockstate_interval_btree_test.go",  # keep
     ],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":concurrency"],
     shard_count = 16,

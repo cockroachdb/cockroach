@@ -32,6 +32,7 @@ go_test(
         "pacer_test.go",
         "replicate_queue_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":asim"],
     deps = [
         "//pkg/kv/kvserver/asim/config",

@@ -36,6 +36,7 @@ go_test(
         "main_test.go",
         "pebble_key_manager_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":engineccl"],
     deps = [

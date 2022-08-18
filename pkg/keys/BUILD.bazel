@@ -32,6 +32,7 @@ go_test(
         "printer_test.go",
         "sql_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":keys"],
     deps = [
         "//pkg/roachpb",

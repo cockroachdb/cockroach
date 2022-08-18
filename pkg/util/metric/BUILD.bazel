@@ -47,6 +47,7 @@ go_test(
         "registry_test.go",
         "rule_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":metric"],
     deps = [
         "//pkg/util/log",
