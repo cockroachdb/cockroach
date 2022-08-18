@@ -254,7 +254,9 @@ type TxnSender interface {
 
 	// PrepareRetryableError generates a
 	// TransactionRetryWithProtoRefreshError with a payload initialized
-	// from this txn.
+	// from this txn. The method also moves the transaction into the
+	// txnRestart state, forcing the client to handle the error before
+	// being able to use the transaction again.
 	PrepareRetryableError(ctx context.Context, msg string) error
 
 	// TestingCloneTxn returns a clone of the transaction's current

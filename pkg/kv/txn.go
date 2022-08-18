@@ -976,6 +976,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		}
 
 		var retryable bool
+		var retryErr *roachpb.TransactionRetryWithProtoRefreshError
 		if err != nil {
 			if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
 				if txn.typ == RootTxn {
@@ -984,8 +985,8 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					// applies only in the case where this is the root transaction.
 					log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 				}
-			} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
-				if !txn.IsRetryableErrMeantForTxn(*t) {
+			} else if errors.As(err, &retryErr) {
+				if !txn.IsRetryableErrMeantForTxn(*retryErr) {
 					// Make sure the txn record that err carries is for this txn.
 					// If it's not, we terminate the "retryable" character of the error. We
 					// might get a TransactionRetryWithProtoRefreshError if the closure ran another
@@ -1000,7 +1001,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 			break
 		}
 
-		txn.PrepareForRetry(ctx)
+		txn.prepareForRetry(ctx, retryErr)
 	}
 
 	return err
@@ -1009,13 +1010,21 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 // PrepareForRetry needs to be called before a retry to perform some
 // book-keeping and clear errors when possible.
 func (txn *Txn) PrepareForRetry(ctx context.Context) {
+	txn.prepareForRetry(ctx, nil /* retryErr */)
+}
+
+func (txn *Txn) prepareForRetry(
+	ctx context.Context, retryErr *roachpb.TransactionRetryWithProtoRefreshError,
+) {
 	// TODO(andrei): I think commit triggers are reset in the wrong place. See #18170.
 	txn.commitTriggers = nil
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
-	retryErr := txn.mu.sender.GetTxnRetryableErr(ctx)
+	if retryErr == nil {
+		retryErr = txn.mu.sender.GetTxnRetryableErr(ctx)
+	}
 	if retryErr == nil {
 		return
 	}
@@ -1446,35 +1455,14 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 }
 
 // GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError that will
-// cause the txn to be retried.
+// cause the txn to be aborted and retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
-// TxnCoordSender does on retriable errors. The transaction's timestamp is
-// bumped to the current clock timestamp.
-//
-// TODO(andrei): This method should take in an up-to-date timestamp, but
-// unfortunately its callers don't currently have that handy.
+// TxnCoordSender does on aborted errors.
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	now := txn.db.clock.NowAsClockTimestamp()
-	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
-	return txn.mu.sender.PrepareRetryableError(ctx, msg)
-}
-
-// PrepareRetryableError returns a
-// TransactionRetryWithProtoRefreshError that will cause the txn to be
-// retried. The current txn parameters are used. The txn remains valid
-// for use.
-func (txn *Txn) PrepareRetryableError(ctx context.Context, msg string) error {
-	if txn.typ != RootTxn {
-		return errors.WithContextTags(
-			errors.AssertionFailedf("PrepareRetryableError() called on leaf txn"), ctx)
-	}
-
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
 	return txn.mu.sender.PrepareRetryableError(ctx, msg)
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,6 +37,66 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
+
+// TestPrepareRetryableErrorAndCleanupOnErrorInTxn exercises the behavior
+// of creating a retryable error inside (*DB).Txn and then cleaning up
+// the intents before propagating it to the loop. This is mirrors the
+// logic used by the connExecutor when discovering a violation of the
+// two-version invariant, but with the retry management happening in
+// the kv package as opposed to the manual management that happens in the
+// sql layer.
+func TestGenerateForcedRetryableErrorInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	ts, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+
+	k, err := ts.ScratchRange()
+	require.NoError(t, err)
+	mkKey := func(s string) roachpb.Key {
+		return encoding.EncodeStringAscending(k[:len(k):len(k)], s)
+	}
+	checkKey := func(t *testing.T, s string, exp int64) {
+		got, err := db.Get(ctx, mkKey(s))
+		require.NoError(t, err)
+		require.Equal(t, exp, got.ValueInt())
+	}
+	var i int
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Ensure that at the start, there is no data.
+		{
+			got, err := txn.Get(ctx, mkKey("a"))
+			if err != nil {
+				return err
+			}
+			if got.Exists() {
+				return errors.AssertionFailedf("expected key to not exist, got %v", got)
+			}
+		}
+		// Perform a write to key "a".
+		if err := txn.Put(ctx, mkKey("a"), 1); err != nil {
+			return err
+		}
+		// Retry exactly by propagating a retry error two times, cleaning up
+		// on the second time to ensure that that does not cause problems, but
+		// not cleaning up the first time to make sure the transaction's writes
+		// are no longer visible.
+		if i++; i < 3 {
+			if i == 1 {
+				if err := txn.Rollback(ctx); err != nil {
+					return err
+				}
+			}
+
+			return txn.GenerateForcedRetryableError(ctx, "force retry")
+		}
+		return txn.Put(ctx, mkKey("b"), 2)
+	}))
+	checkKey(t, "a", 1)
+	checkKey(t, "b", 2)
+}
 
 // Test the behavior of a txn.Rollback() issued after txn.Commit() failing with
 // an ambiguous error.
