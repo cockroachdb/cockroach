@@ -4924,10 +4924,16 @@ type DOid struct {
 // IntToOid is a helper that turns a DInt into a *DOid and checks that the value
 // is in range.
 func IntToOid(i DInt) (*DOid, error) {
-	if i > math.MaxUint32 || i < math.MinInt32 {
-		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", i)
+	if intIsOutOfOIDRange(i) {
+		return nil, pgerror.Newf(
+			pgcode.NumericValueOutOfRange, "OID out of range: %d", i,
+		)
 	}
 	return NewDOid(oid.Oid(i)), nil
+}
+
+func intIsOutOfOIDRange(i DInt) bool {
+	return i > math.MaxUint32 || i < math.MinInt32
 }
 
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.

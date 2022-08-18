@@ -387,7 +387,7 @@ func (r *Replica) propose(
 		// See also https://github.com/cockroachdb/cockroach/issues/67740.
 		lhRemovalAllowed := r.store.cfg.Settings.Version.IsActive(
 			ctx, clusterversion.EnableLeaseHolderRemoval)
-		lhDescriptor, err := r.GetReplicaDescriptor()
+		lhDesc, err := r.GetReplicaDescriptor()
 		if err != nil {
 			return roachpb.NewError(err)
 		}
@@ -400,11 +400,11 @@ func (r *Replica) propose(
 		// transferred away. The previous leaseholder is a LEARNER in the target config,
 		// and therefore shouldn't continue holding the lease.
 		if err := roachpb.CheckCanReceiveLease(
-			lhDescriptor, proposedDesc.Replicas(), lhRemovalAllowed,
+			lhDesc, proposedDesc.Replicas(), lhRemovalAllowed,
 		); err != nil {
-			e := errors.Mark(errors.Wrapf(err, "received invalid ChangeReplicasTrigger %s to "+
-				"remove self (leaseholder); lhRemovalAllowed: %v; proposed descriptor: %v", crt,
-				lhRemovalAllowed, proposedDesc), errMarkInvalidReplicationChange)
+			e := errors.Mark(errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
+				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
+				lhDesc, crt, lhRemovalAllowed, r.Desc(), proposedDesc), errMarkInvalidReplicationChange)
 			log.Errorf(p.ctx, "%v", e)
 			return roachpb.NewError(e)
 		}
