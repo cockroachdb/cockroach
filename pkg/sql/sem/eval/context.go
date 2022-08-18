@@ -232,7 +232,7 @@ type Context struct {
 	RangeStatsFetcher RangeStatsFetcher
 
 	// ChangefeedState stores the state (progress) of core changefeeds.
-	ChangefeedState ChangefeedState
+	ChangefeedState CoreChangefeedState
 }
 
 // DescIDGenerator generates unique descriptor IDs.
