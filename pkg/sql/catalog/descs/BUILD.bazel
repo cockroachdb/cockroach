@@ -9,6 +9,7 @@ go_library(
         "descriptor.go",
         "direct.go",
         "dist_sql_type_resolver.go",
+        "errors.go",
         "factory.go",
         "function.go",
         "hydrate.go",
@@ -71,6 +72,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
     ],
 )
@@ -80,6 +82,7 @@ go_test(
     size = "small",
     srcs = [
         "collection_test.go",
+        "errors_test.go",
         "helpers_test.go",
         "main_test.go",
     ],
@@ -118,6 +121,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

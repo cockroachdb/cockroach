@@ -226,7 +226,3 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
-
-// InternalExecutorCommitTxnFunc is to commit the txn associated with an
-// internal executor.
-type InternalExecutorCommitTxnFunc func(ctx context.Context) error
