@@ -35,6 +35,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
@@ -64,6 +65,7 @@ type singleNodeDockerTest struct {
 	testName         string
 	runContainerArgs runContainerArgs
 	containerName    string
+	containerIP      string
 	// sqlOpts are arguments passed to a `cockroach sql` command.
 	sqlOpts []string
 	// sqlQueries are queries to run in this container, and their expected results.
@@ -83,6 +85,7 @@ func TestSingleNodeDocker(t *testing.T) {
 		{
 			testName:      "single-node-secure-mode",
 			containerName: "roach1",
+			containerIP:   hostIP,
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -111,6 +114,7 @@ func TestSingleNodeDocker(t *testing.T) {
 		{
 			testName:      "single-node-insecure-mode",
 			containerName: "roach2",
+			containerIP:   hostIP,
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -138,6 +142,7 @@ func TestSingleNodeDocker(t *testing.T) {
 		{
 			testName:      "single-node-insecure-mem-mode",
 			containerName: "roach3",
+			containerIP:   hostIP,
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -149,6 +154,35 @@ func TestSingleNodeDocker(t *testing.T) {
 				cmd: []string{"start-single-node", "--insecure", "--store=type=mem,size=0.25"},
 			},
 			sqlOpts: []string{
+				"--format=csv",
+				"--insecure",
+				"--database=mydb",
+			},
+			sqlQueries: []sqlQuery{
+				{"SELECT current_user", "current_user\nroot"},
+				{"SELECT current_database()", "current_database\nmydb"},
+				{"CREATE TABLE hello (X INT)", "CREATE TABLE"},
+				{"INSERT INTO hello VALUES (1), (2), (3)", "INSERT 0 3"},
+				{"SELECT * FROM hello", "x\n1\n2\n3"},
+				{"SELECT * FROM bello", "id,name\n1,a\n2,b\n3,c"},
+			},
+		},
+		{
+			testName:      "single-node-insecure-mode-custom-listen-addr",
+			containerName: "roach4",
+			containerIP:   "172.0.10.0",
+			runContainerArgs: runContainerArgs{
+				envSetting: []string{
+					"COCKROACH_DATABASE=mydb",
+				},
+				volSetting: []string{
+					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
+					fmt.Sprintf("%s:/cockroach/docker-fsnotify", fsnotifyBinPath),
+				},
+				cmd: []string{"start-single-node", "--insecure", "--listen-addr=172.0.10.0:26257"},
+			},
+			sqlOpts: []string{
+				"--host=172.0.10.0",
 				"--format=csv",
 				"--insecure",
 				"--database=mydb",
@@ -193,11 +227,26 @@ func TestSingleNodeDocker(t *testing.T) {
 
 			if err := contextutil.RunWithTimeout(
 				ctx,
+				"create network",
+				defaultTimeout,
+				func(ctx context.Context) error {
+					return dn.createNetwork(
+						ctx,
+						test.containerIP,
+					)
+				},
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := contextutil.RunWithTimeout(
+				ctx,
 				"start container",
 				defaultTimeout,
 				func(ctx context.Context) error {
 					return dn.startContainer(
 						ctx,
+						test.containerIP,
 						test.containerName,
 						test.runContainerArgs.envSetting,
 						test.runContainerArgs.volSetting,
@@ -268,6 +317,16 @@ func TestSingleNodeDocker(t *testing.T) {
 				t.Errorf("%v", err)
 			}
 
+			if err := contextutil.RunWithTimeout(
+				ctx,
+				"remove current network",
+				defaultTimeout,
+				func(ctx context.Context) error {
+					return dn.cl.NetworkRemove(ctx, dn.networkID)
+				},
+			); err != nil {
+				t.Errorf("%v", err)
+			}
 		})
 	}
 
@@ -285,8 +344,9 @@ const (
 )
 
 type dockerNode struct {
-	cl     client.APIClient
-	contID string
+	cl        client.APIClient
+	contID    string
+	networkID string
 }
 
 // removeLocalData removes existing database saved in cockroach-data.
@@ -340,10 +400,35 @@ func (dn *dockerNode) showContainerLog(ctx context.Context, logFileName string) 
 	return nil
 }
 
+func (dn *dockerNode) createNetwork(ctx context.Context, ipAddr string) error {
+	resp, err := dn.cl.NetworkCreate(context.Background(), "roachnet", types.NetworkCreate{
+		Driver: "bridge",
+		IPAM: &network.IPAM{
+			Config: []network.IPAMConfig{{
+				Subnet:  fmt.Sprintf("%s/16", ipAddr),
+				Gateway: ipAddr,
+			}},
+		},
+	})
+	if err != nil {
+		return errors.Wrap(err, "cannot create network for docker")
+	}
+	if resp.Warning != "" {
+		log.Warningf(ctx, "creating network: %s", resp.Warning)
+	}
+	dn.networkID = resp.ID
+	return nil
+}
+
 // startContainer starts a container with given setting for environment
 // variables, mounted volumes, and command to run.
 func (dn *dockerNode) startContainer(
-	ctx context.Context, containerName string, envSetting []string, volSetting []string, cmd []string,
+	ctx context.Context,
+	hostIP string,
+	containerName string,
+	envSetting []string,
+	volSetting []string,
+	cmd []string,
 ) error {
 
 	containerConfig := container.Config{
