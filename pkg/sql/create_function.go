@@ -91,12 +91,8 @@ func (n *createFunctionNode) createNewFunction(
 			return err
 		}
 	}
-	if udfDesc.LeakProof && udfDesc.Volatility != catpb.Function_IMMUTABLE {
-		return pgerror.Newf(
-			pgcode.InvalidFunctionDefinition,
-			"cannot create leakproof function with non-immutable volatility: %s",
-			udfDesc.Volatility.String(),
-		)
+	if err := funcdesc.CheckLeakProofVolatility(udfDesc); err != nil {
+		return err
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -167,12 +163,9 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 			return err
 		}
 	}
-	if udfDesc.LeakProof && udfDesc.Volatility != catpb.Function_IMMUTABLE {
-		return pgerror.Newf(
-			pgcode.InvalidFunctionDefinition,
-			"cannot create leakproof function with non-immutable volatility: %s",
-			udfDesc.Volatility.String(),
-		)
+
+	if err := funcdesc.CheckLeakProofVolatility(udfDesc); err != nil {
+		return err
 	}
 
 	// Removing all existing references before adding new references.
