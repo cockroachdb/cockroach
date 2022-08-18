@@ -42,6 +42,9 @@ func alterTableAddColumn(
 ) {
 	b.IncrementSchemaChangeAlterCounter("table", "add_column")
 	d := t.ColumnDef
+	// We don't support handling zone config related properties for tables, so
+	// throw an unsupported error.
+	fallBackIfZoneConfigExists(b, d, tbl.TableID)
 	// Check column non-existence.
 	{
 		elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{

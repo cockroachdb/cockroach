@@ -30,6 +30,7 @@ import (
 func alterTableDropColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, n *tree.AlterTableDropColumn,
 ) {
+	fallBackIfZoneConfigExists(b, n, tbl.TableID)
 	checkSafeUpdatesForDropColumn(b)
 	checkRowLevelTTLColumn(b, tn, tbl, n)
 	checkRegionalByRowColumnConflict(b, tbl, n)
