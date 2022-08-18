@@ -15,7 +15,7 @@ const webpack = require("webpack");
 
 const pkg = require("./package.json");
 
-const prodDependencies = Object.keys(pkg.dependencies);
+const prodDependencies = Object.keys(pkg.dependencies).filter(name => !name.startsWith("@cockroachlabs"));
 
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
