@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -177,9 +178,11 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 func TestSQLStatsScheduleOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "test is too slow to run under race")
 
 	ctx := context.Background()
 	helper, helperCleanup := newTestHelper(t, nil /* sqlStatsKnobs */)
+	helper.sqlDB.SucceedsSoonDuration = 2 * time.Minute
 	defer helperCleanup()
 
 	schedID := getSQLStatsCompactionSchedule(t, helper).ScheduleID()
@@ -215,7 +218,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 			helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = $1", expr)
 
 			var err error
-			testutils.SucceedsSoon(t, func() error {
+			testutils.SucceedsWithin(t, func() error {
 				// Reload schedule from DB.
 				sj := getSQLStatsCompactionSchedule(t, helper)
 				err = persistedsqlstats.CheckScheduleAnomaly(sj)
@@ -224,7 +227,8 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 				}
 				require.Equal(t, expr, sj.ScheduleExpr())
 				return nil
-			})
+			}, time.Minute*2)
+
 			require.True(t, errors.Is(
 				errors.Unwrap(err), persistedsqlstats.ErrScheduleIntervalTooLong),
 				"expected ErrScheduleIntervalTooLong, but found %+v", err)
