@@ -148,6 +148,7 @@ go_test(
         "read_import_pgdump_test.go",
         "testutils_test.go",
     ],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":importer"],
     # It's a large test, so use 16 shards to run test cases.

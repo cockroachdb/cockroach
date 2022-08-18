@@ -30,6 +30,7 @@ go_test(
         "interceptor_test.go",
         "pg_conn_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":interceptor"],
     deps = [
         "//pkg/sql/pgwire/pgwirebase",

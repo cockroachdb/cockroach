@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "integration_test",
     srcs = ["insights_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

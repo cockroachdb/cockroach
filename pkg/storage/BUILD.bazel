@@ -131,6 +131,7 @@ go_test(
         "sst_writer_test.go",
         "temp_engine_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":storage"],
     deps = [

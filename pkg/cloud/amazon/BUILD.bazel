@@ -49,6 +49,7 @@ go_test(
         "aws_kms_test.go",
         "s3_storage_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":amazon"],
     deps = [
         "//pkg/base",

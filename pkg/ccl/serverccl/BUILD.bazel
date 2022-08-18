@@ -40,6 +40,7 @@ go_test(
         "tenant_decommissioned_host_test.go",
         "tenant_vars_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     embed = [":serverccl"],
     deps = [
         "//pkg/base",

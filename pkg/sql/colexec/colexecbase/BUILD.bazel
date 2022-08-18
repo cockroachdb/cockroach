@@ -53,6 +53,7 @@ go_test(
         "ordinality_test.go",
         "simple_project_test.go",
     ],
+    args = ["-test.timeout=295s"],
     tags = ["no-remote"],
     deps = [
         ":colexecbase",

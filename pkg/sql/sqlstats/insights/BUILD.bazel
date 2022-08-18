@@ -39,6 +39,7 @@ go_test(
         "problems_test.go",
         "registry_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":insights"],
     deps = [
         "//pkg/roachpb",

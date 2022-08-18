@@ -25,6 +25,7 @@ go_test(
     name = "nodedialer_test",
     size = "small",
     srcs = ["nodedialer_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":nodedialer"],
     deps = [
         "//pkg/clusterversion",

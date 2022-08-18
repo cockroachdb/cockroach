@@ -34,6 +34,7 @@ go_test(
         "streamer_test.go",
         ":clusterstats_mock",  # keep
     ],
+    args = ["-test.timeout=295s"],
     embed = [":clusterstats"],
     deps = [
         "//pkg/roachprod/logger",

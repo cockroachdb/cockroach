@@ -13,6 +13,7 @@ go_test(
     name = "cloudinfo_test",
     size = "small",
     srcs = ["cloudinfo_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":cloudinfo"],
     deps = [
         "//pkg/util/httputil",

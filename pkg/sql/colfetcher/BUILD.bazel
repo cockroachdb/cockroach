@@ -71,6 +71,7 @@ go_test(
         "main_test.go",
         "vectorized_batch_size_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

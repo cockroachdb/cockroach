@@ -143,6 +143,7 @@ go_test(
         "txn_test.go",
         ":mock_kvcoord",  # keep
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvcoord"],
     shard_count = 16,

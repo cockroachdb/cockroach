@@ -57,6 +57,7 @@ go_test(
         "replication_manager_test.go",
         "replication_stream_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":streamproducer"],
     deps = [
         "//pkg/base",

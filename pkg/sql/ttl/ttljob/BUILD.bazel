@@ -59,6 +59,7 @@ go_test(
         "ttljob_query_builder_test.go",
         "ttljob_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":ttljob"],
     deps = [
         "//pkg/base",

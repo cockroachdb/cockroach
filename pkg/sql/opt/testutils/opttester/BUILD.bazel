@@ -65,6 +65,7 @@ go_test(
     name = "opttester_test",
     size = "small",
     srcs = ["opt_tester_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     deps = [
         ":opttester",

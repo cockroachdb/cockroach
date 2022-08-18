@@ -126,6 +126,7 @@ go_test(
         "runtime_stats_test.go",
         "runtime_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":status"],
     deps = [
         "//pkg/base",

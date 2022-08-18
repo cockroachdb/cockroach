@@ -25,6 +25,7 @@ go_test(
         "safewrite_test.go",
         "temp_dir_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":fs"],
     deps = [
         "//pkg/util/leaktest",
