@@ -333,6 +333,11 @@ retry
 synthetic error: TransactionRetryWithProtoRefreshError: forced retry
 epoch: 0 -> 1
 
+reset
+----
+txn error cleared
+txn id not changed
+
 release x
 ----
 0 <noignore>
