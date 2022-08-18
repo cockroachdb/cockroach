@@ -883,7 +883,7 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 		ctx,
 		p.Txn(),
 		catalog.NoValidationTelemetry,
-		catalog.ValidationLevelCrossReferences,
+		catalog.ValidationLevelBackReferences,
 		descriptor,
 	)
 }

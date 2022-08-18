@@ -2337,7 +2337,12 @@ func (r *restoreResumer) dropDescriptors(
 
 	// Delete any schema descriptors that this restore created. Also collect the
 	// descriptors so we can update their parent databases later.
-	dbsWithDeletedSchemas := make(map[descpb.ID][]catalog.Descriptor)
+	type dbWithDeletedSchemas struct {
+		db      *dbdesc.Mutable
+		schemas []catalog.Descriptor
+	}
+
+	dbsWithDeletedSchemas := make(map[descpb.ID]dbWithDeletedSchemas)
 	for _, schemaDesc := range details.SchemaDescs {
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
 		isSchemaEmpty, err := isSchemaEmpty(ctx, txn, schemaDesc.GetID(), allDescs, ignoredChildDescIDs)
@@ -2354,49 +2359,53 @@ func (r *restoreResumer) dropDescriptors(
 		if err != nil {
 			return err
 		}
+		entry, hasEntry := dbsWithDeletedSchemas[schemaDesc.GetParentID()]
+		if !hasEntry {
+			mutParent, err := descsCol.GetMutableDescriptorByID(ctx, txn, schemaDesc.GetParentID())
+			if err != nil {
+				return err
+			}
+			entry.db = mutParent.(*dbdesc.Mutable)
+		}
 
-		// Mark schema as dropped and add uncommitted version to pass pre-txn
-		// descriptor validation.
+		// Delete schema entries in descriptor and namespace system tables.
+		b.Del(catalogkeys.EncodeNameKey(codec, mutSchema))
+		b.Del(catalogkeys.MakeDescMetadataKey(codec, mutSchema.GetID()))
+		descsCol.NotifyOfDeletedDescriptor(mutSchema.GetID())
+		// Add dropped descriptor as uncommitted to satisfy descriptor validation.
 		mutSchema.SetDropped()
 		mutSchema.MaybeIncrementVersion()
 		if err := descsCol.AddUncommittedDescriptor(ctx, mutSchema); err != nil {
 			return err
 		}
 
-		b.Del(catalogkeys.EncodeNameKey(codec, mutSchema))
-		b.Del(catalogkeys.MakeDescMetadataKey(codec, mutSchema.GetID()))
-		descsCol.NotifyOfDeletedDescriptor(mutSchema.GetID())
-		dbsWithDeletedSchemas[mutSchema.GetParentID()] = append(dbsWithDeletedSchemas[mutSchema.GetParentID()], mutSchema)
+		// Remove the back-reference to the deleted schema in the parent database.
+		if schemaInfo, ok := entry.db.Schemas[schemaDesc.GetName()]; !ok {
+			log.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
+				schemaDesc.GetName(), entry.db.GetID())
+		} else if schemaInfo.ID != schemaDesc.GetID() {
+			log.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
+				schemaInfo.ID, schemaDesc.GetName(), entry.db.GetID(), schemaDesc.GetID())
+		} else {
+			delete(entry.db.Schemas, schemaDesc.GetName())
+		}
+
+		entry.schemas = append(entry.schemas, mutSchema)
+		dbsWithDeletedSchemas[entry.db.GetID()] = entry
 	}
 
 	// For each database that had a child schema deleted (regardless of whether
 	// the db was created in the restore job), if it wasn't deleted just now,
-	// delete the now-deleted child schema from its schema map.
+	// write the updated descriptor with the now-deleted child schemas from its
+	// schema map.
 	//
 	// This cleanup must be done prior to dropping the database descriptors in the
 	// loop below so that we do not accidentally `b.Put` the descriptor with the
 	// modified schema slice after we have issued a `b.Del` to drop it.
-	for dbID, schemas := range dbsWithDeletedSchemas {
-		log.Infof(ctx, "deleting %d schema entries from database %d", len(schemas), dbID)
-		desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, dbID)
-		if err != nil {
-			return err
-		}
-		db := desc.(*dbdesc.Mutable)
-		for _, sc := range schemas {
-			if schemaInfo, ok := db.Schemas[sc.GetName()]; !ok {
-				log.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
-					sc.GetName(), dbID)
-			} else if schemaInfo.ID != sc.GetID() {
-				log.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
-					schemaInfo.ID, sc.GetName(), dbID, sc.GetID())
-			} else {
-				delete(db.Schemas, sc.GetName())
-			}
-		}
-
+	for dbID, entry := range dbsWithDeletedSchemas {
+		log.Infof(ctx, "deleting %d schema entries from database %d", len(entry.schemas), dbID)
 		if err := descsCol.WriteDescToBatch(
-			ctx, false /* kvTrace */, db, b,
+			ctx, false /* kvTrace */, entry.db, b,
 		); err != nil {
 			return err
 		}
