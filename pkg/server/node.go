@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -214,18 +216,19 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // IDs for bootstrapping the node itself or initializing new stores as
 // they're added on subsequent instantiations.
 type Node struct {
-	stopper      *stop.Stopper
-	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
-	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
-	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
-	sqlExec      *sql.InternalExecutor    // For event logging
-	stores       *kvserver.Stores         // Access to node-local stores
-	metrics      nodeMetrics
-	recorder     *status.MetricsRecorder
-	startedAt    int64
-	lastUp       int64
-	initialStart bool // true if this is the first time this node has started
-	txnMetrics   kvcoord.TxnMetrics
+	stopper        *stop.Stopper
+	clusterID      *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor     roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg       kvserver.StoreConfig     // Config to use and pass to stores
+	sqlExec        *sql.InternalExecutor    // For event logging
+	eventsExporter obs.EventsExporter
+	stores         *kvserver.Stores // Access to node-local stores
+	metrics        nodeMetrics
+	recorder       *status.MetricsRecorder
+	startedAt      int64
+	lastUp         int64
+	initialStart   bool // true if this is the first time this node has started
+	txnMetrics     kvcoord.TxnMetrics
 
 	// Used to signal when additional stores, if any, have been initialized.
 	additionalStoreInitCh chan struct{}
@@ -392,6 +395,7 @@ func NewNode(
 // logging.
 func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
 	n.sqlExec = execCfg.InternalExecutor
+	n.eventsExporter = execCfg.EventsExporter
 }
 
 // String implements fmt.Stringer.
@@ -956,7 +960,7 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 		retryOpts.Closer = n.stopper.ShouldQuiesce()
 		for r := retry.Start(retryOpts); r.Next(); {
 			if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return sql.InsertEventRecords(ctx, n.sqlExec,
+				return sql.InsertEventRecords(ctx, n.sqlExec, n.eventsExporter,
 					txn,
 					int32(n.Descriptor.NodeID), /* reporting ID: the node where the event is logged */
 					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* LogEventDestination: we already call log.StructuredEvent above */
@@ -1238,6 +1242,12 @@ func (n *Node) RangeLookup(
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
+	return n.singleRangeFeed(args, stream)
+}
+
+func (n *Node) singleRangeFeed(
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
+) error {
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
@@ -1247,6 +1257,78 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// setRangeIDEventSink annotates each response with range and stream IDs.
+// This is used by MuxRangeFeed.
+// TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
+// the old style RangeFeed deprecated.
+type setRangeIDEventSink struct {
+	ctx      context.Context
+	rangeID  roachpb.RangeID
+	streamID int64
+	wrapped  *lockedMuxStream
+}
+
+func (s *setRangeIDEventSink) Context() context.Context {
+	return s.ctx
+}
+
+func (s *setRangeIDEventSink) Send(event *roachpb.RangeFeedEvent) error {
+	response := &roachpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+		StreamID:       s.streamID,
+	}
+	return s.wrapped.Send(response)
+}
+
+var _ roachpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
+
+// lockedMuxStream provides support for concurrent calls to Send.
+// The underlying MuxRangeFeedServer is not safe for concurrent calls to Send.
+type lockedMuxStream struct {
+	wrapped roachpb.Internal_MuxRangeFeedServer
+	sendMu  syncutil.Mutex
+}
+
+func (s *lockedMuxStream) Context() context.Context {
+	return s.wrapped.Context()
+}
+
+func (s *lockedMuxStream) Send(e *roachpb.MuxRangeFeedEvent) error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return s.wrapped.Send(e)
+}
+
+// MuxRangeFeed implements the roachpb.InternalServer interface.
+func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
+	ctx, cancelFeeds := n.stopper.WithCancelOnQuiesce(stream.Context())
+	defer cancelFeeds()
+	rfGrp := ctxgroup.WithContext(ctx)
+
+	muxStream := &lockedMuxStream{wrapped: stream}
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			cancelFeeds()
+			return errors.CombineErrors(err, rfGrp.Wait())
+		}
+
+		rfGrp.GoCtx(func(ctx context.Context) error {
+			ctx, span := tracing.ForkSpan(logtags.AddTag(ctx, "r", req.RangeID), "mux-rf")
+			defer span.Finish()
+
+			sink := setRangeIDEventSink{
+				ctx:      ctx,
+				rangeID:  req.RangeID,
+				streamID: req.StreamID,
+				wrapped:  muxStream,
+			}
+			return n.singleRangeFeed(req, &sink)
+		})
+	}
 }
 
 // ResetQuorum implements the roachpb.InternalServer interface.

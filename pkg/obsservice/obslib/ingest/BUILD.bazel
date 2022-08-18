@@ -1,0 +1,58 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ingest",
+    srcs = ["ingest.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_jackc_pgx_v4//pgxpool",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//credentials/insecure",
+    ],
+)
+
+go_test(
+    name = "ingest_test",
+    srcs = [
+        "ingest_test.go",
+        "main_test.go",
+    ],
+    embed = [":ingest"],
+    deps = [
+        "//pkg/base",
+        "//pkg/obs",
+        "//pkg/obsservice/obslib/migrations",
+        "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
+        "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
+        "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:resource",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_jackc_pgx_v4//pgxpool",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

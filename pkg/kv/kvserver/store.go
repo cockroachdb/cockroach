@@ -3090,7 +3090,7 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // the provided stream and returns with an optional error when the rangefeed is
 // complete.
 func (s *Store) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error {
 
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {

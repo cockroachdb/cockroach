@@ -571,6 +571,10 @@ func (*internalServer) RangeFeed(
 	panic("unimplemented")
 }
 
+func (s *internalServer) MuxRangeFeed(server roachpb.Internal_MuxRangeFeedServer) error {
+	panic("implement me")
+}
+
 func (*internalServer) GossipSubscription(
 	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
 ) error {

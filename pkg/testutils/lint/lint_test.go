@@ -227,6 +227,9 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`/embedded.go`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
+			// The opentelemetry-proto files are copied from otel with their own
+			// license.
+			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 		), func(filename string) {
 			file, err := os.Open(filepath.Join(pkgDir, filename))
 			if err != nil {

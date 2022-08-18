@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -351,6 +352,9 @@ type sqlServerArgs struct {
 
 	// grpc is the RPC service.
 	grpc *grpcServer
+
+	// eventsServer communicates with the Observability Service.
+	eventsServer *obs.EventsServer
 }
 
 type monitorAndMetrics struct {
@@ -811,13 +815,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
-			ctx,
 			cfg.TableStatCacheSize,
 			cfg.db,
 			cfg.circularInternalExecutor,
-			codec,
 			cfg.Settings,
-			cfg.rangeFeedFactory,
 			collectionFactory,
 		),
 
@@ -834,6 +835,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeProber:                rangeprober.NewRangeProber(cfg.db),
 		DescIDGenerator:            descidgen.NewGenerator(codec, cfg.db),
 		RangeStatsFetcher:          rangeStatsFetcher,
+		EventsExporter:             cfg.eventsServer,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1245,6 +1247,9 @@ func (s *SQLServer) preStart(
 		return err
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
+	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+		return err
+	}
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.
