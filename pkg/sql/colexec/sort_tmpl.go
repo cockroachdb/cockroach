@@ -122,6 +122,10 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(
 	s.allocator = allocator
 	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
 	s.abbreviatedSortCol = s.sortCol.Abbreviated()
+	// Finalize the accounting in case the capacity of the new slice is larger
+	// than we asked for.
+	extraCap := cap(s.abbreviatedSortCol) - len(s.abbreviatedSortCol)
+	s.allocator.AdjustMemoryUsageAfterAllocation(memsize.Uint64 * int64(extraCap))
 	// {{end}}
 	s.nulls = col.Nulls()
 	s.order = order
@@ -130,7 +134,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) reset() {
 	// {{if .CanAbbreviate}}
-	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(cap(s.abbreviatedSortCol)))
 	s.allocator = nil
 	s.abbreviatedSortCol = nil
 	// {{end}}

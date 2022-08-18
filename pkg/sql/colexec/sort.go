@@ -336,6 +336,10 @@ func (p *sortOp) sort() {
 		sizeAfter := memsize.Int * int64(spooledTuples)
 		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
 		p.order = make([]int, spooledTuples)
+		// Finalize the accounting in case the capacity of the new slice is
+		// larger than we asked for.
+		extraCap := cap(p.order) - len(p.order)
+		p.allocator.AdjustMemoryUsageAfterAllocation(memsize.Int * int64(extraCap))
 	}
 	order := p.order[:spooledTuples]
 

@@ -399,13 +399,17 @@ func (s *sortBytesAscWithNullsOp) init(
 	s.allocator = allocator
 	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
 	s.abbreviatedSortCol = s.sortCol.Abbreviated()
+	// Finalize the accounting in case the capacity of the new slice is larger
+	// than we asked for.
+	extraCap := cap(s.abbreviatedSortCol) - len(s.abbreviatedSortCol)
+	s.allocator.AdjustMemoryUsageAfterAllocation(memsize.Uint64 * int64(extraCap))
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
 }
 
 func (s *sortBytesAscWithNullsOp) reset() {
-	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(cap(s.abbreviatedSortCol)))
 	s.allocator = nil
 	s.abbreviatedSortCol = nil
 	s.sortCol = nil
@@ -1371,13 +1375,17 @@ func (s *sortBytesDescWithNullsOp) init(
 	s.allocator = allocator
 	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
 	s.abbreviatedSortCol = s.sortCol.Abbreviated()
+	// Finalize the accounting in case the capacity of the new slice is larger
+	// than we asked for.
+	extraCap := cap(s.abbreviatedSortCol) - len(s.abbreviatedSortCol)
+	s.allocator.AdjustMemoryUsageAfterAllocation(memsize.Uint64 * int64(extraCap))
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
 }
 
 func (s *sortBytesDescWithNullsOp) reset() {
-	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(cap(s.abbreviatedSortCol)))
 	s.allocator = nil
 	s.abbreviatedSortCol = nil
 	s.sortCol = nil
@@ -2333,13 +2341,17 @@ func (s *sortBytesAscOp) init(
 	s.allocator = allocator
 	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
 	s.abbreviatedSortCol = s.sortCol.Abbreviated()
+	// Finalize the accounting in case the capacity of the new slice is larger
+	// than we asked for.
+	extraCap := cap(s.abbreviatedSortCol) - len(s.abbreviatedSortCol)
+	s.allocator.AdjustMemoryUsageAfterAllocation(memsize.Uint64 * int64(extraCap))
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
 }
 
 func (s *sortBytesAscOp) reset() {
-	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(cap(s.abbreviatedSortCol)))
 	s.allocator = nil
 	s.abbreviatedSortCol = nil
 	s.sortCol = nil
@@ -3198,13 +3210,17 @@ func (s *sortBytesDescOp) init(
 	s.allocator = allocator
 	s.allocator.AdjustMemoryUsage(memsize.Uint64 * int64(s.sortCol.Len()))
 	s.abbreviatedSortCol = s.sortCol.Abbreviated()
+	// Finalize the accounting in case the capacity of the new slice is larger
+	// than we asked for.
+	extraCap := cap(s.abbreviatedSortCol) - len(s.abbreviatedSortCol)
+	s.allocator.AdjustMemoryUsageAfterAllocation(memsize.Uint64 * int64(extraCap))
 	s.nulls = col.Nulls()
 	s.order = order
 	s.cancelChecker.Init(ctx)
 }
 
 func (s *sortBytesDescOp) reset() {
-	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(s.sortCol.Len()))
+	s.allocator.AdjustMemoryUsage(0 - memsize.Uint64*int64(cap(s.abbreviatedSortCol)))
 	s.allocator = nil
 	s.abbreviatedSortCol = nil
 	s.sortCol = nil
