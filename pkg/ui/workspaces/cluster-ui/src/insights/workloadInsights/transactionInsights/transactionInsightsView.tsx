@@ -56,7 +56,6 @@ export type TransactionInsightsViewStateProps = {
   transactionsError: Error | null;
   filters: InsightEventFilters;
   sortSetting: SortSetting;
-  internalAppNamePrefix: string;
 };
 
 export type TransactionInsightsViewDispatchProps = {
@@ -69,6 +68,7 @@ export type TransactionInsightsViewProps = TransactionInsightsViewStateProps &
   TransactionInsightsViewDispatchProps;
 
 const INSIGHT_TXN_SEARCH_PARAM = "q";
+const INTERNAL_APP_NAME_PREFIX = "$ internal";
 
 export const TransactionInsightsView: React.FC<
   TransactionInsightsViewProps
@@ -77,7 +77,6 @@ export const TransactionInsightsView: React.FC<
   transactions,
   transactionsError,
   filters,
-  internalAppNamePrefix,
   refreshTransactionInsights,
   onFiltersChange,
   onSortChange,
@@ -178,13 +177,13 @@ export const TransactionInsightsView: React.FC<
 
   const apps = getAppsFromTransactionInsights(
     transactionInsights,
-    internalAppNamePrefix,
+    INTERNAL_APP_NAME_PREFIX,
   );
   const countActiveFilters = calculateActiveFilters(filters);
   const filteredTransactions = filterTransactionInsights(
     transactionInsights,
     filters,
-    internalAppNamePrefix,
+    INTERNAL_APP_NAME_PREFIX,
     search,
   );
 
