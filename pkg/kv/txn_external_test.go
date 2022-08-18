@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -577,4 +578,127 @@ func TestRevScanAndGet(t *testing.T) {
 		b.ReverseScan("d", "f")
 		require.NoError(t, txn.Run(ctx, b))
 	}
+}
+
+// TestGenerateForcedRetryableErrorAfterRollback poisons the txn handle and then
+// rolls it back. This should fail - a retryable error should not be returned
+// after a rollback.
+func TestGenerateForcedRetryableErrorAfterRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+	k, err := ts.ScratchRange()
+	require.NoError(t, err)
+	mkKey := func(s string) roachpb.Key {
+		return encoding.EncodeStringAscending(k[:len(k):len(k)], s)
+	}
+	checkKey := func(t *testing.T, s string, exp int64) {
+		got, err := db.Get(ctx, mkKey(s))
+		require.NoError(t, err)
+		require.Equal(t, exp, got.ValueInt())
+	}
+	var i int
+	txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		e1 := txn.Put(ctx, mkKey("a"), 1)
+		i++
+		require.LessOrEqual(t, i, 2)
+		if i == 1 {
+			require.NoError(t, e1)
+			// Prepare an error to return after the rollback.
+			retryErr := txn.GenerateForcedRetryableError(ctx, "force retry")
+			// Rolling back completes the transaction, returning an error is invalid.
+			require.NoError(t, txn.Rollback(ctx))
+			return retryErr
+		} else {
+			require.ErrorContains(t, e1, "TransactionStatusError", i)
+			return nil
+		}
+	})
+	require.ErrorContains(t, txnErr, "TransactionStatusError")
+	checkKey(t, "a", 0)
+}
+
+// TestGenerateForcedRetryableErrorSimple verifies the retryable func can return
+// a forced retryable error, and then the retry will not see writes from the
+// first run, and can succeed on the second run.
+func TestGenerateForcedRetryableErrorSimple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+	k, err := ts.ScratchRange()
+	require.NoError(t, err)
+	mkKey := func(s string) roachpb.Key {
+		return encoding.EncodeStringAscending(k[:len(k):len(k)], s)
+	}
+	checkKey := func(t *testing.T, s string, exp int64) {
+		got, err := db.Get(ctx, mkKey(s))
+		require.NoError(t, err)
+		require.Equal(t, exp, got.ValueInt())
+	}
+	var i int
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		{
+			// Verify 'a' is not written yet.
+			got, err := txn.Get(ctx, mkKey("a"))
+			require.NoError(t, err)
+			require.False(t, got.Exists())
+		}
+		require.NoError(t, txn.Put(ctx, mkKey("a"), 1))
+		// Retry exactly once by propagating a retry error.
+		if i++; i == 1 {
+			return txn.GenerateForcedRetryableError(ctx, "force retry")
+		}
+		require.NoError(t, txn.Put(ctx, mkKey("b"), 2))
+		return nil
+	}))
+	checkKey(t, "a", 1)
+	checkKey(t, "b", 2)
+}
+
+// TestGenerateForcedRetryableErrorByPoisoning does the same as
+// TestGenerateForcedRetryableErrorSimple above, but doesn't return the error
+// from the retryable func, instead, this test verifies that the txn object is
+// "poisoned" (in a state where the txn object cannot be used until the error is
+// cleared) and it will be reset automatically and succeed on the second try.
+func TestGenerateForcedRetryableErrorByPoisoning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+	k, err := ts.ScratchRange()
+	require.NoError(t, err)
+	mkKey := func(s string) roachpb.Key {
+		return encoding.EncodeStringAscending(k[:len(k):len(k)], s)
+	}
+	checkKey := func(t *testing.T, s string, exp int64) {
+		got, err := db.Get(ctx, mkKey(s))
+		require.NoError(t, err)
+		require.Equal(t, exp, got.ValueInt())
+	}
+	var i int
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		{
+			// Verify 'a' is not written yet.
+			got, err := txn.Get(ctx, mkKey("a"))
+			require.NoError(t, err, got.ValueInt())
+			require.False(t, got.Exists(), got.ValueInt())
+		}
+		require.NoError(t, txn.Put(ctx, mkKey("a"), 1))
+		// Retry exactly once by propagating a retry error.
+		if i++; i == 1 {
+			// Generate an error and then return nil (not the ideal implementation but
+			// should work).
+			_ = txn.GenerateForcedRetryableError(ctx, "force retry")
+			return nil
+		}
+		require.NoError(t, txn.Put(ctx, mkKey("b"), 2))
+		return nil
+	}))
+	checkKey(t, "a", 1)
+	checkKey(t, "b", 2)
 }
