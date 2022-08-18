@@ -11,6 +11,7 @@
 package ttljob
 
 import (
+	"bytes"
 	"context"
 	"sync/atomic"
 	"time"
@@ -44,16 +45,16 @@ type ttlProcessor struct {
 	ttlSpec execinfrapb.TTLSpec
 }
 
-func (ttl *ttlProcessor) Start(ctx context.Context) {
-	ctx = ttl.StartInternal(ctx, "ttl")
-	err := ttl.work(ctx)
-	ttl.MoveToDraining(err)
+func (t *ttlProcessor) Start(ctx context.Context) {
+	ctx = t.StartInternal(ctx, "ttl")
+	err := t.work(ctx)
+	t.MoveToDraining(err)
 }
 
-func (ttl *ttlProcessor) work(ctx context.Context) error {
+func (t *ttlProcessor) work(ctx context.Context) error {
 
-	ttlSpec := ttl.ttlSpec
-	flowCtx := ttl.FlowCtx
+	ttlSpec := t.ttlSpec
+	flowCtx := t.FlowCtx
 	descsCol := flowCtx.Descriptors
 	serverCfg := flowCtx.Cfg
 	db := serverCfg.DB
@@ -126,7 +127,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 			group.GoCtx(func(ctx context.Context) error {
 				for rangeToProcess := range rangeChan {
 					start := timeutil.Now()
-					rangeRowCount, err := ttl.runTTLOnRange(
+					rangeRowCount, err := t.runTTLOnRange(
 						ctx,
 						metrics,
 						rangeToProcess,
@@ -153,12 +154,14 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		var alloc tree.DatumAlloc
 		ri := kvcoord.MakeRangeIterator(serverCfg.DistSender)
 		for _, span := range ttlSpec.Spans {
-			rangeSpan := span
-			ri.Seek(ctx, roachpb.RKey(span.Key), kvcoord.Ascending)
+			spanStartKey := span.Key
+			spanStartRKey := roachpb.RKey(spanStartKey)
+			spanEndKey := span.EndKey
+			spanEndRKey := roachpb.RKey(spanEndKey)
+			ri.Seek(ctx, spanStartRKey, kvcoord.Ascending)
 			for done := false; ri.Valid() && !done; ri.Next(ctx) {
 				// Send range info to each goroutine worker.
 				rangeDesc := ri.Desc()
-				var nextRange rangeToProcess
 				// A single range can contain multiple tables or indexes.
 				// If this is the case, the rangeDesc.StartKey would be less than span.Key
 				// or the rangeDesc.EndKey would be greater than the span.EndKey, meaning
@@ -166,36 +169,44 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 				// Trying to decode keys outside the PK range will lead to a decoding error.
 				// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
 				// (by default, a 0 element startPK or endPK means the beginning or end).
-				if rangeDesc.StartKey.AsRawKey().Compare(span.Key) > 0 {
-					var err error
-					nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.StartKey.AsRawKey(),
-							span.Key,
-						)
-					}
+				rangeStartRKey := rangeDesc.StartKey
+				startRKey := spanStartRKey
+				if spanStartRKey.Less(rangeStartRKey) {
+					startRKey = rangeStartRKey
 				}
-				if rangeDesc.EndKey.AsRawKey().Compare(span.EndKey) < 0 {
-					rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
-					var err error
-					nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.EndKey.AsRawKey(),
-							span.EndKey,
-						)
-					}
-				} else {
+				startPK, err := keyToDatums(startRKey, codec, pkTypes, &alloc)
+				if err != nil {
+					return errors.Wrapf(
+						err,
+						"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
+						rangeDesc.RangeID,
+						rangeStartRKey.AsRawKey(),
+						spanStartKey,
+					)
+				}
+
+				rangeEndRKey := rangeDesc.EndKey
+				endRKey := spanEndRKey
+				if rangeEndRKey.Less(spanEndRKey) {
+					endRKey = rangeEndRKey
 					done = true
 				}
-				rangeChan <- nextRange
+				endPK, err := keyToDatums(endRKey, codec, pkTypes, &alloc)
+				if err != nil {
+					return errors.Wrapf(
+						err,
+						"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
+						rangeDesc.RangeID,
+						rangeEndRKey.AsRawKey(),
+						spanEndKey,
+					)
+				}
+				if bytes.Compare(startRKey, endRKey) < 0 {
+					rangeChan <- rangeToProcess{
+						startPK: startPK,
+						endPK:   endPK,
+					}
+				}
 			}
 		}
 		return nil
@@ -216,15 +227,19 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		true, /* useReadLock */
 		func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
+			processorID := t.ProcessorID
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
-			existingRowCount := rowLevelTTL.RowCount
-			rowLevelTTL.RowCount += processorRowCount
+			rowLevelTTL.JobRowCount += processorRowCount
+			if rowLevelTTL.ProcessorRowCount == nil {
+				rowLevelTTL.ProcessorRowCount = make(map[int32]int64, 1)
+			}
+			rowLevelTTL.ProcessorRowCount[processorID] = processorRowCount
 			ju.UpdateProgress(progress)
 			log.VInfof(
 				ctx,
 				2, /* level */
-				"TTL processorRowCount updated jobID=%d processorID=%d tableID=%d existingRowCount=%d processorRowCount=%d progress=%s",
-				jobID, ttl.ProcessorID, details.TableID, existingRowCount, processorRowCount, progress,
+				"TTL processorRowCount updated jobID=%d processorID=%d tableID=%d jobRowCount=%d processorRowCount=%d",
+				jobID, processorID, details.TableID, rowLevelTTL.JobRowCount, processorRowCount,
 			)
 			return nil
 		},
@@ -232,7 +247,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 }
 
 // rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
-func (ttl *ttlProcessor) runTTLOnRange(
+func (t *ttlProcessor) runTTLOnRange(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
 	rangeToProcess rangeToProcess,
@@ -245,12 +260,12 @@ func (ttl *ttlProcessor) runTTLOnRange(
 
 	// TODO(#82140): investigate improving row deletion performance with secondary indexes
 
-	ttlSpec := ttl.ttlSpec
+	ttlSpec := t.ttlSpec
 	details := ttlSpec.RowLevelTTLDetails
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
-	flowCtx := ttl.FlowCtx
+	flowCtx := t.FlowCtx
 	serverCfg := flowCtx.Cfg
 	ie := serverCfg.Executor
 
@@ -415,8 +430,8 @@ func keyToDatums(
 	return datums, nil
 }
 
-func (ttl *ttlProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	return nil, ttl.DrainHelper()
+func (t *ttlProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	return nil, t.DrainHelper()
 }
 
 func newTTLProcessor(

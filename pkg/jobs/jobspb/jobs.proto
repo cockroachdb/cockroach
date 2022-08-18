@@ -1010,7 +1010,10 @@ message RowLevelTTLDetails {
 }
 
 message RowLevelTTLProgress {
-  int64 row_count = 1;
+  // Number of deleted rows for the entire TTL job.
+  int64 job_row_count = 1;
+  // Number of deleted rows per DistSQL processor.
+  map<int32, int64> processor_row_count = 2  [(gogoproto.nullable)=false];
 }
 
 message SchemaTelemetryDetails {
