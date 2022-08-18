@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	// testAllocator is a colexec.Allocator with an unlimited budget for use in
+	// testAllocator is a colmem.Allocator with an unlimited budget for use in
 	// tests.
 	testAllocator     *colmem.Allocator
 	testColumnFactory coldata.ColumnFactory
