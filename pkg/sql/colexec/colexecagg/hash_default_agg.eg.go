@@ -167,7 +167,7 @@ func (a *defaultHashAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f.allocator = a.allocator
 	f.scratch.otherArgs = a.otherArgsScratch
-	a.allocator.AdjustMemoryUsage(f.fn.Size())
+	a.allocator.AdjustMemoryUsageAfterAllocation(f.fn.Size())
 	a.aggFuncs = a.aggFuncs[1:]
 	a.returnedFns = append(a.returnedFns, f)
 	return f
