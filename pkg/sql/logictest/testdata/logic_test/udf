@@ -4,6 +4,9 @@ a INT PRIMARY KEY,
 b INT
 )
 
+statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
+CREATE FUNCTION f(a int) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
+
 statement error pq: cannot set leakproof on function with non-immutable volatility: STABLE
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
@@ -76,27 +79,14 @@ CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 statement ok
 CREATE TABLE t_implicit_type(a INT PRIMARY KEY, b STRING);
 
+statement error pq: unimplemented: implicit record types as argument or return types in user-defined functions are not supported
+CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+
+statement error pq: unimplemented: implicit record types as argument or return types in user-defined functions are not supported
+CREATE FUNCTION f(t_implicit_type) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$
+
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
-
-statement ok
-CREATE FUNCTION f_star() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT * from t_implicit_type $$
-
-statement ok
-CREATE FUNCTION f_by_cols() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
-
-query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_by_cols];
-----
-CREATE FUNCTION public.f_by_cols()
-  RETURNS T_IMPLICIT_TYPE
-  IMMUTABLE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE SQL
-  AS $$
-  SELECT a, b FROM test.public.t_implicit_type;
-$$
 
 # Create function with no references.
 statement ok
@@ -153,7 +143,7 @@ CREATE FUNCTION public.f(IN a test.public.notmyworkday)
     SELECT a FROM test.public.t;
     SELECT b FROM test.public.t@t_idx_b;
     SELECT c FROM test.public.t@t_idx_c;
-    SELECT nextval(116:::REGCLASS);
+    SELECT nextval(114:::REGCLASS);
 $$
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
@@ -165,11 +155,8 @@ subtest udf_pg_proc
 statement ok
 CREATE FUNCTION proc_f(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
-statement
-CREATE FUNCTION proc_f(STRING, b INT) RETURNS SETOF STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
-
 statement ok
-CREATE FUNCTION proc_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
+CREATE FUNCTION proc_f(STRING, b INT) RETURNS STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
 statement ok
 CREATE SCHEMA sc;
@@ -181,9 +168,9 @@ query TTTTTBBBTITTTTT
 SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
 ----
-100120  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
-100121  proc_f    4101115737  1546506610  14  true   true   true   i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
-100124  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+100118  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
+100119  proc_f    4101115737  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
+100121  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
 
 subtest create_function_statements
 
@@ -201,16 +188,16 @@ CREATE FUNCTION public.proc_f(IN INT8)
     LANGUAGE SQL
     AS $$
     SELECT 1;
-$$  104  test  105  public  120  proc_f
+$$  104  test  105  public  118  proc_f
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-    RETURNS SETOF STRING
+    RETURNS STRING
     IMMUTABLE
     LEAKPROOF
     STRICT
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  105  public  121  proc_f
+$$  104  test  105  public  119  proc_f
 CREATE FUNCTION sc.proc_f_2(IN STRING)
     RETURNS STRING
     VOLATILE
@@ -219,7 +206,7 @@ CREATE FUNCTION sc.proc_f_2(IN STRING)
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  123  sc  124  proc_f_2
+$$  104  test  120  sc  121  proc_f_2
 
 statement ok
 CREATE DATABASE test_cross_db;
@@ -241,16 +228,16 @@ CREATE FUNCTION public.proc_f(IN INT8)
     LANGUAGE SQL
     AS $$
     SELECT 1;
-$$  104  test  105  public  120  proc_f
+$$  104  test  105  public  118  proc_f
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-    RETURNS SETOF STRING
+    RETURNS STRING
     IMMUTABLE
     LEAKPROOF
     STRICT
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  105  public  121  proc_f
+$$  104  test  105  public  119  proc_f
 CREATE FUNCTION sc.proc_f_2(IN STRING)
     RETURNS STRING
     VOLATILE
@@ -259,7 +246,7 @@ CREATE FUNCTION sc.proc_f_2(IN STRING)
     LANGUAGE SQL
     AS $$
     SELECT 'hello';
-$$  104  test  123  sc  124  proc_f_2
+$$  104  test  120  sc  121  proc_f_2
 CREATE FUNCTION public.f_cross_db()
     RETURNS INT8
     VOLATILE
@@ -268,7 +255,7 @@ CREATE FUNCTION public.f_cross_db()
     LANGUAGE SQL
     AS $$
     SELECT 1;
-$$  125  test_cross_db  126  public  127  f_cross_db
+$$  122  test_cross_db  123  public  124  f_cross_db
 
 subtest show_create_function
 
@@ -285,7 +272,7 @@ CREATE FUNCTION public.proc_f(IN INT8)
   SELECT 1;
 $$
 CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-  RETURNS SETOF STRING
+  RETURNS STRING
   IMMUTABLE
   LEAKPROOF
   STRICT
@@ -332,16 +319,6 @@ SET search_path = public;
 subtest udf_regproc
 
 query T
-SELECT 'proc_implicit'::REGPROC;
-----
-proc_implicit
-
-query I
-SELECT 'proc_implicit'::REGPROC::INT;
-----
-100122
-
-query T
 SELECT '100126'::REGPROC;
 ----
 100126
@@ -354,7 +331,7 @@ proc_f_2
 query I
 SELECT 'sc.proc_f_2'::REGPROC::INT;
 ----
-100124
+100121
 
 statement error pq: unknown function: no_such_func()
 SELECT 'no_such_func'::REGPROC;
@@ -554,14 +531,6 @@ SET search_path = public
 statement ok
 DROP SCHEMA sc1;
 
-subtest drop_table_using_implicit_type
-
-statement ok
-CREATE FUNCTION test_implicit_f() RETURNS t_implicit_type LANGUAGE SQL AS $$ SELECT * FROM t_implicit_type $$
-
-statement ok
-DROP FUNCTION test_implicit_f;
-
 subtest disallow_udf_in_table
 
 statement ok
@@ -652,9 +621,9 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root     test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     root     test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     root     test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 statement ok
 GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO udf_test_user WITH GRANT OPTION;
@@ -665,12 +634,12 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root           test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     root           test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     root           test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     root           test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     root           test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 statement error pq: cannot drop role/user udf_test_user: grants still exist on.*
 DROP USER udf_test_user;
@@ -684,12 +653,12 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root           test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     root           test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         NO
-NULL     udf_test_user  test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         NO
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     root           test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     root           test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         NO
+NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         NO
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
 statement ok
 REVOKE EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user;
@@ -700,9 +669,9 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root     test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     root     test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     root     test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 statement ok
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 TO udf_test_user WITH GRANT OPTION;
@@ -713,12 +682,12 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root           test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     root           test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     root           test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     root           test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     root           test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 statement ok
 REVOKE GRANT OPTION FOR EXECUTE ON ALL FUNCTIONS in schema public, test_priv_sc1 FROM udf_test_user;
@@ -729,12 +698,12 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root           test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     root           test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         NO
-NULL     udf_test_user  test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         NO
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     root           test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     root           test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         NO
+NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         NO
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
 statement ok
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 FROM udf_test_user;
@@ -745,9 +714,9 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root     test              public           test_priv_f1_100141  test             public          test_priv_f1  EXECUTE         YES
-NULL     root     test              public           test_priv_f2_100142  test             public          test_priv_f2  EXECUTE         YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100143  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     root     test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
+NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
+NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 statement ok
 DROP FUNCTION test_priv_f1;
@@ -767,7 +736,7 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root     test              public           test_priv_f1_100144  test             public          test_priv_f1  EXECUTE         YES
+NULL     root     test              public           test_priv_f1_100140  test             public          test_priv_f1  EXECUTE         YES
 
 # Add default privilege and make sure new function
 statement ok
@@ -783,11 +752,11 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root           test              public           test_priv_f1_100144  test             public          test_priv_f1  EXECUTE         YES
-NULL     root           test              public           test_priv_f2_100145  test             public          test_priv_f2  EXECUTE         YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100146  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f2_100145  test             public          test_priv_f2  EXECUTE         YES
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100146  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     root           test              public           test_priv_f1_100140  test             public          test_priv_f1  EXECUTE         YES
+NULL     root           test              public           test_priv_f2_100141  test             public          test_priv_f2  EXECUTE         YES
+NULL     root           test              test_priv_sc1    test_priv_f3_100142  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f2_100141  test             public          test_priv_f2  EXECUTE         YES
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100142  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 statement ok
 DROP FUNCTION test_priv_f2;
@@ -799,7 +768,7 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root     test              public           test_priv_f1_100144  test             public          test_priv_f1  EXECUTE         YES
+NULL     root     test              public           test_priv_f1_100140  test             public          test_priv_f1  EXECUTE         YES
 
 statement ok
 ALTER DEFAULT PRIVILEGES IN SCHEMA public, test_priv_sc1 REVOKE EXECUTE ON FUNCTIONS FROM udf_test_user;
@@ -814,9 +783,9 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     root     test              public           test_priv_f1_100144  test             public          test_priv_f1  EXECUTE         YES
-NULL     root     test              public           test_priv_f2_100147  test             public          test_priv_f2  EXECUTE         YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100148  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     root     test              public           test_priv_f1_100140  test             public          test_priv_f1  EXECUTE         YES
+NULL     root     test              public           test_priv_f2_100143  test             public          test_priv_f2  EXECUTE         YES
+NULL     root     test              test_priv_sc1    test_priv_f3_100144  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 subtest alter_function_options
 
@@ -1023,9 +992,9 @@ query TTT
 SELECT oid, proname, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc');
 ----
-100154  f_test_sc  SELECT 1;
-100155  f_test_sc  SELECT 2;
-100157  f_test_sc  SELECT 3;
+100150  f_test_sc  SELECT 1;
+100151  f_test_sc  SELECT 2;
+100153  f_test_sc  SELECT 3;
 
 query TT
   WITH fns AS (
@@ -1046,9 +1015,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-154  105
-155  105
-157  156
+150  105
+151  105
+153  152
 
 statement error pq: cannot move objects into or out of virtual schemas
 ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
@@ -1079,9 +1048,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-154  105
-155  105
-157  156
+150  105
+151  105
+153  152
 
 query T
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
@@ -1129,9 +1098,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-154  105
-155  156
-157  156
+150  105
+151  152
+153  152
 
 query T
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
@@ -1189,7 +1158,7 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, c INT) RETURNS INT IMMUTABLE LANGUA
 statement error pq: cannot change return type of existing function
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
-statement error pq: cannot change return type of existing function
+statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement error pq: cannot set leakproof on function with non-immutable volatility: VOLATILE
@@ -1241,43 +1210,6 @@ CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
   AS $$
   SELECT 3;
 $$
-
-# Make sure function using implicit type can be replaced properly.
-statement ok
-CREATE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
-
-query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor_implicit];
-----
-CREATE FUNCTION public.f_test_cor_implicit()
-  RETURNS T_IMPLICIT_TYPE
-  IMMUTABLE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE SQL
-  AS $$
-  SELECT a, b FROM test.public.t_implicit_type;
-$$
-
-statement error pq: function "f_test_cor_implicit" already exists with same argument types
-CREATE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
-
-statement ok
-CREATE OR REPLACE FUNCTION f_test_cor_implicit() RETURNS t_implicit_type STABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
-
-query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor_implicit];
-----
-CREATE FUNCTION public.f_test_cor_implicit()
-  RETURNS T_IMPLICIT_TYPE
-  STABLE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE SQL
-  AS $$
-  SELECT a, b FROM test.public.t_implicit_type;
-$$
-
 
 subtest execution
 
