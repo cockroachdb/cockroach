@@ -24,22 +24,22 @@ import (
 	"github.com/lib/pq"
 )
 
-// lowMemoryBudget is the memory budget used to test builtins are recording
-// their memory use. The budget needs to be large enough to establish the
-// initial database connection, but small enough to overflow easily. It's set
-// to be comfortably large enough that the server can start up with a bit of
-// extra space to overflow.
-const lowMemoryBudget = 1 << 20 /* 1MiB */
-
 // rowSize is the length of the string present in each row of the table created
 // by createTableWithLongStrings.
-const rowSize = 30000
+const rowSize = 50000
 
 // numRows is the number of rows to insert in createTableWithLongStrings.
 // numRows and rowSize were picked arbitrarily but so that rowSize * numRows >
 // lowMemoryBudget, so that aggregating them all in a CONCAT_AGG or
 // ARRAY_AGG will exhaust lowMemoryBudget.
-const numRows = 50
+const numRows = 100
+
+// lowMemoryBudget is the memory budget used to test builtins are recording
+// their memory use. The budget needs to be large enough to establish the
+// initial database connection, but small enough to overflow easily. It's set
+// to be comfortably large enough that the server can start up with a bit of
+// extra space to overflow.
+const lowMemoryBudget = rowSize*numRows - 1
 
 // createTableWithLongStrings creates a table with a modest number of long strings,
 // with the intention of using them to exhaust a memory budget.
