@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -78,26 +77,13 @@ func (e *taggedError) Unwrap() error { return e.wrapped }
 const retryableErrorString = "retryable changefeed error"
 
 type retryableError struct {
-	// A schema change may result in a changefeed returning retryableError,
-	// which can signal the changefeed to restart.
-	// boundaryTimestamp can be returned inside this error so
-	// the changefeed knows where to restart from. Note this is
-	// only useful for sinkless/core changefeeds because they do not have
-	// the ability to read/write their state to jobs tables during restarts.
-	boundaryTimestamp hlc.Timestamp
-	wrapped           error
+	wrapped error
 }
 
 // MarkRetryableError wraps the given error, marking it as retryable to
 // changefeeds.
 func MarkRetryableError(e error) error {
 	return &retryableError{wrapped: e}
-}
-
-// MarkRetryableErrorWithTimestamp wraps the given error, marks it as
-// retryable, and attaches a timestamp to the error.
-func MarkRetryableErrorWithTimestamp(e error, ts hlc.Timestamp) error {
-	return &retryableError{boundaryTimestamp: ts, wrapped: e}
 }
 
 // Error implements the error interface.
@@ -137,17 +123,6 @@ func IsRetryableError(err error) bool {
 		flowinfra.IsNoInboundStreamConnectionError(err) ||
 		errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)) ||
 		errors.Is(err, sql.ErrPlanChanged))
-}
-
-// MaybeGetRetryableErrorTimestamp will get the timestamp of an error if
-// the error is a retryableError and the timestamp field is populated.
-func MaybeGetRetryableErrorTimestamp(err error) (timestamp hlc.Timestamp, ok bool) {
-	if retryableErr := (*retryableError)(nil); errors.As(err, &retryableErr) {
-		if !retryableErr.boundaryTimestamp.IsEmpty() {
-			return retryableErr.boundaryTimestamp, true
-		}
-	}
-	return hlc.Timestamp{}, false
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the

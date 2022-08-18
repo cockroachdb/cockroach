@@ -385,7 +385,7 @@ type Column interface {
 	// If the column is not an identity column, return nil for both sequence option
 	// and the error.
 	// Note it doesn't return the sequence owner info.
-	GetGeneratedAsIdentitySequenceOption() (*descpb.TableDescriptor_SequenceOpts, error)
+	GetGeneratedAsIdentitySequenceOption(defaultIntSize int32) (*descpb.TableDescriptor_SequenceOpts, error)
 }
 
 // ConstraintToUpdate is an interface around a constraint mutation.

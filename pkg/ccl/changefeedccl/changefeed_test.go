@@ -5752,6 +5752,64 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	}
 }
 
+// TestCoreChangefeedBackfillScanCheckpoint tests that a core changefeed
+// successfully completes the initial scan of a table when transient errors occur.
+// This test only succeeds if checkpoints are taken.
+func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	rnd, _ := randutil.NewPseudoRand()
+
+	rowCount := 10000
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (a) SELECT * FROM generate_series(%d, %d)`, 0, rowCount))
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Ensure Scan Requests are always small enough that we receive multiple
+		// resolved events during a backfill. Also ensure that checkpoint frequency
+		// and size are large enough to induce several checkpoints when
+		// writing `rowCount` rows.
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
+			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(25)
+			return nil
+		}
+		changefeedbase.FrontierCheckpointFrequency.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 1)
+		changefeedbase.FrontierCheckpointMaxBytes.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100<<20)
+
+		emittedCount := 0
+		knobs.RaiseRetryableError = func() error {
+			emittedCount++
+			if emittedCount%200 == 0 {
+				return changefeedbase.MarkRetryableError(errors.New("test transient error"))
+			}
+			return nil
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR TABLE foo`)
+		defer closeFeed(t, foo)
+
+		payloads := make([]string, rowCount+1)
+		for i := 0; i < rowCount+1; i++ {
+			payloads[i] = fmt.Sprintf(`foo: [%d]->{"after": {"a": %d}}`, i, i)
+		}
+		assertPayloads(t, foo, payloads)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+}
+
 func TestCheckpointFrequency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5765,6 +5823,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	ts := timeutil.NewManualTime(timeutil.Now())
 	js := newJobState(
 		nil, /* job */
+		nil, /* core progress */
 		cluster.MakeTestingClusterSettings(),
 		MakeMetrics(time.Second).(*Metrics), ts,
 	)

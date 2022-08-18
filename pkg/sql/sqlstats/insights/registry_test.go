@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -142,4 +143,40 @@ func TestRegistry(t *testing.T) {
 
 		require.Equal(t, expected, actual)
 	})
+
+	t.Run("retention", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
+		slow := 2 * LatencyThreshold.Get(&st.SV).Seconds()
+		r := newRegistry(st, NewMetrics())
+
+		// With the ExecutionInsightsCapacity set to 5, we retain the 5 most recently-seen insights.
+		ExecutionInsightsCapacity.Override(ctx, &st.SV, 5)
+		for id := 0; id < 10; id++ {
+			observeStatementExecution(r, uint64(id), slow)
+		}
+		assertInsightStatementIDs(t, r, []uint64{9, 8, 7, 6, 5})
+
+		// Lowering the ExecutionInsightsCapacity requires having a new insight to evict the others.
+		ExecutionInsightsCapacity.Override(ctx, &st.SV, 2)
+		assertInsightStatementIDs(t, r, []uint64{9, 8, 7, 6, 5})
+		observeStatementExecution(r, 10, slow)
+		assertInsightStatementIDs(t, r, []uint64{10, 9})
+	})
+}
+
+func observeStatementExecution(registry Registry, idBase uint64, latencyInSeconds float64) {
+	sessionID := clusterunique.ID{Uint128: uint128.FromInts(2, 0)}
+	txnID := uuid.FromUint128(uint128.FromInts(1, idBase))
+	stmtID := clusterunique.ID{Uint128: uint128.FromInts(0, idBase)}
+	registry.ObserveStatement(sessionID, &Statement{ID: stmtID, LatencyInSeconds: latencyInSeconds})
+	registry.ObserveTransaction(sessionID, &Transaction{ID: txnID})
+}
+
+func assertInsightStatementIDs(t *testing.T, registry Registry, expected []uint64) {
+	var actual []uint64
+	registry.IterateInsights(context.Background(), func(ctx context.Context, insight *Insight) {
+		actual = append(actual, insight.Statement.ID.Lo)
+	})
+	require.ElementsMatch(t, expected, actual)
 }

@@ -198,7 +198,7 @@ func (hi *hypotheticalIndex) Table() cat.Table {
 }
 
 // Ordinal is part of the cat.Index interface.
-func (hi *hypotheticalIndex) Ordinal() int {
+func (hi *hypotheticalIndex) Ordinal() cat.IndexOrdinal {
 	return hi.indexOrdinal
 }
 

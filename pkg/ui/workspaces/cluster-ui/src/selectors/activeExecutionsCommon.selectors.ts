@@ -24,7 +24,7 @@ import {
 export const selectExecutionID = (
   _state: unknown,
   props: RouteComponentProps,
-) => getMatchParamByName(props.match, executionIdAttr);
+): string | null => getMatchParamByName(props.match, executionIdAttr);
 
 export const selectActiveExecutionsCombiner = (
   sessions: SessionsResponse | null,
@@ -39,10 +39,12 @@ export const selectActiveExecutionsCombiner = (
   return {
     statements: execs.statements.map(s => ({
       ...s,
+      status: waitTimeByTxnID[s.transactionID] != null ? "Waiting" : s.status,
       timeSpentWaiting: waitTimeByTxnID[s.transactionID],
     })),
     transactions: execs.transactions.map(t => ({
       ...t,
+      status: waitTimeByTxnID[t.transactionID] != null ? "Waiting" : t.status,
       timeSpentWaiting: waitTimeByTxnID[t.transactionID],
     })),
   };
