@@ -16,13 +16,30 @@ import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
-enum Concern {
-  // SlowExecution is for statement executions that either take longer than a predetermined
-  // threshold, configured by the sql.insights.latency_threshold
-  // cluster setting, or that take significantly "longer than usual" for their statement
-  // fingerprint, based on some heuristics we're developing, which can be enabled by the
-  // sql.insights.anomaly_detection.enabled cluster setting.
-  SlowExecution = 0;
+enum Problem {
+  // We were unable to identify specific reasons why this statement was slow.
+  Unknown = 0;
+
+  // This statement was slow because we picked the wrong plan, possibly due to
+  // outdated statistics, the statement using different literals or search
+  // conditions, or a change in the database schema.
+  PlanRegression = 1;
+
+  // This statement was slow because a good plan was not available, whether
+  // due to outdated statistics or missing indexes.
+  SuboptimalPlan = 2;
+
+  // This statement was slow because of contention.
+  HighWaitTime = 3;
+
+  // This statement was slow because of being retried multiple times, again due
+  // to contention. The "high" threshold may be configured by the
+  // `sql.insights.high_retry_count.threshold` cluster setting.
+  HighRetryCount = 4;
+
+  // This statement execution failed completely, due to contention, resource
+  // saturation, or syntax errors.
+  FailedExecution = 5;
 }
 
 message Session {
@@ -74,5 +91,5 @@ message Insight {
   Transaction transaction = 2;
   Statement statement = 3;
 
-  repeated Concern concerns = 4;
+  repeated Problem problems = 4;
 }
