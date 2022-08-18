@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -47,9 +48,9 @@ func (cf *CollectionFactory) Txn(
 	opts ...TxnOption,
 ) error {
 	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descriptors *Collection, _ sqlutil.InternalExecutor,
+		ctx context.Context, txn *kv.Txn, descriptors collectionfactory.DescsCollection, _ sqlutil.InternalExecutor,
 	) error {
-		return f(ctx, txn, descriptors)
+		return f(ctx, txn, descriptors.(*Collection))
 	}, opts...)
 }
 
@@ -85,7 +86,7 @@ func SteppingEnabled() TxnOption {
 type TxnWithExecutorFunc = func(
 	ctx context.Context,
 	txn *kv.Txn,
-	descriptors *Collection,
+	descriptors collectionfactory.DescsCollection,
 	ie sqlutil.InternalExecutor,
 ) error
 

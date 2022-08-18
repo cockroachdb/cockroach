@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -2461,7 +2462,7 @@ func (sc *SchemaChanger) txn(
 func (sc *SchemaChanger) txnWithExecutor(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
-	f func(context.Context, *kv.Txn, *descs.Collection, sqlutil.InternalExecutor) error,
+	f func(context.Context, *kv.Txn, collectionfactory.DescsCollection, sqlutil.InternalExecutor) error,
 ) error {
 	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
 		if err := fn(sc.job.ID()); err != nil {

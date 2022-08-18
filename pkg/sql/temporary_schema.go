@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -181,9 +182,10 @@ func cleanupSessionTempObjects(
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
 	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn *kv.Txn, col collectionfactory.DescsCollection,
 		ie sqlutil.InternalExecutor,
 	) error {
+		descsCol := col.(*descs.Collection)
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)

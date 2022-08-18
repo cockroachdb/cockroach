@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -70,7 +71,7 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 			}
 			sd.SearchPath = &searchPath
 			err = cf.TxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
-				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+				ctx context.Context, txn *kv.Txn, descriptors collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
 			) error {
 				for _, stmt := range stmts {
 					switch d.Cmd {
