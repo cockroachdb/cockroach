@@ -112,6 +112,7 @@ go_test(
         "main_test.go",
         "min_version_test.go",
         "multi_iterator_test.go",
+        "mvcc_history_metamorphic_iterator_test.go",
         "mvcc_history_test.go",
         "mvcc_incremental_iterator_test.go",
         "mvcc_key_test.go",
