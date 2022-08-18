@@ -1270,7 +1270,9 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 }
 
 // PrepareRetryableError is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string) error {
+func (tc *TxnCoordSender) PrepareRetryableError(
+	ctx context.Context, msg string,
+) *roachpb.TransactionRetryWithProtoRefreshError {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return roachpb.NewTransactionRetryWithProtoRefreshError(
@@ -1365,6 +1367,18 @@ func (tc *TxnCoordSender) GetTxnRetryableErr(
 		return tc.mu.storedRetryableErr
 	}
 	return nil
+}
+
+// SetTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) SetTxnRetryableErr(
+	ctx context.Context, pErr *roachpb.TransactionRetryWithProtoRefreshError,
+) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState != txnFinalized {
+		tc.mu.storedRetryableErr = pErr
+		tc.mu.txnState = txnRetryableError
+	}
 }
 
 // ClearTxnRetryableErr is part of the TxnSender interface.

@@ -255,7 +255,7 @@ type TxnSender interface {
 	// PrepareRetryableError generates a
 	// TransactionRetryWithProtoRefreshError with a payload initialized
 	// from this txn.
-	PrepareRetryableError(ctx context.Context, msg string) error
+	PrepareRetryableError(ctx context.Context, msg string) *roachpb.TransactionRetryWithProtoRefreshError
 
 	// TestingCloneTxn returns a clone of the transaction's current
 	// proto. This is for use by tests only. Use
@@ -322,6 +322,10 @@ type TxnSender interface {
 	// error. ClearTxnRetryableErr can be called to clear this error and make
 	// TxnSender usable again.
 	GetTxnRetryableErr(ctx context.Context) *roachpb.TransactionRetryWithProtoRefreshError
+
+	// SetTxnRetryableErr sets the state of the TxnSender to be txnRetryableError
+	// as if it encountered the given pErr.
+	SetTxnRetryableErr(ctx context.Context, pErr *roachpb.TransactionRetryWithProtoRefreshError)
 
 	// ClearTxnRetryableErr clears the retryable error, if any.
 	ClearTxnRetryableErr(ctx context.Context)
