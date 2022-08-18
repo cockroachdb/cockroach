@@ -23,7 +23,7 @@ pq: failed to construct External Connection details: failed to create nodelocal 
 exec-sql
 CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
 ----
-pq: external connection with connection name 'foo' already exists
+pq: failed to create external connection: external connection with connection name 'foo' already exists
 
 # Create another External Connection with a unique name.
 exec-sql
@@ -53,89 +53,6 @@ DROP EXTERNAL CONNECTION foo;
 ----
 
 inspect-system-table
-----
-
-subtest end
-
-subtest create-external-connection-global-privilege
-
-exec-sql
-CREATE USER testuser;
-----
-
-exec-sql user=testuser
-CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
-----
-pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
-
-exec-sql
-GRANT SYSTEM EXTERNALCONNECTION TO testuser;
-----
-
-exec-sql user=testuser
-CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
-----
-
-inspect-system-table
-----
-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
-
-exec-sql
-DROP EXTERNAL CONNECTION privileged;
-----
-
-exec-sql
-REVOKE SYSTEM EXTERNALCONNECTION FROM testuser;
-----
-
-exec-sql user=testuser
-CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
-----
-pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
-
-subtest end
-
-subtest drop-external-storage-privilege
-
-exec-sql
-CREATE EXTERNAL CONNECTION privileged AS 'nodelocal://1/foo'
-----
-
-# Create another External Connection.
-exec-sql
-CREATE EXTERNAL CONNECTION 'privileged-dup' AS 'nodelocal://1/foo'
-----
-
-exec-sql user=testuser
-DROP EXTERNAL CONNECTION privileged
-----
-pq: user testuser does not have DROP privilege on external_connection privileged
-
-inspect-system-table
-----
-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
-
-exec-sql
-GRANT DROP ON EXTERNAL CONNECTION privileged TO testuser;
-----
-
-exec-sql user=testuser
-DROP EXTERNAL CONNECTION privileged
-----
-
-# Try to drop the second external connection, testuser should be disallowed.
-exec-sql user=testuser
-DROP EXTERNAL CONNECTION 'privileged-dup'
-----
-pq: user testuser does not have DROP privilege on external_connection privileged-dup
-
-inspect-system-table
-----
-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
-
-exec-sql
-DROP EXTERNAL CONNECTION 'privileged-dup'
 ----
 
 subtest end

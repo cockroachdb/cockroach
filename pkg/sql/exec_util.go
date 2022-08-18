@@ -1566,9 +1566,9 @@ type TTLTestingKnobs struct {
 	// AOSTDuration changes the AOST timestamp duration to add to the
 	// current time.
 	AOSTDuration *time.Duration
-	// RequireMultipleSpanPartitions is a flag to verify that the DistSQL will
-	// distribute the work across multiple nodes.
-	RequireMultipleSpanPartitions bool
+	// ExpectedNumSpanPartitions causes the TTL job to fail if it does not match
+	// the number of DistSQL processors.
+	ExpectedNumSpanPartitions int
 	// ReturnStatsError causes stats errors to be returned instead of logged as
 	// warnings.
 	ReturnStatsError bool

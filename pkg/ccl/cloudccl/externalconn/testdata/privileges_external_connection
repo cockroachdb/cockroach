@@ -1,0 +1,123 @@
+subtest create-external-connection-global-privilege
+
+exec-sql
+CREATE USER testuser;
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION "global-privileged" AS 'nodelocal://1/foo'
+----
+pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+
+exec-sql
+GRANT SYSTEM EXTERNALCONNECTION TO testuser;
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION "global-privileged" AS 'nodelocal://1/foo'
+----
+
+inspect-system-table
+----
+global-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
+
+exec-sql
+DROP EXTERNAL CONNECTION "global-privileged";
+----
+
+exec-sql
+REVOKE SYSTEM EXTERNALCONNECTION FROM testuser;
+----
+
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION "global-privileged" AS 'nodelocal://1/foo'
+----
+pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
+
+subtest end
+
+subtest drop-external-storage-privilege
+
+exec-sql
+CREATE EXTERNAL CONNECTION "drop-privileged" AS 'nodelocal://1/foo'
+----
+
+# Create another External Connection.
+exec-sql
+CREATE EXTERNAL CONNECTION 'drop-privileged-dup' AS 'nodelocal://1/foo'
+----
+
+exec-sql user=testuser
+DROP EXTERNAL CONNECTION "drop-privileged"
+----
+pq: user testuser does not have DROP privilege on external_connection drop-privileged
+
+inspect-system-table
+----
+drop-privileged STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
+drop-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
+
+exec-sql
+GRANT DROP ON EXTERNAL CONNECTION "drop-privileged" TO testuser;
+----
+
+exec-sql user=testuser
+DROP EXTERNAL CONNECTION "drop-privileged"
+----
+
+# Try to drop the second external connection, testuser should be disallowed.
+exec-sql user=testuser
+DROP EXTERNAL CONNECTION 'drop-privileged-dup'
+----
+pq: user testuser does not have DROP privilege on external_connection drop-privileged-dup
+
+inspect-system-table
+----
+drop-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo"}}
+
+exec-sql
+DROP EXTERNAL CONNECTION 'drop-privileged-dup'
+----
+
+subtest end
+
+subtest create-grants-all
+
+# Reset the user.
+exec-sql
+DROP USER testuser
+----
+
+exec-sql
+CREATE USER testuser
+----
+
+exec-sql
+GRANT SYSTEM EXTERNALCONNECTION TO testuser
+----
+
+# Create an EC as root, testuser cannot use this.
+exec-sql
+CREATE EXTERNAL CONNECTION root AS 'userfile:///foo'
+----
+
+exec-sql user=testuser
+CREATE TABLE foo (id INT)
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://foo'
+----
+pq: user testuser does not have USAGE privilege on external_connection foo
+
+# Now create an EC as testuser, they should be able to use this EC since on
+# creation they are given `ALL` privileges.
+exec-sql user=testuser
+CREATE EXTERNAL CONNECTION 'not-root' AS 'userfile:///bar'
+----
+
+exec-sql user=testuser
+BACKUP TABLE foo INTO 'external://not-root'
+----
+
+subtest end
