@@ -66,9 +66,10 @@ func TestBuildDataDriven(t *testing.T) {
 					// The schema changer test dependencies do not hold any reference to the
 					// test cluster, here the SQLRunner is only used to populate the mocked
 					// catalog state.
+					descriptorCatalog := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog
 					fn(
 						sctestdeps.NewTestDependencies(
-							sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
+							sctestdeps.WithDescriptors(descriptorCatalog),
 							sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 							sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 							sctestdeps.WithSessionData(
@@ -84,6 +85,7 @@ func TestBuildDataDriven(t *testing.T) {
 								),
 							),
 							sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
+							sctestdeps.WithZoneConfigs(sctestdeps.ReadZoneConfigsFromDB(t, tdb, descriptorCatalog)),
 						),
 					)
 				},

@@ -102,7 +102,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 		}
 	})
-
+	// We don't support handling zone config related properties for tables, so
+	// throw an unsupported error.
+	fallBackIfZoneConfigExists(b, n, index.TableID)
 	if n.Unique {
 		index.ConstraintID = b.NextTableConstraintID(index.TableID)
 	}

@@ -102,12 +102,14 @@ func dropAnIndex(
 				"use DROP CONSTRAINT ... PRIMARY KEY followed by ADD CONSTRAINT ... PRIMARY KEY in a transaction",
 		))
 	}
-
 	// TODO (Xiang): Check if requires CCL binary for eventual zone config removal.
 	_, _, sie := scpb.FindSecondaryIndex(toBeDroppedIndexElms)
 	if sie == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find secondary index element."))
 	}
+	// We don't support handling zone config related properties for tables, so
+	// throw an unsupported error.
+	fallBackIfZoneConfigExists(b, nil, sie.TableID)
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
 	if dropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
