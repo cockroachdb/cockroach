@@ -25,11 +25,11 @@ import (
 const (
 	// ImmutableRead is the default validation level when reading an immutable
 	// descriptor.
-	ImmutableRead = catalog.ValidationLevelCrossReferences
+	ImmutableRead = catalog.ValidationLevelForwardReferences
 
 	// MutableRead is the default validation level when reading a mutable
 	// descriptor.
-	MutableRead = catalog.ValidationLevelCrossReferences
+	MutableRead = catalog.ValidationLevelBackReferences
 
 	// Write is the default validation level when writing a descriptor.
 	Write = catalog.ValidationLevelAllPreTxnCommit
@@ -81,13 +81,24 @@ func Validate(
 		vea.reportDescGetterError(collectingReferencedDescriptors, descGetterErr)
 		return vea.errors
 	}
-	// Descriptor cross-reference checks.
+	// Descriptor forward-reference checks.
 	if !vea.validateDescriptorsAtLevel(
-		catalog.ValidationLevelCrossReferences,
+		catalog.ValidationLevelForwardReferences,
 		descriptors,
 		func(desc catalog.Descriptor) {
 			if !desc.Dropped() {
-				desc.ValidateCrossReferences(&vea, vdg)
+				desc.ValidateForwardReferences(&vea, vdg)
+			}
+		}) {
+		return vea.errors
+	}
+	// Descriptor backward-reference checks.
+	if !vea.validateDescriptorsAtLevel(
+		catalog.ValidationLevelBackReferences,
+		descriptors,
+		func(desc catalog.Descriptor) {
+			if !desc.Dropped() {
+				desc.ValidateBackReferences(&vea, vdg)
 			}
 		}) {
 		return vea.errors
@@ -239,8 +250,10 @@ func (vea *validationErrorAccumulator) decorate(err error) error {
 		switch vea.currentLevel {
 		case catalog.ValidationLevelSelfOnly:
 			tkSuffix = "self"
-		case catalog.ValidationLevelCrossReferences:
-			tkSuffix = "cross_references"
+		case catalog.ValidationLevelForwardReferences:
+			tkSuffix = "forward_references"
+		case catalog.ValidationLevelBackReferences:
+			tkSuffix = "backward_references"
 		case catalog.ValidationLevelNamespace:
 			tkSuffix = "namespace"
 		case catalog.ValidationLevelAllPreTxnCommit:

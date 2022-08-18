@@ -27,9 +27,12 @@ const (
 	NoValidation ValidationLevel = 0
 	// ValidationLevelSelfOnly means only validate internal descriptor consistency.
 	ValidationLevelSelfOnly ValidationLevel = 1<<(iota+1) - 1
-	// ValidationLevelCrossReferences means do the above and also check
-	// cross-references.
-	ValidationLevelCrossReferences
+	// ValidationLevelForwardReferences means do the above and also check
+	// forward references.
+	ValidationLevelForwardReferences
+	// ValidationLevelBackReferences means do the above and also check
+	// backward references.
+	ValidationLevelBackReferences
 	// ValidationLevelNamespace means do the above and also check namespace
 	// table records.
 	ValidationLevelNamespace
@@ -120,7 +123,7 @@ type ValidationDescGetter interface {
 
 // ValidateOutboundTableRef validates outbound reference to relation descriptor
 // depID from descriptor selfID.
-func ValidateOutboundTableRef(selfID descpb.ID, depID descpb.ID, vdg ValidationDescGetter) error {
+func ValidateOutboundTableRef(depID descpb.ID, vdg ValidationDescGetter) error {
 	referencedTable, err := vdg.GetTableDescriptor(depID)
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on relation reference")
@@ -129,21 +132,29 @@ func ValidateOutboundTableRef(selfID descpb.ID, depID descpb.ID, vdg ValidationD
 		return errors.AssertionFailedf("depends-on relation %q (%d) is dropped",
 			referencedTable.GetName(), referencedTable.GetID())
 	}
-	for _, by := range referencedTable.TableDesc().DependedOnBy {
+	return nil
+}
+
+// ValidateOutboundTableRefBackReference validates that the outbound reference
+// to a table descriptor has a matching back-reference.
+func ValidateOutboundTableRefBackReference(selfID descpb.ID, ref TableDescriptor) error {
+	if ref == nil || ref.Dropped() {
+		// Don't follow up on backward references for invalid or irrelevant forward
+		// references.
+		return nil
+	}
+	for _, by := range ref.TableDesc().DependedOnBy {
 		if by.ID == selfID {
 			return nil
 		}
 	}
 	return errors.AssertionFailedf("depends-on relation %q (%d) has no corresponding depended-on-by back reference",
-		referencedTable.GetName(), referencedTable.GetID())
+		ref.GetName(), ref.GetID())
 }
 
-// ValidateOutboundTypeRef validates outbound reference to type descriptor
-// depTypeID from descriptor selfID.
-func ValidateOutboundTypeRef(
-	selfID descpb.ID, depTypeID descpb.ID, vdg ValidationDescGetter,
-) error {
-	typ, err := vdg.GetTypeDescriptor(depTypeID)
+// ValidateOutboundTypeRef validates outbound reference to type descriptor.
+func ValidateOutboundTypeRef(typeID descpb.ID, vdg ValidationDescGetter) error {
+	typ, err := vdg.GetTypeDescriptor(typeID)
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on type reference")
 	}
@@ -151,13 +162,23 @@ func ValidateOutboundTypeRef(
 		return errors.AssertionFailedf("depends-on type %q (%d) is dropped",
 			typ.GetName(), typ.GetID())
 	}
+	return nil
+}
+
+// ValidateOutboundTypeRefBackReference validates that the outbound reference
+// to a type descriptor has a matching back-reference.
+func ValidateOutboundTypeRefBackReference(selfID descpb.ID, typ TypeDescriptor) error {
+	if typ == nil || typ.Dropped() {
+		// Don't follow up on backward references for invalid or irrelevant forward
+		// references.
+		return nil
+	}
 
 	for ord := 0; ord < typ.NumReferencingDescriptors(); ord++ {
 		if typ.GetReferencingDescriptorID(ord) == selfID {
 			return nil
 		}
 	}
-
 	return errors.AssertionFailedf("depends-on type %q (%d) has no corresponding referencing-descriptor back references",
 		typ.GetName(), typ.GetID())
 }
