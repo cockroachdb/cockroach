@@ -154,7 +154,7 @@ type Key int
 //
 //go:generate stringer -type=Key
 const (
-	_ Key = iota - 1 // want first named one to start at zero
+	invalidVersionKey Key = iota - 1 // want first named one to start at zero
 
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
@@ -497,11 +497,12 @@ var (
 )
 
 func init() {
-	const isReleaseBranch = false
-	if isReleaseBranch {
-		if binaryVersion != ByKey(V21_2) {
-			panic("unexpected cluster version greater than release's binary version")
+	if finalVersion > invalidVersionKey {
+		if binaryVersion != ByKey(finalVersion) {
+			panic("binary version does not match final version")
 		}
+	} else if binaryVersion.Internal == 0 {
+		panic("a non-upgrade cluster version must be the final version")
 	}
 }
 
