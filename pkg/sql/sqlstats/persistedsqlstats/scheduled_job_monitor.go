@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -67,10 +68,12 @@ type jobMonitor struct {
 }
 
 func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
-	j.ensureSchedule(ctx)
-	j.registerClusterSettingHook()
-
+	// ch is used to notify a goroutine to ensure the schedule exists and
+	// update its recurrence.
+	ch := make(chan struct{}, 1)
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-scheduled-compaction-job-monitor", func(ctx context.Context) {
+		stopCtx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
 		for {
@@ -78,33 +81,27 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 			select {
 			case <-timer.C:
 				timer.Read = true
-			case <-stopper.ShouldQuiesce():
+			case <-stopCtx.Done():
 				return
+			case <-ch:
 			}
-			j.ensureSchedule(ctx)
+			j.updateSchedule(stopCtx, j.ie)
 		}
 	})
-}
 
-func (j *jobMonitor) registerClusterSettingHook() {
-	SQLStatsCleanupRecurrence.SetOnChange(&j.st.SV, func(ctx context.Context) {
-		j.ensureSchedule(ctx)
-		if err := j.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			sj, err := j.getSchedule(ctx, txn)
-			if err != nil {
-				return err
-			}
-			cronExpr := SQLStatsCleanupRecurrence.Get(&j.st.SV)
-			if err = sj.SetSchedule(cronExpr); err != nil {
-				return err
-			}
-			if err = CheckScheduleAnomaly(sj); err != nil {
-				log.Warningf(ctx, "schedule anomaly detected, disabled sql stats compaction may cause performance impact: %s", err)
-			}
-			return sj.Update(ctx, j.ie, txn)
-		}); err != nil {
-			log.Errorf(ctx, "unable to find sqlstats clean up schedule: %s", err)
+	notify := func() {
+		// Notify only if the channel is empty.
+		select {
+		case ch <- struct{}{}:
+		default:
 		}
+	}
+
+	// Ensure at startup.
+	notify()
+
+	SQLStatsCleanupRecurrence.SetOnChange(&j.st.SV, func(ctx context.Context) {
+		notify()
 	})
 }
 
@@ -139,31 +136,50 @@ func (j *jobMonitor) getSchedule(
 	return sj, nil
 }
 
-func (j *jobMonitor) ensureSchedule(ctx context.Context) {
+func (j *jobMonitor) updateSchedule(ctx context.Context, ie sqlutil.InternalExecutor) {
 	var sj *jobs.ScheduledJob
 	var err error
-	if err = j.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// We check if we can get load the schedule, if the schedule cannot be
-		// loaded because it's not found, we recreate the schedule.
-		sj, err = j.getSchedule(ctx, txn)
-		if err != nil {
-			if !jobs.HasScheduledJobNotFoundError(err) && !errors.Is(err, errScheduleNotFound) {
-				return err
-			}
-			sj, err = CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, j.ie, txn, j.st)
+	retryOptions := retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     10 * time.Minute,
+	}
+	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+		if err = j.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// We check if we can get load the schedule, if the schedule cannot be
+			// loaded because it's not found, we recreate the schedule.
+			sj, err = j.getSchedule(ctx, txn)
 			if err != nil {
+				if !jobs.HasScheduledJobNotFoundError(err) && !errors.Is(err, errScheduleNotFound) {
+					return err
+				}
+				sj, err = CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, j.ie, txn, j.st)
+				if err != nil {
+					return err
+				}
+			}
+			// Update schedule with new recurrence, if different.
+			cronExpr := SQLStatsCleanupRecurrence.Get(&j.st.SV)
+			if sj.ScheduleExpr() == cronExpr {
+				return nil
+			}
+			if err := sj.SetSchedule(cronExpr); err != nil {
 				return err
 			}
+			sj.SetScheduleStatus(string(jobs.StatusPending))
+			return sj.Update(ctx, ie, txn)
+		}); err != nil && ctx.Err() == nil {
+			log.Errorf(ctx, "failed to update stats scheduled compaction job: %s", err)
+		} else {
+			break
 		}
-		return nil
-	}); err != nil {
-		log.Errorf(ctx, "fail to ensure sql stats scheduled compaction job is created: %s", err)
-		return
 	}
 
-	if err = CheckScheduleAnomaly(sj); err != nil {
-		log.Warningf(ctx, "schedule anomaly detected: %s", err)
+	if ctx.Err() == nil {
+		if err = CheckScheduleAnomaly(sj); err != nil {
+			log.Warningf(ctx, "schedule anomaly detected, disabling sql stats compaction may cause performance impact: %s", err)
+		}
 	}
+
 }
 
 // CheckScheduleAnomaly checks a given schedule to see if it is either paused
