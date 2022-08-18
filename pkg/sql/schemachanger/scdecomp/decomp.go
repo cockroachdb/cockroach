@@ -32,6 +32,7 @@ type walkCtx struct {
 	cachedTypeIDClosures map[catid.DescID]map[catid.DescID]struct{}
 	backRefs             catalog.DescriptorIDSet
 	commentCache         CommentGetter
+	zoneConfigReader     ZoneConfigGetter
 }
 
 // WalkDescriptor walks through the elements which are implicitly defined in
@@ -49,15 +50,17 @@ type walkCtx struct {
 // verifies scerrors.HasNotImplemented.
 //
 // TODO(postamar): remove the dependency on the lookup function
-//  This is required to look up the the multi-region enum type ID and the
-//  type ID closure of types referenced in expressions. This data should
-//  instead be stored in the backing struct of the catalog.Descriptor.
+//
+//	This is required to look up the the multi-region enum type ID and the
+//	type ID closure of types referenced in expressions. This data should
+//	instead be stored in the backing struct of the catalog.Descriptor.
 func WalkDescriptor(
 	ctx context.Context,
 	desc catalog.Descriptor,
 	lookupFn func(id catid.DescID) catalog.Descriptor,
 	ev ElementVisitor,
 	commentCache CommentGetter,
+	zoneConfigReader ZoneConfigGetter,
 ) (backRefs catalog.DescriptorIDSet) {
 	w := walkCtx{
 		ctx:                  ctx,
@@ -66,6 +69,7 @@ func WalkDescriptor(
 		lookupFn:             lookupFn,
 		cachedTypeIDClosures: make(map[catid.DescID]map[catid.DescID]struct{}),
 		commentCache:         commentCache,
+		zoneConfigReader:     zoneConfigReader,
 	}
 	w.walkRoot()
 	w.backRefs.Remove(catid.InvalidDescID)
@@ -318,6 +322,21 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.backRefs.Add(fk.OriginTableID)
 		return nil
 	})
+	// Add a zone config element which is a stop gap to allow us to block
+	// operations on tables. To minimize RTT impact limit
+	// this to only tables and materialized views.
+	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() {
+		zoneCfg, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
+		if err != nil {
+			panic(err)
+		}
+		if zoneCfg != nil {
+			w.ev(scpb.Status_PUBLIC,
+				&scpb.TableZoneConfig{
+					TableID: tbl.GetID(),
+				})
+		}
+	}
 }
 
 func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityConfig) {
