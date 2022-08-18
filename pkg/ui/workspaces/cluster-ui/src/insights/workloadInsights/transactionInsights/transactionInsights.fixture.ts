@@ -57,7 +57,6 @@ export const transactionInsightsPropsFixture: TransactionInsightsViewProps = {
   filters: {
     app: "",
   },
-  internalAppNamePrefix: "$ internal",
   refreshTransactionInsights: () => {},
   onSortChange: () => {},
   onFiltersChange: () => {},
