@@ -1541,7 +1541,7 @@ func (oi *optIndex) Table() cat.Table {
 }
 
 // Ordinal is part of the cat.Index interface.
-func (oi *optIndex) Ordinal() int {
+func (oi *optIndex) Ordinal() cat.IndexOrdinal {
 	return oi.indexOrdinal
 }
 
@@ -2352,7 +2352,7 @@ func (oi *optVirtualIndex) Table() cat.Table {
 }
 
 // Ordinal is part of the cat.Index interface.
-func (oi *optVirtualIndex) Ordinal() int {
+func (oi *optVirtualIndex) Ordinal() cat.IndexOrdinal {
 	return oi.indexOrdinal
 }
 

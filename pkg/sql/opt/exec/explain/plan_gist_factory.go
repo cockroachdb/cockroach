@@ -591,7 +591,7 @@ func (u *unknownIndex) Table() cat.Table {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
-func (u *unknownIndex) Ordinal() int {
+func (u *unknownIndex) Ordinal() cat.IndexOrdinal {
 	return 0
 }
 
