@@ -24,7 +24,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const awsScheme = "aws"
+const (
+	awsScheme    = "aws"
+	awsKMSScheme = "aws-kms"
+)
 
 type awsKMS struct {
 	kms                 *kms.KMS
@@ -34,7 +37,7 @@ type awsKMS struct {
 var _ cloud.KMS = &awsKMS{}
 
 func init() {
-	cloud.RegisterKMSFromURIFactory(MakeAWSKMS, awsScheme)
+	cloud.RegisterKMSFromURIFactory(MakeAWSKMS, awsScheme, awsKMSScheme)
 }
 
 type kmsURIParams struct {
@@ -48,17 +51,23 @@ type kmsURIParams struct {
 	delegateRoleARNs []string
 }
 
-func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
-	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.Query().Get(AssumeRoleParam))
+func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
+	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
 	params := kmsURIParams{
-		accessKey:        kmsURI.Query().Get(AWSAccessKeyParam),
-		secret:           kmsURI.Query().Get(AWSSecretParam),
-		tempToken:        kmsURI.Query().Get(AWSTempTokenParam),
-		endpoint:         kmsURI.Query().Get(AWSEndpointParam),
-		region:           kmsURI.Query().Get(KMSRegionParam),
-		auth:             kmsURI.Query().Get(cloud.AuthParam),
+		accessKey:        kmsURI.ConsumeParam(AWSAccessKeyParam),
+		secret:           kmsURI.ConsumeParam(AWSSecretParam),
+		tempToken:        kmsURI.ConsumeParam(AWSTempTokenParam),
+		endpoint:         kmsURI.ConsumeParam(AWSEndpointParam),
+		region:           kmsURI.ConsumeParam(KMSRegionParam),
+		auth:             kmsURI.ConsumeParam(cloud.AuthParam),
 		roleARN:          assumeRole,
 		delegateRoleARNs: delegateRoles,
+	}
+
+	// Validate that all the passed in parameters are supported.
+	if unknownParams := kmsURI.RemainingQueryParams(); len(unknownParams) > 0 {
+		return kmsURIParams{}, errors.Errorf(
+			`unknown KMS query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
 	// AWS secrets often contain + characters, which must be escaped when
@@ -69,7 +78,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	// contain spaces. We can convert any space characters we see to +
 	// characters to recover the original secret.
 	params.secret = strings.Replace(params.secret, " ", "+", -1)
-	return params
+	return params, nil
 }
 
 // MakeAWSKMS is the factory method which returns a configured, ready-to-use
@@ -84,7 +93,11 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	// Extract the URI parameters required to setup the AWS KMS session.
-	kmsURIParams := resolveKMSURIParams(*kmsURI)
+	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}
+	kmsURIParams, err := resolveKMSURIParams(kmsConsumeURL)
+	if err != nil {
+		return nil, err
+	}
 	region := kmsURIParams.region
 	awsConfig := &aws.Config{
 		Credentials: credentials.NewStaticCredentials(kmsURIParams.accessKey,
