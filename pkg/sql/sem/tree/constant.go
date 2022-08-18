@@ -295,10 +295,7 @@ var (
 // AvailableTypes implements the Constant interface.
 func (expr *NumVal) AvailableTypes() []*types.T {
 	if i, err := expr.AsInt64(); err == nil {
-		noOid := false
-		if _, err := IntToOid(DInt(i)); err != nil {
-			noOid = true
-		}
+		noOid := intIsOutOfOIDRange(DInt(i))
 		intKind := expr.Kind() == constant.Int
 		switch {
 		case noOid && intKind:
