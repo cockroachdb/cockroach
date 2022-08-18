@@ -81,6 +81,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

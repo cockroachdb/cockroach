@@ -1273,8 +1273,11 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return roachpb.NewTransactionRetryWithProtoRefreshError(
+	pErr := roachpb.NewTransactionRetryWithProtoRefreshError(
 		msg, tc.mu.txn.ID, tc.mu.txn)
+	tc.mu.storedRetryableErr = pErr
+	tc.mu.txnState = txnRetryableError
+	return pErr
 }
 
 // Step is part of the TxnSender interface.
