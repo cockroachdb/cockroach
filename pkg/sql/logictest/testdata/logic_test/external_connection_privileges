@@ -22,7 +22,7 @@ statement ok
 GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
 
 query TTTT
-SELECT * FROM system.privileges
+SELECT * FROM system.privileges ORDER by username
 ----
 root      /externalconn/foo  {ALL}         {}
 testuser  /externalconn/foo  {DROP,USAGE}  {}
@@ -31,7 +31,7 @@ statement ok
 REVOKE USAGE,DROP ON EXTERNAL CONNECTION foo FROM testuser
 
 query TTTT
-SELECT * FROM system.privileges
+SELECT * FROM system.privileges ORDER by username
 ----
 root  /externalconn/foo  {ALL}  {}
 
