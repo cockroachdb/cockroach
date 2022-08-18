@@ -190,6 +190,12 @@ message SnapshotRequest {
     // TODO(irfansharif): Remove this in v22.1.
     bool deprecated_unreplicated_truncated_state = 8;
 
+    // The sending queue's name.
+    string sender_queue_name = 10;
+
+    // The sending queue's priority.
+    double sender_queue_priority = 11;
+
     reserved 1, 4;
   }
 
@@ -233,6 +239,12 @@ message DelegateSnapshotRequest {
 
   // The priority of the snapshot.
   SnapshotRequest.Priority priority = 5;
+
+  // The sending queue's name.
+  string sender_queue_name = 9;
+
+  // The sending queue's priority.
+  double sender_queue_priority = 10;
 
   // The type of the snapshot.
   SnapshotRequest.Type type = 6;

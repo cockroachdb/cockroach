@@ -982,13 +982,15 @@ func (r *Replica) ChangeReplicas(
 			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
 		}
 	}
-	return r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs)
+	return r.changeReplicasImpl(ctx, desc, priority, "admin", 0.0, reason, details, chgs)
 }
 
 func (r *Replica) changeReplicasImpl(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority kvserverpb.SnapshotRequest_Priority,
+	senderName string,
+	senderQueuePriority float64,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
@@ -1055,7 +1057,7 @@ func (r *Replica) changeReplicasImpl(
 		_ = roachpb.ReplicaSet.LearnerDescriptors
 		var err error
 		desc, err = r.initializeRaftLearners(
-			ctx, desc, priority, reason, details, adds, roachpb.LEARNER,
+			ctx, desc, priority, senderName, senderQueuePriority, reason, details, adds, roachpb.LEARNER,
 		)
 		if err != nil {
 			return nil, err
@@ -1101,7 +1103,7 @@ func (r *Replica) changeReplicasImpl(
 		// disruption to foreground traffic. See
 		// https://github.com/cockroachdb/cockroach/issues/63199 for an example.
 		desc, err = r.initializeRaftLearners(
-			ctx, desc, priority, reason, details, adds, roachpb.NON_VOTER,
+			ctx, desc, priority, senderName, senderQueuePriority, reason, details, adds, roachpb.NON_VOTER,
 		)
 		if err != nil {
 			return nil, err
@@ -1655,6 +1657,8 @@ func (r *Replica) initializeRaftLearners(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority kvserverpb.SnapshotRequest_Priority,
+	senderName string,
+	senderQueuePriority float64,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	targets []roachpb.ReplicationTarget,
@@ -1800,7 +1804,7 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority); err != nil {
+		if err := r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority, senderName, senderQueuePriority); err != nil {
 			return nil, err
 		}
 	}
@@ -2585,6 +2589,8 @@ func (r *Replica) sendSnapshot(
 	recipient roachpb.ReplicaDescriptor,
 	snapType kvserverpb.SnapshotRequest_Type,
 	priority kvserverpb.SnapshotRequest_Priority,
+	senderQueueName string,
+	senderQueuePriority float64,
 ) (retErr error) {
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
@@ -2632,13 +2638,15 @@ func (r *Replica) sendSnapshot(
 
 	// Create new delegate snapshot request with only required metadata.
 	delegateRequest := &kvserverpb.DelegateSnapshotRequest{
-		RangeID:            r.RangeID,
-		CoordinatorReplica: sender,
-		RecipientReplica:   recipient,
-		Priority:           priority,
-		Type:               snapType,
-		Term:               status.Term,
-		DelegatedSender:    sender,
+		RangeID:             r.RangeID,
+		CoordinatorReplica:  sender,
+		RecipientReplica:    recipient,
+		Priority:            priority,
+		SenderQueueName:     senderQueueName,
+		SenderQueuePriority: senderQueuePriority,
+		Type:                snapType,
+		Term:                status.Term,
+		DelegatedSender:     sender,
 	}
 	err = contextutil.RunWithTimeout(
 		ctx, "delegate-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
@@ -2778,10 +2786,12 @@ func (r *Replica) followerSendSnapshot(
 				Snapshot: snap.RaftSnap,
 			},
 		},
-		RangeSize: rangeSize,
-		Priority:  req.Priority,
-		Strategy:  kvserverpb.SnapshotRequest_KV_BATCH,
-		Type:      req.Type,
+		RangeSize:           rangeSize,
+		Priority:            req.Priority,
+		SenderQueueName:     req.SenderQueueName,
+		SenderQueuePriority: req.SenderQueuePriority,
+		Strategy:            kvserverpb.SnapshotRequest_KV_BATCH,
+		Type:                req.Type,
 	}
 	newBatchFn := func() storage.Batch {
 		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)
