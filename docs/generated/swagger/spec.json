@@ -1245,6 +1245,10 @@
           "type": "boolean",
           "x-go-name": "Overreplicated"
         },
+        "paused_followers": {
+          "type": "boolean",
+          "x-go-name": "PausedFollowers"
+        },
         "quiescent_equals_ticking": {
           "description": "Quiescent ranges do not tick by definition, but we track this in\ntwo different ways and suspect that they're getting out of sync.\nIf the replica's quiescent flag doesn't agree with the store's\nlist of replicas that are ticking, warn about it.",
           "type": "boolean",

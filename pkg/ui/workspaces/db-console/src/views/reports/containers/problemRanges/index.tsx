@@ -212,6 +212,11 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           problems={problems}
           extract={problem => problem.circuit_breaker_error_range_ids}
         />
+        <ProblemRangeList
+          name="Paused Replicas"
+          problems={problems}
+          extract={problem => problem.paused_replica_ids}
+        />
       </div>
     );
   }
