@@ -98,6 +98,17 @@ func forEachPublicIndexTableSpan(
 	codec keys.SQLCodec,
 	f func(span roachpb.Span),
 ) {
+	// We do not backup spans for views here as they do not contain data.
+	//
+	// Additionally, in the old protected timestamp subsystem where protection
+	// records were written on keyspans, it is incorrect to protect the empty span
+	// corresponding to a view. This is because we do not split ranges at view
+	// boundaries, and it is possible that the range the view belongs to is shared
+	// by another object in the cluster (that we may or may not be backing up)
+	// that might have its own bespoke zone configurations, namely one with a
+	// short GC TTL. This could lead to a situation where the short GC TTL on the
+	// range we are not backing up causes our protectedts verification to fail
+	// when attempting to backup the view span.
 	if !table.IsPhysicalTable() {
 		return
 	}

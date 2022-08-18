@@ -10175,6 +10175,27 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreJobEventType, expectedRestoreFailEvent)
 }
 
+// This is a regression test ensuring that the spans represented by views are
+// not included in backups when their descriptors are included in descriptor
+// revisions.
+func TestViewRevisions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, 10, InitManualReplication)
+	defer cleanup()
+
+	sqlDB.Exec(t, `
+CREATE DATABASE test;
+USE test;
+CREATE VIEW v AS SELECT 1;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+ALTER VIEW v RENAME TO v2;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+`)
+}
+
 // This tests checks that backups do not contain spans of views.
 func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -10225,14 +10246,14 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 }
 
 // In the old protected timestamp subsystem where protection records were
-// written on keyspans, it should be incorrect to protect the empty span
-// corresponding to a view. However, because we do not split ranges at view
-// boundaries, it is possible that the range the view belongs to is shared by
-// another object in the cluster (that we may or may not be backing up) that
-// might have its own bespoke zone configurations, namely one with a short GC
-// TTL. This could lead to a situation where the short GC TTL on the range we
-// are not backing up causes our protectedts verification to fail when
-// attempting to backup the view span.
+// written on keyspans, it is incorrect to protect the empty span corresponding
+// to a view. This is because we do not split ranges at view boundaries, and it
+// is possible that the range the view belongs to is shared by another object in
+// the cluster (that we may or may not be backing up) that might have its own
+// bespoke zone configurations, namely one with a short GC TTL. This could lead
+// to a situation where the short GC TTL on the range we are not backing up
+// causes our protectedts verification to fail when attempting to backup the
+// view span.
 //
 // This test verifies that backups succeed on a database with a view that's on
 // another database's range because we are no longer backing up that view's
@@ -10246,6 +10267,9 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 
 	s0 := tc.Servers[0]
 
+	// Create two databases da and db, and tables in such a way that the view
+	// db.dbview is on the same range as db.t2. Set da to have a short GC TTL of 1
+	// second.
 	sqlDB.Exec(t, `
 		CREATE DATABASE da;
 		CREATE TABLE da.t1 (k INT PRIMARY KEY, v INT);
@@ -10257,14 +10281,17 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 
 		INSERT INTO da.t2 VALUES (1, 100), (2, 200), (3, 300);
 		UPDATE da.t2 SET v = 101 WHERE k = 1;
+	`)
 
-		BACKUP DATABASE db INTO 'userfile:///a' WITH revision_history;
-  `)
+	sqlDB.Exec(t, `BACKUP DATABASE db INTO 'userfile:///a' WITH revision_history;`)
 
 	time.Sleep(5 * time.Second)
 
+	// Force GC on da.t2 to advance its GC threshold.
 	err := s0.ForceTableGC(context.Background(), "da", "t2", s0.Clock().Now().Add(-int64(1*time.Second), 0))
 	require.NoError(t, err)
 
+	// This statement should succeed as we are not backing up the span for dbview,
+	// but would fail if it was backed up.
 	sqlDB.Exec(t, `BACKUP database db into latest in 'userfile:///a' with revision_history;`)
 }
