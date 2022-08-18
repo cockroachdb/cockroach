@@ -2045,6 +2045,7 @@ func (s *statusServer) rangesHelper(
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 				CircuitBreakerError:    len(state.CircuitBreakerError) > 0,
+				PausedFollowers:        metrics.PausedFollowerCount > 0,
 			},
 			LeaseStatus:                 metrics.LeaseStatus,
 			Quiescent:                   metrics.Quiescent,

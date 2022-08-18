@@ -389,6 +389,7 @@ message RangeProblems {
   // When the raft log is too large, it can be a symptom of other issues.
   bool raft_log_too_large = 7;
   bool circuit_breaker_error = 9;
+  bool paused_followers = 10;
 }
 
 // RangeStatistics describes statistics reported by a range. For internal use
@@ -1221,6 +1222,11 @@ message ProblemRangesResponse {
     repeated int64 circuit_breaker_error_range_ids = 10 [
       (gogoproto.customname) = "CircuitBreakerErrorRangeIDs",
       (gogoproto.casttype) = 
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 paused_replica_ids = 11 [
+      (gogoproto.customname) = "PausedReplicaIDs",
+      (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
   }

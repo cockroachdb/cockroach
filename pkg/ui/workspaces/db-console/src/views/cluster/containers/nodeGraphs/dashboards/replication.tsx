@@ -24,6 +24,7 @@ import {
   CircuitBreakerTrippedEventsTooltip,
   CircuitBreakerTrippedReplicasTooltip,
   LogicalBytesGraphTooltip,
+  PausedFollowersTooltip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 import { cockroach } from "src/js/protos";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
@@ -216,6 +217,23 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.kv.replica_circuit_breaker.num_tripped_events"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+    <LineGraph
+      title="Paused Followers"
+      sources={storeSources}
+      tooltip={PausedFollowersTooltip}
+    >
+      <Axis label="replicas">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.admission.raft.paused_replicas"
             title={nodeDisplayName(nodesSummary, nid)}
             sources={storeIDsForNode(nodesSummary, nid)}
             nonNegativeRate
