@@ -168,7 +168,7 @@ func (op *_OP_STRING) next(batch coldata.Batch, startIdx, endIdx int) *coldata.B
 		}
 	}
 
-	op.allocator.AdjustMemoryUsage(op.outputBytes.Size() - oldBytesSize)
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
 	return op.outputBytes
 }
 
