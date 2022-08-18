@@ -78,6 +78,16 @@ var AnomalyDetectionMemoryLimit = settings.RegisterByteSizeSetting(
 	1024*1024,
 )
 
+// HighRetryCountThreshold sets the number of times a slow statement must have
+// been retried to be marked as having a high retry count.
+var HighRetryCountThreshold = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.insights.high_retry_count.threshold",
+	"slow statements retried more than this number of times will be marked as having a high retry count",
+	10,
+	settings.NonNegativeInt,
+).WithPublic()
+
 // Metrics holds running measurements of various outliers-related runtime stats.
 type Metrics struct {
 	// Fingerprints measures the number of statement fingerprints being monitored for
