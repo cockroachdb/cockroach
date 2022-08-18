@@ -95,7 +95,7 @@ var restoreStatsInsertBatchSize = 10
 func rewriteBackupSpanKey(
 	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
-	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), 0)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
@@ -657,6 +657,25 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 	return ok
 }
 
+// eligibleInProgressImport returns true if the descriptor represents a table with an in progress
+// import that started in a cluster finalized to version 22.2.
+func eligibleInProgressImport(
+	ctx context.Context, p sql.JobExecContext, desc catalog.Descriptor,
+) bool {
+	table, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		return false
+	}
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2) {
+		return false
+	}
+
+	if table.GetInProgressImportStartTime() == 0 {
+		return false
+	}
+	return true
+}
+
 // createImportingDescriptors create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
@@ -688,6 +707,14 @@ func createImportingDescriptors(
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
 
 	for _, desc := range sqlDescs {
+
+		// TODO (msbutler) remove the schema_change condition once the online schema changer
+		// doesn't rely on OFFLINE state
+		if desc.Offline() && desc.GetDeclarativeSchemaChangerState() == nil &&
+			!eligibleInProgressImport(ctx, p, desc) {
+			continue
+		}
+
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
 			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
