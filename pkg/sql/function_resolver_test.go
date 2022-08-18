@@ -64,7 +64,7 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 CREATE FUNCTION f() RETURNS VOID IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
-CREATE FUNCTION f(INT) RETURNS t IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b, c FROM t $$;
+CREATE FUNCTION f(INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a FROM t $$;
 `)
 
 	var sessionData sessiondatapb.SessionData
@@ -116,8 +116,7 @@ CREATE FUNCTION f(INT) RETURNS t IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b, c FRO
 		require.True(t, funcDef.Overloads[2].IsUDF)
 		require.Equal(t, 1, len(funcDef.Overloads[2].Types.Types()))
 		require.Equal(t, types.Int, funcDef.Overloads[2].Types.Types()[0])
-		require.Equal(t, types.TupleFamily, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}).Family())
-		require.NotZero(t, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}).TypeMeta)
+		require.Equal(t, types.Int, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}))
 
 		_, overload, err := funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
 		require.NoError(t, err)
@@ -143,13 +142,12 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 
 		_, overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[2].Oid)
 		require.NoError(t, err)
-		require.Equal(t, `SELECT a, b, c FROM defaultdb.public.t;`, overload.Body)
+		require.Equal(t, `SELECT a FROM defaultdb.public.t;`, overload.Body)
 		require.True(t, overload.IsUDF)
 		require.False(t, overload.UDFContainsOnlySignature)
 		require.Equal(t, 1, len(overload.Types.Types()))
 		require.Equal(t, types.Int, overload.Types.Types()[0])
-		require.Equal(t, types.TupleFamily, overload.ReturnType([]tree.TypedExpr{}).Family())
-		require.NotZero(t, overload.ReturnType([]tree.TypedExpr{}).TypeMeta)
+		require.Equal(t, types.Int, overload.ReturnType([]tree.TypedExpr{}))
 
 		return nil
 	})

@@ -31,6 +31,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))
 		}
 	}
+	if cf.ReturnType.IsSet {
+		panic(unimplemented.NewWithIssue(86391, "user-defined functions with SETOF return types are not supported"))
+	}
+
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.FuncName)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.FuncName.ObjectNamePrefix = resName
@@ -100,6 +104,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		if err != nil {
 			panic(err)
 		}
+		if err := maybeFailOnImplicitRecordType(typ); err != nil {
+			panic(err)
+		}
 
 		// Add the argument to the base scope of the body.
 		argColName := funcArgColName(arg.Name, i)
@@ -119,6 +126,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	// Collect the user defined type dependency of the return type.
 	funcReturnType, err := tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
 	if err != nil {
+		panic(err)
+	}
+	if err := maybeFailOnImplicitRecordType(funcReturnType); err != nil {
 		panic(err)
 	}
 	typeIDs, err := typedesc.GetTypeDescriptorClosure(funcReturnType)
@@ -269,5 +279,15 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 		)
 	}
 
+	return nil
+}
+
+func maybeFailOnImplicitRecordType(t *types.T) error {
+	if types.IsOIDUserDefinedType(t.Oid()) && t.Family() == types.TupleFamily {
+		return unimplemented.NewWithIssue(
+			86393,
+			"implicit record types as argument or return types in user-defined functions are not supported",
+		)
+	}
 	return nil
 }
