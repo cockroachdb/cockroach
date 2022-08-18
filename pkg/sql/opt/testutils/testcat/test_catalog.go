@@ -986,7 +986,7 @@ func (ti *Index) Table() cat.Table {
 }
 
 // Ordinal is part of the cat.Index interface.
-func (ti *Index) Ordinal() int {
+func (ti *Index) Ordinal() cat.IndexOrdinal {
 	return ti.ordinal
 }
 
