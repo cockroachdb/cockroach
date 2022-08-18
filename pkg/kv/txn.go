@@ -1446,35 +1446,14 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 }
 
 // GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError that will
-// cause the txn to be retried.
+// cause the txn to be aborted and retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
-// TxnCoordSender does on retriable errors. The transaction's timestamp is
-// bumped to the current clock timestamp.
-//
-// TODO(andrei): This method should take in an up-to-date timestamp, but
-// unfortunately its callers don't currently have that handy.
+// TxnCoordSender does on aborted errors.
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	now := txn.db.clock.NowAsClockTimestamp()
-	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
-	return txn.mu.sender.PrepareRetryableError(ctx, msg)
-}
-
-// PrepareRetryableError returns a
-// TransactionRetryWithProtoRefreshError that will cause the txn to be
-// retried. The current txn parameters are used. The txn remains valid
-// for use.
-func (txn *Txn) PrepareRetryableError(ctx context.Context, msg string) error {
-	if txn.typ != RootTxn {
-		return errors.WithContextTags(
-			errors.AssertionFailedf("PrepareRetryableError() called on leaf txn"), ctx)
-	}
-
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
 	return txn.mu.sender.PrepareRetryableError(ctx, msg)
 }
 

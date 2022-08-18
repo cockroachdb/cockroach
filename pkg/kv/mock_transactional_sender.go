@@ -179,7 +179,8 @@ func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
 // PrepareRetryableError is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) PrepareRetryableError(ctx context.Context, msg string) error {
-	return roachpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
+	retryErr := roachpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
+	return retryErr
 }
 
 // Step is part of the TxnSender interface.

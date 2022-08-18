@@ -281,25 +281,20 @@ func CheckTwoVersionInvariant(
 		return false, descsCol.MaybeUpdateDeadline(ctx, txn)
 	}
 
-	// Restart the transaction so that it is able to replay itself at a newer timestamp
-	// with the hope that the next time around there will be leases only at the current
-	// version.
-	retryErr := txn.PrepareRetryableError(ctx,
-		fmt.Sprintf(
-			`cannot publish new versions for descriptors: %v, old versions still in use`,
-			descs))
-	// We cleanup the transaction and create a new transaction after
-	// waiting for the invariant to be satisfied because the wait time
-	// might be extensive and intents can block out leases being created
-	// on a descriptor.
-	//
-	// TODO(vivek): Change this to restart a txn while fixing #20526 . All the
-	// descriptor intents can be laid down here after the invariant
-	// has been checked.
-	txn.CleanupOnError(ctx, retryErr)
 	// Release the rest of our leases on unmodified descriptors so we don't hold
 	// up schema changes there and potentially create a deadlock.
 	descsCol.ReleaseLeases(ctx)
+	// Abort the transaction so that it is able to replay itself at a newer timestamp
+	// with the hope that the next time around there will be leases only at the current
+	// version.
+	//
+	// We clean up the transaction and create a new transaction after
+	// waiting for the invariant to be satisfied because the wait time
+	// might be extensive and intents can block out leases being created
+	// on a descriptor.
+	if err := txn.Rollback(ctx); err != nil {
+		return true, err
+	}
 
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
@@ -316,7 +311,10 @@ func CheckTwoVersionInvariant(
 			onRetryBackoff()
 		}
 	}
-	return true, retryErr
+	return true, txn.GenerateForcedRetryableError(ctx,
+		fmt.Sprintf(
+			`cannot publish new versions for descriptors: %v, old versions still in use`,
+			descs))
 }
 
 // CheckSpanCountLimit checks whether committing the set of uncommitted tables

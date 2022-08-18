@@ -1272,8 +1272,13 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return roachpb.NewTransactionRetryWithProtoRefreshError(
-		msg, tc.mu.txn.ID, tc.mu.txn)
+	abortedError := roachpb.NewTransactionAbortedError(
+		roachpb.ABORT_REASON_UNKNOWN,
+	)
+	retryErr := tc.handleRetryableErrLocked(ctx,
+		roachpb.NewErrorWithTxn(abortedError, tc.mu.txn.Clone()))
+	retryErr.Msg = msg
+	return retryErr
 }
 
 // Step is part of the TxnSender interface.
