@@ -21,7 +21,6 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/flowinfra",
-        "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

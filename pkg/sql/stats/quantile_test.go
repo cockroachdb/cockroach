@@ -479,9 +479,9 @@ func TestQuantileToHistogram(t *testing.T) {
 			hist: testHistogram{{0, 0, 0, 0}, {1, 1, 1, 100}},
 		},
 		{
-			qfun: quantile{{0, 0}, {0.9, 100}, {1, 100}},
-			rows: 10,
-			hist: testHistogram{{0, 0, 0, 0}, {1, 9, 9, 100}},
+			qfun: quantile{{0, 0}, {0.9375, 100}, {1, 100}},
+			rows: 16,
+			hist: testHistogram{{0, 0, 0, 0}, {1, 15, 15, 100}},
 		},
 		{
 			qfun: quantile{{0, 100}, {0.25, 100}, {0.75, 200}, {1, 200}},
@@ -503,26 +503,26 @@ func TestQuantileToHistogram(t *testing.T) {
 			rows: 32,
 			hist: testHistogram{{4, 0, 0, 310}, {4, 0, 0, 320}, {8, 0, 0, 330}, {4, 0, 0, 340}, {4, 0, 0, 350}, {4, 0, 0, 360}, {4, 0, 0, 370}},
 		},
-		// Cases where we steal a row from NumRange to give to NumEq.
+		// Cases with 0 NumEq.
 		{
 			qfun: quantile{{0, 0}, {1, 100}},
 			rows: 2,
-			hist: testHistogram{{0, 0, 0, 0}, {1, 1, 1, 100}},
+			hist: testHistogram{{0, 0, 0, 0}, {0, 2, 2, 100}},
 		},
 		{
 			qfun: quantile{{0, 100}, {0.5, 100}, {1, 200}, {1, 300}},
 			rows: 4,
-			hist: testHistogram{{2, 0, 0, 100}, {1, 1, 1, 200}},
+			hist: testHistogram{{2, 0, 0, 100}, {0, 2, 2, 200}},
 		},
 		{
 			qfun: quantile{{0, 0}, {0.875, 87.5}, {1, 100}},
 			rows: 8,
-			hist: testHistogram{{0, 0, 0, 0}, {1, 6, 6, 87.5}, {0, 1, 1, 100}},
+			hist: testHistogram{{0, 0, 0, 0}, {0, 7, 7, 87.5}, {0, 1, 1, 100}},
 		},
 		{
 			qfun: quantile{{0, 400}, {0.5, 600}, {0.75, 700}, {1, 800}},
 			rows: 16,
-			hist: testHistogram{{0, 0, 0, 400}, {1, 7, 7, 600}, {1, 3, 3, 700}, {1, 3, 3, 800}},
+			hist: testHistogram{{0, 0, 0, 400}, {0, 8, 8, 600}, {0, 4, 4, 700}, {0, 4, 4, 800}},
 		},
 		// Error cases.
 		{
