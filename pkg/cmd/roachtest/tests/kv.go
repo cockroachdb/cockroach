@@ -155,7 +155,7 @@ func registerKV(r registry.Registry) {
 				envFlags = " " + e
 			}
 
-			cmd := fmt.Sprintf("./workload run kv --init"+
+			cmd := fmt.Sprintf("./workload run kv --tolerate-errors --init"+
 				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+envFlags+
 				" {pgurl:1-%d}", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
