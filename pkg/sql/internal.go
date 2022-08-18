@@ -147,6 +147,7 @@ func newInternalExecutorWithTxn(
 		extraTxnState: &extraTxnState{
 			txn:                    txn,
 			descCollection:         descCol,
+			jobs:                   new(jobsCollection),
 			schemaChangeJobRecords: schemaChangeJobRecords,
 			schemaChangerState:     schemaChangerState,
 		},
@@ -156,12 +157,15 @@ func newInternalExecutorWithTxn(
 
 	commitTxnFunc := func(ctx context.Context) error {
 		defer func() {
+			ie.extraTxnState.jobs.reset()
 			ie.releaseSchemaChangeJobRecords()
 		}()
 		if err := ie.commitTxn(ctx); err != nil {
 			return err
 		}
-		return nil
+		return ie.s.cfg.JobRegistry.Run(
+			ctx, ie.s.cfg.InternalExecutor, *ie.extraTxnState.jobs,
+		)
 	}
 
 	return &ie, commitTxnFunc
@@ -333,9 +337,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 				ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
 				ex.extraTxnState.fromOuterTxn = true
 				ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
-				if ie.extraTxnState.jobs != nil {
-					ex.extraTxnState.jobs = *ie.extraTxnState.jobs
-				}
+				ex.extraTxnState.jobs = ie.extraTxnState.jobs
 				ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			}
 		}
