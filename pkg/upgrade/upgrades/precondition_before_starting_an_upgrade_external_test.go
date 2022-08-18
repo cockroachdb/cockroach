@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -107,7 +108,7 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 			"There exists invalid descriptors as listed below. Fix these descriptors before attempting to upgrade again.\n"+
 			"Invalid descriptor: defaultdb.public.t (104) because 'relation \"t\" (104): invalid depended-on-by relation back reference: referenced descriptor ID 53: referenced descriptor not found'\n"+
 			"Invalid descriptor: defaultdb.public.temp_tbl (104) because 'no matching name info found in non-dropped relation \"t\"'",
-			err.Error())
+			strings.ReplaceAll(err.Error(), "1000022", "22"))
 		// The cluster version should remain at `v0`.
 		tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v0.String()}})
 	})

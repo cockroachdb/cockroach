@@ -8,6 +8,7 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
+	_ = x[invalidVersionKey - -1]
 	_ = x[V21_2-0]
 	_ = x[Start22_1-1]
 	_ = x[ProbeRequest-2]
@@ -52,13 +53,14 @@ func _() {
 	_ = x[RangefeedUseOneStreamPerNode-41]
 }
 
-const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnablePebbleFormatVersionBlockPropertiesChangefeedIdlenessEnableNewStoreRebalancerEnableNewChangefeedOptionsV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNode"
+const _Key_name = "invalidVersionKeyV21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnablePebbleFormatVersionBlockPropertiesChangefeedIdlenessEnableNewStoreRebalancerEnableNewChangefeedOptionsV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNode"
 
-var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 173, 191, 215, 241, 246, 255, 270, 310, 344, 378, 400, 420, 439, 472, 491, 511, 532, 567, 601, 631, 684, 698, 719, 750, 783, 814, 848, 870, 899, 926, 957, 990, 1008, 1032, 1060}
+var _Key_index = [...]uint16{0, 17, 22, 31, 43, 71, 101, 129, 150, 190, 208, 232, 258, 263, 272, 287, 327, 361, 395, 417, 437, 456, 489, 508, 528, 549, 584, 618, 648, 701, 715, 736, 767, 800, 831, 865, 887, 916, 943, 974, 1007, 1025, 1049, 1077}
 
 func (i Key) String() string {
+	i -= -1
 	if i < 0 || i >= Key(len(_Key_index)-1) {
-		return "Key(" + strconv.FormatInt(int64(i), 10) + ")"
+		return "Key(" + strconv.FormatInt(int64(i+-1), 10) + ")"
 	}
 	return _Key_name[_Key_index[i]:_Key_index[i+1]]
 }
