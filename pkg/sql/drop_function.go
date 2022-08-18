@@ -34,6 +34,14 @@ type dropFunctionNode struct {
 func (p *planner) DropFunction(
 	ctx context.Context, n *tree.DropFunction,
 ) (ret planNode, err error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"DROP FUNCTION",
+	); err != nil {
+		return nil, err
+	}
+
 	if n.DropBehavior == tree.DropCascade {
 		// TODO(chengxiong): remove this check when drop function cascade is supported.
 		return nil, unimplemented.Newf("DROP FUNCTION...CASCADE", "drop function cascade not supported")
