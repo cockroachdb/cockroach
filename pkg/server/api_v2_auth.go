@@ -266,14 +266,16 @@ func (a *authenticationV2Server) ServeHTTP(w http.ResponseWriter, r *http.Reques
 // and the request isn't routed through to the inner handler. On success, the
 // username is set on the request context for use in the inner handler.
 type authenticationV2Mux struct {
-	s     *authenticationV2Server
-	inner http.Handler
+	s              *authenticationV2Server
+	inner          http.Handler
+	allowAnonymous bool
 }
 
 func newAuthenticationV2Mux(s *authenticationV2Server, inner http.Handler) *authenticationV2Mux {
 	return &authenticationV2Mux{
-		s:     s,
-		inner: inner,
+		s:              s,
+		inner:          inner,
+		allowAnonymous: s.sqlServer.cfg.Insecure,
 	}
 }
 
@@ -293,14 +295,13 @@ const apiV2UseCookieBasedAuth = "cookie"
 // and also sends the error over http using w.
 func (a *authenticationV2Mux) getSession(
 	w http.ResponseWriter, req *http.Request,
-) (string, *serverpb.SessionCookie, error) {
+) (string, *serverpb.SessionCookie, int, error) {
 	ctx := req.Context()
 	// Validate the returned session header or cookie.
 	rawSession := req.Header.Get(apiV2AuthHeader)
 	if len(rawSession) == 0 {
 		err := errors.New("invalid session header")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return "", nil, err
+		return "", nil, http.StatusUnauthorized, err
 	}
 
 	possibleSessions := []string{}
@@ -335,36 +336,40 @@ func (a *authenticationV2Mux) getSession(
 	}
 	if err != nil {
 		err := errors.New("invalid session header")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return "", nil, err
+		return "", nil, http.StatusBadRequest, err
 	}
 	valid, username, err := a.s.authServer.verifySession(req.Context(), sessionCookie)
 	if err != nil {
 		apiV2InternalError(req.Context(), err, w)
-		return "", nil, err
+		return "", nil, http.StatusInternalServerError, err
 	}
 	if !valid {
 		err := errors.New("the provided authentication session could not be validated")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return "", nil, err
+		return "", nil, http.StatusUnauthorized, err
 	}
 
-	return username, sessionCookie, nil
+	return username, sessionCookie, http.StatusOK, nil
 }
 
 func (a *authenticationV2Mux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, cookie, err := a.getSession(w, req)
-	if err == nil {
-		// Valid session found. Set the username in the request context, so
-		// child http.Handlers can access it.
-		ctx := req.Context()
-		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
-		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
-		req = req.WithContext(ctx)
-	} else {
+	u, cookie, errStatus, err := a.getSession(w, req)
+	if err != nil && !a.allowAnonymous {
 		// getSession writes an error to w if err != nil.
+		http.Error(w, err.Error(), errStatus)
 		return
 	}
+	if a.allowAnonymous {
+		u = username.RootUser
+	}
+	// Valid session found, or insecure. Set the username in the request context,
+	// so child http.Handlers can access it.
+	ctx := req.Context()
+	ctx = context.WithValue(ctx, webSessionUserKey{}, u)
+	if cookie != nil {
+		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+	}
+	req = req.WithContext(ctx)
+
 	a.inner.ServeHTTP(w, req)
 }
 
