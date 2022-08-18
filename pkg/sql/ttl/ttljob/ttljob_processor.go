@@ -11,6 +11,7 @@
 package ttljob
 
 import (
+	"bytes"
 	"context"
 	"sync/atomic"
 	"time"
@@ -153,12 +154,14 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		var alloc tree.DatumAlloc
 		ri := kvcoord.MakeRangeIterator(serverCfg.DistSender)
 		for _, span := range ttlSpec.Spans {
-			rangeSpan := span
-			ri.Seek(ctx, roachpb.RKey(span.Key), kvcoord.Ascending)
+			spanStartKey := span.Key
+			spanStartRKey := roachpb.RKey(spanStartKey)
+			spanEndKey := span.EndKey
+			spanEndRKey := roachpb.RKey(spanEndKey)
+			ri.Seek(ctx, spanStartRKey, kvcoord.Ascending)
 			for done := false; ri.Valid() && !done; ri.Next(ctx) {
 				// Send range info to each goroutine worker.
 				rangeDesc := ri.Desc()
-				var nextRange rangeToProcess
 				// A single range can contain multiple tables or indexes.
 				// If this is the case, the rangeDesc.StartKey would be less than span.Key
 				// or the rangeDesc.EndKey would be greater than the span.EndKey, meaning
@@ -166,36 +169,44 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 				// Trying to decode keys outside the PK range will lead to a decoding error.
 				// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
 				// (by default, a 0 element startPK or endPK means the beginning or end).
-				if rangeDesc.StartKey.AsRawKey().Compare(span.Key) > 0 {
-					var err error
-					nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.StartKey.AsRawKey(),
-							span.Key,
-						)
-					}
+				rangeStartRKey := rangeDesc.StartKey
+				startRKey := spanStartRKey
+				if spanStartRKey.Less(rangeStartRKey) {
+					startRKey = rangeStartRKey
 				}
-				if rangeDesc.EndKey.AsRawKey().Compare(span.EndKey) < 0 {
-					rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
-					var err error
-					nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.EndKey.AsRawKey(),
-							span.EndKey,
-						)
-					}
-				} else {
+				startPK, err := keyToDatums(startRKey, codec, pkTypes, &alloc)
+				if err != nil {
+					return errors.Wrapf(
+						err,
+						"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
+						rangeDesc.RangeID,
+						rangeStartRKey.AsRawKey(),
+						spanStartKey,
+					)
+				}
+
+				rangeEndRKey := rangeDesc.EndKey
+				endRKey := spanEndRKey
+				if rangeEndRKey.Less(spanEndRKey) {
+					endRKey = rangeEndRKey
 					done = true
 				}
-				rangeChan <- nextRange
+				endPK, err := keyToDatums(endRKey, codec, pkTypes, &alloc)
+				if err != nil {
+					return errors.Wrapf(
+						err,
+						"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
+						rangeDesc.RangeID,
+						rangeEndRKey.AsRawKey(),
+						spanEndKey,
+					)
+				}
+				if bytes.Compare(startRKey, endRKey) < 0 {
+					rangeChan <- rangeToProcess{
+						startPK: startPK,
+						endPK:   endPK,
+					}
+				}
 			}
 		}
 		return nil
@@ -300,6 +311,12 @@ func (ttl *ttlProcessor) runTTLOnRange(
 		// SELECT query.
 		start := timeutil.Now()
 		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
+		// TODO remove this log
+		log.Infof(
+			ctx,
+			"TTL selected rows jobID=%d processorID=%d tableID=%d expiredRowsPKs=%s",
+			ttlSpec.JobID, ttl.ProcessorID, details.TableID, expiredRowsPKs,
+		)
 		metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
 			return rangeRowCount, errors.Wrapf(err, "error selecting rows to delete")
