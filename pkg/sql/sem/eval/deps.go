@@ -503,12 +503,12 @@ type SequenceOperators interface {
 	SetSequenceValueByID(ctx context.Context, seqID uint32, newVal int64, isCalled bool) error
 }
 
-// ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
+// CoreChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
 // Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang and return data
 // over the SQL connection, this state belongs in the EvalCtx.
-type ChangefeedState interface {
+type CoreChangefeedState interface {
 	// SetHighwater sets the frontier timestamp for the changefeed.
-	SetHighwater(frontier *hlc.Timestamp)
+	SetHighwater(frontier hlc.Timestamp)
 
 	// SetCheckpoint sets the checkpoint for the changefeed.
 	SetCheckpoint(spans []roachpb.Span, timestamp hlc.Timestamp)

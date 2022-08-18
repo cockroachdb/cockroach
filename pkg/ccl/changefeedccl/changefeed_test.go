@@ -5822,8 +5822,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	// job table update.  Instead, we just test canCheckpointHighWatermark directly.
 	ts := timeutil.NewManualTime(timeutil.Now())
 	js := newJobState(
-		nil, /* job */
-		nil, /* core progress */
+		nil,
 		cluster.MakeTestingClusterSettings(),
 		MakeMetrics(time.Second).(*Metrics), ts,
 	)
