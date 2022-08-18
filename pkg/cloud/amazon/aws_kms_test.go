@@ -227,9 +227,9 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 		q.Add(param, v)
 	}
 
-	keyARN := os.Getenv("AWS_KMS_KEY_ARN_A")
+	keyARN := os.Getenv("AWS_KMS_KEY_ARN")
 	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 	}
 
 	t.Run("allow-endpoints", func(t *testing.T) {
