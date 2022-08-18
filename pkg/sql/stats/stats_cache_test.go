@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func insertTableStat(
@@ -240,15 +241,13 @@ func TestCacheBasic(t *testing.T) {
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
 	sc := NewTableStatisticsCache(
-		ctx,
 		2, /* cacheSize */
 		db,
 		ex,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
 	}
@@ -348,15 +347,13 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	_ = kvDB
 	// Make a stats cache.
 	sc := NewTableStatisticsCache(
-		ctx,
 		1,
 		kvDB,
 		s.InternalExecutor().(sqlutil.InternalExecutor),
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
@@ -408,15 +405,13 @@ func TestCacheWait(t *testing.T) {
 	}
 	sort.Sort(tableIDs)
 	sc := NewTableStatisticsCache(
-		ctx,
 		len(tableIDs), /* cacheSize */
 		db,
 		ex,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
 	}
@@ -465,15 +460,13 @@ func TestCacheAutoRefresh(t *testing.T) {
 
 	s := tc.Server(0)
 	sc := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		s.DB(),
 		s.InternalExecutor().(sqlutil.InternalExecutor),
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 
 	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sr0.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
