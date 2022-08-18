@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -240,6 +241,10 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test assumes that the snapshot send limit is set to 1 so the second
+	// snapshot send will block waiting for the first to complete.
+	cleanup := envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", "1")
+	defer cleanup()
 	// blockIncomingSnapshots will block receiving snapshots.
 	blockIncomingSnapshots := make(chan struct{})
 	waitForRebalanceToBlockCh := make(chan struct{})

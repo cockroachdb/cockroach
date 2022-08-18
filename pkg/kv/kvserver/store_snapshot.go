@@ -660,12 +660,11 @@ func (s *Store) reserveReceiveSnapshot(
 ) (_cleanup func(), _err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSnapshot")
 	defer sp.Finish()
-	// FIXME(sarkesian): Get correct value for these two fields
-	requestSource := 0
-	requestPriority := 0.0
+	requestSource := int32(header.SenderQueueName)
+	requestPriority := header.SenderQueuePriority
 	return s.throttleSnapshot(
 		ctx, s.snapshotApplySem,
-		requestSource, requestPriority,
+		int(requestSource), requestPriority,
 		header.RangeSize,
 		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
 		s.metrics.RangeSnapshotRecvQueueLength,
@@ -682,11 +681,10 @@ func (s *Store) reserveSendSnapshot(
 	if fn := s.cfg.TestingKnobs.BeforeSendSnapshotThrottle; fn != nil {
 		fn()
 	}
-	// FIXME(sarkesian): Get correct value for these two fields
-	requestSource := 0
-	requestPriority := 0.0
+	requestSource := int32(req.SenderQueueName)
+	requestPriority := req.SenderQueuePriority
 	return s.throttleSnapshot(ctx, s.snapshotSendSem,
-		requestSource, requestPriority,
+		int(requestSource), requestPriority,
 		rangeSize,
 		req.RangeID, req.DelegatedSender.ReplicaID,
 		s.metrics.RangeSnapshotSendQueueLength,
