@@ -288,6 +288,8 @@ message DescriptorRewrite {
 
   // NewDBName represents the new name given to a restored database during a database restore
   string new_db_name = 4 [(gogoproto.customname) = "NewDBName"];
+
+  // Next ID is 6
 }
 
 message RestoreDetails {

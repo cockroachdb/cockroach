@@ -560,9 +560,14 @@ func rewriteSchemaChangerState(
 	return nil
 }
 
-// DatabaseDescs rewrites all ID's in the input slice of
-// DatabaseDescriptors using the input ID rewrite mapping.
-func DatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
+// DatabaseDescs rewrites all ID's in the input slice of DatabaseDescriptors
+// using the input ID rewrite mapping. The function elides remapping offline schemas,
+// since they will not get restored into the cluster.
+func DatabaseDescs(
+	databases []*dbdesc.Mutable,
+	descriptorRewrites jobspb.DescRewriteMap,
+	offlineSchemas map[descpb.ID]struct{},
+) error {
 	for _, db := range databases {
 		rewrite, ok := descriptorRewrites[db.ID]
 		if !ok {
@@ -587,6 +592,10 @@ func DatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites jobspb.DescRe
 			rewrite, ok := descriptorRewrites[id]
 			if !ok {
 				return errors.Errorf("missing rewrite for schema %d", id)
+			}
+			if _, ok := offlineSchemas[id]; ok {
+				// offline schema should not get added to the database descriptor.
+				return nil
 			}
 			newSchemas[name] = descpb.DatabaseDescriptor_SchemaInfo{ID: rewrite.ID}
 			return nil

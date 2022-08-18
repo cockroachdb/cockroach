@@ -1768,7 +1768,7 @@ func doRestorePlan(
 	if err := rewrite.TableDescs(tables, descriptorRewrites, intoDB); err != nil {
 		return err
 	}
-	if err := rewrite.DatabaseDescs(databases, descriptorRewrites); err != nil {
+	if err := rewrite.DatabaseDescs(databases, descriptorRewrites, map[descpb.ID]struct{}{}); err != nil {
 		return err
 	}
 	if err := rewrite.SchemaDescs(schemas, descriptorRewrites); err != nil {
