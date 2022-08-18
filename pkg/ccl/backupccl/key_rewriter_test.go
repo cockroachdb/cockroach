@@ -83,7 +83,7 @@ func TestKeyRewriter(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
 		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
 			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
-		newKey, ok, err := kr.RewriteKey(key)
+		newKey, ok, err := kr.RewriteKey(key, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func TestKeyRewriter(t *testing.T) {
 	t.Run("prefix end", func(t *testing.T) {
 		key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
 			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())).PrefixEnd()
-		newKey, ok, err := kr.RewriteKey(key)
+		newKey, ok, err := kr.RewriteKey(key, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,7 +131,7 @@ func TestKeyRewriter(t *testing.T) {
 		}
 
 		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
-		newKey, ok, err := newKr.RewriteKey(key)
+		newKey, ok, err := newKr.RewriteKey(key, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func TestKeyRewriter(t *testing.T) {
 		require.NoError(t, err)
 
 		key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
-		newKey, ok, err := newKr.RewriteKey(key)
+		newKey, ok, err := newKr.RewriteKey(key, 0)
 		require.NoError(t, err)
 		if !ok {
 			t.Fatalf("expected rewrite")
@@ -207,7 +207,7 @@ func TestKeyRewriter(t *testing.T) {
 		key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
 		oldNoTenantKey, oldTenantID, err := keys.DecodeTenantPrefix(key)
 		require.NoError(t, err)
-		newKey, ok, err := newKr.RewriteKey(key)
+		newKey, ok, err := newKr.RewriteKey(key, 0)
 		require.NoError(t, err)
 		if !ok {
 			t.Fatalf("expected rewrite")

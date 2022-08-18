@@ -216,7 +216,7 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 
 // RewriteKey modifies key (possibly in place), changing all table IDs to their
 // new value.
-func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
+func (kr *KeyRewriter) RewriteKey(key []byte, wallTime int64) ([]byte, bool, error) {
 	// If we are reading a system tenant backup and this is a tenant key then it
 	// is part of a backup *of* that tenant, so we only restore it if we have a
 	// tenant rekey for it, i.e. we're restoring that tenant.
@@ -236,7 +236,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		return nil, false, err
 	}
 
-	rekeyed, ok, err := kr.rewriteTableKey(noTenantPrefix)
+	rekeyed, ok, err := kr.checkAndRewriteTableKey(noTenantPrefix, wallTime)
 	if err != nil {
 		return nil, false, err
 	}
@@ -258,23 +258,33 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	return rekeyed, ok, err
 }
 
-// rewriteTableKey rewrites the table IDs in the key.
-// It assumes that any tenant ID has been stripped from the key so it operates
-// with the system codec. It is the responsibility of the caller to either
-// remap, or re-prepend any required tenant prefix.
-func (kr *KeyRewriter) rewriteTableKey(key []byte) ([]byte, bool, error) {
+// ErrImportingKeyError indicates the current key is apart of an in-progress import
+var ErrImportingKeyError = errors.New("Importing Key")
+
+// checkAndRewriteTableKey rewrites the table IDs in the key. It assumes that
+// any tenant ID has been stripped from the key so it operates with the system
+// codec. It is the responsibility of the caller to either remap, or re-prepend
+// any required tenant prefix.
+func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
 	_, tableID, _ := keys.SystemSQLCodec.DecodeTablePrefix(key)
+
+	desc := kr.descs[descpb.ID(tableID)]
+	if desc == nil {
+		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
+	}
+
+	// Elide Importing Keys
+	if importTime := desc.GetInProgressImportStartTime(); wallTime > 0 && importTime > 0 && wallTime >= importTime {
+		return nil, false, ErrImportingKeyError
+	}
+
 	// Rewrite the first table ID.
 	key, ok := kr.prefixes.rewriteKey(key)
 	if !ok {
 		return nil, false, nil
-	}
-	desc := kr.descs[descpb.ID(tableID)]
-	if desc == nil {
-		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
 	return key, true, nil
 }

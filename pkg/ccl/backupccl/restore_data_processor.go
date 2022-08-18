@@ -464,7 +464,12 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
 		value := roachpb.Value{RawBytes: valueScratch}
 
-		key.Key, ok, err = kr.RewriteKey(key.Key)
+		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
+
+		if errors.Is(err, ErrImportingKeyError) {
+			// Elide importing keys
+			continue
+		}
 		if err != nil {
 			return summary, err
 		}
