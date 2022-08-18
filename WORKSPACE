@@ -590,7 +590,6 @@ register_toolchains(
     "//build/toolchains:cross_arm64_windows_toolchain",
     "//build/toolchains:cross_arm64_macos_toolchain",
     "//build/toolchains:cross_arm64_macos_arm_toolchain",
-    "//build/toolchains:dev_darwin_x86_64_toolchain",
     "//build/toolchains:node_freebsd_toolchain",
 )
 

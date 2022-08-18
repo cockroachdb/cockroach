@@ -263,9 +263,7 @@ You can install node with: `+"`pkg install node`")
 		failedStampTestMsg = failedStampTestMsg + fmt.Sprintf(`
 Make sure one of the following lines is in the file %s/.bazelrc.user:
 `, workspace)
-		if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
-			failedStampTestMsg = failedStampTestMsg + "    build --config=devdarwinx86_64"
-		} else if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
 			failedStampTestMsg = failedStampTestMsg + "    build --config=dev\n"
 			failedStampTestMsg = failedStampTestMsg + "             OR       \n"
 			failedStampTestMsg = failedStampTestMsg + "    build --config=crosslinux\n"
