@@ -150,7 +150,17 @@ func (f *FlowCoordinator) nextAdapter() {
 // Next is part of the execinfra.RowSource interface.
 func (f *FlowCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if err := colexecerror.CatchVectorizedRuntimeError(f.nextAdapter); err != nil {
-		f.MoveToDraining(err)
+		if f.State == execinfra.StateRunning {
+			f.MoveToDraining(err)
+		} else {
+			// We have encountered an error during draining, so we will just
+			// return the error as metadata directly. This could occur, for
+			// example, when accounting for the metadata footprint and exceeding
+			// the limit.
+			meta := execinfrapb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
+		}
 		return nil, f.DrainHelper()
 	}
 	return f.row, f.meta
