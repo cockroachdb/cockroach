@@ -146,14 +146,14 @@ type FileToTableSystem struct {
 }
 
 // FileTable which contains records for every uploaded file.
-const fileTableSchema = `CREATE TABLE %s (filename STRING PRIMARY KEY,
+const fileTableSchema = `CREATE TABLE IF NOT EXISTS %s (filename STRING PRIMARY KEY,
 file_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
 file_size INT NOT NULL,
 username STRING NOT NULL,
 upload_time TIMESTAMP DEFAULT now())`
 
 // PayloadTable contains the chunked payloads of each file.
-const payloadTableSchema = `CREATE TABLE %s (file_id UUID,
+const payloadTableSchema = `CREATE TABLE IF NOT EXISTS %s (file_id UUID,
 byte_offset INT,
 payload BYTES,
 PRIMARY KEY(file_id, byte_offset))`
@@ -247,21 +247,21 @@ func NewFileToTableSystem(
 		// TODO(adityamaru): Handle scenario where the user has already created
 		// tables with the same names not via the FileToTableSystem
 		// object. Not sure if we want to error out or work around it.
-		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, e.ie)
+		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, nil /* txn */, e.ie)
 		if err != nil {
 			return err
 		}
 
 		if !tablesExist {
-			if err := f.createFileAndPayloadTables(ctx, txn, e.ie); err != nil {
+			if err := f.createFileAndPayloadTables(ctx, e.ie); err != nil {
 				return err
 			}
 
-			if err := f.grantCurrentUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.grantCurrentUserTablePrivileges(ctx, e.ie); err != nil {
 				return err
 			}
 
-			if err := f.revokeOtherUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.revokeOtherUserTablePrivileges(ctx, e.ie); err != nil {
 				return err
 			}
 		}
@@ -365,7 +365,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 	if err := e.db.Txn(ctx,
 		func(ctx context.Context, txn *kv.Txn) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := e.ie.ExecEx(ctx, "drop-payload-table", txn,
+			_, err := e.ie.ExecEx(ctx, "drop-payload-table", nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropPayloadTableQuery)
 			if err != nil {
@@ -373,7 +373,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 			}
 
 			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
-			_, err = e.ie.ExecEx(ctx, "drop-file-table", txn,
+			_, err = e.ie.ExecEx(ctx, "drop-file-table", nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropFileTableQuery)
 			if err != nil {
@@ -821,11 +821,11 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 }
 
 func (f *FileToTableSystem) createFileAndPayloadTables(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	ctx context.Context, ie sqlutil.InternalExecutor,
 ) error {
 	// Create the File and Payload tables to hold the file chunks.
 	fileTableCreateQuery := fmt.Sprintf(fileTableSchema, f.GetFQFileTableName())
-	_, err := ie.ExecEx(ctx, "create-file-table", txn,
+	_, err := ie.ExecEx(ctx, "create-file-table", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: f.username},
 		fileTableCreateQuery)
 	if err != nil {
@@ -833,16 +833,16 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 	}
 
 	payloadTableCreateQuery := fmt.Sprintf(payloadTableSchema, f.GetFQPayloadTableName())
-	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
+	_, err = ie.ExecEx(ctx, "create-payload-table", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: f.username},
 		payloadTableCreateQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to create table to store chunks of uploaded files")
 	}
 
-	addFKQuery := fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT file_id_fk FOREIGN KEY (
+	addFKQuery := fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT IF NOT EXISTS file_id_fk FOREIGN KEY (
 file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableName())
-	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
+	_, err = ie.ExecEx(ctx, "create-payload-table", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: f.username},
 		addFKQuery)
 	if err != nil {
@@ -855,11 +855,11 @@ file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableNa
 // Grant the current user all read/edit privileges for the file and payload
 // tables.
 func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	ctx context.Context, ie sqlutil.InternalExecutor,
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
-	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", txn,
+	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		grantQuery)
 	if err != nil {
@@ -872,12 +872,12 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 // Revoke all privileges from every user and role except root/admin and the
 // current user.
 func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	ctx context.Context, ie sqlutil.InternalExecutor,
 ) error {
 	getUsersQuery := `SELECT username FROM system.
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`
 	it, err := ie.QueryIteratorEx(
-		ctx, "get-users", txn,
+		ctx, "get-users", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		getUsersQuery, f.username,
 	)
@@ -899,7 +899,7 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 	for _, user := range users {
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
 			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user.SQLIdentifier())
-		_, err = ie.ExecEx(ctx, "revoke-user-privileges", txn,
+		_, err = ie.ExecEx(ctx, "revoke-user-privileges", nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			revokeQuery)
 		if err != nil {

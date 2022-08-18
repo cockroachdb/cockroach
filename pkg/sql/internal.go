@@ -871,6 +871,9 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
+	if tree.CanModifySchema(parsed.AST) && txn != nil {
+		return nil, errors.New("DDL statement is disallowed with internal executor")
+	}
 	if err != nil {
 		return nil, err
 	}

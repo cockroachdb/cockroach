@@ -345,7 +345,7 @@ func cleanupSchemaObjects(
 							_, err = ie.ExecEx(
 								ctx,
 								"delete-temp-dependent-col",
-								txn,
+								nil, /* txn */
 								override,
 								fmt.Sprintf(
 									"ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT",
@@ -385,7 +385,7 @@ func cleanupSchemaObjects(
 				query.WriteString(tbName.FQString())
 			}
 			query.WriteString(" CASCADE")
-			_, err = ie.ExecEx(ctx, "delete-temp-"+toDelete.typeName, txn, override, query.String())
+			_, err = ie.ExecEx(ctx, "delete-temp-"+toDelete.typeName, nil /* txn */, override, query.String())
 			if err != nil {
 				return err
 			}

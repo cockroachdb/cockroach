@@ -413,7 +413,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 						}
 					}()
 
-					it, err := a.admin.ie.QueryIteratorEx(ctx, "run-query-via-api", txn,
+					it, err := a.admin.ie.QueryIteratorEx(ctx, "run-query-via-api", nil, /* txn */
 						sessiondata.InternalExecutorOverride{
 							User:            username,
 							Database:        requestPayload.Database,
