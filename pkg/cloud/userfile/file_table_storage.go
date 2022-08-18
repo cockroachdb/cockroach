@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
@@ -84,6 +85,7 @@ type fileTableStorage struct {
 	ioConf   base.ExternalIODirConfig
 	db       *kv.DB
 	ie       sqlutil.InternalExecutor
+	cf       *descs.CollectionFactory
 	prefix   string // relative filepath
 	settings *cluster.Settings
 }
@@ -122,12 +124,16 @@ func makeFileTableStorage(
 
 	// cfg.User is already a normalized SQL username.
 	user := username.MakeSQLUsernameFromPreNormalizedString(cfg.User)
-	executor := filetable.MakeInternalFileToTableExecutor(args.InternalExecutor, args.DB)
+	executor := filetable.MakeInternalFileToTableExecutor(args.InternalExecutor, args.DB, args.CollectionFactory.(*descs.CollectionFactory))
 
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
 		cfg.QualifiedTableName, executor, user)
 	if err != nil {
 		return nil, err
+	}
+	var colFac *descs.CollectionFactory
+	if args.CollectionFactory != nil {
+		colFac = args.CollectionFactory.(*descs.CollectionFactory)
 	}
 	return &fileTableStorage{
 		fs:       fileToTableSystem,
@@ -135,6 +141,7 @@ func makeFileTableStorage(
 		ioConf:   args.IOConf,
 		db:       args.DB,
 		ie:       args.InternalExecutor,
+		cf:       colFac,
 		prefix:   cfg.Path,
 		settings: args.Settings,
 	}, nil
@@ -257,6 +264,10 @@ func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.Writ
 	// which should never be the case.
 	if f.ie == nil {
 		return nil, errors.New("cannot Write without a configured internal executor")
+	}
+
+	if f.cf == nil {
+		return nil, errors.New("cannot Write without a configured collection factory")
 	}
 
 	return f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)

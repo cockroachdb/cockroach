@@ -107,7 +107,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), kvDB, nil)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestReadWriteFile(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), kvDB, nil)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)
@@ -341,7 +341,7 @@ func TestUserGrants(t *testing.T) {
 
 	// Operate under non-admin user.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), kvDB, nil)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -425,7 +425,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 
 	// Operate under non-admin user john.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), kvDB, nil)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -483,7 +483,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 
 	// Operate under non-admin user john.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), kvDB, nil)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -518,7 +518,7 @@ func TestDatabaseScope(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), kvDB, nil)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)

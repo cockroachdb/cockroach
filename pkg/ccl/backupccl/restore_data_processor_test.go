@@ -253,8 +253,18 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		Cfg: &execinfra.ServerConfig{
 			DB: kvDB,
 			ExternalStorage: func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
-				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil, nil, opts...)
+				return cloud.MakeExternalStorage(
+					ctx,
+					dest,
+					base.ExternalIODirConfig{},
+					s.ClusterSettings(),
+					blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir),
+					nil, /* InternalExecutor */
+					nil, /* CollectionFactory */
+					nil, /* DB */
+					nil, /* Limiters */
+					opts...,
+				)
 			},
 			Settings:          s.ClusterSettings(),
 			Codec:             keys.SystemSQLCodec,

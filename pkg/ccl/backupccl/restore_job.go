@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1581,7 +1582,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx, nil /* txn */); err != nil {
+		if err := r.execCfg.CollectionFactory.TxnWithExecutor(ctx, r.execCfg.DB, nil /* sessionData */, func(
+			ctx context.Context, txn *kv.Txn, descsCol collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
+		) error {
+			return r.cleanupTempSystemTables(ctx, txn, ie)
+		},
+		); err != nil {
 			return err
 		}
 	} else if isSystemUserRestore(details) {
@@ -1590,7 +1596,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx, nil /* txn */); err != nil {
+		if err := r.execCfg.CollectionFactory.TxnWithExecutor(ctx, r.execCfg.DB, nil /* sessionData */, func(
+			ctx context.Context, txn *kv.Txn, descsCol collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
+		) error {
+			return r.cleanupTempSystemTables(ctx, txn, ie)
+		},
+		); err != nil {
 			return err
 		}
 	}
@@ -2076,9 +2087,13 @@ func (r *restoreResumer) OnFailOrCancel(
 	logJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	if err := sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	if err := execCfg.CollectionFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descsCol collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
 	) error {
+		var collection *descs.Collection
+		if descsCol != nil {
+			collection = descsCol.(*descs.Collection)
+		}
 		for _, tenant := range details.Tenants {
 			tenant.State = descpb.TenantInfo_DROP
 			// This is already a job so no need to spin up a gc job for the tenant;
@@ -2088,14 +2103,13 @@ func (r *restoreResumer) OnFailOrCancel(
 			}
 		}
 
-		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol); err != nil {
+		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, collection); err != nil {
 			return err
 		}
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			// We've dropped defaultdb and postgres in the planning phase, we must
 			// recreate them now if the full cluster restore failed.
-			ie := p.ExecCfg().InternalExecutor
 			_, err := ie.Exec(ctx, "recreate-defaultdb", txn, "CREATE DATABASE IF NOT EXISTS defaultdb")
 			if err != nil {
 				return err
@@ -2114,9 +2128,15 @@ func (r *restoreResumer) OnFailOrCancel(
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		// The temporary system table descriptors should already have been dropped
 		// in `dropDescriptors` but we still need to drop the temporary system db.
-		if err := execCfg.DB.Txn(ctx, r.cleanupTempSystemTables); err != nil {
+		if err := execCfg.CollectionFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(
+			ctx context.Context, txn *kv.Txn, descsCol collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
+		) error {
+			return r.cleanupTempSystemTables(ctx, txn, ie)
+		},
+		); err != nil {
 			return err
 		}
+
 	}
 
 	// Emit to the event log that the job has completed reverting.
@@ -2635,12 +2655,19 @@ func (r *restoreResumer) restoreSystemTables(
 	return nil
 }
 
-func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context, txn *kv.Txn) error {
-	executor := r.execCfg.InternalExecutor
+func (r *restoreResumer) cleanupTempSystemTables(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+) error {
 	// Check if the temp system database has already been dropped. This can happen
 	// if the restore job fails after the system database has cleaned up.
 	checkIfDatabaseExists := "SELECT database_name FROM [SHOW DATABASES] WHERE database_name=$1"
-	if row, err := executor.QueryRow(ctx, "checking-for-temp-system-db" /* opName */, txn, checkIfDatabaseExists, restoreTempSystemDB); err != nil {
+	if row, err := ie.QueryRow(
+		ctx,
+		"checking-for-temp-system-db", /* opName */
+		txn,
+		checkIfDatabaseExists,
+		restoreTempSystemDB,
+	); err != nil {
 		return errors.Wrap(err, "checking for temporary system db")
 	} else if row == nil {
 		// Temporary system DB might already have been dropped by the restore job.
@@ -2650,11 +2677,11 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context, txn *kv.Tx
 	// After restoring the system tables, drop the temporary database holding the
 	// system tables.
 	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", restoreTempSystemDB)
-	if _, err := executor.Exec(ctx, "altering-gc-ttl-temp-system" /* opName */, txn, gcTTLQuery); err != nil {
+	if _, err := ie.Exec(ctx, "altering-gc-ttl-temp-system" /* opName */, txn, gcTTLQuery); err != nil {
 		log.Errorf(ctx, "failed to update the GC TTL of %q: %+v", restoreTempSystemDB, err)
 	}
 	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDB)
-	if _, err := executor.Exec(ctx, "drop-temp-system-db" /* opName */, txn, dropTableQuery); err != nil {
+	if _, err := ie.Exec(ctx, "drop-temp-system-db" /* opName */, txn, dropTableQuery); err != nil {
 		return errors.Wrap(err, "dropping temporary system db")
 	}
 	return nil

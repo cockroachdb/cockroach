@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -61,6 +63,7 @@ type FileToTableSystemExecutor interface {
 type InternalFileToTableExecutor struct {
 	ie sqlutil.InternalExecutor
 	db *kv.DB
+	cf *descs.CollectionFactory
 }
 
 var _ FileToTableSystemExecutor = &InternalFileToTableExecutor{}
@@ -68,9 +71,9 @@ var _ FileToTableSystemExecutor = &InternalFileToTableExecutor{}
 // MakeInternalFileToTableExecutor returns an instance of a
 // InternalFileToTableExecutor.
 func MakeInternalFileToTableExecutor(
-	ie sqlutil.InternalExecutor, db *kv.DB,
+	ie sqlutil.InternalExecutor, db *kv.DB, cf *descs.CollectionFactory,
 ) *InternalFileToTableExecutor {
-	return &InternalFileToTableExecutor{ie, db}
+	return &InternalFileToTableExecutor{ie, db, cf}
 }
 
 // Query implements the FileToTableSystemExecutor interface.
@@ -146,14 +149,14 @@ type FileToTableSystem struct {
 }
 
 // FileTable which contains records for every uploaded file.
-const fileTableSchema = `CREATE TABLE %s (filename STRING PRIMARY KEY,
+const fileTableSchema = `CREATE TABLE IF NOT EXISTS %s (filename STRING PRIMARY KEY,
 file_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
 file_size INT NOT NULL,
 username STRING NOT NULL,
 upload_time TIMESTAMP DEFAULT now())`
 
 // PayloadTable contains the chunked payloads of each file.
-const payloadTableSchema = `CREATE TABLE %s (file_id UUID,
+const payloadTableSchema = `CREATE TABLE IF NOT EXISTS %s (file_id UUID,
 byte_offset INT,
 payload BYTES,
 PRIMARY KEY(file_id, byte_offset))`
@@ -243,25 +246,25 @@ func NewFileToTableSystem(
 	if err != nil {
 		return nil, err
 	}
-	if err := e.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := e.cf.TxnWithExecutor(ctx, e.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, collection collectionfactory.DescsCollection, ie sqlutil.InternalExecutor) error {
 		// TODO(adityamaru): Handle scenario where the user has already created
 		// tables with the same names not via the FileToTableSystem
 		// object. Not sure if we want to error out or work around it.
-		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, e.ie)
+		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, ie)
 		if err != nil {
 			return err
 		}
 
 		if !tablesExist {
-			if err := f.createFileAndPayloadTables(ctx, txn, e.ie); err != nil {
+			if err := f.createFileAndPayloadTables(ctx, txn, ie); err != nil {
 				return err
 			}
 
-			if err := f.grantCurrentUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.grantCurrentUserTablePrivileges(ctx, txn, ie); err != nil {
 				return err
 			}
 
-			if err := f.revokeOtherUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.revokeOtherUserTablePrivileges(ctx, txn, ie); err != nil {
 				return err
 			}
 		}
@@ -362,8 +365,8 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 		return err
 	}
 
-	if err := e.db.Txn(ctx,
-		func(ctx context.Context, txn *kv.Txn) error {
+	if err := e.cf.TxnWithExecutor(ctx, e.db, nil, /* SessionData */
+		func(ctx context.Context, txn *kv.Txn, collection collectionfactory.DescsCollection, ie sqlutil.InternalExecutor) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
 			_, err := e.ie.ExecEx(ctx, "drop-payload-table", txn,
 				sessiondata.InternalExecutorOverride{User: f.username},
@@ -840,7 +843,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 		return errors.Wrap(err, "failed to create table to store chunks of uploaded files")
 	}
 
-	addFKQuery := fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT file_id_fk FOREIGN KEY (
+	addFKQuery := fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT IF NOT EXISTS file_id_fk FOREIGN KEY (
 file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableName())
 	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
 		sessiondata.InternalExecutorOverride{User: f.username},

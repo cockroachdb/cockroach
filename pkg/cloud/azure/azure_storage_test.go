@@ -66,10 +66,24 @@ func TestAzure(t *testing.T) {
 		return
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
-	cloudtestutils.CheckExportStore(t, cfg.filePath("backup-test"),
-		false, username.RootUserName(), nil, nil, testSettings)
+	cloudtestutils.CheckExportStore(
+		t,
+		cfg.filePath("backup-test"),
+		false,
+		username.RootUserName(),
+		nil,
+		nil,
+		nil,
+		testSettings,
+	)
 	cloudtestutils.CheckListFiles(
-		t, cfg.filePath("listing-test"), username.RootUserName(), nil, nil, testSettings,
+		t,
+		cfg.filePath("listing-test"),
+		username.RootUserName(),
+		nil,
+		nil,
+		nil,
+		testSettings,
 	)
 }
 
