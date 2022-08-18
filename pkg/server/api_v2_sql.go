@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -374,7 +375,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		cf := a.admin.server.sqlServer.execCfg.CollectionFactory
 		runner = func(ctx context.Context, fn txnFunc) error {
 			return cf.TxnWithExecutor(ctx, a.admin.server.db, nil, func(
-				ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor,
+				ctx context.Context, txn *kv.Txn, _ collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
 			) error {
 				return fn(ctx, txn, ie)
 			}, descs.SteppingEnabled())

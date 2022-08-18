@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -98,9 +99,10 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	cf := execCfg.CollectionFactory
 	require.NoError(t, cf.TxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn *kv.Txn, col collectionfactory.DescsCollection,
 		ie sqlutil.InternalExecutor,
 	) error {
+		descsCol := col.(*descs.Collection)
 		// Add a hack to not wait for one version on the descriptors.
 		defer descsCol.ReleaseAll(ctx)
 		defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(

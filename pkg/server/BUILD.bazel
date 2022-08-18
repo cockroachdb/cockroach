@@ -163,6 +163,7 @@ go_library(
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/collectionfactory",
         "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",

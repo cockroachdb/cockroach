@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -204,12 +205,12 @@ func (sc *SchemaChanger) fixedTimestampTxnWithExecutor(
 ) error {
 	sd := NewFakeSessionData(sc.execCfg.SV())
 	return sc.txnWithExecutor(ctx, sd, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		ctx context.Context, txn *kv.Txn, descriptors collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
 	) error {
 		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
 			return err
 		}
-		return retryable(ctx, txn, sd, descriptors, ie)
+		return retryable(ctx, txn, sd, descriptors.(*descs.Collection), ie)
 	})
 }
 

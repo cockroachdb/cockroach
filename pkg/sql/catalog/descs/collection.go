@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
@@ -134,6 +135,12 @@ type Collection struct {
 	// For the most part, it is in deprecated or testing settings.
 	direct direct
 }
+
+// ImplmentDescsCollection is to implement collectionfactory.DescsCollection.
+func (tc *Collection) ImplmentDescsCollection() {
+}
+
+var _ collectionfactory.DescsCollection = (*Collection)(nil)
 
 var _ catalog.Accessor = (*Collection)(nil)
 
