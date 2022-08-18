@@ -19,7 +19,6 @@ import {
   TransactionInsightsViewDispatchProps,
   TransactionInsightsView,
 } from "@cockroachlabs/cluster-ui";
-import { selectAppName } from "src/selectors/activeExecutionsSelectors";
 import {
   filtersLocalSetting,
   sortSettingLocalSetting,
@@ -34,7 +33,6 @@ const mapStateToProps = (
   transactionsError: state.cachedData?.insights.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
-  internalAppNamePrefix: selectAppName(state),
 });
 
 const mapDispatchToProps = {

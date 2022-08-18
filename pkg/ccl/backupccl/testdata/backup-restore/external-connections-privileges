@@ -12,7 +12,7 @@ CREATE EXTERNAL CONNECTION root AS 'nodelocal://1/root'
 ----
 
 exec-sql user=testuser
-CREATE EXTERNAL CONNECTION fails AS 'userfile:///noprivs'
+CREATE EXTERNAL CONNECTION "testuser-ec" AS 'userfile:///noprivs'
 ----
 pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
 
@@ -21,7 +21,7 @@ GRANT SYSTEM EXTERNALCONNECTION TO testuser;
 ----
 
 exec-sql user=testuser
-CREATE EXTERNAL CONNECTION fails AS 'nodelocal://1/privs'
+CREATE EXTERNAL CONNECTION "testuser-ec" AS 'nodelocal://1/privs'
 ----
 
 exec-sql
@@ -32,17 +32,17 @@ exec-sql
 GRANT SELECT ON TABLE foo TO testuser
 ----
 
+# Since testuser created the External Connection they have `ALL` privileges on the object.
 exec-sql user=testuser
-BACKUP TABLE foo INTO 'external://fails'
+BACKUP TABLE foo INTO 'external://testuser-ec'
 ----
-pq: user testuser does not have USAGE privilege on external_connection fails
 
 exec-sql
-GRANT USAGE ON EXTERNAL CONNECTION fails TO testuser;
+GRANT USAGE ON EXTERNAL CONNECTION "testuser-ec" TO testuser;
 ----
 
 exec-sql user=testuser
-BACKUP TABLE foo INTO 'external://fails'
+BACKUP TABLE foo INTO LATEST IN 'external://testuser-ec'
 ----
 
 # Sanity check that the user can't write to any other external connection.
@@ -51,18 +51,34 @@ BACKUP TABLE foo INTO 'external://root'
 ----
 pq: user testuser does not have USAGE privilege on external_connection root
 
-# Revoke the USAGE privilege to test that restore also requires it.
-exec-sql
-REVOKE USAGE ON EXTERNAL CONNECTION fails FROM testuser;
+query-sql
+SELECT * FROM system.privileges
 ----
+root /externalconn/root {ALL} {}
+testuser /externalconn/testuser-ec {ALL} {}
+testuser /global/ {EXTERNALCONNECTION} {}
+
+# Revoke the USAGE privilege. Note testuser had ALL privileges since they
+# created the External Connection, but revoking USAGE means that they will now
+# only have DROP privileges. Thus, they shouldn't be able to restore.
+exec-sql
+REVOKE USAGE ON EXTERNAL CONNECTION "testuser-ec" FROM testuser;
+----
+
+query-sql
+SELECT * FROM system.privileges
+----
+root /externalconn/root {ALL} {}
+testuser /externalconn/testuser-ec {DROP} {}
+testuser /global/ {EXTERNALCONNECTION} {}
 
 exec-sql user=testuser
-RESTORE TABLE foo FROM LATEST IN 'external://fails'
+RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec'
 ----
-pq: user testuser does not have USAGE privilege on external_connection fails
+pq: user testuser does not have USAGE privilege on external_connection testuser-ec
 
 exec-sql
-GRANT USAGE ON EXTERNAL CONNECTION fails TO testuser;
+GRANT USAGE ON EXTERNAL CONNECTION "testuser-ec" TO testuser;
 ----
 
 exec-sql
@@ -71,7 +87,7 @@ GRANT CREATE ON DATABASE failsdb TO testuser;
 ----
 
 exec-sql user=testuser
-RESTORE TABLE foo FROM LATEST IN 'external://fails' WITH into_db=failsdb;
+RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec' WITH into_db=failsdb;
 ----
 
 subtest end

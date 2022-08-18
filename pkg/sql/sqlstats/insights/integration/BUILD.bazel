@@ -13,6 +13,7 @@ go_test(
         "//pkg/sql/sqlstats/insights",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

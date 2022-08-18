@@ -233,8 +233,9 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 		true, /* useReadLock */
 		func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
-			existingRowCount := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount
-			progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += processorRowCount
+			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
+			existingRowCount := rowLevelTTL.RowCount
+			rowLevelTTL.RowCount += processorRowCount
 			ju.UpdateProgress(progress)
 			log.VInfof(
 				ctx,
