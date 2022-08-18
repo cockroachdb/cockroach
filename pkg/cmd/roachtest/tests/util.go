@@ -118,4 +118,10 @@ func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
 		}
 	}
+	if !enabled {
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING admission.kv.pause_replication_io_threshold = 0.0"); err != nil {
+			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
+		}
+	}
 }
