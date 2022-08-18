@@ -2513,7 +2513,8 @@ var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
 func errIsRetriable(err error) bool {
 	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
 		scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID ||
-		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError)
+		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
+		descs.IsTwoVersionInvariantViolationError(err)
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
