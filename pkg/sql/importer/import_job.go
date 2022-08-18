@@ -262,7 +262,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_1) {
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2) {
 					// Update the descriptor in the job record and in the database with the ImportStartTime
 					details.Tables[i].Desc.ImportStartWallTime = details.Walltime
 					err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime)
@@ -454,7 +454,6 @@ func (r *importResumer) prepareTablesForIngestion(
 	// wait for all nodes to see the same descriptor version before doing so.
 	if !hasExistingTables {
 		importDetails.Walltime = p.ExecCfg().Clock.Now().WallTime
-		// TODO(msbutler): add import start time to IMPORT PGDUMP/MYSQL descriptor
 	} else {
 		importDetails.Walltime = 0
 	}
