@@ -199,6 +199,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 
 			case "trace-sql":
 				mustHaveArgOrFatal(t, d, serverIdx)
+				var rec tracing.Recording
 				queryFunc := func() (localRead bool, followerRead bool, err error) {
 					var idx int
 					d.ScanArgs(t, serverIdx, &idx)
@@ -221,7 +222,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 					if err != nil {
 						return false, false, err
 					}
-					rec := <-recCh
+					rec = <-recCh
 					localRead, followerRead, err = checkReadServedLocallyInSimpleRecording(rec)
 					if err != nil {
 						return false, false, err
@@ -239,6 +240,9 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				if localRead {
 					output.WriteString(
 						fmt.Sprintf("served via follower read: %s\n", strconv.FormatBool(followerRead)))
+				}
+				if d.Expected != output.String() {
+					return errors.AssertionFailedf("not a match, trace:\n%s\n", rec).Error()
 				}
 				return output.String()
 
@@ -322,8 +326,8 @@ func TestMultiRegionDataDriven(t *testing.T) {
 						}
 					}
 
-					// If the user specified a leaseholder, transfer range lease to the
-					// leaseholder.
+					// If the user specified a leaseholder, transfer range's lease to the
+					// that node.
 					if expectedPlacement.hasLeaseholderInfo() {
 						expectedLeaseIdx := expectedPlacement.getLeaseholder()
 						actualLeaseIdx := actualPlacement.getLeaseholder()
@@ -354,7 +358,17 @@ func TestMultiRegionDataDriven(t *testing.T) {
 							)
 						}
 					}
-
+					// Now that this range has gone through a bunch of changes, we lookup
+					// the range and its leaseholder again to ensure we're comparing the
+					// most up-to-date range state with the supplied expectation.
+					desc, err = ds.tc.LookupRange(lookupKey)
+					if err != nil {
+						return err
+					}
+					actualPlacement, err = parseReplicasFromRange(t, ds.tc, desc)
+					if err != nil {
+						return err
+					}
 					err = actualPlacement.satisfiesExpectedPlacement(expectedPlacement)
 					if err != nil {
 						return err
@@ -563,6 +577,7 @@ func parseReplicasFromInput(
 }
 
 // parseReplicasFromInput constructs a replicaPlacement from a range descriptor.
+// It also ensures all replicas have the same view of who the leaseholder is.
 func parseReplicasFromRange(
 	t *testing.T, tc serverutils.TestClusterInterface, desc roachpb.RangeDescriptor,
 ) (*replicaPlacement, error) {
@@ -574,6 +589,28 @@ func parseReplicasFromRange(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get leaseholder")
 	}
+	// This test performs lease transfers at various points and expects the
+	// range's leaseholder to conform to what was specified in the test. However,
+	// whenever the lease is transferred using methods on TestCluster, only the
+	// outgoing leaseholder is guaranteed to have applied the lease. Given the
+	// tracing assumptions these tests make, it's worth ensuring all replicas have
+	// applied the lease, as it makes reasoning about these tests much easier.
+	// To that effect, we loop through all replicas on the supplied descriptor and
+	// ensure that is indeed the case.
+	for _, repl := range desc.Replicas().VoterAndNonVoterDescriptors() {
+		t := tc.Target(nodeIdToIdx(t, tc, repl.NodeID))
+		lh, err := tc.FindRangeLeaseHolder(desc, &t)
+		if err != nil {
+			return nil, err
+		}
+		if lh.NodeID != leaseHolder.NodeID && lh.StoreID != leaseHolder.StoreID {
+			return nil, errors.Newf(
+				"all replicas do not have the same view of the lease; found %s and %s",
+				lh, leaseHolder,
+			)
+		}
+	}
+
 	leaseHolderIdx := nodeIdToIdx(t, tc, leaseHolder.NodeID)
 	replicaMap[leaseHolderIdx] = replicaTypeLeaseholder
 	ret.leaseholder = leaseHolderIdx
@@ -645,6 +682,12 @@ func (r *replicaPlacement) satisfiesExpectedPlacement(expected *replicaPlacement
 		}
 	}
 
+	if expected.hasLeaseholderInfo() && expected.getLeaseholder() != r.getLeaseholder() {
+		return errors.Newf(
+			"expected %s to be the leaseholder, but %s was instead",
+			expected.getLeaseholder(), r.getLeaseholder(),
+		)
+	}
 	return nil
 }
 
