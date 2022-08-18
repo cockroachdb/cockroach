@@ -78,6 +78,7 @@ go_test(
         "upgrade_sequence_to_be_referenced_by_ID_external_test.go",
         "wait_for_del_range_in_gc_job_test.go",
     ],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":upgrades"],
     shard_count = 16,

@@ -11,6 +11,7 @@ go_library(
 go_test(
     name = "quantile_test",
     srcs = ["stream_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":quantile"],
 )
 

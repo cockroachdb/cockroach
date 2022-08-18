@@ -29,6 +29,7 @@ go_test(
         "main_test.go",
         "pgbench_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":bench"],
     deps = [
         "//pkg/base",

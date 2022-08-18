@@ -19,6 +19,7 @@ go_test(
     name = "prereqs_test",
     size = "small",
     srcs = ["prereqs_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":prereqs_lib"],
     tags = ["broken_in_bazel"],

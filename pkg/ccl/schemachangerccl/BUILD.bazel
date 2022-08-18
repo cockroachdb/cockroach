@@ -8,6 +8,7 @@ go_test(
         "main_test.go",
         "schemachanger_ccl_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]) + [
         "//pkg/sql/schemachanger:testdata",
     ],

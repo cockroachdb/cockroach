@@ -50,6 +50,7 @@ go_test(
         "json_array_test.go",
         "trigram_test.go",
     ],
+    args = ["-test.timeout=55s"],
     deps = [
         ":invertedidx",
         "//pkg/geo",

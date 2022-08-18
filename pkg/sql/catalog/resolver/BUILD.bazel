@@ -33,6 +33,7 @@ go_test(
         "resolver_bench_test.go",
         "resolver_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         ":resolver",
         "//pkg/base",

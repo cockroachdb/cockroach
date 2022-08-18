@@ -38,6 +38,7 @@ go_test(
         "store_token_estimation_test.go",
         "work_queue_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":admission"],
     deps = [

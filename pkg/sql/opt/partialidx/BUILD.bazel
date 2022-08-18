@@ -21,6 +21,7 @@ go_test(
     name = "partialidx_test",
     size = "small",
     srcs = ["implicator_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     deps = [
         ":partialidx",

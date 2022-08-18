@@ -24,6 +24,7 @@ go_test(
         "compute_etags_test.go",
         "etag_handler_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":httputil"],
     deps = [
         "//pkg/util/leaktest",

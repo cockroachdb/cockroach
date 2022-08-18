@@ -28,6 +28,7 @@ go_test(
         "hba_test.go",
         "scanner_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":hba"],
     deps = [

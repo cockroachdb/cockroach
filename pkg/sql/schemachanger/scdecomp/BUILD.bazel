@@ -36,6 +36,7 @@ go_test(
         "decomp_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",

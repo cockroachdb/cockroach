@@ -83,6 +83,7 @@ go_test(
         "helpers_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":descs"],
     deps = [

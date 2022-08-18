@@ -45,6 +45,7 @@ go_test(
         "main_test.go",
         "spanconfigdecoder_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":spanconfigkvsubscriber"],
     deps = [

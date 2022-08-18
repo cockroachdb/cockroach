@@ -22,6 +22,7 @@ go_library(
 go_test(
     name = "partition_test",
     srcs = ["locality_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":partition"],
     deps = [
         "//pkg/settings/cluster",

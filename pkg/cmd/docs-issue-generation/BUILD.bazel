@@ -21,6 +21,7 @@ go_binary(
 go_test(
     name = "docs-issue-generation_test",
     srcs = ["docs_issue_generation_test.go"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":docs-issue-generation_lib"],
     deps = ["@com_github_stretchr_testify//assert"],

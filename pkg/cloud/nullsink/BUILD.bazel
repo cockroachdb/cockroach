@@ -19,6 +19,7 @@ go_library(
 go_test(
     name = "nullsink_test",
     srcs = ["nullsink_storage_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":nullsink"],
     deps = [
         "//pkg/base",

@@ -7,6 +7,7 @@ go_test(
         "main_test.go",
         "telemetry_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     shard_count = 16,
     deps = [

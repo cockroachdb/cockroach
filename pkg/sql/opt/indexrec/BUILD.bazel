@@ -33,6 +33,7 @@ go_test(
         "index_candidate_set_test.go",
         "indexrec_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":indexrec"],
     deps = [

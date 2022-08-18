@@ -39,6 +39,7 @@ go_test(
         "profiler_common_test.go",
         "profilestore_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":heapprofiler"],
     deps = [
         "//pkg/clusterversion",

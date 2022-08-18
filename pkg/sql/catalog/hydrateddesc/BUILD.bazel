@@ -30,6 +30,7 @@ go_library(
 go_test(
     name = "hydrateddesc_test",
     srcs = ["hydratedcache_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":hydrateddesc"],
     deps = [
         "//pkg/security/username",

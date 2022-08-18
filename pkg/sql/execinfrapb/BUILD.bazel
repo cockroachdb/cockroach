@@ -74,6 +74,7 @@ go_test(
         "flow_diagram_external_test.go",
         "flow_diagram_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":execinfrapb"],
     deps = [
         "//pkg/base",
