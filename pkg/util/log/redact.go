@@ -221,7 +221,7 @@ func SafeOperational(s interface{}) redact.SafeValue {
 // and does not need to be treated as sensitive. This function marks
 // the provided object as safe/unsafe accordingly.
 func SafeManaged(s interface{}) redact.RedactableString {
-	if !IsManaged() {
+	if !isManaged() {
 		return redact.Sprint(s)
 	}
 	return redact.Sprint(redact.Safe(s))

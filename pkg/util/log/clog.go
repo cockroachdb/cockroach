@@ -414,7 +414,7 @@ func SetManaged(isManaged bool) {
 // isManaged indicates whether or not we are running in a managed service,
 // sourced originally from the `--managed` start cmd flag. This impacts log
 // redaction policies, such as in log.SafeManaged.
-func IsManaged() bool {
+func isManaged() bool {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	return logging.mu.managed

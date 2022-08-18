@@ -76,13 +76,13 @@ func NewActiveQueryProfiler(
 
 	maxMem, warn, err := memLimitFn()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to detect cgroup memory limit")
 	}
 	if warn != "" {
-		log.Warningf(ctx, "warning when reading cgroup memory limit: %s", warn)
+		log.Warningf(ctx, "warning when reading cgroup memory limit: %s", log.SafeManaged(warn))
 	}
 
-	log.Infof(ctx, "writing go query profiles to %s", dir)
+	log.Infof(ctx, "writing go query profiles to %s", log.SafeManaged(dir))
 	qp := &ActiveQueryProfiler{
 		profiler: profiler{
 			store: newProfileStore(dumpStore, QueryFileNamePrefix, QueryFileNameSuffix, st),
