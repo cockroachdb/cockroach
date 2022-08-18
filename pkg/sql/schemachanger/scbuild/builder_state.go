@@ -941,7 +941,7 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 	if err := b.commentCache.LoadCommentsForObjects(b.ctx, []descpb.ID{c.desc.GetID()}); err != nil {
 		panic(err)
 	}
-	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn, b.commentCache)
+	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn, b.commentCache, b.zoneConfigReader)
 	// Name prefix and namespace lookups.
 	switch d := c.desc.(type) {
 	case catalog.DatabaseDescriptor:
