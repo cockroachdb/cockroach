@@ -26,6 +26,7 @@ go_test(
         "file_test.go",
         "watcher_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":denylist"],
     deps = [
         "//pkg/util/leaktest",

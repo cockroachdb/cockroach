@@ -42,6 +42,7 @@ go_test(
         "row_decoder_external_test.go",
         "settings_watcher_external_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         ":settingswatcher",
         "//pkg/base",

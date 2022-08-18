@@ -20,6 +20,7 @@ go_library(
 go_test(
     name = "grpcinterceptor_test",
     srcs = ["grpc_interceptor_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         ":grpcinterceptor",
         "//pkg/testutils",

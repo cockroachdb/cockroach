@@ -101,6 +101,7 @@ go_test(
         "validity_check_test.go",
         "voronoi_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = ["//c-deps:libgeos"],
     embed = [":geomfn"],
     deps = [

@@ -53,6 +53,7 @@ go_test(
         "entry_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=895s"],
     embed = [":tenant"],
     deps = [
         "//pkg/base",

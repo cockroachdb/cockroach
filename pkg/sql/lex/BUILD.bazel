@@ -21,6 +21,7 @@ go_library(
 go_test(
     name = "lex_test",
     srcs = ["encode_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [":lex"],
 )
 

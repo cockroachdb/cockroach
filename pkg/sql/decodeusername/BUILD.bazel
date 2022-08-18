@@ -19,6 +19,7 @@ go_library(
 go_test(
     name = "decodeusername_test",
     srcs = ["role_spec_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":decodeusername"],
     deps = [
         "//pkg/security/username",

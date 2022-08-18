@@ -54,6 +54,7 @@ go_test(
         "result_test.go",
         "stats_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":tpcc"],
     deps = [
         "//pkg/testutils",

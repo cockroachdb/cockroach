@@ -30,6 +30,7 @@ go_test(
         "bazci_test.go",
         "watch_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":bazci_lib"],
     deps = [

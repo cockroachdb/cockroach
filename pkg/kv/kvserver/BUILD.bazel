@@ -319,6 +319,7 @@ go_test(
         "txn_recovery_integration_test.go",
         "txn_wait_queue_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
     shard_count = 8,

@@ -49,6 +49,7 @@ go_test(
         "gcp_kms_test.go",
         "gcs_storage_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":gcp"],
     deps = [
         "//pkg/base",

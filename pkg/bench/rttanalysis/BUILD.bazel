@@ -48,6 +48,7 @@ go_test(
         "validate_benchmark_data_test.go",
         "virtual_table_bench_test.go",
     ],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":rttanalysis"],
     shard_count = 16,

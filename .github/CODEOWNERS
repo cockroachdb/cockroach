@@ -246,6 +246,7 @@
 /pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-experience
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/geospatial
 /pkg/cmd/generate-test-suites/ @cockroachdb/dev-inf
+/pkg/cmd/generate-test-timeouts/ @cockroachdb/dev-inf
 /pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
 /pkg/cmd/geoviz/             @cockroachdb/geospatial
 /pkg/cmd/github-post/        @cockroachdb/test-eng

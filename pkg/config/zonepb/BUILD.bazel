@@ -29,6 +29,7 @@ go_test(
     name = "zonepb_test",
     size = "small",
     srcs = ["zone_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":zonepb"],
     deps = [
         "//pkg/keys",

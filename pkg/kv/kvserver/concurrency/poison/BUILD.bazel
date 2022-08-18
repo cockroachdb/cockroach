@@ -47,6 +47,7 @@ go_library(
 go_test(
     name = "poison_test",
     srcs = ["error_test.go"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         ":poison",
