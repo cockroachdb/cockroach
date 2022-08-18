@@ -208,27 +208,7 @@ func changefeedPlanHook(
 			telemetry.Count(`changefeed.create.core`)
 			logChangefeedCreateTelemetry(ctx, jr)
 
-			var err error
-			for r := retry.StartWithCtx(ctx, changefeedRetryOptions); r.Next(); {
-				if err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh); err == nil {
-					return nil
-				}
-
-				if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-					if knobs != nil && knobs.HandleDistChangefeedError != nil {
-						err = knobs.HandleDistChangefeedError(err)
-					}
-				}
-
-				if !changefeedbase.IsRetryableError(err) {
-					log.Warningf(ctx, `CHANGEFEED returning with error: %+v`, err)
-					return err
-				}
-
-				progress = p.ExtendedEvalContext().ChangefeedState.(*coreChangefeedProgress).progress
-			}
-			telemetry.Count(`changefeed.core.error`)
-			return changefeedbase.MaybeStripRetryableErrorMarker(err)
+			return runCoreChangefeed(ctx, p, details, progress, resultsCh)
 		}
 
 		// The below block creates the job and protects the data required for the
@@ -301,6 +281,36 @@ func changefeedPlanHook(
 		return err
 	}
 	return rowFnLogErrors, header, nil, avoidBuffering, nil
+}
+
+func runCoreChangefeed(
+	ctx context.Context,
+	p sql.PlanHookState,
+	details jobspb.ChangefeedDetails,
+	progress jobspb.Progress,
+	resultsCh chan<- tree.Datums,
+) error {
+	var err error
+	for r := retry.StartWithCtx(ctx, changefeedRetryOptions); r.Next(); {
+		if err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh); err == nil {
+			return nil
+		}
+
+		if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+			if knobs != nil && knobs.HandleDistChangefeedError != nil {
+				err = knobs.HandleDistChangefeedError(err)
+			}
+		}
+
+		if !changefeedbase.IsRetryableError(err) {
+			log.Warningf(ctx, `CHANGEFEED returning with error: %+v`, err)
+			return err
+		}
+
+		progress = p.ExtendedEvalContext().ChangefeedState.(*coreChangefeedProgress).progress
+	}
+	telemetry.Count(`changefeed.core.error`)
+	return changefeedbase.MaybeStripRetryableErrorMarker(err)
 }
 
 func createChangefeedJobRecord(
