@@ -136,7 +136,7 @@ func newInternalExecutorWithTxn(
 	monitor *mon.BytesMonitor,
 	descCol *descs.Collection,
 	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
-) (*InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc) {
+) (*InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
 	schemaChangerState := &SchemaChangerState{
 		mode: sd.NewSchemaChangerMode,
 	}
@@ -158,10 +158,7 @@ func newInternalExecutorWithTxn(
 		defer func() {
 			ie.releaseSchemaChangeJobRecords()
 		}()
-		if err := ie.commitTxn(ctx); err != nil {
-			return err
-		}
-		return nil
+		return ie.commitTxn(ctx)
 	}
 
 	return &ie, commitTxnFunc
@@ -1042,11 +1039,7 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 		return errors.Wrap(err, "cannot create conn executor to commit txn")
 	}
 	defer ex.close(ctx, externalTxnClose)
-
-	if err := ex.commitSQLTransactionInternal(ctx); err != nil {
-		return err
-	}
-	return nil
+	return ex.commitSQLTransactionInternal(ctx)
 }
 
 // internalClientComm is an implementation of ClientComm used by the
@@ -1221,6 +1214,12 @@ type InternalExecutorFactory struct {
 	monitor    *mon.BytesMonitor
 }
 
+// MemoryMonitor returns the monitor which should be used when constructing
+// things in the context of an internal executor created by this factory.
+func (ief *InternalExecutorFactory) MemoryMonitor() *mon.BytesMonitor {
+	return ief.monitor
+}
+
 // NewInternalExecutorFactory returns a new internal executor factory.
 func NewInternalExecutorFactory(
 	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
@@ -1252,7 +1251,7 @@ func (ief *InternalExecutorFactory) NewInternalExecutor(
 // This function should only be used under CollectionFactory.TxnWithExecutor().
 func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
 	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
-) (sqlutil.InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc) {
+) (sqlutil.InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
 	schemaChangeJobRecords := make(map[descpb.ID]*jobs.Record)
 	// By default, if not given session data, we initialize a sessionData that
 	// would be the same as what would be created if root logged in.
