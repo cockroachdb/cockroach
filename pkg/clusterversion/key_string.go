@@ -8,6 +8,7 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
+	_ = x[invalidVersionKey - -1]
 	_ = x[V21_2-0]
 	_ = x[Start22_1-1]
 	_ = x[ProbeRequest-2]
@@ -47,13 +48,14 @@ func _() {
 	_ = x[NoNonMVCCAddSSTable-36]
 }
 
-const _Key_name = "V21_2Start22_1ProbeRequestEnableSpanConfigStoreEnableNewStoreRebalancerV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTable"
+const _Key_name = "invalidVersionKeyV21_2Start22_1ProbeRequestEnableSpanConfigStoreEnableNewStoreRebalancerV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTable"
 
-var _Key_index = [...]uint16{0, 5, 14, 26, 47, 71, 76, 85, 100, 140, 174, 208, 230, 250, 269, 302, 321, 341, 362, 397, 431, 461, 514, 528, 549, 580, 613, 644, 678, 700, 729, 756, 787, 820, 838, 862, 890, 909}
+var _Key_index = [...]uint16{0, 17, 22, 31, 43, 64, 88, 93, 102, 117, 157, 191, 225, 247, 267, 286, 319, 338, 358, 379, 414, 448, 478, 531, 545, 566, 597, 630, 661, 695, 717, 746, 773, 804, 837, 855, 879, 907, 926}
 
 func (i Key) String() string {
+	i -= -1
 	if i < 0 || i >= Key(len(_Key_index)-1) {
-		return "Key(" + strconv.FormatInt(int64(i), 10) + ")"
+		return "Key(" + strconv.FormatInt(int64(i+-1), 10) + ")"
 	}
 	return _Key_name[_Key_index[i]:_Key_index[i+1]]
 }

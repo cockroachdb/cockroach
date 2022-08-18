@@ -923,7 +923,7 @@ func TestIsAtLeastVersion(t *testing.T) {
 		errorRE  string
 	}{
 		{version: "21.2", expected: "true"},
-		{version: "99.2", expected: "false"},
+		{version: "1000099.2", expected: "false"},
 		{version: "foo", errorRE: ".*invalid version.*"},
 	} {
 		query := fmt.Sprintf("SELECT crdb_internal.is_at_least_version('%s')", tc.version)

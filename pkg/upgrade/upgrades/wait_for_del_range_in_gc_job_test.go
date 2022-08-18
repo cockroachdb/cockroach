@@ -94,7 +94,7 @@ SELECT count(*)
  WHERE job_type = 'SCHEMA CHANGE GC'
    AND status = 'paused'`,
 		[][]string{{"2"}})
-	tdb.ExpectErr(t, `verifying precondition for version 22.1-\d+: `+
+	tdb.ExpectErr(t, `verifying precondition for version \d*22.1-\d+: `+
 		`paused GC jobs prevent upgrading GC job behavior: \[\d+ \d+]`,
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
