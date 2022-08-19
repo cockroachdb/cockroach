@@ -19,10 +19,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -412,47 +410,4 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAutoStatsTableSettingsDisallowedOnOldCluster(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	serverArgs := base.TestServerArgs{
-		Insecure: true,
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.ClusterLocksVirtualTable),
-			},
-		},
-	}
-
-	var (
-		ctx        = context.Background()
-		s, conn, _ = serverutils.StartServer(t, serverArgs)
-		sqlDB      = sqlutils.MakeSQLRunner(conn)
-	)
-	defer conn.Close()
-	defer s.Stopper().Stop(ctx)
-
-	sqlDB.Exec(t,
-		`CREATE DATABASE t;`)
-
-	sqlDB.ExpectErr(t, "pq: auto stats table settings are only available once the cluster is fully upgraded", "CREATE TABLE t1 (a int) WITH (sql_stats_automatic_collection_enabled = true)")
-
-	sqlDB.Exec(t,
-		`CREATE TABLE t2 (a int)`)
-
-	sqlDB.ExpectErr(t, "pq: auto stats table settings are only available once the cluster is fully upgraded", "ALTER TABLE t2 SET (sql_stats_automatic_collection_enabled = true)")
-
-	// Run the upgrade.
-	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.ByKey(clusterversion.AutoStatsTableSettings).String())
-
-	sqlDB.Exec(t,
-		`CREATE TABLE t1 (a int) WITH (sql_stats_automatic_collection_enabled = true)`)
-
-	sqlDB.Exec(t,
-		`ALTER TABLE t2 SET (sql_stats_automatic_collection_enabled = true)`)
-
 }
