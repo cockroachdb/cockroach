@@ -2095,6 +2095,7 @@ func TestLint(t *testing.T) {
 			"cmd",
 			"config",
 			"gossip",
+			"internal",
 			"server",
 			"sql/opt/norm*.go",
 			":!*_test.go",

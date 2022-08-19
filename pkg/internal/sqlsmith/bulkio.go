@@ -90,16 +90,16 @@ func makeAsOf(s *Smither) tree.AsOfClause {
 func makeBackup(s *Smither) (tree.Statement, bool) {
 	name := fmt.Sprintf("%s/%s", s.bulkSrv.URL, s.name("backup"))
 	var targets tree.BackupTargetList
-	seen := map[tree.TableName]bool{}
+	seen := map[tree.TableName]struct{}{}
 	for len(targets.Tables.TablePatterns) < 1 || s.coin() {
 		table, ok := s.getRandTable()
 		if !ok {
 			return nil, false
 		}
-		if seen[*table.TableName] {
+		if _, ok := seen[*table.TableName]; ok {
 			continue
 		}
-		seen[*table.TableName] = true
+		seen[*table.TableName] = struct{}{}
 		targets.Tables.TablePatterns = append(targets.Tables.TablePatterns, table.TableName)
 	}
 	s.lock.Lock()

@@ -28,7 +28,7 @@ type RSG struct {
 	Rnd *rand.Rand
 
 	lock  syncutil.Mutex
-	seen  map[string]bool
+	seen  map[string]struct{}
 	prods map[string][]*yacc.ExpressionNode
 }
 
@@ -44,7 +44,7 @@ func NewRSG(seed int64, y string, allowDuplicates bool) (*RSG, error) {
 		prods: make(map[string][]*yacc.ExpressionNode),
 	}
 	if !allowDuplicates {
-		rsg.seen = make(map[string]bool)
+		rsg.seen = make(map[string]struct{})
 	}
 	for _, prod := range tree.Productions {
 		rsg.prods[prod.Name] = prod.Expressions
@@ -62,8 +62,8 @@ func (r *RSG) Generate(root string, depth int) string {
 		s := strings.Join(r.generate(root, depth), " ")
 		if r.seen != nil {
 			r.lock.Lock()
-			if !r.seen[s] {
-				r.seen[s] = true
+			if _, ok := r.seen[s]; !ok {
+				r.seen[s] = struct{}{}
 			} else {
 				s = ""
 			}
