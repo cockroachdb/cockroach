@@ -311,55 +311,9 @@ func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 	}
 }
 
-func checkPrivilegesForBackup(
-	ctx context.Context,
-	backupStmt *annotatedBackupStatement,
-	p sql.PlanHookState,
-	targetDescs []catalog.Descriptor,
-	to []string,
-) error {
-	hasAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return err
-	}
-	if hasAdmin {
-		return nil
-	}
-	// Do not allow full cluster backups.
-	if backupStmt.Coverage() == tree.AllDescriptors {
-		return pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to perform full cluster backups")
-	}
-	// Do not allow tenant backups.
-	if backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet() {
-		return pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role can perform BACKUP TENANT")
-	}
-	for _, desc := range targetDescs {
-		switch desc := desc.(type) {
-		case catalog.DatabaseDescriptor:
-			if connectErr := p.CheckPrivilege(ctx, desc, privilege.CONNECT); connectErr != nil {
-				// SELECT is being deprecated as privilege on Databases in 22.1.
-				// In the meanwhile, we still allow backup if the user has SELECT.
-				// TODO(richardjcai): Remove this check for SELECT in 22.1.
-				if selectErr := p.CheckPrivilege(ctx, desc, privilege.SELECT); selectErr != nil {
-					// Return the connectErr as we want users to grant CONNECT to perform
-					// this backup and not select.
-					return connectErr
-				}
-			}
-		case catalog.TableDescriptor:
-			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-				return err
-			}
-		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
-			if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
-				return err
-			}
-		}
-	}
+// checkBackupDestinationPrivileges iterates over the External Storage URIs and
+// ensures the user has adequate privileges to use each of them.
+func checkBackupDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []string) error {
 	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
 		return nil
 	}
@@ -397,6 +351,170 @@ func checkPrivilegesForBackup(
 	}
 
 	return nil
+}
+
+// privilegesDeprecationNotice returns a notice that outlines the deprecation of
+// the existing privilege model for backups, and the steps to take to adopt the
+// new privilege model, based on the type of backup being run.
+func privilegesDeprecationNotice(
+	p sql.PlanHookState, backupStmt *annotatedBackupStatement, targetDescs []catalog.Descriptor,
+) string {
+	if backupStmt.Targets == nil {
+		return ""
+	}
+
+	// If a user is running `BACKUP DATABASE` buffer all the databases that will
+	// require the `BACKUP` privilege.
+	var notice string
+	preamble := "The existing privileges required for backup are being deprecated " +
+		"in favour of a fine-grained privilege model explained here <link>. In a future release, to run"
+	if backupStmt.Targets.Databases != nil {
+		dbsRequireBackupPrivilege := make([]string, 0)
+		for _, desc := range targetDescs {
+			switch desc := desc.(type) {
+			case catalog.DatabaseDescriptor:
+				dbsRequireBackupPrivilege = append(dbsRequireBackupPrivilege, desc.GetName())
+			}
+		}
+
+		notice = fmt.Sprintf("%s BACKUP DATABASE, user %s will exclusively require the "+
+			"BACKUP privilege on database %s.",
+			preamble, p.User().Normalized(), strings.Join(dbsRequireBackupPrivilege, ", "))
+	} else if backupStmt.Targets.Tables.TablePatterns != nil {
+		// If a user is running `BACKUP TABLE` buffer all the tables that will require the `BACKUP` privilege.
+		tablesRequireBackupPrivilege := make([]string, 0)
+		for _, desc := range targetDescs {
+			switch desc := desc.(type) {
+			case catalog.TableDescriptor:
+				tablesRequireBackupPrivilege = append(tablesRequireBackupPrivilege, desc.GetName())
+			}
+		}
+
+		notice = fmt.Sprintf("%s BACKUP TABLE, user %s will exclusively require the "+
+			"BACKUP privilege on tables: %s.",
+			preamble,
+			p.User().Normalized(),
+			strings.Join(tablesRequireBackupPrivilege, ", "))
+	}
+
+	return notice
+}
+
+// checkPrivilegesForBackup is the driver method for privilege checks for all
+// flavours of backup. It checks that the user has sufficient privileges to read
+// the targets in the database, as well as use the External Storage URIs passed
+// in the backup statement.
+func checkPrivilegesForBackup(
+	ctx context.Context,
+	backupStmt *annotatedBackupStatement,
+	p sql.PlanHookState,
+	targetDescs []catalog.Descriptor,
+	to []string,
+) error {
+	// If the user is admin no further checks need to be performed.
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+
+	{
+		// Cluster and tenant backups require the `BACKUP` system privilege.
+		requiresBackupSystemPrivilege := backupStmt.Coverage() == tree.AllDescriptors ||
+			(backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet())
+
+		var hasBackupSystemPrivilege bool
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
+				privilege.BACKUP, p.User())
+			hasBackupSystemPrivilege = err == nil
+		}
+
+		if requiresBackupSystemPrivilege && hasBackupSystemPrivilege {
+			return checkBackupDestinationPrivileges(ctx, p, to)
+		} else if requiresBackupSystemPrivilege && !hasBackupSystemPrivilege {
+			return pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups")
+		}
+	}
+
+	// Target is only nil in cluster backups for which we have already checked
+	// privileges above.
+	if backupStmt.Targets == nil {
+		return errors.AssertionFailedf("programming error: target should be non-nil " +
+			"for database and table backups")
+	}
+
+	hasRequiredBackupPrivileges := true
+	// If running a database backup, check that the user has the `BACKUP`
+	// privilege on all the target databases.
+	//
+	// TODO(adityamaru): In 23.1 a missing `BACKUP` privilege should return an
+	// error. In 22.2 we continue to check for old style privileges on the
+	// descriptors.
+	if backupStmt.Targets.Databases != nil {
+		for _, desc := range targetDescs {
+			switch desc := desc.(type) {
+			case catalog.DatabaseDescriptor:
+				hasRequiredBackupPrivileges = hasRequiredBackupPrivileges &&
+					p.CheckPrivilegeForUser(ctx, desc, privilege.BACKUP, p.User()) == nil
+			}
+		}
+	} else if backupStmt.Targets.Tables.TablePatterns != nil {
+		// If running a table backup, check that the user has the `BACKUP` privilege
+		// on all the target tables.
+		//
+		// TODO(adityamaru): In 23.1 a missing `BACKUP` privilege should return an
+		// error. In 22.2 we continue to check for old style privileges on the
+		// descriptors.
+		for _, desc := range targetDescs {
+			switch desc := desc.(type) {
+			case catalog.TableDescriptor:
+				hasRequiredBackupPrivileges = hasRequiredBackupPrivileges &&
+					p.CheckPrivilegeForUser(ctx, desc, privilege.BACKUP, p.User()) == nil
+			}
+		}
+	} else {
+		return errors.AssertionFailedf("unknown backup target")
+	}
+
+	// If a user has the BACKUP privilege on the target databases or tables we can
+	// move on to checking the destination URIs.
+	if hasRequiredBackupPrivileges {
+		return checkBackupDestinationPrivileges(ctx, p, to)
+	}
+
+	// The following checks are to maintain compatability with pre-22.2 privilege
+	// requirements to run the backup. If we have failed to find the appropriate
+	// `BACKUP` privileges, we default to our old-style privilege checks and buffer
+	// a notice urging users to switch to `BACKUP` privileges.
+	//
+	// TODO(adityamaru): Delete deprecated privilege checks in 23.1. Users will be
+	// required to have the appropriate `BACKUP` privilege instead.
+	notice := privilegesDeprecationNotice(p, backupStmt, targetDescs)
+	p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
+
+	for _, desc := range targetDescs {
+		switch desc := desc.(type) {
+		case catalog.DatabaseDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.CONNECT); err != nil {
+				return errors.WithHint(err, notice)
+			}
+		case catalog.TableDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+				return errors.WithHint(err, notice)
+			}
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
+				return errors.WithHint(err, notice)
+			}
+		}
+	}
+
+	return checkBackupDestinationPrivileges(ctx, p, to)
 }
 
 func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {

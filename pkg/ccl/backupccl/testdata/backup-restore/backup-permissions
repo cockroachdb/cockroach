@@ -1,24 +1,23 @@
-# Test permissions checks for non-admin users running BACKUP.
 new-server name=s1
 ----
 
 exec-sql
 CREATE DATABASE d;
-REVOKE CONNECT ON DATABASE d FROM public;
 CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
 
 # BACKUP is not allowed in a batch-statement.
 exec-sql
-BACKUP INTO 'nodelocal://0/test-root/';
+BACKUP INTO 'userfile:///test-root/';
 SELECT 1;
 ----
 pq: BACKUP cannot be used inside a multi-statement transaction without DETACHED option
 
+subtest cluster-backup
 # Cluster backup should succeed as a root user.
 exec-sql
-BACKUP INTO 'nodelocal://0/test-root/'
+BACKUP INTO 'userfile:///test-root/'
 ----
 
 # Backups should succeed as a non-root user with admin role.
@@ -28,138 +27,187 @@ GRANT ADMIN TO testuser;
 ----
 
 exec-sql user=testuser
-BACKUP INTO 'nodelocal://0/test-nonroot-cluster';
+BACKUP INTO 'userfile:///test-nonroot-cluster';
 ----
 
 exec-sql user=testuser
-BACKUP DATABASE d INTO 'nodelocal://0/test-nonroot-db';
+BACKUP DATABASE d INTO 'userfile:///test-nonroot-db';
 ----
 
 exec-sql user=testuser
-BACKUP TABLE d.t INTO 'nodelocal://0/test-nonroot-table';
-----
-
-# Start a new cluster with the same IO dir.
-# nodelocal IO is a form of implicit access (since it is accessed as the node,
-# so we require the allow-implicit-access flag.
-new-server name=s2 allow-implicit-access
+BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table';
 ----
 
 exec-sql
-CREATE DATABASE d2;
-USE d2;
-REVOKE CONNECT ON DATABASE d2 FROM public;
-CREATE TABLE d2.t (x INT);
-INSERT INTO d2.t VALUES (1), (2), (3);
+REVOKE ADMIN FROM testuser
 ----
 
+# Sanity check that cluster backup is disallowed.
+exec-sql user=testuser
+BACKUP INTO 'userfile:///test-nonroot-cluster';
+----
+pq: only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups
+
+# Grant system backup privilege and re-run the backup.
 exec-sql
-CREATE USER testuser
+GRANT SYSTEM BACKUP TO testuser;
 ----
 
-# Cluster backup as a non-admin user should fail.
 exec-sql user=testuser
-BACKUP TO 'nodelocal://0/test2'
+BACKUP INTO 'userfile:///test-nonroot-cluster';
 ----
-pq: only users with the admin role are allowed to perform full cluster backups
 
-# Database backup as a non-admin user should have SELECT privileges.
+# System privilege BACKUP does not allow a user to run database/table backups by
+# default.
 exec-sql user=testuser
-BACKUP DATABASE d2 TO 'nodelocal://0/d2'
-----
-pq: user testuser does not have CONNECT privilege on database d2
-
-exec-sql
-GRANT CONNECT ON DATABASE d2 TO testuser;
-----
-
-# Table backup as a non-admin user should have SELECT privileges.
-exec-sql user=testuser
-BACKUP TABLE d2.t INTO 'nodelocal://0/d2-table'
+BACKUP DATABASE d INTO 'userfile:///test-nonroot-db';
 ----
 pq: user testuser does not have SELECT privilege on relation t
-
-exec-sql
-GRANT SELECT ON TABLE d2.t TO testuser;
-----
-
-# Add user defined schema to the database.
-exec-sql
-CREATE SCHEMA sc2;
-----
-
-# Schema backup as a non-admin user should have USAGE privileges.
-exec-sql user=testuser
-BACKUP DATABASE d2 INTO 'nodelocal://0/d2-schema';
-----
-pq: user testuser does not have USAGE privilege on schema sc2
-
-exec-sql
-GRANT USAGE ON SCHEMA sc2 TO testuser;
-----
-
-# Add user defined type to the database.
-# By default `public` is given USAGE privilege on a UDT so we revoke it to
-# test our BACKUP checks.
-exec-sql
-CREATE TYPE d2.greeting AS ENUM ('hello', 'hiya');
-REVOKE USAGE ON TYPE d2.greeting FROM public;
-----
-
-# Type backup as a non-admin user should have USAGE privileges.
-exec-sql user=testuser
-BACKUP DATABASE d2 INTO 'nodelocal://0/d2-schema';
-----
-pq: user testuser does not have USAGE privilege on type greeting
-
-exec-sql
-GRANT USAGE ON TYPE d2.greeting TO testuser;
-----
-
-# testuser should now have all the required privileges.
-exec-sql server=s2 user=testuser
-BACKUP DATABASE d2 INTO 'nodelocal://0/d2';
-----
-
-exec-sql server=s2 user=testuser
-BACKUP TABLE d2.t INTO 'nodelocal://0/d2-table';
-----
-
-exec-sql server=s2 user=testuser
-SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
-----
-pq: error response from server: 404 Not Found "404 page not found\n": http storage file does not exist: external_storage: file doesn't exist
-
-# Test that implicit access is disallowed when the testing knob is not set.
-new-server name=s3 share-io-dir=s1
-----
-
-exec-sql
-CREATE DATABASE d;
-REVOKE CONNECT ON DATABASE d FROM public;
-CREATE USER testuser;
-GRANT CONNECT ON DATABASE d TO testuser;
-----
-
-exec-sql server=s3 user=testuser
-SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
-----
-pq: only users with the admin role are allowed to SHOW BACKUP from the specified http URI
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d.
 
 exec-sql user=testuser
-BACKUP DATABASE d INTO 'nodelocal://0/test3'
+BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table';
 ----
-pq: only users with the admin role are allowed to BACKUP to the specified nodelocal URI
+pq: user testuser does not have SELECT privilege on relation t
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
 
-# Test that http access is disallowed by disable http even if allow-non-admin is on.
-new-server name=s4 allow-implicit-access disable-http
-----
-
-exec-sql server=s4
-CREATE USER testuser
+exec-sql
+REVOKE SYSTEM BACKUP FROM testuser;
 ----
 
-exec-sql server=s4 user=testuser
-SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
+subtest end
+
+
+subtest database-backup
+
+# A database backup requires the `BACKUP` privilege on the database, make sure
+# we are informing users about this even though we check for old-style
+# privileges.
+exec-sql user=testuser
+BACKUP DATABASE d INTO 'userfile:///test-nonroot-db'
 ----
-pq: make storage: external http access disabled
+pq: user testuser does not have SELECT privilege on relation t
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d.
+
+# Grant the user `BACKUP` on the database.
+exec-sql
+GRANT BACKUP ON DATABASE d TO testuser
+----
+
+# Create some types and schemas.
+exec-sql
+CREATE SCHEMA d.foo;
+CREATE TYPE d.foo.type1 AS ENUM()
+----
+
+# Backup should succeed!
+exec-sql user=testuser
+BACKUP DATABASE d INTO 'userfile:///test-nonroot-db'
+----
+
+# Existing tables DO NOT inherit database privileges so a user should not be
+# allowed to backup tables in the database.
+exec-sql user=testuser
+BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table'
+----
+pq: user testuser does not have SELECT privilege on relation t
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
+
+# Set the default privileges on the database and create a new table.
+exec-sql
+USE d;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT BACKUP ON TABLES TO testuser;
+----
+
+exec-sql
+CREATE TABLE d.t2 (id INT)
+----
+
+exec-sql
+CREATE TABLE d.t3 (id INT)
+----
+
+# Backups on the new tables will succeed because the default privileges grant
+# `BACKUP` on the tables to testuser.
+exec-sql user=testuser
+BACKUP TABLE d.t2 INTO 'userfile:///test-nonroot-table'
+----
+
+exec-sql user=testuser
+BACKUP TABLE d.t3 INTO 'userfile:///test-nonroot-table'
+----
+
+# Cleanup by revoking `BACKUP` from testuser.
+exec-sql
+REVOKE BACKUP ON DATABASE d FROM testuser;
+REVOKE BACKUP ON TABLE d.t2 FROM testuser;
+REVOKE BACKUP ON TABLE d.t3 FROM testuser;
+----
+
+subtest end
+
+subtest table-backup
+
+query-sql
+SHOW GRANTS ON DATABASE d;
+----
+d admin ALL true
+d public CONNECT false
+d root ALL true
+
+# testuser should not be able to backup any table, verify the deprecation notice is accurate.
+exec-sql user=testuser
+BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table'
+----
+pq: user testuser does not have SELECT privilege on relation t
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
+
+exec-sql user=testuser
+BACKUP TABLE d.t2 INTO 'userfile:///test-nonroot-table'
+----
+pq: user testuser does not have SELECT privilege on relation t2
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t2.
+
+exec-sql user=testuser
+BACKUP TABLE d.t3 INTO 'userfile:///test-nonroot-table'
+----
+pq: user testuser does not have SELECT privilege on relation t3
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t3.
+
+exec-sql
+GRANT BACKUP ON TABLE d.t,d.t2,d.t3 TO testuser;
+----
+
+exec-sql user=testuser
+BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table'
+----
+
+exec-sql user=testuser
+BACKUP TABLE d.t2 INTO 'userfile:///test-nonroot-table'
+----
+
+exec-sql user=testuser
+BACKUP TABLE d.t3 INTO 'userfile:///test-nonroot-table'
+----
+
+# Create a table with user defined schema + type.
+exec-sql
+CREATE TABLE d.foo.t1 (hi d.foo.type1)
+----
+
+# User requires `BACKUP` on the table, NOT on the schema and type.
+exec-sql user=testuser
+BACKUP TABLE d.foo.t1 INTO 'userfile:///test-nonroot-table'
+----
+pq: user testuser does not have USAGE privilege on schema foo
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t1.
+
+exec-sql
+GRANT BACKUP ON TABLE foo.t1 TO testuser;
+----
+
+exec-sql user=testuser
+BACKUP TABLE d.foo.t1 INTO 'userfile:///test-nonroot-table'
+----
+
+subtest end
