@@ -2077,7 +2077,6 @@ func TestLint(t *testing.T) {
 	// a map can be replaced with map[...]struct{} that is more efficient, and
 	// this linter nudges folks to do so. This linter can be disabled by
 	// '//nolint:maptobool' comment.
-	// TODO(yuzefovich): expand the scope where the linter is applied.
 	t.Run("TestMapToBool", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
@@ -2087,17 +2086,10 @@ func TestLint(t *testing.T) {
 			"-nE",
 			`map\[[^]]*\]bool`,
 			"--",
-			"ccl",
-			"cli",
-			"cmd",
-			"config",
-			"gossip",
-			"internal",
-			"kv",
-			"server",
-			"sql",
 			":!*_test.go",
 			":!*testdata*",
+			":!roachprod*",
+			":!workload*",
 		)
 		if err != nil {
 			t.Fatal(err)
