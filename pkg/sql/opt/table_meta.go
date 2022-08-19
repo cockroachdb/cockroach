@@ -369,7 +369,7 @@ func (tm *TableMeta) IndexPartitionLocality(
 	if !ok {
 		if localPartitions, ok :=
 			partition.HasMixOfLocalAndRemotePartitions(evalCtx, index); ok {
-			ps = partition.GetSortedPrefixes(index, *localPartitions, evalCtx)
+			ps = partition.GetSortedPrefixes(index, localPartitions, evalCtx)
 		}
 		tm.AddIndexPartitionLocality(ord, ps)
 	}
