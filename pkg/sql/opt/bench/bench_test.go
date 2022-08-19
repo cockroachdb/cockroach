@@ -705,6 +705,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
+		context.Background(),
 		explain.NewPlanGistFactory(exec.StubFactory{}),
 		&h.optimizer,
 		execMemo,
@@ -758,6 +759,7 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 
 	root := execMemo.RootExpr()
 	eb := execbuilder.New(
+		context.Background(),
 		explain.NewPlanGistFactory(exec.StubFactory{}),
 		&h.optimizer,
 		execMemo,

@@ -11,6 +11,7 @@
 package ordering
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -76,7 +77,7 @@ func TestOrdinalityProvided(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := eval.NewTestingEvalContext(st)
 			var f norm.Factory
-			f.Init(evalCtx, nil /* catalog */)
+			f.Init(context.Background(), evalCtx, nil /* catalog */)
 			input := &testexpr.Instance{
 				Rel: &props.Relational{OutputCols: opt.MakeColSet(1, 2, 3, 4, 5)},
 				Provided: &physical.Provided{

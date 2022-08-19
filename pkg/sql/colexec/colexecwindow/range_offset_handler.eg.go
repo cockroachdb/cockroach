@@ -1920,6 +1920,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1948,7 +1949,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, c
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -3000,6 +3001,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3028,7 +3030,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, 
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -4405,6 +4407,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -4450,7 +4453,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, cur
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -5638,6 +5641,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5683,7 +5687,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, cu
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -6924,6 +6928,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6952,7 +6957,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, c
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -8004,6 +8009,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8032,7 +8038,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, 
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -9409,6 +9415,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -9454,7 +9461,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, cur
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -10642,6 +10649,7 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDatum{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10687,7 +10695,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, cu
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}

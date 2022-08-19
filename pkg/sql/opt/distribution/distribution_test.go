@@ -30,7 +30,7 @@ func TestBuildProvided(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	var f norm.Factory
-	f.Init(evalCtx, tc)
+	f.Init(context.Background(), evalCtx, tc)
 
 	testCases := []struct {
 		leftDist  []string

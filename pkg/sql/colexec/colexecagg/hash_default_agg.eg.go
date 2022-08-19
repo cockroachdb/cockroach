@@ -90,6 +90,7 @@ func (a *defaultHashAgg) Reset() {
 }
 
 func newDefaultHashAggAlloc(
+	ctx context.Context,
 	allocator *colmem.Allocator,
 	constructor execagg.AggregateConstructor,
 	evalCtx *eval.Context,
@@ -109,6 +110,7 @@ func newDefaultHashAggAlloc(
 			allocSize: allocSize,
 		},
 		constructor:        constructor,
+		ctx:                ctx,
 		evalCtx:            evalCtx,
 		inputArgsConverter: inputArgsConverter,
 		resultConverter:    colconv.GetDatumToPhysicalFn(outputType),
@@ -122,6 +124,7 @@ type defaultHashAggAlloc struct {
 	aggFuncs []defaultHashAgg
 
 	constructor execagg.AggregateConstructor
+	ctx         context.Context
 	evalCtx     *eval.Context
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator
@@ -163,7 +166,7 @@ func (a *defaultHashAggAlloc) newAggFunc() AggregateFunc {
 	f := &a.aggFuncs[0]
 	*f = defaultHashAgg{
 		fn:                 a.constructor(a.evalCtx, a.arguments),
-		ctx:                a.evalCtx.Context,
+		ctx:                a.ctx,
 		inputArgsConverter: a.inputArgsConverter,
 		resultConverter:    a.resultConverter,
 	}

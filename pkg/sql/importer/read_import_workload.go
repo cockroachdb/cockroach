@@ -65,7 +65,12 @@ func (w *workloadReader) start(ctx ctxgroup.Group) {
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromColOffset(
-	alloc *tree.DatumAlloc, hint *types.T, evalCtx *eval.Context, col coldata.Vec, rowIdx int,
+	ctx context.Context,
+	alloc *tree.DatumAlloc,
+	hint *types.T,
+	evalCtx *eval.Context,
+	col coldata.Vec,
+	rowIdx int,
 ) (tree.Datum, error) {
 	if col.Nulls().NullAt(rowIdx) {
 		return tree.DNull, nil
@@ -117,7 +122,7 @@ func makeDatumFromColOffset(
 		default:
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
-			return rowenc.ParseDatumStringAs(hint, str, evalCtx)
+			return rowenc.ParseDatumStringAs(ctx, hint, str, evalCtx)
 		}
 	}
 	return nil, errors.Errorf(
@@ -258,7 +263,7 @@ func (w *WorkloadKVConverter) Worker(
 				// TODO(dan): This does a type switch once per-datum. Reduce this to
 				// a one-time switch per column.
 				converted, err := makeDatumFromColOffset(
-					&alloc, conv.VisibleColTypes[colIdx], evalCtx, col, rowIdx)
+					ctx, &alloc, conv.VisibleColTypes[colIdx], evalCtx, col, rowIdx)
 				if err != nil {
 					return err
 				}

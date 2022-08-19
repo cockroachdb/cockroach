@@ -226,7 +226,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr execinfrapb.Expression
-		expr, err = physicalplan.MakeExpression(renderExpr, nil, nil)
+		expr, err = physicalplan.MakeExpression(ctx, renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -330,7 +330,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr execinfrapb.Expression
-		expr, err = physicalplan.MakeExpression(renderExpr, nil, nil)
+		expr, err = physicalplan.MakeExpression(ctx, renderExpr, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

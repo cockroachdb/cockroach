@@ -342,9 +342,12 @@ func (v *vTableLookupJoinNode) pushRow(lookedUpRow ...tree.Datum) error {
 		v.run.row = append(v.run.row, lookedUpRow[i-1])
 	}
 	// Run the predicate and exit if we don't match, or if there was an error.
-	if ok, err := v.pred.eval(v.run.params.EvalContext(),
+	if ok, err := v.pred.eval(
+		v.run.params.ctx,
+		v.run.params.EvalContext(),
 		v.run.row[:len(v.inputCols)],
-		v.run.row[len(v.inputCols):]); !ok || err != nil {
+		v.run.row[len(v.inputCols):],
+	); !ok || err != nil {
 		return err
 	}
 	_, err := v.run.rows.AddRow(v.run.params.ctx, v.run.row)

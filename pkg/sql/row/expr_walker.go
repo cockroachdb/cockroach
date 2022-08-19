@@ -296,10 +296,10 @@ type SeqChunkProvider struct {
 // first checks if there is a previously allocated chunk associated with the
 // row, and if not goes on to allocate a new chunk.
 func (j *SeqChunkProvider) RequestChunk(
-	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
+	ctx context.Context, evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) error {
 	var hasAllocatedChunk bool
-	return j.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+	return j.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var foundFromPreviouslyAllocatedChunk bool
 		resolveChunkFunc := func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
@@ -318,7 +318,7 @@ func (j *SeqChunkProvider) RequestChunk(
 
 			// Reserve a new sequence value chunk at the KV level.
 			if !hasAllocatedChunk {
-				if err := reserveChunkOfSeqVals(evalCtx, c, seqMetadata, j.DB); err != nil {
+				if err := reserveChunkOfSeqVals(ctx, evalCtx, c, seqMetadata, j.DB); err != nil {
 					return err
 				}
 				hasAllocatedChunk = true
@@ -456,7 +456,11 @@ func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 // reserveChunkOfSeqVals ascertains the size of the next chunk, and reserves it
 // at the KV level. The seqMetadata is updated to reflect this.
 func reserveChunkOfSeqVals(
-	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata, db *kv.DB,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	c *CellInfoAnnotation,
+	seqMetadata *SequenceMetadata,
+	db *kv.DB,
 ) error {
 	seqOpts := seqMetadata.SeqDesc.GetSequenceOpts()
 	newChunkSize := int64(initialChunkSize)
@@ -480,8 +484,9 @@ func reserveChunkOfSeqVals(
 	incrementValBy := newChunkSize * seqOpts.Increment
 	// incrementSequenceByVal keeps retrying until it is able to find a slot
 	// of incrementValBy.
-	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.SeqDesc, db,
-		evalCtx.Codec, incrementValBy)
+	seqVal, err := incrementSequenceByVal(
+		ctx, seqMetadata.SeqDesc, db, evalCtx.Codec, incrementValBy,
+	)
 	if err != nil {
 		return err
 	}
@@ -505,7 +510,7 @@ func importNextVal(
 	if !ok {
 		return nil, errors.Newf("sequence %s not found in annotation", seqName)
 	}
-	return importNextValHelper(evalCtx, c, seqMetadata)
+	return importNextValHelper(ctx, evalCtx, c, seqMetadata)
 }
 
 func importNextValByID(
@@ -517,7 +522,7 @@ func importNextValByID(
 	if !ok {
 		return nil, errors.Newf("sequence with ID %v not found in annotation", oid)
 	}
-	return importNextValHelper(evalCtx, c, seqMetadata)
+	return importNextValHelper(ctx, evalCtx, c, seqMetadata)
 }
 
 // importDefaultToDatabasePrimaryRegion returns the primary region of the
@@ -525,7 +530,7 @@ func importNextValByID(
 func importDefaultToDatabasePrimaryRegion(
 	ctx context.Context, evalCtx *eval.Context, _ tree.Datums,
 ) (tree.Datum, error) {
-	regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
+	regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +543,7 @@ func importDefaultToDatabasePrimaryRegion(
 }
 
 func importNextValHelper(
-	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
+	ctx context.Context, evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) (tree.Datum, error) {
 	seqOpts := seqMetadata.SeqDesc.GetSequenceOpts()
 	if c.seqChunkProvider == nil {
@@ -549,7 +554,7 @@ func importNextValHelper(
 	// seqName, or the row we are processing is outside the range of rows covered
 	// by the active chunk, we need to request a chunk.
 	if seqMetadata.CurChunk == nil || c.RowID == seqMetadata.CurChunk.NextChunkStartRow {
-		if err := c.seqChunkProvider.RequestChunk(evalCtx, c, seqMetadata); err != nil {
+		if err := c.seqChunkProvider.RequestChunk(ctx, evalCtx, c, seqMetadata); err != nil {
 			return nil, err
 		}
 	} else {

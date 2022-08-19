@@ -178,7 +178,7 @@ var _ importRowConsumer = &delimitedConsumer{}
 
 // FillDatums implements importRowConsumer
 func (d *delimitedConsumer) FillDatums(
-	input interface{}, rowNum int64, conv *row.DatumRowConverter,
+	ctx context.Context, input interface{}, rowNum int64, conv *row.DatumRowConverter,
 ) error {
 	data := input.([]rune)
 
@@ -256,7 +256,7 @@ func (d *delimitedConsumer) FillDatums(
 			// function expects, and the difference between ParseStringAs and
 			// ParseDatumStringAs is whether or not it attempts to parse bytes.
 			var err error
-			datum, err = rowenc.ParseDatumStringAsWithRawBytes(conv.VisibleColTypes[datumIdx], field, conv.EvalCtx)
+			datum, err = rowenc.ParseDatumStringAsWithRawBytes(ctx, conv.VisibleColTypes[datumIdx], field, conv.EvalCtx)
 			if err != nil {
 				col := conv.VisibleCols[datumIdx]
 				return newImportRowError(

@@ -220,6 +220,7 @@ const (
 
 // NewAggregateFuncsAlloc returns a new AggregateFuncsAlloc.
 func NewAggregateFuncsAlloc(
+	ctx context.Context,
 	args *NewAggregatorArgs,
 	aggregations []execinfrapb.AggregatorSpec_Aggregation,
 	allocSize int64,
@@ -381,12 +382,12 @@ func NewAggregateFuncsAlloc(
 			switch aggKind {
 			case HashAggKind:
 				funcAllocs[i] = newDefaultHashAggAlloc(
-					args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
+					ctx, args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
 					len(aggFn.ColIdx), args.ConstArguments[i], args.OutputTypes[i], allocSize,
 				)
 			case OrderedAggKind:
 				funcAllocs[i] = newDefaultOrderedAggAlloc(
-					args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
+					ctx, args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
 					len(aggFn.ColIdx), args.ConstArguments[i], args.OutputTypes[i], allocSize,
 				)
 			case WindowAggKind:

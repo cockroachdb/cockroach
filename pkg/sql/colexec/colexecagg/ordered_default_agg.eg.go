@@ -155,6 +155,7 @@ func (a *defaultOrderedAgg) Reset() {
 }
 
 func newDefaultOrderedAggAlloc(
+	ctx context.Context,
 	allocator *colmem.Allocator,
 	constructor execagg.AggregateConstructor,
 	evalCtx *eval.Context,
@@ -174,6 +175,7 @@ func newDefaultOrderedAggAlloc(
 			allocSize: allocSize,
 		},
 		constructor:        constructor,
+		ctx:                ctx,
 		evalCtx:            evalCtx,
 		inputArgsConverter: inputArgsConverter,
 		resultConverter:    colconv.GetDatumToPhysicalFn(outputType),
@@ -187,6 +189,7 @@ type defaultOrderedAggAlloc struct {
 	aggFuncs []defaultOrderedAgg
 
 	constructor execagg.AggregateConstructor
+	ctx         context.Context
 	evalCtx     *eval.Context
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator
@@ -228,7 +231,7 @@ func (a *defaultOrderedAggAlloc) newAggFunc() AggregateFunc {
 	f := &a.aggFuncs[0]
 	*f = defaultOrderedAgg{
 		fn:                 a.constructor(a.evalCtx, a.arguments),
-		ctx:                a.evalCtx.Context,
+		ctx:                a.ctx,
 		inputArgsConverter: a.inputArgsConverter,
 		resultConverter:    a.resultConverter,
 	}

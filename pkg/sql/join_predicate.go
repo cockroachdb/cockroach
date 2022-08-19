@@ -137,12 +137,14 @@ func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // in the join algorithm already).
 // Returns true if there is no on condition or the on condition accepts the
 // row.
-func (p *joinPredicate) eval(evalCtx *eval.Context, leftRow, rightRow tree.Datums) (bool, error) {
+func (p *joinPredicate) eval(
+	ctx context.Context, evalCtx *eval.Context, leftRow, rightRow tree.Datums,
+) (bool, error) {
 	if p.onCond != nil {
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
 		evalCtx.PushIVarContainer(p.iVarHelper.Container())
-		pred, err := execinfrapb.RunFilter(p.onCond, evalCtx)
+		pred, err := execinfrapb.RunFilter(ctx, p.onCond, evalCtx)
 		evalCtx.PopIVarContainer()
 		return pred, err
 	}
