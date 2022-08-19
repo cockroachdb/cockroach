@@ -318,15 +318,6 @@ func (tm *TableMeta) ComputedColExpr(id ColumnID) (_ ScalarExpr, ok bool) {
 	return e, ok
 }
 
-// AddPartialIndexPredicate adds a partial index predicate to the table's
-// metadata.
-func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
-	if tm.partialIndexPredicates == nil {
-		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
-	}
-	tm.partialIndexPredicates[ord] = pred
-}
-
 // AddCheckConstraintsStats adds a column, ColumnStatistic pair to the
 // checkConstraintsStats map. When the table is duplicated, the mapping from the
 // new check constraint ColumnID back to the original ColumnStatistic is
@@ -378,6 +369,15 @@ func (tm *TableMeta) IndexPartitionLocality(
 	// remote partitions, so no PrefixSorter is built for it. We return ok=false
 	// to the caller to indicate no PrefixSorter is available for this index.
 	return ps, ps != nil
+}
+
+// AddPartialIndexPredicate adds a partial index predicate to the table's
+// metadata.
+func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
+	if tm.partialIndexPredicates == nil {
+		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
+	}
+	tm.partialIndexPredicates[ord] = pred
 }
 
 // PartialIndexPredicate returns the given index's predicate scalar expression,
