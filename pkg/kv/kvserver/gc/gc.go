@@ -529,7 +529,7 @@ type intentBatcher struct {
 	options intentBatcherOptions
 
 	// Maps from txn ID to bool and intent slice to accumulate a batch.
-	pendingTxns          map[uuid.UUID]bool
+	pendingTxns          map[uuid.UUID]struct{}
 	pendingIntents       []roachpb.Intent
 	collectedIntentBytes int64
 
@@ -562,7 +562,7 @@ func newIntentBatcher(
 	return intentBatcher{
 		cleanupIntentsFn: cleanupIntentsFunc,
 		options:          options,
-		pendingTxns:      make(map[uuid.UUID]bool),
+		pendingTxns:      make(map[uuid.UUID]struct{}),
 		gcStats:          gcStats,
 	}
 }
@@ -594,7 +594,7 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 	b.alloc, key = b.alloc.Copy(key, 0)
 	b.pendingIntents = append(b.pendingIntents, roachpb.MakeIntent(meta.Txn, key))
 	b.collectedIntentBytes += int64(len(key))
-	b.pendingTxns[txnID] = true
+	b.pendingTxns[txnID] = struct{}{}
 
 	return err
 }

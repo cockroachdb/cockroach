@@ -258,7 +258,7 @@ type validator struct {
 	// any "missing" or "extra" writes at the end.
 	// Each key has a map of all the tombstone timestamps, stored with a boolean
 	// flag indicating if it has been matched to a transactional delete or not.
-	tombstonesForKey       map[string]map[hlc.Timestamp]bool
+	tombstonesForKey       map[string]map[hlc.Timestamp]bool //nolint:maptobool
 	committedDeletesForKey map[string]int
 
 	failures []error
@@ -266,7 +266,7 @@ type validator struct {
 
 func makeValidator(kvs *Engine) (*validator, error) {
 	kvByValue := make(map[string]storage.MVCCKeyValue)
-	tombstonesForKey := make(map[string]map[hlc.Timestamp]bool)
+	tombstonesForKey := make(map[string]map[hlc.Timestamp]bool) //nolint:maptobool
 	var err error
 	kvs.Iterate(func(key storage.MVCCKey, value []byte, iterErr error) {
 		if iterErr != nil {
@@ -294,7 +294,7 @@ func makeValidator(kvs *Engine) (*validator, error) {
 		} else if !v.Value.IsPresent() {
 			rawKey := string(key.Key)
 			if _, ok := tombstonesForKey[rawKey]; !ok {
-				tombstonesForKey[rawKey] = make(map[hlc.Timestamp]bool)
+				tombstonesForKey[rawKey] = make(map[hlc.Timestamp]bool) //nolint:maptobool
 			}
 			tombstonesForKey[rawKey][key.Timestamp] = false
 		}
