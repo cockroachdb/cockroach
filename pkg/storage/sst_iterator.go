@@ -52,7 +52,7 @@ func NewPebbleMultiMemSSTIterator(
 		return nil, err
 	}
 	if verify {
-		iter = NewVerifyingMVCCIterator(iter)
+		iter = newVerifyingMVCCIterator(iter.(*pebbleIterator))
 	}
 	return iter, nil
 }
