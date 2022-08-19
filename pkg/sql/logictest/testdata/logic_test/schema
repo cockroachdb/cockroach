@@ -876,5 +876,13 @@ statement ok
 DROP SCHEMA sc
 
 statement ok
+BEGIN;
+CREATE SCHEMA sc;
+COMMIT
+
+statement ok
+DROP SCHEMA sc
+
+statement ok
 SET CLUSTER SETTING server.eventlog.enabled = false
 

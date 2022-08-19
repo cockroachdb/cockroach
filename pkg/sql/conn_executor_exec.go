@@ -933,6 +933,18 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "commit sql txn")
 	defer sp.Finish()
 
+	// We need to step the transaction before committing if it has stepping
+	// enabled. If it doesn't have stepping enabled, then we just set the
+	// stepping mode back to what it was.
+	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+	if prevSteppingMode == kv.SteppingEnabled {
+		if err := ex.state.mu.txn.Step(ctx); err != nil {
+			return err
+		}
+	} else {
+		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+	}
+
 	if err := ex.createJobs(ctx); err != nil {
 		return err
 	}
@@ -2093,10 +2105,6 @@ func (ex *connExecutor) handleAutoCommit(
 	// Attempt to refresh the deadline before the autocommit.
 	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
 	if err != nil {
-		return ex.makeErrEvent(err, stmt)
-	}
-	if err = ex.state.mu.txn.Step(ctx); err != nil {
-		log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
 		return ex.makeErrEvent(err, stmt)
 	}
 	ev, payload := ex.commitSQLTransaction(ctx, stmt, ex.commitSQLTransactionInternal)

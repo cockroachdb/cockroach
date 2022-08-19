@@ -518,22 +518,18 @@ func generateNewTargets(
 	// drop one column family from a table and add another at the same time,
 	// and since we watch entire table spans the set of spans won't change.
 	if len(droppedTargets) > 0 {
-		stillThere := make(map[descpb.ID]bool)
-		for k := range newTargets {
-			stillThere[k.TableID] = true
-		}
+		droppedIDs := make(map[descpb.ID]struct{}, len(droppedTargets))
 		for k := range droppedTargets {
-			if !stillThere[k.TableID] {
-				stillThere[k.TableID] = false
-			}
+			droppedIDs[k.TableID] = struct{}{}
 		}
-		var droppedTargetDescs []catalog.Descriptor
-		for id, there := range stillThere {
-			if !there {
+		for k := range newTargets {
+			delete(droppedIDs, k.TableID)
+		}
+		if len(droppedIDs) > 0 {
+			droppedTargetDescs := make([]catalog.Descriptor, 0, len(droppedIDs))
+			for id := range droppedIDs {
 				droppedTargetDescs = append(droppedTargetDescs, descResolver.DescByID[id])
 			}
-		}
-		if len(droppedTargetDescs) > 0 {
 			droppedTargetSpans := fetchSpansForDescs(p, droppedTargetDescs)
 			removeSpansFromProgress(newJobProgress, droppedTargetSpans)
 		}

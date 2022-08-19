@@ -266,11 +266,16 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 				uint64(opts.MinTimestampHint.WallTime),
 				uint64(opts.MaxTimestampHint.WallTime)+1),
 		}
-		p.options.RangeKeyFilters = []pebble.BlockPropertyFilter{
-			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
-				uint64(opts.MinTimestampHint.WallTime),
-				uint64(opts.MaxTimestampHint.WallTime)+1),
-		}
+		// NB: We disable range key block filtering because of complications in
+		// MVCCIncrementalIterator.maybeSkipKeys: the TBI may see different range
+		// key fragmentation than the main iterator due to the filtering. This would
+		// necessitate additional seeks/processing that likely negate the marginal
+		// benefit of the range key filters. See:
+		// https://github.com/cockroachdb/cockroach/issues/86260.
+		//
+		// However, we do collect block properties for range keys, in case we enable
+		// this later.
+		p.options.RangeKeyFilters = nil
 	}
 
 	// Set the new iterator options. We unconditionally do so, since Pebble will

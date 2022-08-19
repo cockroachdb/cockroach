@@ -284,10 +284,12 @@ func (i *MVCCIncrementalIterator) NextKey() {
 // It is expected (but not required) that TBI is at a key <= main iterator key
 // when calling maybeSkipKeys().
 //
-// TODO(erikgrinaker): Make sure this works properly when TBIs handle range
-// keys. In particular, we need to make sure a SeekGE doesn't get stuck
-// prematurely on a bare range key that we've already emitted, but moves onto
-// the next TBI point key (which can be much further ahead).
+// NB: This logic will not handle TBI range key filtering properly -- the TBI
+// may see different range key fragmentation than the regular iterator, causing
+// it to skip past range key fragments. Range key filtering has therefore been
+// disabled in pebbleMVCCIterator, since the performance gains are expected to
+// be marginal, and the necessary seeks/processing here would likely negate it.
+// See: https://github.com/cockroachdb/cockroach/issues/86260
 func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 	if i.timeBoundIter == nil {
 		// If there is no time bound iterator, we cannot skip any keys.
@@ -309,8 +311,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 		// using the incremental iterator, by avoiding a SeekGE.
 		i.timeBoundIter.NextKey()
 		if ok, err := i.timeBoundIter.Valid(); !ok {
-			i.err = err
-			i.valid = false
+			i.valid, i.err = false, err
 			return
 		}
 		tbiKey = i.timeBoundIter.UnsafeKey().Key
@@ -325,11 +326,23 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			seekKey := MakeMVCCMetadataKey(iterKey)
 			i.timeBoundIter.SeekGE(seekKey)
 			if ok, err := i.timeBoundIter.Valid(); !ok {
-				i.err = err
-				i.valid = false
+				i.valid, i.err = false, err
 				return
 			}
 			tbiKey = i.timeBoundIter.UnsafeKey().Key
+
+			// If there is an MVCC range key across iterKey, then the TBI seek may get
+			// stuck in the middle of the bare range key so we step forward.
+			if hasPoint, hasRange := i.timeBoundIter.HasPointAndRange(); hasRange && !hasPoint {
+				if !i.timeBoundIter.RangeBounds().Key.Equal(tbiKey) {
+					i.timeBoundIter.Next()
+					if ok, err := i.timeBoundIter.Valid(); !ok {
+						i.valid, i.err = false, err
+						return
+					}
+					tbiKey = i.timeBoundIter.UnsafeKey().Key
+				}
+			}
 			cmp = iterKey.Compare(tbiKey)
 		}
 
@@ -345,6 +358,17 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			i.iter.SeekGE(seekKey)
 			if !i.updateValid() {
 				return
+			}
+
+			// The seek may have landed in the middle of a bare range key, in which
+			// case we should move on to the next key.
+			if hasPoint, hasRange := i.iter.HasPointAndRange(); hasRange && !hasPoint {
+				if !i.iter.RangeBounds().Key.Equal(i.iter.UnsafeKey().Key) {
+					i.iter.Next()
+					if !i.updateValid() {
+						return
+					}
+				}
 			}
 		}
 	}
