@@ -171,7 +171,7 @@ func (s *TestState) CheckPrivilegeForUser(
 // MemberOfWithAdminOption implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) MemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername,
-) (map[username.SQLUsername]bool, error) {
+) (map[username.SQLUsername]bool, error) { //nolint:maptobool
 	return nil, nil
 }
 

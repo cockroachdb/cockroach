@@ -128,7 +128,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 
 		// Get all KEY columns from t.Columns
 		allColumnsNameToIDMapping := getAllColumnsNameToIDMapping(b, tbl.TableID)
-		allKeyColumnIDs := make(map[catid.ColumnID]bool)
+		allKeyColumnIDs := make(map[catid.ColumnID]struct{})
 		for _, col := range t.Columns {
 			colID, exist := allColumnsNameToIDMapping[string(col.Column)]
 			if !exist {
@@ -142,7 +142,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 				kind:      scpb.IndexColumn_KEY,
 				direction: indexColumnDirection(col.Direction),
 			})
-			allKeyColumnIDs[colID] = true
+			allKeyColumnIDs[colID] = struct{}{}
 		}
 
 		// What's left are STORED columns, excluding virtual columns and system columns
