@@ -284,6 +284,13 @@ func (i *MVCCIncrementalIterator) NextKey() {
 // It is expected (but not required) that TBI is at a key <= main iterator key
 // when calling maybeSkipKeys().
 //
+// NB: This logic will not handle TBI range key filtering properly -- the TBI
+// may see different range key fragmentation than the regular iterator, causing
+// it to skip past range key fragments. Range key filtering has therefore been
+// disabled in pebbleMVCCIterator, since the performance gains are expected to
+// be marginal, and the necessary seeks/processing here would likely negate it.
+// See: https://github.com/cockroachdb/cockroach/issues/86260
+//
 // TODO(erikgrinaker): Make sure this works properly when TBIs handle range
 // keys. In particular, we need to make sure a SeekGE doesn't get stuck
 // prematurely on a bare range key that we've already emitted, but moves onto
