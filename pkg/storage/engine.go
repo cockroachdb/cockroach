@@ -401,6 +401,10 @@ type IterOptions struct {
 	// separate [3-5] SST where foo@5 was removed or updated. See also:
 	// https://github.com/cockroachdb/pebble/issues/1786
 	//
+	// NB: Range keys are not currently subject to timestamp filtering due to
+	// complications with MVCCIncrementalIterator. See:
+	// https://github.com/cockroachdb/cockroach/issues/86260
+	//
 	// Currently, the only way to correctly use such an iterator is to use it in
 	// concert with an iterator without timestamp hints, as done by
 	// MVCCIncrementalIterator.

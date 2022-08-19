@@ -1114,18 +1114,19 @@ func (os OrderingSet) RemapColumns(from, to opt.ColList) OrderingSet {
 }
 
 // LongestCommonPrefix returns the longest common prefix between the
-// OrderingChoices within the receiver and the given OrderingChoice. However, if
-// the longest common prefix implies the given OrderingChoice, nil is returned
-// instead. This allows LongestCommonPrefix to avoid allocating in the common
-// case where its result is just discarded by Optimizer.enforceProps.
-func (os OrderingSet) LongestCommonPrefix(other *OrderingChoice) *OrderingChoice {
+// OrderingChoices within the receiver and the given OrderingChoice. If there is
+// no common prefix, ok=false is returned. Also, if the longest common prefix
+// implies the given OrderingChoice, ok=false is returned. This allows
+// LongestCommonPrefix to avoid allocating in the common case where its result
+// is just discarded by Optimizer.enforceProps.
+func (os OrderingSet) LongestCommonPrefix(other *OrderingChoice) (_ OrderingChoice, ok bool) {
 	var bestPrefixLength, bestPrefixIdx int
 	for i, orderingChoice := range os {
 		length, implies := orderingChoice.commonPrefixLength(other)
 		if implies {
 			// We have found a prefix that implies the required ordering. No order
 			// needs to be enforced.
-			return nil
+			return OrderingChoice{}, false
 		}
 		if length > bestPrefixLength {
 			bestPrefixLength = length
@@ -1134,10 +1135,9 @@ func (os OrderingSet) LongestCommonPrefix(other *OrderingChoice) *OrderingChoice
 	}
 	if bestPrefixLength == 0 {
 		// No need to call CommonPrefix since no 'best' prefix was found.
-		return &OrderingChoice{}
+		return OrderingChoice{}, false
 	}
-	commonPrefix := os[bestPrefixIdx].CommonPrefix(other)
-	return &commonPrefix
+	return os[bestPrefixIdx].CommonPrefix(other), true
 }
 
 // colSetHelper is used to lazily copy the wrapped ColSet only when a mutating

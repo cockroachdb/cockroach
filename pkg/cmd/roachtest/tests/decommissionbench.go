@@ -129,12 +129,40 @@ func registerDecommissionBench(r registry.Registry) {
 		},
 		// Manually run benchmark configurations.
 		{
+			// Add a new node during decommission (no drain).
 			nodes:              8,
 			cpus:               16,
 			warehouses:         3000,
 			load:               true,
 			admissionControl:   true,
 			whileUpreplicating: true,
+			// This test can take nearly an hour to import and achieve balance, so
+			// we extend the timeout to let it complete.
+			timeout: 4 * time.Hour,
+			skip:    manualBenchmarkingOnly,
+		},
+		{
+			// Drain before decommission, without adding a new node.
+			nodes:            8,
+			cpus:             16,
+			warehouses:       3000,
+			load:             true,
+			admissionControl: true,
+			drainFirst:       true,
+			// This test can take nearly an hour to import and achieve balance, so
+			// we extend the timeout to let it complete.
+			timeout: 4 * time.Hour,
+			skip:    manualBenchmarkingOnly,
+		},
+		{
+			// Drain before decommission, and add a new node.
+			nodes:              8,
+			cpus:               16,
+			warehouses:         3000,
+			load:               true,
+			admissionControl:   true,
+			whileUpreplicating: true,
+			drainFirst:         true,
 			// This test can take nearly an hour to import and achieve balance, so
 			// we extend the timeout to let it complete.
 			timeout: 4 * time.Hour,
@@ -346,7 +374,8 @@ func setupDecommissionBench(
 	for i := 1; i <= benchSpec.nodes; i++ {
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-			fmt.Sprintf("--attrs=node%d", i))
+			fmt.Sprintf("--attrs=node%d", i),
+			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
 
