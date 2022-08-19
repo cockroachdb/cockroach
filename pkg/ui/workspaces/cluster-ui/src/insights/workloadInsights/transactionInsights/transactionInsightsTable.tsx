@@ -35,11 +35,11 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>
       name: "executionID",
       title: insightsTableTitles.executionID(execType),
       cell: (item: InsightEvent) => (
-        <Link to={`/insights/${item.executionID}`}>
-          {String(item.executionID)}
+        <Link to={`/insights/${item.transactionID}`}>
+          {String(item.transactionID)}
         </Link>
       ),
-      sort: (item: InsightEvent) => item.executionID,
+      sort: (item: InsightEvent) => item.transactionID,
     },
     {
       name: "fingerprintID",
@@ -73,8 +73,8 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>
     {
       name: "elapsedTime",
       title: insightsTableTitles.elapsedTime(execType),
-      cell: (item: InsightEvent) => Duration(item.elapsedTime * 1e6),
-      sort: (item: InsightEvent) => item.elapsedTime,
+      cell: (item: InsightEvent) => Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: InsightEvent) => item.elapsedTimeMillis,
     },
     {
       name: "applicationName",

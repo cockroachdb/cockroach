@@ -55,12 +55,12 @@ export function getInsightsFromState(
       return;
     } else {
       insightEvents.push({
-        executionID: e.executionID,
+        transactionID: e.transactionID,
         fingerprintID: e.fingerprintID,
         queries: e.queries,
         insights: insightsForEvent,
         startTime: e.startTime,
-        elapsedTime: e.elapsedTime,
+        elapsedTimeMillis: e.elapsedTimeMillis,
         application: e.application,
         execType: InsightExecEnum.TRANSACTION,
         contentionThreshold: e.contentionThreshold,
@@ -121,7 +121,7 @@ export const filterTransactionInsights = (
     filteredTransactions = filteredTransactions.filter(
       txn =>
         !search ||
-        txn.executionID.toLowerCase()?.includes(search) ||
+        txn.transactionID.toLowerCase()?.includes(search) ||
         txn.queries?.find(query => query.toLowerCase().includes(search)),
     );
   }
