@@ -115,12 +115,15 @@ func ExternalSSTReader(
 	encryption *roachpb.FileEncryptionOptions,
 	iterOpts storage.IterOptions,
 ) (storage.SimpleMVCCIterator, error) {
+	// TODO(jackson): Change the interface to accept a two-dimensional
+	// [][]StoreFiles slice, and propagate that structure to
+	// NewPebbleSSTIterator.
 
 	if !remoteSSTs.Get(&storeFiles[0].Store.Settings().SV) {
 		return newMemPebbleSSTReader(ctx, storeFiles, encryption, iterOpts)
 	}
 	remoteCacheSize := remoteSSTSuffixCacheSize.Get(&storeFiles[0].Store.Settings().SV)
-	readers := make([]sstable.ReadableFile, 0, len(storeFiles))
+	readerLevels := make([][]sstable.ReadableFile, 0, len(storeFiles))
 
 	for _, sf := range storeFiles {
 		// prevent capturing the loop variables by reference when defining openAt below.
@@ -160,9 +163,12 @@ func ExternalSSTReader(
 			}
 			reader = raw
 		}
-		readers = append(readers, reader)
+		readerLevels = append(readerLevels, []sstable.ReadableFile{reader})
 	}
-	return storage.NewPebbleSSTIterator(readers, iterOpts)
+	// NB: It's okay to pass forwardOnly=true, because this function returns a
+	// SimpleMVCCIterator which does not provide an interface for reverse
+	// iteration.
+	return storage.NewPebbleSSTIterator(readerLevels, iterOpts, true /* forwardOnly */)
 }
 
 type sstReader struct {
