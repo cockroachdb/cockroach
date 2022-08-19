@@ -180,7 +180,7 @@ func TestLatencyQuantileDetector(t *testing.T) {
 	})
 }
 
-// dev bench pkg/sql/sqlstats/outliers  --bench-mem --verbose
+// dev bench pkg/sql/sqlstats/insights  --bench-mem --verbose
 // BenchmarkLatencyQuantileDetector-16    	 1589583	       701.1 ns/op	      24 B/op	       1 allocs/op
 func BenchmarkLatencyQuantileDetector(b *testing.B) {
 	random := rand.New(rand.NewSource(42))
