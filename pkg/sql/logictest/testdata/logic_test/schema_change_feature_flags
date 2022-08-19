@@ -1,3 +1,22 @@
+# Set up the schema at the beginning while all of the features are enabled.
+# In a prior iteration of this test, the creation statements were interspersed
+# in the test, flipping the cluster setting on and off. This approach leads to
+# test failures due to the structure of the cluster setting logic; the cluster
+# setting infrastructure just waits for the value of the setting in memoru to
+# be equal to the desired value. That means that sequences of flipping it back
+# and forth can trick the test into thinking the value has changed when in
+# reality, it has not yet been changed in response to the latest setting.
+
+statement ok
+CREATE SCHEMA s;
+CREATE TABLE t1(a INT8, b INT8);
+CREATE DATABASE d;
+CREATE TABLE t();
+CREATE INDEX i on t1 (a, b);
+CREATE SEQUENCE seq;
+CREATE TYPE s.typ AS ENUM ();
+CREATE VIEW public.bar (x) AS SELECT 1 AS x;
+
 # Test all feature flags when set to off in SQL package.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE;
@@ -15,14 +34,6 @@ statement error pq: feature CREATE SCHEMA is part of the schema change category,
 CREATE SCHEMA s;
 
 # Test CREATE TYPE.
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE SCHEMA s;
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 statement error pq: feature CREATE TYPE is part of the schema change category, which was disabled by the database administrator
 CREATE TYPE s.typ AS ENUM ()
@@ -36,27 +47,11 @@ statement error pq: feature CREATE SEQUENCE is part of the schema change categor
 CREATE SEQUENCE seq
 
 # Test CREATE INDEX.
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE TABLE t1(a INT8, b INT8);
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 statement error pq: feature CREATE INDEX is part of the schema change category, which was disabled by the database administrator
 CREATE INDEX on t1 (a, b)
 
 # Test ALTER DATABASE OWNER.
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE DATABASE d;
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
 ALTER DATABASE d OWNER TO testuser
@@ -80,15 +75,6 @@ ALTER DATABASE d RENAME TO r
 # Test REPARENT DATABASE
 statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA in version
 ALTER DATABASE d CONVERT TO SCHEMA WITH PARENT test
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE TABLE t();
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test ALTER TABLE PARTITION BY.
 statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
@@ -154,15 +140,6 @@ ALTER TABLE t1 UNSPLIT AT VALUES ('1')
 statement error pq: feature ALTER TABLE/INDEX UNSPLIT ALL is part of the schema change category, which was disabled by the database administrator
 ALTER TABLE t1 UNSPLIT ALL
 
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE INDEX i on t1 (a, b);
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE;
-
 # Test RENAME COLUMN, throws ALTER TABLE error.
 statement error pq: feature ALTER TABLE is part of the schema change category, which was disabled by the database administrator
 ALTER TABLE t1 RENAME COLUMN a to c
@@ -196,14 +173,6 @@ statement error pq: feature ALTER SCHEMA is part of the schema change category, 
 ALTER SCHEMA s OWNER TO testuser
 
 # Test ALTER TYPE.
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE TYPE s.typ AS ENUM ();
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test ALTER TYPE ADD VALUE.
 statement error pq: feature ALTER TYPE is part of the schema change category, which was disabled by the database administrator
@@ -222,14 +191,6 @@ statement error pq: feature ALTER TYPE is part of the schema change category, wh
 ALTER TYPE s.typ SET SCHEMA s
 
 # Test ALTER SEQUENCE.
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE SEQUENCE seq;
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test RENAME SEQUENCE.
 statement error pq: feature RENAME TABLE/VIEW/SEQUENCE is part of the schema change category, which was disabled by the database administrator
@@ -271,14 +232,6 @@ statement error pq: feature DROP SEQUENCE is part of the schema change category,
 DROP SEQUENCE seq
 
 # Test DROP VIEW.
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
-
-statement ok
-CREATE VIEW public.bar (x) AS SELECT 1 AS x;
-
-statement ok
-SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test ALTER VIEW SET SCHEMA
 statement error pq: feature ALTER TABLE/VIEW/SEQUENCE SET SCHEMA is part of the schema change category, which was disabled by the database administrator
