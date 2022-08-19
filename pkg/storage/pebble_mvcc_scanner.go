@@ -440,16 +440,18 @@ func (p *pebbleMVCCScanner) init(
 func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	p.isGet = true
 
-	p.parent.SeekGE(MVCCKey{Key: p.start})
-
-	// The iterator may already have been positioned on a range key, in which
-	// case RangeKeyChanged() wouldn't fire.
+	// The iterator may already be positioned on a range key that SeekGE hits, in
+	// which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
+	// here if needed. We check this before SeekGE, because in the typical case
+	// this will be a new, unpositioned iterator, which allows omitting the
+	// HasPointAndRange() call.
 	if ok, _ := p.parent.Valid(); ok {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
 			p.enablePointSynthesis()
 		}
 	}
 
+	p.parent.SeekGE(MVCCKey{Key: p.start})
 	if !p.updateCurrent() {
 		return
 	}
@@ -468,8 +470,11 @@ func (p *pebbleMVCCScanner) scan(
 	}
 	p.isGet = false
 
-	// The iterator may already be positioned on a range key, in which
-	// case RangeKeyChanged() wouldn't fire.
+	// The iterator may already be positioned on a range key that the seek hits,
+	// in which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
+	// here if needed. We check this before seeking, because in the typical case
+	// this will be a new, unpositioned iterator, which allows omitting the
+	// HasPointAndRange() call.
 	if ok, _ := p.parent.Valid(); ok {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
 			p.enablePointSynthesis()
