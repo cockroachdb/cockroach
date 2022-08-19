@@ -659,8 +659,9 @@ func (s *Store) reserveReceiveSnapshot(
 ) (_cleanup func(), _err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSnapshot")
 	defer sp.Finish()
+	snapshotApplyTask := s.snapshotApplyMultiQueue.Add(header.SenderQueueName, header.SenderQueuePriority)
 	return s.throttleSnapshot(
-		ctx, s.snapshotApplySem, header.RangeSize,
+		ctx, snapshotApplyTask.GetWaitChan(), header.RangeSize,
 		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
 		s.metrics.RangeSnapshotRecvQueueLength,
 		s.metrics.RangeSnapshotRecvInProgress, s.metrics.RangeSnapshotRecvTotalInProgress,

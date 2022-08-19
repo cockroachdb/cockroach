@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
@@ -776,6 +777,8 @@ type Store struct {
 	initialSnapshotSendSem chan struct{}
 	// Semaphore to limit concurrent non-empty snapshot sending.
 	raftSnapshotSendSem chan struct{}
+	// Multi-queue for prioritizing non-empty snapshot application.
+	snapshotApplyMultiQueue *multiqueue.MultiQueue
 
 	// Track newly-acquired expiration-based leases that we want to proactively
 	// renew. An object is sent on the signal whenever a new entry is added to
@@ -1245,6 +1248,7 @@ func NewStore(
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 	s.initialSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
 	s.raftSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
+	s.snapshotApplyMultiQueue = multiqueue.NewMultiQueue("snapshot-recv", cfg.concurrentSnapshotApplyLimit)
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
 		s.renewableLeasesSignal = ch
 	} else {
@@ -2062,6 +2066,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
+
+	s.snapshotApplyMultiQueue.Start(ctx, s.stopper)
 
 	s.consistencyLimiter = quotapool.NewRateLimiter(
 		"ConsistencyQueue",
