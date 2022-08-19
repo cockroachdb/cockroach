@@ -56,6 +56,8 @@ func runDecommissionMixedVersions(
 		waitForUpgradeStep(allNodes),
 		preventAutoUpgradeStep(h.nodeIDs[0]),
 
+		preloadDataStep(pinnedUpgrade),
+
 		// We upgrade a pinnedUpgrade and one other random node of the cluster to v20.2.
 		binaryUpgradeStep(c.Node(pinnedUpgrade), mainVersion),
 		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), mainVersion),
@@ -105,6 +107,22 @@ func cockroachBinaryPath(version string) string {
 		return "./cockroach"
 	}
 	return fmt.Sprintf("./v%s/cockroach", version)
+}
+
+// preloadDataStep load data into cluster to ensure we have a large enough
+// number of replicas to move on decommissioning.
+func preloadDataStep(target int) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		// Load data into cluster to ensure we have a large enough number of replicas
+		// to move on decommissioning.
+		c := u.c
+		c.Run(ctx, c.Node(target), `./cockroach workload fixtures import tpcc --warehouses=100`)
+		db := c.Conn(ctx, t.L(), target)
+		defer db.Close()
+		if err := WaitFor3XReplication(ctx, t, db); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // partialDecommissionStep runs `cockroach node decommission --wait=none` from a
