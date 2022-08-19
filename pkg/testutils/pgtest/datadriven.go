@@ -186,7 +186,7 @@ func hasKeepErrMsg(d *datadriven.TestData) bool {
 // second argument can specify how to adjust the messages (e.g. to make them
 // more deterministic) if needed, see testdata for examples.
 func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
-	ignore := map[string]bool{}
+	ignore := map[string]struct{}{}
 	errs := map[string]string{}
 	for _, arg := range args.CmdArgs {
 		switch arg.Key {
@@ -225,7 +225,7 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 			}
 		case "ignore":
 			for _, typ := range arg.Vals {
-				ignore[fmt.Sprintf("*pgproto3.%s", typ)] = true
+				ignore[fmt.Sprintf("*pgproto3.%s", typ)] = struct{}{}
 			}
 		case "mapError":
 			errs[arg.Vals[0]] = arg.Vals[1]
@@ -236,7 +236,7 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 	var sb strings.Builder
 	enc := json.NewEncoder(&sb)
 	for _, msg := range msgs {
-		if ignore[fmt.Sprintf("%T", msg)] {
+		if _, ok := ignore[fmt.Sprintf("%T", msg)]; ok {
 			continue
 		}
 		if errmsg, ok := msg.(*pgproto3.ErrorResponse); ok {

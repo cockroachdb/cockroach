@@ -21,7 +21,7 @@ import (
 
 // requireConstMsg records functions for which the last string
 // argument must be a constant string.
-var requireConstMsg = map[string]bool{
+var requireConstMsg = map[string]bool{ //nolint:maptobool
 	"github.com/cockroachdb/cockroach/pkg/util/log.Shout":     true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Event":     true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.VEvent":    true,
@@ -34,7 +34,7 @@ var requireConstMsg = map[string]bool{
 
 // requireConstFmt records functions for which the string arg
 // before the final ellipsis must be a constant string.
-var requireConstFmt = map[string]bool{
+var requireConstFmt = map[string]bool{ //nolint:maptobool
 	// Logging things.
 	"log.Printf":           true,
 	"log.Fatalf":           true,

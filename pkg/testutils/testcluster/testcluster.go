@@ -1417,15 +1417,16 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 		// Check that all the nodes in the testcluster have a status. We tolerate
 		// other nodes having statuses (in some tests the cluster is configured with
 		// a pre-existing store).
-		nodeIDs := make(map[roachpb.NodeID]bool)
+		nodeIDs := make(map[roachpb.NodeID]struct{})
 		for _, node := range response.Nodes {
 			if len(node.StoreStatuses) == 0 {
 				return fmt.Errorf("missing StoreStatuses in NodeStatus: %+v", node)
 			}
-			nodeIDs[node.Desc.NodeID] = true
+			nodeIDs[node.Desc.NodeID] = struct{}{}
 		}
 		for _, s := range tc.Servers {
-			if id := s.GetNode().Descriptor.NodeID; !nodeIDs[id] {
+			id := s.GetNode().Descriptor.NodeID
+			if _, ok := nodeIDs[id]; !ok {
 				return fmt.Errorf("missing n%d in NodeStatus: %+v", id, response)
 			}
 		}
