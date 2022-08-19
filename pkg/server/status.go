@@ -424,7 +424,7 @@ func (b *baseStatusServer) localExecutionInsights(
 ) (*serverpb.ListExecutionInsightsResponse, error) {
 	var response serverpb.ListExecutionInsightsResponse
 
-	reader := b.sqlServer.pgServer.SQLServer.GetSQLStatsProvider()
+	reader := b.sqlServer.pgServer.SQLServer.GetInsightsReader()
 	reader.IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
 		response.Insights = append(response.Insights, *insight)
 	})

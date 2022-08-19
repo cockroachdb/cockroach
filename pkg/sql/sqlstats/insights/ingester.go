@@ -20,7 +20,7 @@ import (
 )
 
 // concurrentBufferIngester amortizes the locking cost of writing to an
-// insights Registry concurrently from multiple goroutines. To that end, it
+// insights registry concurrently from multiple goroutines. To that end, it
 // contains nothing specific to the insights domain; it is merely a bit of
 // asynchronous plumbing, built around a contentionutils.ConcurrentBufferGuard.
 type concurrentBufferIngester struct {
@@ -30,15 +30,13 @@ type concurrentBufferIngester struct {
 	}
 
 	eventBufferCh chan *eventBuffer
-	delegate      Registry
+	delegate      registry
 }
 
-// Meanwhile, it looks like a Registry to the outside world, so that others
-// needn't know it exist.
-var _ Registry = &concurrentBufferIngester{}
+var _ Provider = &concurrentBufferIngester{}
 
 // concurrentBufferIngester buffers the "events" it sees (via ObserveStatement
-// and ObserveTransaction) and passes them along to the underlying Registry
+// and ObserveTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
 // clusters and tests.)
 //
@@ -57,7 +55,7 @@ type event struct {
 
 func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stopper) {
 	// This task pulls buffers from the channel and forwards them along to the
-	// underlying Registry.
+	// underlying registry.
 	_ = stopper.RunAsyncTask(ctx, "insights-ingester", func(ctx context.Context) {
 		for {
 			select {
@@ -101,10 +99,18 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 	}
 }
 
+func (i *concurrentBufferIngester) Reader() Reader {
+	return i.delegate
+}
+
+func (i *concurrentBufferIngester) Writer() Writer {
+	return i
+}
+
 func (i *concurrentBufferIngester) ObserveStatement(
 	sessionID clusterunique.ID, statement *Statement,
 ) {
-	if !i.enabled() {
+	if !i.delegate.enabled() {
 		return
 	}
 	i.guard.AtomicWrite(func(writerIdx int64) {
@@ -118,7 +124,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 func (i *concurrentBufferIngester) ObserveTransaction(
 	sessionID clusterunique.ID, transaction *Transaction,
 ) {
-	if !i.enabled() {
+	if !i.delegate.enabled() {
 		return
 	}
 	i.guard.AtomicWrite(func(writerIdx int64) {
@@ -129,21 +135,11 @@ func (i *concurrentBufferIngester) ObserveTransaction(
 	})
 }
 
-func (i *concurrentBufferIngester) IterateInsights(
-	ctx context.Context, visitor func(context.Context, *Insight),
-) {
-	i.delegate.IterateInsights(ctx, visitor)
-}
-
-func (i *concurrentBufferIngester) enabled() bool {
-	return i.delegate.enabled()
-}
-
-func newConcurrentBufferIngester(delegate Registry) Registry {
+func newConcurrentBufferIngester(delegate registry) *concurrentBufferIngester {
 	i := &concurrentBufferIngester{
 		// A channel size of 1 is sufficient to avoid unnecessarily
 		// synchronizing producer (our clients) and consumer (the underlying
-		// Registry): moving from 0 to 1 here resulted in a 25% improvement
+		// registry): moving from 0 to 1 here resulted in a 25% improvement
 		// in the micro-benchmarks, but further increases had no effect.
 		// Otherwise, we rely solely on the size of the eventBuffer for
 		// adjusting our carrying capacity.

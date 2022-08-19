@@ -119,8 +119,8 @@ type Container struct {
 	txnCounts transactionCounts
 	mon       *mon.BytesMonitor
 
-	knobs            *sqlstats.TestingKnobs
-	outliersRegistry insights.Registry
+	knobs    *sqlstats.TestingKnobs
+	insights insights.Writer
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -135,7 +135,7 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
-	outliersRegistry insights.Registry,
+	insightsWriter insights.Writer,
 ) *Container {
 	s := &Container{
 		st:                         st,
@@ -144,7 +144,7 @@ func New(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		mon:                        mon,
 		knobs:                      knobs,
-		outliersRegistry:           outliersRegistry,
+		insights:                   insightsWriter,
 	}
 
 	if mon != nil {
@@ -250,7 +250,7 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /* outliersRegistry */
+		nil, /* insights */
 	)
 
 	for i := range statistics {
@@ -323,7 +323,7 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /* outliersRegistry */
+		nil, /* insights */
 	)
 
 	for i := range statistics {
@@ -364,7 +364,7 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.Applicati
 		s.mon,
 		s.appName,
 		s.knobs,
-		s.outliersRegistry,
+		s.insights,
 	)
 }
 

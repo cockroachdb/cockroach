@@ -31,8 +31,8 @@ type compositeDetector struct {
 	detectors []detector
 }
 
-func (a compositeDetector) enabled() bool {
-	for _, d := range a.detectors {
+func (d *compositeDetector) enabled() bool {
+	for _, d := range d.detectors {
 		if d.enabled() {
 			return true
 		}
@@ -40,11 +40,11 @@ func (a compositeDetector) enabled() bool {
 	return false
 }
 
-func (a compositeDetector) isSlow(statement *Statement) bool {
+func (d *compositeDetector) isSlow(statement *Statement) bool {
 	// Because some detectors may need to observe all statements to build up
 	// their baseline sense of what "normal" is, we avoid short-circuiting.
 	result := false
-	for _, d := range a.detectors {
+	for _, d := range d.detectors {
 		result = d.isSlow(statement) || result
 	}
 	return result
@@ -64,7 +64,7 @@ type latencySummaryEntry struct {
 	value *quantile.Stream
 }
 
-func (d anomalyDetector) enabled() bool {
+func (d *anomalyDetector) enabled() bool {
 	return AnomalyDetectionEnabled.Get(&d.settings.SV)
 }
 
@@ -121,7 +121,7 @@ func (d *anomalyDetector) withFingerprintLatencySummary(
 	}
 }
 
-func newAnomalyDetector(settings *cluster.Settings, metrics Metrics) detector {
+func newAnomalyDetector(settings *cluster.Settings, metrics Metrics) *anomalyDetector {
 	return &anomalyDetector{
 		settings: settings,
 		metrics:  metrics,
@@ -134,10 +134,10 @@ type latencyThresholdDetector struct {
 	st *cluster.Settings
 }
 
-func (l latencyThresholdDetector) enabled() bool {
-	return LatencyThreshold.Get(&l.st.SV) > 0
+func (d *latencyThresholdDetector) enabled() bool {
+	return LatencyThreshold.Get(&d.st.SV) > 0
 }
 
-func (l latencyThresholdDetector) isSlow(s *Statement) bool {
-	return l.enabled() && s.LatencyInSeconds >= LatencyThreshold.Get(&l.st.SV).Seconds()
+func (d *latencyThresholdDetector) isSlow(s *Statement) bool {
+	return d.enabled() && s.LatencyInSeconds >= LatencyThreshold.Get(&d.st.SV).Seconds()
 }
