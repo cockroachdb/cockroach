@@ -40,12 +40,13 @@ func (n *discardNode) startExec(params runParams) error {
 				"DISCARD ALL cannot run inside a transaction block")
 		}
 
+		// SET SESSION AUTHORIZATION DEFAULT
+		if err := params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser()); err != nil {
+			return err
+		}
+
 		// RESET ALL
-		if err := params.p.sessionDataMutatorIterator.applyOnEachMutatorError(
-			func(m sessionDataMutator) error {
-				return resetSessionVars(params.ctx, m)
-			},
-		); err != nil {
+		if err := params.p.resetAllSessionVars(params.ctx); err != nil {
 			return err
 		}
 
@@ -53,28 +54,6 @@ func (n *discardNode) startExec(params runParams) error {
 		params.p.preparedStatements.DeleteAll(params.ctx)
 	default:
 		return errors.AssertionFailedf("unknown mode for DISCARD: %d", n.mode)
-	}
-	return nil
-}
-
-func resetSessionVars(ctx context.Context, m sessionDataMutator) error {
-	for _, varName := range varNames {
-		if err := resetSessionVar(ctx, m, varName); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func resetSessionVar(ctx context.Context, m sessionDataMutator, varName string) error {
-	v := varGen[varName]
-	if v.Set != nil {
-		hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
-		if hasDefault {
-			if err := v.Set(ctx, m, defVal); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
