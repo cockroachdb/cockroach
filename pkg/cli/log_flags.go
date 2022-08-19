@@ -189,7 +189,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	}
 
 	// Configuration ready and directories exist; apply it.
-	logShutdownFn, err := log.ApplyConfig(h.Config)
+	logShutdownFn, err := log.ApplyConfig(h.Config, log.WithManaged(cliCtx.managed))
 	if err != nil {
 		return err
 	}
