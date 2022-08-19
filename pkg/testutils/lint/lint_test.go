@@ -2073,6 +2073,47 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// TestMapToBool asserts that map[...]bool is not used. In most cases, such
+	// a map can be replaced with map[...]struct{} that is more efficient, and
+	// this linter nudges folks to do so. This linter can be disabled by
+	// '//nolint:maptobool' comment.
+	// TODO(yuzefovich): expand the scope where the linter is applied.
+	t.Run("TestMapToBool", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`map\[.*\]bool`,
+			"--",
+			"sql/opt/norm*.go",
+			":!*_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.GrepNot(`nolint:maptobool`),
+		), func(s string) {
+			t.Errorf("\n%s <- forbidden; use map[...]struct{} instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.

@@ -397,7 +397,8 @@ func TestOtelTracer(t *testing.T) {
 	}
 
 	sp2 := tr.StartSpan("child", WithRemoteParentFromSpanMeta(wireSpanMeta))
-	defer sp2.Finish()
+	sp2.SetLazyTag("lazy expanding tag", testExpandingTag{})
+	sp2.SetLazyTag("lazy tag", testStringerLazyTag{})
 
 	rs := sr.Started()
 	require.Len(t, rs, 2)
@@ -405,6 +406,29 @@ func TestOtelTracer(t *testing.T) {
 	require.Equal(t, "hello", rs[0].Events()[0].Name)
 	require.Equal(t, rs[0].SpanContext().TraceID(), rs[1].Parent().TraceID())
 	require.Equal(t, rs[0].SpanContext().SpanID(), rs[1].Parent().SpanID())
+
+	sp2.Finish()
+	rs2 := sr.Ended()
+
+	expectedAttributes := []attribute.KeyValue{
+		{
+			Key:   attribute.Key("lazy expanding tag-exp1"),
+			Value: attribute.StringValue("1"),
+		},
+		{
+			Key:   attribute.Key("lazy expanding tag-exp2"),
+			Value: attribute.StringValue("2"),
+		},
+		{
+			Key:   attribute.Key("lazy tag"),
+			Value: attribute.StringValue("lazy stringer"),
+		},
+	}
+	actualAttributes := rs2[0].Attributes()
+
+	require.Len(t, rs2, 1)
+	require.Len(t, actualAttributes, 3)
+	require.Equal(t, expectedAttributes, actualAttributes)
 }
 
 func TestTracer_RegistryMaxSize(t *testing.T) {

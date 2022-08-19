@@ -4,10 +4,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "admission",
     srcs = [
+        "admission.go",
         "disk_bandwidth.go",
-        "doc.go",
+        "grant_coordinator.go",
         "granter.go",
+        "io_load_listener.go",
+        "kv_slot_adjuster.go",
+        "sql_cpu_overload_indicator.go",
         "store_token_estimation.go",
+        "tokens_linear_model.go",
         "work_queue.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission",
@@ -35,7 +40,9 @@ go_test(
     srcs = [
         "disk_bandwidth_test.go",
         "granter_test.go",
+        "io_load_listener_test.go",
         "store_token_estimation_test.go",
+        "tokens_linear_model_test.go",
         "work_queue_test.go",
     ],
     data = glob(["testdata/**"]),
