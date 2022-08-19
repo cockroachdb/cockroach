@@ -1,0 +1,22 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "sctestgen_lib",
+    srcs = ["gen.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest/sctestgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cli/exit",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_binary(
+    name = "sctestgen",
+    embed = [":sctestgen_lib"],
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
