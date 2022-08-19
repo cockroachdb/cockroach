@@ -97,7 +97,7 @@ type PlanHookState interface {
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
-	GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error)
+	GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error) //nolint:maptobool
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	EvalAsOfTimestamp(
 		ctx context.Context,

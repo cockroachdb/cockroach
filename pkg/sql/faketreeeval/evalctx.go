@@ -215,7 +215,7 @@ func (ep *DummyEvalPlanner) UserHasAdminRole(
 // MemberOfWithAdminOption is part of the Planner interface.
 func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername,
-) (map[username.SQLUsername]bool, error) {
+) (map[username.SQLUsername]bool, error) { //nolint:maptobool
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

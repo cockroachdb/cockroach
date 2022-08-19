@@ -295,11 +295,11 @@ func PopulateTableWithRandData(
 	}
 
 	// Find columns subject to a foreign key constraint
-	var hasFK = map[string]bool{}
+	var hasFK = map[string]struct{}{}
 	for _, def := range createStmt.Defs {
 		if fk, ok := def.(*tree.ForeignKeyConstraintTableDef); ok {
 			for _, col := range fk.FromCols {
-				hasFK[col.String()] = true
+				hasFK[col.String()] = struct{}{}
 			}
 		}
 	}

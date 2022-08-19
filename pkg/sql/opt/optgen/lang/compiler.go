@@ -148,7 +148,7 @@ func (c *Compiler) Errors() []error {
 func (c *Compiler) compileDefines(defines DefineSetExpr) bool {
 	c.compiled.Defines = defines
 
-	unique := make(map[TagExpr]bool)
+	unique := make(map[TagExpr]struct{})
 
 	for _, define := range defines {
 		// Record the define in the index for fast lookup.
@@ -162,9 +162,9 @@ func (c *Compiler) compileDefines(defines DefineSetExpr) bool {
 
 		// Determine unique set of tags.
 		for _, tag := range define.Tags {
-			if !unique[tag] {
+			if _, ok = unique[tag]; !ok {
 				c.compiled.DefineTags = append(c.compiled.DefineTags, string(tag))
-				unique[tag] = true
+				unique[tag] = struct{}{}
 			}
 		}
 	}
@@ -173,7 +173,7 @@ func (c *Compiler) compileDefines(defines DefineSetExpr) bool {
 }
 
 func (c *Compiler) compileRules(rules RuleSetExpr) bool {
-	unique := make(map[StringExpr]bool)
+	unique := make(map[StringExpr]struct{})
 
 	for _, rule := range rules {
 		// Ensure that rule names are unique.
@@ -181,7 +181,7 @@ func (c *Compiler) compileRules(rules RuleSetExpr) bool {
 		if ok {
 			c.addErr(rule.Source(), fmt.Errorf("duplicate rule name '%s'", rule.Name))
 		}
-		unique[rule.Name] = true
+		unique[rule.Name] = struct{}{}
 
 		var ruleCompiler ruleCompiler
 		ruleCompiler.compile(c, rule)

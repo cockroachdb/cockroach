@@ -144,18 +144,20 @@ func (c *Conf) Map(mapName, systemIdentity string) ([]username.SQLUsername, erro
 		return nil, nil
 	}
 	var names []username.SQLUsername
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	for _, elt := range elts {
-		if n := elt.substitute(systemIdentity); n != "" && !seen[n] {
-			// We're returning this as a for-validation username since a
-			// pattern-based mapping could still result in invalid characters
-			// being incorporated into the input.
-			u, err := username.MakeSQLUsernameFromUserInput(n, username.PurposeValidation)
-			if err != nil {
-				return nil, err
+		if n := elt.substitute(systemIdentity); n != "" {
+			if _, ok := seen[n]; !ok {
+				// We're returning this as a for-validation username since a
+				// pattern-based mapping could still result in invalid
+				// characters being incorporated into the input.
+				u, err := username.MakeSQLUsernameFromUserInput(n, username.PurposeValidation)
+				if err != nil {
+					return nil, err
+				}
+				names = append(names, u)
+				seen[n] = struct{}{}
 			}
-			names = append(names, u)
-			seen[n] = true
 		}
 	}
 	return names, nil

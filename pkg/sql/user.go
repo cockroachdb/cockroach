@@ -448,7 +448,7 @@ var userLoginTimeout = settings.RegisterDurationSetting(
 ).WithPublic()
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
-func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error) {
+func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error) { //nolint:maptobool
 	query := `SELECT username FROM system.users`
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx, "read-users", p.txn,
@@ -458,7 +458,7 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 		return nil, err
 	}
 
-	users := make(map[username.SQLUsername]bool)
+	users := make(map[username.SQLUsername]bool) //nolint:maptobool
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		user := tree.MustBeDString(it.Cur()[0])

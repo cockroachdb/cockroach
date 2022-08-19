@@ -112,12 +112,12 @@ func DoTypesContradict(dt1, dt2 DataType) bool {
 			if len(t2.Defines) > len(t1.Defines) {
 				t1, t2 = t2, t1
 			}
-			set := make(map[StringExpr]bool)
+			set := make(map[StringExpr]struct{})
 			for _, d := range t1.Defines {
-				set[d.Name] = true
+				set[d.Name] = struct{}{}
 			}
 			for _, d := range t2.Defines {
-				if !set[d.Name] {
+				if _, ok := set[d.Name]; !ok {
 					return true
 				}
 			}

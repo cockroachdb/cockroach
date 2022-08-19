@@ -1677,7 +1677,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			update := make(map[descpb.ID]bool, newReferencedTypeIDs.Len()+referencedTypeIDs.Len())
+			update := make(map[descpb.ID]bool, newReferencedTypeIDs.Len()+referencedTypeIDs.Len()) //nolint:maptobool
 			newReferencedTypeIDs.ForEach(func(id descpb.ID) {
 				if !referencedTypeIDs.Contains(id) {
 					// Mark id as requiring update, `true` means addition.
