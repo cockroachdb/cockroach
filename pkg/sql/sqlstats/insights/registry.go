@@ -19,21 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// registry is the central object in the insights subsystem. It observes
+// This registry is the central object in the insights subsystem. It observes
 // statement execution to determine which statements are outliers and
 // exposes the set of currently retained insights.
-//
-// TODO(todd): Remove this interface once we pass detectors to newRegistry.
-//   At that point, we can use a fakeDetector instead of a fakeRegistry in
-//   ingester_test.go.
-type registry interface {
-	enabled() bool
-
-	Writer
-
-	Reader
-}
-
 type lockingRegistry struct {
 	detector detector
 	problems *problems
@@ -48,7 +36,8 @@ type lockingRegistry struct {
 	}
 }
 
-var _ registry = &lockingRegistry{}
+var _ Writer = &lockingRegistry{}
+var _ Reader = &lockingRegistry{}
 
 func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
@@ -110,7 +99,7 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func newRegistry(st *cluster.Settings, metrics Metrics) *lockingRegistry {
+func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
 	config := cache.Config{
 		Policy: cache.CacheFIFO,
 		ShouldEvict: func(size int, key, value interface{}) bool {
@@ -118,13 +107,8 @@ func newRegistry(st *cluster.Settings, metrics Metrics) *lockingRegistry {
 		},
 	}
 	r := &lockingRegistry{
-		detector: &compositeDetector{detectors: []detector{
-			&latencyThresholdDetector{st: st},
-			newAnomalyDetector(st, metrics),
-		}},
-		problems: &problems{
-			st: st,
-		},
+		detector: detector,
+		problems: &problems{st: st},
 	}
 	r.mu.statements = make(map[clusterunique.ID][]*Statement)
 	r.mu.insights = cache.NewUnorderedCache(config)
