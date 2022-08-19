@@ -2013,17 +2013,12 @@ func NewTableDesc(
 	// Now that all columns are in place, add any explicit families (this is done
 	// here, rather than in the constraint pass below since we want to pick up
 	// explicit allocations before AllocateIDs adds implicit ones).
-	columnsInExplicitFamilies := map[string]bool{}
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.FamilyTableDef); ok {
-			fam := descpb.ColumnFamilyDescriptor{
+			desc.AddFamily(descpb.ColumnFamilyDescriptor{
 				Name:        string(d.Name),
 				ColumnNames: d.Columns.ToStrings(),
-			}
-			for _, c := range fam.ColumnNames {
-				columnsInExplicitFamilies[c] = true
-			}
-			desc.AddFamily(fam)
+			})
 		}
 	}
 	version := st.Version.ActiveVersionOrEmpty(ctx)
