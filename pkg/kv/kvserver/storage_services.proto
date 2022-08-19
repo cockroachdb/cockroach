@@ -17,6 +17,14 @@ import "kv/kvserver/api.proto";
 
 service MultiRaft {
     rpc RaftMessageBatch (stream cockroach.kv.kvserver.kvserverpb.RaftMessageRequestBatch) returns (stream cockroach.kv.kvserver.kvserverpb.RaftMessageResponse) {}
+    // RaftSnapshot asks the server to accept and apply a range snapshot.
+    // The client is expected to initially send a message consisting solely of
+    // a Header, upon which the server will respond with a message with status
+    // ACCEPTED, or ERROR if it cannot accept the snapshot. Once accepted, the
+    // client will send multiple messages with KVBatch data followed by a
+    // terminal message with the final flag set to true. Once finalized,
+    // the server will ultimately send a message back with status APPLIED, or
+    // ERROR, including any collected traces from processing.
     rpc RaftSnapshot (stream cockroach.kv.kvserver.kvserverpb.SnapshotRequest) returns (stream cockroach.kv.kvserver.kvserverpb.SnapshotResponse) {}
     // DelegateRaftSnapshot asks the server to send a range snapshot to a target
     // (so the client delegates the sending of the snapshot to the server). The
