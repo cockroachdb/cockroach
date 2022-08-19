@@ -25,6 +25,8 @@ type singleEngineReplicasStorage struct {
 	eng storage.Engine
 }
 
+var _ storage.ReplicasStorage = (*singleEngineReplicasStorage)(nil)
+
 func (s *singleEngineReplicasStorage) Init() {
 	// No-op for now but this would really have to apply all entries
 	// that are in HardState.Committed until it sees the first nontrivial
@@ -33,19 +35,33 @@ func (s *singleEngineReplicasStorage) Init() {
 }
 
 func (s *singleEngineReplicasStorage) CurrentRanges() []storage.ReplicaInfo {
+	iwds := s.currentRangesInternal()
 	var sl []storage.ReplicaInfo
+	for _, iwd := range iwds {
+		sl = append(sl, iwd.info)
+	}
+	return sl
+}
+
+type replicaInfoWithDesc struct {
+	info storage.ReplicaInfo
+	desc *roachpb.RangeDescriptor
+}
+
+func (s *singleEngineReplicasStorage) currentRangesInternal() []replicaInfoWithDesc {
+	var sl []replicaInfoWithDesc
 	if err := IterateRangeDescriptorsFromDisk(context.Background(), s.eng, func(desc roachpb.RangeDescriptor) error {
 		replDesc, ok := desc.GetReplicaDescriptor(s.id)
 		if !ok {
 			panic("TODO(tbg)")
 		}
-		sl = append(sl, storage.ReplicaInfo{
+		sl = append(sl, replicaInfoWithDesc{info: storage.ReplicaInfo{
 			FullReplicaID: storage.FullReplicaID{
 				RangeID:   desc.RangeID,
 				ReplicaID: replDesc.ReplicaID,
 			},
 			State: storage.InitializedStateMachine,
-		})
+		}, desc: &desc})
 		return nil
 	}); err != nil {
 		panic(err) // TODO(tbg)
@@ -80,22 +96,14 @@ func (s *singleEngineReplicasStorage) GetRangeTombstone(
 func (s *singleEngineReplicasStorage) GetHandle(
 	rr storage.FullReplicaID,
 ) (storage.RangeStorage, error) {
-	for _, ri := range s.CurrentRanges() {
-		if ri.FullReplicaID == rr {
-			// We don't have a way to look up the start key from a RangeInfo,
-			// nor an on-disk mapping of RangeID to StartKey, so really it's
-			// down to scanning all range descriptors again. So it looks as
-			// though `s` needs to keep a materialized btree around, or we
-			// maintain an index on disk that we update on each split/merge/rebalance.
-			//
-			// TODO(tbg): for now just scan all descriptors every time, worry about
-			// perf later.
-			startKey := roachpb.RKey("TODO")
+	for _, iwd := range s.currentRangesInternal() {
+		if iwd.info.FullReplicaID == rr {
 			impl := &singleEngineRangeStorage{
 				eng:      s.eng,
-				startKey: startKey,
+				startKey: &iwd.desc.StartKey,
 				id:       rr,
 			}
+			return impl, nil
 		}
 	}
 	panic("TODO(tbg): is it an assertion failure to fail to find the replica here?")

@@ -21,10 +21,12 @@ import (
 )
 
 type singleEngineRangeStorage struct {
-	startKey *roachpb.Key // nil if uninited, notably different from pointer to empty slice (which is r1)
+	startKey *roachpb.RKey // nil if uninited, notably different from pointer to empty slice (which is r1)
 	id       storage.FullReplicaID
 	eng      storage.Engine
 }
+
+var _ storage.RangeStorage = (*singleEngineRangeStorage)(nil)
 
 func (s *singleEngineRangeStorage) FullReplicaID() storage.FullReplicaID {
 	return s.id
