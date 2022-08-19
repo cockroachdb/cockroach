@@ -642,6 +642,8 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("x", "z", 7), MVCCValue{}))
 	require.NoError(t, eng.Flush())
 
+	// NB: Range key filtering is currently disabled, see comment in
+	// pebbleIterator.setOptions().
 	testcases := map[string]struct {
 		minTimestamp hlc.Timestamp
 		maxTimestamp hlc.Timestamp
@@ -667,8 +669,20 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 			rangeKV("x", "z", 7, MVCCValue{}),
 			rangeKV("x", "z", 5, MVCCValue{}),
 		}},
-		"above all": {wallTS(10), wallTS(11), nil},
-		"below all": {wallTS(0), wallTS(1), nil},
+		"above all": {wallTS(10), wallTS(11), []interface{}{
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
+		}},
+		"below all": {wallTS(0), wallTS(1), []interface{}{
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
+		}},
 		"intersect": {wallTS(5), wallTS(5), []interface{}{
 			pointKV("a", 5, "a5"),
 			rangeKV("b", "c", 5, MVCCValue{}),
@@ -686,11 +700,18 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 		}},
 		"touches lower": {wallTS(1), wallTS(3), []interface{}{
 			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
 		}},
 		"touches upper": {wallTS(9), wallTS(10), []interface{}{
 			rangeKV("b", "c", 5, MVCCValue{}),
 			rangeKV("c", "d", 7, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
 		}},
 	}
 
@@ -752,6 +773,9 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Separate range keys [b-c)@5, [c-d)@7, [d-e)@9 in a single block in a single SST.
+	//
+	// NB: Range key filtering is currently disabled, see comment in
+	// pebbleIterator.setOptions().
 	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
 	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
 	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
@@ -795,17 +819,19 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
 		// NB: This reveals a@5 which has been deleted, because the SST block
-		// containing the point clear does not satisfy the [1-3] filter.
+		// containing the point clear does not satisfy the [1-3] filter. Range keys
+		// are not filtered.
 		"touches lower": {wallTS(1), wallTS(3), []interface{}{
 			pointKV("a", 7, "a7"),
 			pointKV("a", 5, "a5"),
 			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
-		// NB: This reveals [c-d)@7 which has been deleted, because the SST block
-		// containing the range key clear does not satisfy the [9-10] filter.
+		// Range keys are not filtered, so we see the [c-d)@7 clear even though it
+		// wouldn't satisfy the [9-10] filter.
 		"touches upper": {wallTS(9), wallTS(10), []interface{}{
 			rangeKV("b", "c", 5, MVCCValue{}),
-			rangeKV("c", "d", 7, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
 	}
