@@ -93,8 +93,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	// bodyScope is the base scope for each statement in the body. We add the
 	// named arguments to the scope so that references to them in the body can
 	// be resolved.
-	// TODO(mgartner): Support numeric argument references, like $1. We should
-	// error if there is a reference $n and less than n arguments.
 	bodyScope := b.allocScope()
 	for i := range cf.Args {
 		arg := &cf.Args[i]
@@ -104,12 +102,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		}
 
 		// Add the argument to the base scope of the body.
-		id := b.factory.Metadata().AddColumn(string(arg.Name), typ)
-		bodyScope.appendColumn(&scopeColumn{
-			name: scopeColName(arg.Name),
-			typ:  typ,
-			id:   id,
-		})
+		argColName := funcArgColName(arg.Name, i)
+		col := b.synthesizeColumn(bodyScope, argColName, typ, nil /* expr */, nil /* scalar */)
+		col.setArgOrd(i)
 
 		// Collect the user defined type dependencies.
 		typeIDs, err := typedesc.GetTypeDescriptorClosure(typ)
