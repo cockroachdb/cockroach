@@ -14,7 +14,7 @@ interface IconProps {
   className: string;
 }
 
-export function CircleFilled(props: IconProps) {
+export function CircleFilled(props: IconProps): React.ReactElement {
   const { className } = props;
   return (
     <svg className={className} {...props}>

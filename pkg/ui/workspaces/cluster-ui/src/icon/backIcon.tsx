@@ -15,6 +15,6 @@ import styles from "./backIcon.module.scss";
 
 const cx = classNames.bind(styles);
 
-export const BackIcon = () => (
+export const BackIcon = (): React.ReactElement => (
   <img src={Back} alt="back" className={cx("root")} />
 );

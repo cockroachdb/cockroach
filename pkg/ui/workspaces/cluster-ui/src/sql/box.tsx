@@ -31,7 +31,7 @@ const cx = classNames.bind(styles);
 
 export class SqlBox extends React.Component<SqlBoxProps> {
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
-  render() {
+  render(): React.ReactElement {
     const sizeClass = this.props.size ? this.props.size : "";
     return (
       <div className={cx("box-highlight", this.props.className, sizeClass)}>

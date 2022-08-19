@@ -18,7 +18,9 @@ export type FilterSearchOptionProps = {
   value?: string;
 };
 
-export const FilterSearchOption = (props: FilterSearchOptionProps) => {
+export const FilterSearchOption = (
+  props: FilterSearchOptionProps,
+): React.ReactElement => {
   const { label, onChanged, value } = props;
   return (
     <div>

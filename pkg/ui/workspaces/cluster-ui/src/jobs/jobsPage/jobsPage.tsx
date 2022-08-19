@@ -119,7 +119,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
     }
   }
 
-  onStatusSelected = (item: string) => {
+  onStatusSelected = (item: string): void => {
     this.props.setStatus(item);
 
     syncHistory(
@@ -132,7 +132,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
 
   statusMenuItems: DropdownOption[] = statusOptions;
 
-  onTypeSelected = (item: string) => {
+  onTypeSelected = (item: string): void => {
     const type = parseInt(item, 10);
     this.props.setType(type);
 
@@ -146,7 +146,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
 
   typeMenuItems: DropdownOption[] = typeOptions;
 
-  onShowSelected = (item: string) => {
+  onShowSelected = (item: string): void => {
     this.props.setShow(item);
 
     syncHistory(
@@ -173,7 +173,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
     );
   };
 
-  render() {
+  render(): React.ReactElement {
     const isLoading = !this.props.jobs || this.props.jobsLoading;
     const error = this.props.jobs && this.props.jobsError;
     return (

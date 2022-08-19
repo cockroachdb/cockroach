@@ -20,7 +20,7 @@ export function NumericStatLegend(
   stat: number,
   sd: number,
   formatter: (d: number) => string,
-) {
+): React.ReactElement {
   return (
     <table className={cx("numeric-stat-legend")}>
       <tbody>

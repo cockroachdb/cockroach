@@ -102,11 +102,11 @@ export class IndexDetailsPage extends React.Component<
     };
   }
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.refresh();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refresh();
   }
 
@@ -122,7 +122,7 @@ export class IndexDetailsPage extends React.Component<
     }
   }
 
-  private getTimestampString(timestamp: Moment) {
+  private getTimestampString(timestamp: Moment): string {
     const minDate = moment.utc("0001-01-01"); // minimum value as per UTC
     if (timestamp.isSame(minDate)) {
       return "Never";
@@ -213,7 +213,7 @@ export class IndexDetailsPage extends React.Component<
     );
   }
 
-  render() {
+  render(): React.ReactElement {
     return (
       <div className={cx("page-container")}>
         <div className="root table-area">

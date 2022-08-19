@@ -26,7 +26,7 @@ export interface BadgeProps {
 
 const cx = classNames.bind(styles);
 
-export function Badge(props: BadgeProps) {
+export function Badge(props: BadgeProps): React.ReactElement {
   const { size, status, icon, iconPosition, text, forceUpperCase } = props;
   const classes = cx(
     "badge",

@@ -264,12 +264,12 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     this.setCurrentPageToOneIfJobsChanged(prevProps);
   }
 
-  onChangePage = (current: number) => {
+  onChangePage = (current: number): void => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
   };
 
-  renderEmptyState = () => {
+  renderEmptyState = (): React.ReactElement => {
     const { isUsedFilter, jobs } = this.props;
     const hasData = jobs?.jobs.length > 0;
 
@@ -311,7 +311,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     )}`;
   };
 
-  render() {
+  render(): React.ReactElement {
     const jobs = this.props.jobs.jobs;
     const { pagination } = this.state;
 

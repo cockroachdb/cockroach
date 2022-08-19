@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useMemo } from "react";
+import React from "react";
 import { SortedTable, ColumnDescriptor } from "../../sortedtable";
 import { ContendedExecution, ExecutionType } from "../types";
 import { Link } from "react-router-dom";

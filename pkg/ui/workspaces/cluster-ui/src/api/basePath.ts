@@ -10,6 +10,6 @@
 
 let path = "";
 
-export const setBasePath = (basePath: string) => (path = basePath);
+export const setBasePath = (basePath: string): string => (path = basePath);
 
-export const getBasePath = () => path;
+export const getBasePath = (): string => path;

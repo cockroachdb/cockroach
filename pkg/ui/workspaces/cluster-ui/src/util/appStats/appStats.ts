@@ -64,7 +64,7 @@ export function aggregateNumericStats(
 export function coalesceSensitiveInfo(
   a: protos.cockroach.sql.ISensitiveInfo,
   b: protos.cockroach.sql.ISensitiveInfo,
-) {
+): protos.cockroach.sql.ISensitiveInfo {
   return {
     last_err: a.last_err || b.last_err,
     most_recent_plan_description:

@@ -62,7 +62,7 @@ export function genericBarChart(
   s: NumericStat,
   count: number | Long,
   format?: (v: number) => string,
-) {
+): () => React.ReactElement {
   if (!s) {
     return () => <div />;
   }
