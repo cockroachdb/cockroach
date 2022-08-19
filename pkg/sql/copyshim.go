@@ -110,9 +110,7 @@ func RunCopyFrom(
 	)
 	// TODO(cucaroach): I believe newInternalPlanner should do this but doing it
 	// there causes lots of session diffs and test failures and is risky.
-	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
-		return resetSessionVars(ctx, m)
-	}); err != nil {
+	if err := p.resetAllSessionVars(ctx); err != nil {
 		return -1, err
 	}
 	defer cleanup()
