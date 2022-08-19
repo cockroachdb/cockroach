@@ -199,6 +199,15 @@ type cliContext struct {
 
 	// For `cockroach version --build-tag`.
 	showVersionUsingOnlyBuildTag bool
+
+	// redactionPolicyManaged is used to indicate that the node is being run as part
+	// of a managed service (e.g. CockroachCloud). Certain logged information such as
+	// filepaths, network addresses, and CLI argument lists are considered sensitive
+	// information in on-premises deployments. However, when the node is being run as
+	// part of a managed service (e.g. CockroachCloud), this type of information is no
+	// longer considered sensitive, and should be logged in an unredacted form to aid
+	// in support escalations.
+	redactionPolicyManaged bool
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -234,6 +243,7 @@ func setCliContextDefaults() {
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()
 	cliCtx.showVersionUsingOnlyBuildTag = false
+	cliCtx.redactionPolicyManaged = false
 }
 
 // sqlConnContext captures the connection configuration for all SQL

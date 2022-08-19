@@ -250,7 +250,17 @@ func (f *keyTypeFilter) Set(v string) error {
 	return nil
 }
 
-const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
+const (
+	backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
+	// redactionPolicyManaged is the env var used to indicate that the node is being
+	// run as part of a managed service (e.g. CockroachCloud). Certain logged information
+	// such as filepaths, network addresses, and CLI argument lists are considered
+	// sensitive information in on-premises deployments. However, when the node is being
+	// run as part of a managed service (e.g. CockroachCloud), this type of information is
+	// no longer considered sensitive, and should be logged in an unredacted form to aid
+	// in support escalations.
+	redactionPolicyManagedEnvVar = "COCKROACH_REDACTION_POLICY_MANAGED"
+)
 
 func init() {
 	initCLIDefaults()
@@ -512,6 +522,8 @@ func init() {
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
+
+		cliCtx.redactionPolicyManaged = envutil.EnvOrDefaultBool(redactionPolicyManagedEnvVar, false)
 	}
 
 	// Flags that apply to commands that start servers.
@@ -930,6 +942,8 @@ func init() {
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
+
+		cliCtx.redactionPolicyManaged = envutil.EnvOrDefaultBool(redactionPolicyManagedEnvVar, false)
 	}
 
 	// Multi-tenancy proxy command flags.

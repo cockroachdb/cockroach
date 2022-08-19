@@ -20,6 +20,7 @@ go_library(
         "file_names.go",
         "file_sync_buffer.go",
         "flags.go",
+        "flags_options.go",
         "fluent_client.go",
         "format_crdb.go",
         "format_crdb_v1.go",
