@@ -21,7 +21,7 @@ import (
 // compare compares the key prefix in prefixInfo with the span prefix. The key
 // prefix is considered less than the span prefix if it is longer than the
 // span prefix, or if it sorts less according to the Datum.Compare interface.
-func compare(prefixInfo partition.Prefix, span *Span, ps *partition.PrefixSorter) int {
+func compare(prefixInfo partition.Prefix, span *Span, ps partition.PrefixSorter) int {
 	prefix := prefixInfo.Prefix
 	prefixLength := len(prefix)
 	spanPrefixLength := span.Prefix(ps.EvalCtx)
@@ -57,7 +57,7 @@ func compare(prefixInfo partition.Prefix, span *Span, ps *partition.PrefixSorter
 // prefixSearchUpperBound means the same as passing the max upper bound of
 // math.MaxInt32. A zero value for prefixSearchUpperBound means only match on
 // the DEFAULT partition, which has a zero-length prefix.
-func searchPrefixes(span *Span, ps *partition.PrefixSorter, prefixSearchUpperBound int) int {
+func searchPrefixes(span *Span, ps partition.PrefixSorter, prefixSearchUpperBound int) int {
 	if prefixSearchUpperBound < 0 {
 		prefixSearchUpperBound = math.MaxInt32
 	}
@@ -111,7 +111,7 @@ func searchPrefixes(span *Span, ps *partition.PrefixSorter, prefixSearchUpperBou
 // FindMatch finds the Entry in PrefixSorter which matches the span prefix on a
 // prefix subset of its keys, including a zero-length match in the case of the
 // DEFAULT partition.
-func FindMatch(span *Span, ps *partition.PrefixSorter) (match *partition.Prefix, ok bool) {
+func FindMatch(span *Span, ps partition.PrefixSorter) (match *partition.Prefix, ok bool) {
 	index := searchPrefixes(span, ps, math.MaxInt32 /* prefixSearchUpperBound*/)
 	if index == -1 {
 		return nil, false
@@ -123,7 +123,7 @@ func FindMatch(span *Span, ps *partition.PrefixSorter) (match *partition.Prefix,
 // of 1 or less which matches the span prefix, including a zero-length match in
 // the case of the DEFAULT partition.
 func FindMatchOnSingleColumn(
-	datum tree.Datum, ps *partition.PrefixSorter,
+	datum tree.Datum, ps partition.PrefixSorter,
 ) (match *partition.Prefix, ok bool) {
 	sp := &Span{}
 	key := Key{firstVal: datum}

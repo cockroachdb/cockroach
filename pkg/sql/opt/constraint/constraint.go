@@ -478,14 +478,14 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 // local partitions will not be consolidated with spans that overlap any remote
 // row ranges. A local row range is one whose leaseholder region preference is
 // the same region as the gateway region.
-func (c *Constraint) ConsolidateSpans(evalCtx *eval.Context, ps *partition.PrefixSorter) {
+func (c *Constraint) ConsolidateSpans(evalCtx *eval.Context, ps partition.PrefixSorter) {
 	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
 	var result Spans
 
 	if c.Spans.Count() < 1 {
 		return
 	}
-	indexHasLocalAndRemoteParts := ps != nil
+	indexHasLocalAndRemoteParts := !ps.Empty()
 	spanIsLocal, lastSpanIsLocal, localRemoteCrossover := false, false, false
 
 	// Initializations for the first span so we avoid putting a conditional in the

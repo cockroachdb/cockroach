@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -608,6 +609,7 @@ func (b *Builder) buildScan(
 
 	b.addCheckConstraintsForTable(tabMeta)
 	b.addComputedColsForTable(tabMeta)
+	b.addIndexPartitionLocalitiesForTable(tabMeta)
 
 	outScope.expr = b.factory.ConstructScan(&private)
 
@@ -780,6 +782,19 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				tabMeta.AddComputedCol(colID, scalar)
 			}
+		}
+	}
+}
+
+// addIndexPartitionLocalitiesForTable caches locality prefix sorters in the
+// table metadata for indexes that have a mix of local and remote partitions.
+func (b *Builder) addIndexPartitionLocalitiesForTable(tabMeta *opt.TableMeta) {
+	tab := tabMeta.Table
+	for indexOrd, n := 0, tab.IndexCount(); indexOrd < n; indexOrd++ {
+		index := tab.Index(indexOrd)
+		if localPartitions, ok := partition.HasMixOfLocalAndRemotePartitions(b.evalCtx, index); ok {
+			ps := partition.GetSortedPrefixes(index, localPartitions, b.evalCtx)
+			tabMeta.AddIndexPartitionLocality(indexOrd, ps)
 		}
 	}
 }

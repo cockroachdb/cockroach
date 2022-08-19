@@ -1289,13 +1289,14 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 
 	// The PrefixSorter has collected all the prefixes from all the different
 	// partitions (remembering which ones came from local partitions), and has
-	// sorted them so that longer prefixes come before shorter prefixes. For each
-	// span in the scanConstraint, we will iterate through the list of prefixes
-	// until we find a match, so ordering them with longer prefixes first ensures
-	// that the correct match is found. The PrefixSorter is only non-nil when this
-	// index has at least one local and one remote partition.
-	var ps *partition.PrefixSorter
-	if ps, ok = tabMeta.IndexPartitionLocality(private.Index, index, c.e.evalCtx); !ok {
+	// sorted them so that longer prefixes come before shorter prefixes. For
+	// each span in the scanConstraint, we will iterate through the list of
+	// prefixes until we find a match, so ordering them with longer prefixes
+	// first ensures that the correct match is found. The PrefixSorter is only
+	// non-empty when this index has at least one local and one remote
+	// partition.
+	ps := tabMeta.IndexPartitionLocality(private.Index)
+	if ps.Empty() {
 		return nil, nil, false
 	}
 
@@ -1365,7 +1366,7 @@ func (c CustomFuncs) getConstPrefixFilter(
 // getLocalValues returns the indexes of the values in the given Datums slice
 // that target local partitions.
 func (c *CustomFuncs) getLocalValues(
-	values tree.Datums, ps *partition.PrefixSorter,
+	values tree.Datums, ps partition.PrefixSorter,
 ) util.FastIntSet {
 	// The PrefixSorter has collected all the prefixes from all the different
 	// partitions (remembering which ones came from local partitions), and has

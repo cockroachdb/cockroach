@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -126,7 +127,7 @@ func TestIndexConstraints(t *testing.T) {
 				var ic idxconstraint.Instance
 				ic.Init(
 					filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
-					true /* consolidate */, &evalCtx, &f, nil, /* prefixSorter */
+					true /* consolidate */, &evalCtx, &f, partition.PrefixSorter{},
 				)
 				result := ic.Constraint()
 				var buf bytes.Buffer
@@ -242,7 +243,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				ic.Init(
 					filters, nil /* optionalFilters */, indexCols, sv.NotNullCols(),
 					nil /* computedCols */, true, /* consolidate */
-					&evalCtx, &f, nil, /* prefixSorter */
+					&evalCtx, &f, partition.PrefixSorter{},
 				)
 				_ = ic.Constraint()
 				_ = ic.RemainingFilters()

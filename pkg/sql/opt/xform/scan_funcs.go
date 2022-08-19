@@ -138,12 +138,11 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 
 	// There should be at least two partitions, or we won't be able to
 	// differentiate between local and remote partitions.
-	// This information is encapsulated in the PrefixSorter. If a PrefixSorter was
-	// not created for this index, then either all partitions are local, all
-	// are remote, or the index is not partitioned.
+	// This information is encapsulated in the PrefixSorter. If a non-empty
+	// PrefixSorter was not created for this index, then either all partitions
+	// are local, all are remote, or the index is not partitioned.
 	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
-	index := tabMeta.Table.Index(scanPrivate.Index)
-	if _, ok := tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx); !ok {
+	if ps := tabMeta.IndexPartitionLocality(scanPrivate.Index); ps.Empty() {
 		return false
 	}
 	return true
@@ -172,14 +171,14 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 
 	// The PrefixSorter has collected all the prefixes from all the different
 	// partitions (remembering which ones came from local partitions), and has
-	// sorted them so that longer prefixes come before shorter prefixes. For each
-	// span in the scanConstraint, we will iterate through the list of prefixes
-	// until we find a match, so ordering them with longer prefixes first ensures
-	// that the correct match is found. The PrefixSorter is only non-nil when this
-	// index has at least one local and one remote partition.
-	var ps *partition.PrefixSorter
-	var ok bool
-	if ps, ok = tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx); !ok {
+	// sorted them so that longer prefixes come before shorter prefixes. For
+	// each span in the scanConstraint, we will iterate through the list of
+	// prefixes until we find a match, so ordering them with longer prefixes
+	// first ensures that the correct match is found. The PrefixSorter is only
+	// non-empty when this index has at least one local and one remote
+	// partition.
+	ps := tabMeta.IndexPartitionLocality(scanPrivate.Index)
+	if ps.Empty() {
 		return
 	}
 
@@ -191,6 +190,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	// equivalent to a nil Constraint.
 	idxConstraint := scanPrivate.Constraint
 	if idxConstraint == nil {
+		var ok bool
 		if idxConstraint, ok = c.buildAllPartitionsConstraint(tabMeta, index, ps, scanPrivate); !ok {
 			return
 		}
@@ -297,7 +297,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 // [/'east' - /'east'/3] [/'east'/5 - /'east']. Adding in the following check
 // constraint achieves this: CHECK (r IN ('east', 'west', 'central'))
 func (c *CustomFuncs) buildAllPartitionsConstraint(
-	tabMeta *opt.TableMeta, index cat.Index, ps *partition.PrefixSorter, sp *memo.ScanPrivate,
+	tabMeta *opt.TableMeta, index cat.Index, ps partition.PrefixSorter, sp *memo.ScanPrivate,
 ) (*constraint.Constraint, bool) {
 	var ok bool
 	var remainingFilters memo.FiltersExpr
@@ -328,7 +328,7 @@ func (c *CustomFuncs) buildAllPartitionsConstraint(
 // getLocalSpans returns the indexes of the spans from the given constraint that
 // target local partitions.
 func (c *CustomFuncs) getLocalSpans(
-	scanConstraint *constraint.Constraint, ps *partition.PrefixSorter,
+	scanConstraint *constraint.Constraint, ps partition.PrefixSorter,
 ) util.FastIntSet {
 	// Iterate through the spans and determine whether each one matches
 	// with a prefix from a local partition.
