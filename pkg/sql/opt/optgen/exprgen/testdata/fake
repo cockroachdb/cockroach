@@ -47,7 +47,7 @@ expr
 fake-rel
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── cardinality: [5 - 1000]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=0, distinct(2)=20, null(2)=5, avgsize(2)=0]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=20, null(2)=5]
  └── cost: 0.01
 
 # Verify that newer stats are preferred.
@@ -91,5 +91,5 @@ expr
 ----
 fake-rel
  ├── columns: a:1(int) b:2(int) c:3(int)
- ├── stats: [rows=120, distinct(1)=110, null(1)=0, avgsize(1)=0, distinct(2)=22, null(2)=5, avgsize(2)=0]
+ ├── stats: [rows=120, distinct(1)=110, null(1)=0, distinct(2)=22, null(2)=5]
  └── cost: 0.02

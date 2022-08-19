@@ -508,7 +508,7 @@ inner-join (cross)
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.abc.d:4(int)
  │    ├── constraint: /1: [/1 - /1]
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    ├── cost: 5.09
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)

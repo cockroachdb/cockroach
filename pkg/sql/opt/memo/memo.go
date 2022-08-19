@@ -432,17 +432,15 @@ func (m *Memo) RequestColStat(
 	return nil, false
 }
 
-// RequestColStatTable calculates and returns the column statistic in table
-// tabId.
-func (m *Memo) RequestColStatTable(
-	tabID opt.TableID, colSet opt.ColSet,
-) (colStat *props.ColumnStatistic, ok bool) {
+// RequestColAvgSize calculates and returns the column's average size statistic.
+// The column must exist in the table with ID tabId.
+func (m *Memo) RequestColAvgSize(tabID opt.TableID, col opt.ColumnID) uint64 {
 	// When SetRoot is called, the statistics builder may have been cleared.
 	// If this happens, we can't serve the request anymore.
 	if m.logPropsBuilder.sb.md != nil {
-		return m.logPropsBuilder.sb.colStatTable(tabID, colSet), true
+		return m.logPropsBuilder.sb.colAvgSize(tabID, col)
 	}
-	return nil, false
+	return defaultColSize
 }
 
 // RowsProcessed calculates and returns the number of rows processed by the

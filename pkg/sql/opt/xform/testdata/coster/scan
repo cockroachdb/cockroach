@@ -106,7 +106,7 @@ limit
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
- │    ├── stats: [rows=4666.667, distinct(1)=4666.67, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2, distinct(1,2)=4666.67, null(1,2)=0, avgsize(1,2)=3]
+ │    ├── stats: [rows=4666.667, distinct(1)=4666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=4666.67, null(1,2)=0]
  │    ├── cost: 173.335714
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -114,7 +114,7 @@ limit
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
- │    │    ├── stats: [rows=33333.33, distinct(1)=33333.3, null(1)=0, avgsize(1)=1]
+ │    │    ├── stats: [rows=33333.33, distinct(1)=33333.3, null(1)=0]
  │    │    ├── cost: 169.02
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
@@ -138,7 +138,7 @@ limit
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
- │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2, distinct(1,2)=407.25, null(1,2)=0, avgsize(1,2)=3]
+ │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=407.25, null(1,2)=0]
  │    ├── cost: 32.5079006
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -147,7 +147,7 @@ limit
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/1 - /450]
  │    │    ├── cardinality: [0 - 450]
- │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0, avgsize(1)=1]
+ │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
  │    │    ├── cost: 27.9879006
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
@@ -192,7 +192,7 @@ select
  ├── columns: id:1!null
  ├── cardinality: [0 - 1000]
  ├── immutable
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── cost: 1034.03
  ├── key: (1)
  ├── scan speed_test
@@ -200,7 +200,7 @@ select
  │    ├── constraint: /1: [/1 - /1000]
  │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 1000]
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1024.01
  │    └── key: (1)
  └── filters
@@ -213,7 +213,7 @@ select
  ├── columns: id:1!null
  ├── cardinality: [0 - 2000]
  ├── immutable
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── cost: 1039.03
  ├── key: (1)
  ├── scan speed_test
@@ -221,7 +221,7 @@ select
  │    ├── constraint: /1: [/1 - /2000]
  │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 2000]
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1029.01
  │    └── key: (1)
  └── filters
@@ -350,7 +350,7 @@ scan t60493
  ├── constraint: /2/1
  │    ├── [/'useast' - /'useast']
  │    └── [/'uswest' - /'uswest']
- ├── stats: [rows=2, distinct(2)=2, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=2, distinct(2)=2, null(2)=0]
  │   histogram(2)=  0     1      0     1
  │                <--- 'useast' --- 'uswest'
  ├── cost: 20.1
@@ -505,7 +505,7 @@ upsert t64570
       │    ├── columns: x:9!null y:10!null v:11
       │    ├── constraint: /9/10: [/10/10 - /10/10]
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=0.9333333, distinct(9)=0.933333, null(9)=0, avgsize(9)=4, distinct(10)=0.933333, null(10)=0, avgsize(10)=4, distinct(9,10)=0.933333, null(9,10)=0, avgsize(9,10)=8]
+      │    ├── stats: [rows=0.9333333, distinct(9)=0.933333, null(9)=0, distinct(10)=0.933333, null(10)=0, distinct(9,10)=0.933333, null(9,10)=0]
       │    ├── cost: 5.066
       │    ├── key: ()
       │    └── fd: ()-->(9-11)
@@ -576,7 +576,7 @@ SELECT * FROM t WHERE a = 11 AND b = 11
 scan t@abc
  ├── columns: k:1!null a:2!null b:3!null c:4
  ├── constraint: /2/3/1: [/11/11 - /11/11]
- ├── stats: [rows=2e-05, distinct(2)=2e-05, null(2)=0, avgsize(2)=4, distinct(3)=2e-05, null(3)=0, avgsize(3)=4, distinct(2,3)=2e-05, null(2,3)=0, avgsize(2,3)=8]
+ ├── stats: [rows=2e-05, distinct(2)=2e-05, null(2)=0, distinct(3)=2e-05, null(3)=0, distinct(2,3)=2e-05, null(2,3)=0]
  │   histogram(2)=
  │   histogram(3)=
  ├── cost: 14.0200216
@@ -605,14 +605,14 @@ SELECT * FROM t@{NO_FULL_SCAN} WHERE c > 0
 ----
 index-join t
  ├── columns: k:1!null a:2 b:3 c:4!null
- ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0, avgsize(4)=4]
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
  ├── cost: 234667.505
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan t@b_partial,partial
       ├── columns: k:1!null b:3
       ├── flags: no-full-scan
-      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0, avgsize(4)=4]
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
       ├── cost: 34337.4524
       ├── key: (1)
       └── fd: (1)-->(3)
@@ -622,7 +622,7 @@ SELECT * FROM t@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE c > 0
 ----
 select
  ├── columns: k:1!null a:2 b:3 c:4!null
- ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0, avgsize(4)=4]
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
  ├── cost: 1e+100
  ├── key: (1)
  ├── fd: (1)-->(2-4)
@@ -632,7 +632,7 @@ select
  │    │    └── b_partial: filters
  │    │         └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
  │    ├── flags: force-index=b_partial no-full-scan
- │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, avgsize(1)=4, distinct(4)=10000, null(4)=1000, avgsize(4)=4]
+ │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, distinct(4)=10000, null(4)=1000]
  │    ├── cost: 1e+100
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
@@ -693,5 +693,5 @@ SELECT x FROM b WHERE x < 13
 scan b@xyz
  ├── columns: x:1!null
  ├── constraint: /1/2/3/5: (/NULL - /12]
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=1]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  └── cost: 356.52

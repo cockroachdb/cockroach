@@ -33,12 +33,12 @@ project
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:10(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:11) [type=bool]
-      │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, avgsize(1)=4, distinct(10)=999.957, null(10)=0, avgsize(10)=4]
+      │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, distinct(10)=999.957, null(10)=0]
       │    ├── key: (1,10)
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
       │    │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry)
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── filters (true)
@@ -65,12 +65,12 @@ project
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:10(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:11) [type=bool]
-      │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, avgsize(1)=4, distinct(10)=999.957, null(10)=0, avgsize(10)=4]
+      │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, distinct(10)=999.957, null(10)=0]
       │    ├── key: (1,10)
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
       │    │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry)
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── filters (true)
@@ -140,7 +140,7 @@ project
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=100, distinct(13)=95.6179, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=100, distinct(13)=95.6179, null(13)=0]
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.j:9(jsonb)
       │    │    └── stats: [rows=10]
@@ -169,13 +169,13 @@ inner-join (lookup json_arr1 [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 @> t2.a:10) AND (t1.a:15 @> ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, avgsize(8)=4, distinct(13)=32.9462, null(13)=0, avgsize(13)=4]
+ │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, distinct(13)=32.9462, null(13)=0]
  │    ├── key: (8,13)
  │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
  │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0, avgsize(8)=4]
+ │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
@@ -204,13 +204,13 @@ project
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, avgsize(8)=4, distinct(13)=32.9462, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, distinct(13)=32.9462, null(13)=0]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0, avgsize(8)=4]
+      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)
@@ -239,7 +239,7 @@ project
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
-      │    ├── stats: [rows=100, distinct(13)=95.6179, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=100, distinct(13)=95.6179, null(13)=0]
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.j:9(jsonb)
       │    │    └── stats: [rows=10]
@@ -265,13 +265,13 @@ inner-join (lookup json_arr1 [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 <@ t2.a:10) AND (t1.a:15 <@ ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, avgsize(8)=4, distinct(13)=32.9462, null(13)=0, avgsize(13)=4]
+ │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, distinct(13)=32.9462, null(13)=0]
  │    ├── key: (8,13)
  │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
  │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0, avgsize(8)=4]
+ │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
@@ -300,13 +300,13 @@ project
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, avgsize(8)=4, distinct(13)=32.9462, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=33.33333, distinct(8)=3.33319, null(8)=0, distinct(13)=32.9462, null(13)=0]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0, avgsize(8)=4]
+      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)
@@ -375,19 +375,19 @@ project
       │    ├── prefix key columns: [13] = [16]
       │    ├── inverted-expr
       │    │    └── t1.j:15 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=3, distinct(13)=3, null(13)=0, avgsize(13)=4, distinct(14)=2.99565, null(14)=0, avgsize(14)=4, distinct(16)=3, null(16)=0, avgsize(16)=12]
+      │    ├── stats: [rows=3, distinct(13)=3, null(13)=0, distinct(14)=2.99565, null(14)=0, distinct(16)=3, null(16)=0]
       │    ├── fd: (14)-->(16)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:9(jsonb) "inverted_join_const_col_@3":13(string!null)
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
-      │    │    ├── stats: [rows=30, distinct(13)=3, null(13)=0, avgsize(13)=4]
+      │    │    ├── stats: [rows=30, distinct(13)=3, null(13)=0]
       │    │    ├── scan json_arr2 [as=t2]
       │    │    │    ├── columns: t2.j:9(jsonb)
       │    │    │    └── stats: [rows=10]
       │    │    ├── values
       │    │    │    ├── columns: "inverted_join_const_col_@3":13(string!null)
       │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    ├── stats: [rows=3, distinct(13)=3, null(13)=0, avgsize(13)=4]
+      │    │    │    ├── stats: [rows=3, distinct(13)=3, null(13)=0]
       │    │    │    ├── ('bar',) [type=tuple{string}]
       │    │    │    ├── ('baz',) [type=tuple{string}]
       │    │    │    └── ('foo',) [type=tuple{string}]
@@ -426,23 +426,23 @@ project
       │    ├── prefix key columns: [14 15] = [18 19]
       │    ├── inverted-expr
       │    │    └── t1.j:17 @> t2.j:10 [type=bool]
-      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, avgsize(14)=4, distinct(15)=0.3, null(15)=0, avgsize(15)=4, distinct(16)=0.299957, null(16)=0, avgsize(16)=4, distinct(18)=0.3, null(18)=0, avgsize(18)=12, distinct(19)=0.3, null(19)=0, avgsize(19)=2, distinct(18,19)=0.3, null(18,19)=0, avgsize(18,19)=14]
+      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, distinct(15)=0.3, null(15)=0, distinct(16)=0.299957, null(16)=0, distinct(18)=0.3, null(18)=0, distinct(19)=0.3, null(19)=0, distinct(18,19)=0.3, null(18,19)=0]
       │    ├── fd: ()-->(19), (16)-->(18)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@4":15(int!null) t2.j:10(jsonb) "inverted_join_const_col_@3":14(string!null)
-      │    │    ├── stats: [rows=30, distinct(14)=3, null(14)=0, avgsize(14)=4, distinct(15)=1, null(15)=0, avgsize(15)=4]
+      │    │    ├── stats: [rows=30, distinct(14)=3, null(14)=0, distinct(15)=1, null(15)=0]
       │    │    ├── fd: ()-->(15)
       │    │    ├── inner-join (cross)
       │    │    │    ├── columns: t2.j:10(jsonb) "inverted_join_const_col_@3":14(string!null)
       │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
-      │    │    │    ├── stats: [rows=30, distinct(14)=3, null(14)=0, avgsize(14)=4]
+      │    │    │    ├── stats: [rows=30, distinct(14)=3, null(14)=0]
       │    │    │    ├── scan json_arr2 [as=t2]
       │    │    │    │    ├── columns: t2.j:10(jsonb)
       │    │    │    │    └── stats: [rows=10]
       │    │    │    ├── values
       │    │    │    │    ├── columns: "inverted_join_const_col_@3":14(string!null)
       │    │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    │    ├── stats: [rows=3, distinct(14)=3, null(14)=0, avgsize(14)=4]
+      │    │    │    │    ├── stats: [rows=3, distinct(14)=3, null(14)=0]
       │    │    │    │    ├── ('bar',) [type=tuple{string}]
       │    │    │    │    ├── ('baz',) [type=tuple{string}]
       │    │    │    │    └── ('foo',) [type=tuple{string}]
@@ -477,7 +477,7 @@ project
       ├── key columns: [15] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=10, distinct(4)=10, null(4)=0, avgsize(4)=2, distinct(10)=10, null(10)=0, avgsize(10)=4]
+      ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(10)=10, null(10)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,4), (10)-->(11), (4)==(10), (10)==(4)
       ├── inner-join (inverted json_multi_col@ij_idx [as=t1])
@@ -485,12 +485,12 @@ project
       │    ├── prefix key columns: [10] = [18]
       │    ├── inverted-expr
       │    │    └── t1.j:16 @> t2.j:11 [type=bool]
-      │    ├── stats: [rows=10, distinct(10)=10, null(10)=0, avgsize(10)=4, distinct(15)=9.95512, null(15)=0, avgsize(15)=4, distinct(18)=10, null(18)=0, avgsize(18)=2]
+      │    ├── stats: [rows=10, distinct(10)=10, null(10)=0, distinct(15)=9.95512, null(15)=0, distinct(18)=10, null(18)=0]
       │    ├── key: (15)
       │    ├── fd: (10)-->(11), (15)-->(18), (10)==(18), (18)==(10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:10(int!null) t2.j:11(jsonb)
-      │    │    ├── stats: [rows=10, distinct(10)=10, null(10)=0, avgsize(10)=4]
+      │    │    ├── stats: [rows=10, distinct(10)=10, null(10)=0]
       │    │    ├── key: (10)
       │    │    └── fd: (10)-->(11)
       │    └── filters (true)

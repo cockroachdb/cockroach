@@ -65,6 +65,12 @@ type Statistics struct {
 	// reduction in number of rows for the top-level operator in this
 	// expression.
 	Selectivity Selectivity
+
+	// AvgColSizes contains the estimated average size of columns that
+	// originates from a table. The i-th element of the slice is the average
+	// size of the column with ordinal i in its table. AvgSize is only non-nil
+	// when the statistics are built from a table.
+	AvgColSizes []uint64
 }
 
 // Init initializes the data members of Statistics.
@@ -142,7 +148,6 @@ func (s *Statistics) stringImpl(includeHistograms bool) string {
 	for _, col := range colStats {
 		fmt.Fprintf(&buf, ", distinct%s=%.6g", col.Cols.String(), col.DistinctCount)
 		fmt.Fprintf(&buf, ", null%s=%.6g", col.Cols.String(), col.NullCount)
-		fmt.Fprintf(&buf, ", avgsize%s=%.6g", col.Cols.String(), col.AvgSize)
 	}
 	buf.WriteString("]")
 	if includeHistograms {
@@ -185,10 +190,6 @@ type ColumnStatistic struct {
 	// columns for this expression. For multi-column stats, this null
 	// count tracks only the rows in which all columns in the set are null.
 	NullCount float64
-
-	// AvgSize is the estimated average size of this set of columns in bytes. For
-	// multi-column stats, it is the combined width of all columns.
-	AvgSize float64
 
 	// Histogram is only used when the size of Cols is one. It contains
 	// the approximate distribution of values for that column, represented
@@ -240,7 +241,6 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity Selectivity, inputRows fl
 func (c *ColumnStatistic) CopyFromOther(other *ColumnStatistic, evalCtx *eval.Context) {
 	c.DistinctCount = other.DistinctCount
 	c.NullCount = other.NullCount
-	c.AvgSize = other.AvgSize
 	if other.Histogram != nil && c.Cols.Len() == 1 {
 		c.Histogram = &Histogram{}
 		c.Histogram.Init(evalCtx, c.Cols.SingleColumn(), other.Histogram.buckets)
