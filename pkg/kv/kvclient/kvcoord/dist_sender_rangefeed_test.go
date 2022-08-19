@@ -110,19 +110,16 @@ func (c *countConnectionsTransport) NextInternalClient(
 		return nil, err
 	}
 
+	if ctx.Value(testFeedCtxKey{}) == nil {
+		return client, nil
+	}
 	tc := &testRangefeedClient{
 		RestrictedInternalClient: client,
 		muxRangeFeedEnabled:      c.rfStreamEnabled,
 	}
-	// Count rangefeed calls but only for feeds started by this test.
-	if ctx.Value(testFeedCtxKey{}) != nil {
-		tc.count = func() {
-			c.counts.Inc(tc)
-		}
-	} else {
-		tc.count = func() {}
+	tc.count = func() {
+		c.counts.Inc(tc)
 	}
-
 	return tc, nil
 }
 

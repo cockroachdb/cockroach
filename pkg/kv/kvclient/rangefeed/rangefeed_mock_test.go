@@ -54,6 +54,7 @@ func (m *mockClient) RangeFeed(
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
 	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC)
 }
@@ -342,6 +343,20 @@ func TestRangeFeedMock(t *testing.T) {
 	})
 }
 
+type anyRangeFeedOptionMatcher struct{}
+
+var _ gomock.Matcher = anyRangeFeedOptionMatcher{}
+
+func (a anyRangeFeedOptionMatcher) Matches(x interface{}) bool {
+	return true
+}
+
+func (a anyRangeFeedOptionMatcher) String() string {
+	return "list of range feed options"
+}
+
+var anyRangeFeedOption anyRangeFeedOptionMatcher
+
 // TestBackoffOnRangefeedFailure ensures that the rangefeed is retried on
 // failures.
 func TestBackoffOnRangefeedFailure(t *testing.T) {
@@ -360,11 +375,11 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 
 	// Make sure rangefeed is retried even after 3 failures, then succeed and cancel context
 	// (which signals the rangefeed to shut down gracefully).
-	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), anyRangeFeedOption).
 		Times(3).
 		Return(errors.New("rangefeed failed"))
-	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- kvcoord.RangeFeedMessage) {
+	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), anyRangeFeedOption).
+		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- kvcoord.RangeFeedMessage, ...kvcoord.RangeFeedOption) {
 			cancel()
 		}).
 		Return(nil)

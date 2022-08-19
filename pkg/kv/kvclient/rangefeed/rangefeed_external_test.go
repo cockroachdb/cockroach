@@ -12,6 +12,7 @@ package rangefeed_test
 
 import (
 	"context"
+	"reflect"
 	"runtime/pprof"
 	"sync"
 	"testing"
@@ -101,18 +102,16 @@ func TestRangeFeedIntegration(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer r.Close()
-	{
-		v1 := <-rows
-		require.Equal(t, mkKey("a"), v1.Key)
+	for _, r := range []*roachpb.RangeFeedValue{<-rows, <-rows} {
+		require.True(t,
+			reflect.DeepEqual(r.Key, mkKey("a")) ||
+				reflect.DeepEqual(r.Key, mkKey("b")))
 		// Ensure the initial scan contract is fulfilled when WithDiff is specified.
-		require.Equal(t, v1.Value.RawBytes, v1.PrevValue.RawBytes)
-		require.Equal(t, v1.Value.Timestamp, afterB)
-		require.True(t, v1.PrevValue.Timestamp.IsEmpty())
+		require.Equal(t, r.Value.RawBytes, r.PrevValue.RawBytes)
+		require.Equal(t, r.Value.Timestamp, afterB)
+		require.True(t, r.PrevValue.Timestamp.IsEmpty())
 	}
-	{
-		v2 := <-rows
-		require.Equal(t, mkKey("b"), v2.Key)
-	}
+
 	<-initialScanDone
 	{
 		v3 := <-rows

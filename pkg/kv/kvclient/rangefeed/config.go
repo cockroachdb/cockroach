@@ -12,8 +12,11 @@ package rangefeed
 
 import (
 	"context"
+	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -43,6 +46,7 @@ type config struct {
 	onSSTable            OnSSTable
 	onDeleteRange        OnDeleteRange
 	extraPProfLabels     []string
+	rfOpts               []kvcoord.RangeFeedOption
 }
 
 type scanConfig struct {
@@ -215,14 +219,16 @@ func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 	})
 }
 
+const defaultTargetScanBytes = 1 << 19 // 512KB
 func initConfig(c *config, options []Option) {
 	*c = config{} // the default config is its zero value
-	for _, o := range options {
+	opts := append(metamorphicOpts, options...)
+	for _, o := range opts {
 		o.set(c)
 	}
 
 	if c.targetScanBytes == 0 {
-		c.targetScanBytes = 1 << 19 // 512 KiB
+		c.targetScanBytes = defaultTargetScanBytes
 	}
 }
 
@@ -287,3 +293,28 @@ func WithPProfLabel(key, value string) Option {
 		c.extraPProfLabels = append(c.extraPProfLabels, key, value)
 	})
 }
+
+// WithUseMuxRangeFeed configures rangefeed to use MuxRangeFeed RPC.
+func WithUseMuxRangeFeed() Option {
+	return optionFunc(func(c *config) {
+		c.rfOpts = append(c.rfOpts, kvcoord.WithMuxRangeFeed())
+	})
+}
+
+// metamorphicOptions initializes set of Options with metamorphic values.  These
+// options are applied to the config before user specified options are applied.
+var metamorphicOpts = func() (opts []Option) {
+	if util.ConstantWithMetamorphicTestBool("use-mux", true) {
+		opts = append(opts, WithUseMuxRangeFeed())
+	}
+	opts = append(opts, WithInitialScanParallelismFn(func() int {
+		return util.ConstantWithMetamorphicTestRange("scan-parallelism",
+			1, 1, runtime.GOMAXPROCS(0))
+	}))
+	retryBehavior := util.ConstantWithMetamorphicTestChoice(
+		"scan-retry-behavior", ScanRetryAll, ScanRetryRemaining).(ScanRetryBehavior)
+	opts = append(opts, WithScanRetryBehavior(retryBehavior))
+	opts = append(opts, WithTargetScanBytes(int64(util.ConstantWithMetamorphicTestRange(
+		"target-scan-bytes", defaultTargetScanBytes, 0, 2*defaultTargetScanBytes))))
+	return opts
+}()
