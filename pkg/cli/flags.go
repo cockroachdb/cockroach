@@ -473,6 +473,7 @@ func init() {
 		//
 		// NB: Insecure is deprecated. See #53404.
 		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		cliflagcfg.BoolFlag(f, &cliCtx.managed, cliflags.ServerManaged)
 
 		// Enable/disable various external storage endpoints.
 		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
@@ -890,6 +891,7 @@ func init() {
 		_ = extraServerFlagInit // guru assignment
 		// NB: Insecure is deprecated. See #53404.
 		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		cliflagcfg.BoolFlag(f, &cliCtx.managed, cliflags.ServerManaged)
 
 		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.

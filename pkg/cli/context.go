@@ -199,6 +199,11 @@ type cliContext struct {
 
 	// For `cockroach version --build-tag`.
 	showVersionUsingOnlyBuildTag bool
+
+	// managed specifies whether the server is being run as part
+	// of a managed service (e.g. CockroachCloud). Impacts log
+	// redaction policies.
+	managed bool
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -234,6 +239,7 @@ func setCliContextDefaults() {
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()
 	cliCtx.showVersionUsingOnlyBuildTag = false
+	cliCtx.managed = false
 }
 
 // sqlConnContext captures the connection configuration for all SQL
