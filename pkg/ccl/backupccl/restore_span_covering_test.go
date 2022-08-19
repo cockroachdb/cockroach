@@ -91,6 +91,7 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []BackupManifes
 			backups[i].Files[f].Span.Key = encoding.EncodeVarintAscending(k, int64(start))
 			backups[i].Files[f].Span.EndKey = encoding.EncodeVarintAscending(k, int64(end))
 			backups[i].Files[f].Path = fmt.Sprintf("12345-b%d-f%d.sst", i, f)
+			backups[i].Files[f].EntryCounts.DataSize = 1 << 20
 		}
 		// A non-nil Dir more accurately models the footprint of produced coverings.
 		backups[i].Dir = roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{}}
@@ -113,7 +114,7 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []BackupManifes
 //
 // The function also verifies that a cover does not cross a span boundary.
 func checkRestoreCovering(
-	backups []BackupManifest, spans roachpb.Spans, cov []execinfrapb.RestoreSpanEntry,
+	backups []BackupManifest, spans roachpb.Spans, cov []execinfrapb.RestoreSpanEntry, merged bool,
 ) error {
 	var expectedPartitions int
 	required := make(map[string]*roachpb.SpanGroup)
@@ -174,14 +175,16 @@ func checkRestoreCovering(
 	}
 	for name, uncovered := range required {
 		for _, missing := range uncovered.Slice() {
-			return errors.Errorf("file %s is was supposed to cover span %s", name, missing)
+			return errors.Errorf("file %s was supposed to cover span %s", name, missing)
 		}
 	}
-	if got := len(cov); got != expectedPartitions {
-		return errors.Errorf("expected at least %d partitions, got %d", expectedPartitions, got)
+	if got := len(cov); got != expectedPartitions && !merged {
+		return errors.Errorf("expected %d partitions, got %d", expectedPartitions, got)
 	}
 	return nil
 }
+
+const noSpanTargetSize = 0
 
 func TestRestoreEntryCoverExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -209,6 +212,13 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Files: []BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}},
 	}
 
+	// Pretend every span has 1MB.
+	for i := range backups {
+		for j := range backups[i].Files {
+			backups[i].Files[j].EntryCounts.DataSize = 1 << 20
+		}
+	}
+
 	for i := range backups {
 		backups[i].StartTime = hlc.Timestamp{WallTime: int64(i)}
 		backups[i].EndTime = hlc.Timestamp{WallTime: int64(i + 1)}
@@ -217,7 +227,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	emptySpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
 	require.NoError(t, err)
 
-	cover := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil)
+	cover := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, noSpanTargetSize)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "c"), Files: paths("1", "4", "6")},
 		{Span: sp("c", "e"), Files: paths("2", "4", "6")},
@@ -226,12 +236,19 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, cover)
 
+	coverSized := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, 2<<20)
+	require.Equal(t, []execinfrapb.RestoreSpanEntry{
+		{Span: sp("a", "f"), Files: paths("1", "2", "4", "6")},
+		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
+		{Span: sp("l", "m"), Files: paths("9")},
+	}, coverSized)
+
 	// check that introduced spans are properly elided
 	backups[2].IntroducedSpans = []roachpb.Span{sp("a", "f")}
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	coverIntroduced := makeSimpleImportSpans(spans, backups, nil, introducedSpanFrontier, nil)
+	coverIntroduced := makeSimpleImportSpans(spans, backups, nil, introducedSpanFrontier, nil, noSpanTargetSize)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "f"), Files: paths("6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
@@ -437,7 +454,8 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 			introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 			require.NoError(t, err)
 
-			cover := makeSimpleImportSpans(restoreSpans, backups, nil, introducedSpanFrontier, nil)
+			cover := makeSimpleImportSpans(restoreSpans, backups, nil,
+				introducedSpanFrontier, nil, noSpanTargetSize)
 
 			for _, reIntroTable := range reIntroducedTables {
 				var coveredReIntroducedGroup roachpb.SpanGroup
@@ -467,16 +485,16 @@ func TestRestoreEntryCover(t *testing.T) {
 		for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
 			for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
 				backups := MockBackupChain(numBackups, spans, files, r)
-
-				t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d", numBackups, spans, files), func(t *testing.T) {
-					introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
-					require.NoError(t, err)
-					cover := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil,
-						introducedSpanFrontier, nil)
-					if err := checkRestoreCovering(backups, backups[numBackups-1].Spans, cover); err != nil {
-						t.Fatal(err)
-					}
-				})
+				for _, target := range []int64{0, 1, 4, 100, 1000} {
+					t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d, merge=%d", numBackups, spans, files, target), func(t *testing.T) {
+						introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+						require.NoError(t, err)
+						cover := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, introducedSpanFrontier, nil, target<<20)
+						if err := checkRestoreCovering(backups, backups[numBackups-1].Spans, cover, target != noSpanTargetSize); err != nil {
+							t.Fatal(err)
+						}
+					})
+				}
 			}
 		}
 	}

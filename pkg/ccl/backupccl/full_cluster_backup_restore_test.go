@@ -984,6 +984,10 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	// so we don't see memory errors.
 	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
 
+	// This test is dependent on the number of restore span entries so we disable
+	// merging.
+	srcDB.Exec(t, `SET CLUSTER SETTING backup.restore_span.target_size = '0MiB'`)
+
 	// Take a backup that we'll use to create an OFFLINE descriptor.
 	srcDB.Exec(t, `CREATE INDEX new_idx ON data.bank (balance)`)
 	srcDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, dbBackupLoc)
