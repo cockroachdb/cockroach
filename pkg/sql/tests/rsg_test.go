@@ -722,7 +722,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		datum1, err := eval.Expr(&ec, typed1)
+		datum1, err := eval.Expr(ctx, &ec, typed1)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
@@ -736,7 +736,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		datum2, err := eval.Expr(&ec, typed2)
+		datum2, err := eval.Expr(ctx, &ec, typed2)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}

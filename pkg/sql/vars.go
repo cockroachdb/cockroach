@@ -2412,7 +2412,7 @@ func makePostgresBoolGetStringValFn(varName string) getStringValFn {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		val, err := eval.Expr(&evalCtx.Context, values[0])
+		val, err := eval.Expr(ctx, &evalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}

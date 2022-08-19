@@ -852,7 +852,7 @@ func formatWithPlaceholders(ast tree.Statement, evalCtx *eval.Context) string {
 		fmtCtx = evalCtx.FmtCtx(
 			fmtFlags,
 			tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-				d, err := eval.Expr(evalCtx, placeholder)
+				d, err := eval.Expr(evalCtx.Context, evalCtx, placeholder)
 				if err != nil || d == nil {
 					// Fall back to the default behavior if something goes wrong.
 					ctx.Printf("$%d", placeholder.Idx+1)

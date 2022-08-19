@@ -652,7 +652,7 @@ func (p *planner) TypeAsStringOrNull(
 
 func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {
 	return func() (bool, string, error) {
-		d, err := eval.Expr(p.EvalContext(), typedE)
+		d, err := eval.Expr(p.EvalContext().Context, p.EvalContext(), typedE)
 		if err != nil {
 			return false, "", err
 		}
@@ -692,7 +692,7 @@ func (p *planner) TypeAsBool(
 
 func (p *planner) makeBoolEvalFn(typedE tree.TypedExpr) func() (bool, bool, error) {
 	return func() (bool, bool, error) {
-		d, err := eval.Expr(p.EvalContext(), typedE)
+		d, err := eval.Expr(p.EvalContext().Context, p.EvalContext(), typedE)
 		if err != nil {
 			return false, false, err
 		}
@@ -730,7 +730,7 @@ func evalStringOptions(
 		if !ok {
 			return nil, errors.Errorf("invalid option %q", k)
 		}
-		val, err := eval.Expr(evalCtx, opt.Value)
+		val, err := eval.Expr(evalCtx.Context, evalCtx, opt.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -790,7 +790,7 @@ func (p *planner) TypeAsStringOpts(
 				res[name] = ""
 				continue
 			}
-			d, err := eval.Expr(p.EvalContext(), e)
+			d, err := eval.Expr(ctx, p.EvalContext(), e)
 			if err != nil {
 				return nil, err
 			}
@@ -822,7 +822,7 @@ func (p *planner) TypeAsStringArray(
 	fn := func() ([]string, error) {
 		strs := make([]string, len(exprs))
 		for i := range exprs {
-			d, err := eval.Expr(p.EvalContext(), typedExprs[i])
+			d, err := eval.Expr(ctx, p.EvalContext(), typedExprs[i])
 			if err != nil {
 				return nil, err
 			}

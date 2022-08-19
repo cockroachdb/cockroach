@@ -131,7 +131,7 @@ func (n *setVarNode) startExec(params runParams) error {
 	}
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
-			d, err := eval.Expr(params.EvalContext(), v)
+			d, err := eval.Expr(params.ctx, params.EvalContext(), v)
 			if err != nil {
 				return err
 			}
@@ -269,12 +269,12 @@ func getFloatVal(evalCtx *eval.Context, name string, values []tree.TypedExpr) (f
 }
 
 func timeZoneVarGetStringVal(
-	_ context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
 ) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError("timezone")
 	}
-	d, err := eval.Expr(&evalCtx.Context, values[0])
+	d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
 	if err != nil {
 		return "", err
 	}
@@ -348,7 +348,7 @@ func makeTimeoutVarGetter(
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		d, err := eval.Expr(&evalCtx.Context, values[0])
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}

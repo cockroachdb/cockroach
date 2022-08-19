@@ -812,7 +812,7 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 	for i, expr := range scan.Span {
 		// The expression is either a placeholder or a constant.
 		if p, ok := expr.(*memo.PlaceholderExpr); ok {
-			val, err := eval.Expr(b.evalCtx, p.Value)
+			val, err := eval.Expr(b.evalCtx.Context, b.evalCtx, p.Value)
 			if err != nil {
 				return execPlan{}, err
 			}
