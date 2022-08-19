@@ -154,6 +154,6 @@ func setupTestCliState() *cliState {
 	}
 	sqlCtx := &Context{}
 	c := NewShell(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, nil).(*cliState)
-	c.ins = noLineEditor
+	c.ins = nil
 	return c
 }
