@@ -740,6 +740,8 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	stringifiedSpans := spans.String()
 	require.NotRegexp(t, errRegexp, stringifiedSpans)
 	require.NotRegexp(t, traceRegexp, stringifiedSpans)
+
+	t.Fatal("fail!")
 }
 
 // TestReplicateQueueDecommissionPurgatoryError tests that failure to move a

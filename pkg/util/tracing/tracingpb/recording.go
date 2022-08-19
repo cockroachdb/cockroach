@@ -146,19 +146,8 @@ func (r Recording) String() string {
 
 	var buf strings.Builder
 	start := r[0].StartTime
-	writeLogs := func(logs []traceLogData) {
-		for _, entry := range logs {
-			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
-				1000*entry.Timestamp.Sub(start).Seconds(),
-				1000*entry.timeSincePrev.Seconds(),
-				strings.Repeat("    ", entry.depth+1))
-			fmt.Fprint(&buf, entry.Msg.StripMarkers())
-			buf.WriteByte('\n')
-		}
-	}
-
 	logs := r.visitSpan(r[0], 0 /* depth */)
-	writeLogs(logs)
+	writeLogs(&buf, logs, start)
 
 	// Check if there's any orphan spans (spans for which the parent is missing).
 	// This shouldn't happen, but we're protecting against incomplete traces. For
@@ -170,9 +159,34 @@ func (r Recording) String() string {
 		buf.WriteString("orphan spans (trace is missing spans):\n")
 		for _, o := range orphans {
 			logs := r.visitSpan(o, 0 /* depth */)
-			writeLogs(logs)
+			writeLogs(&buf, logs, start)
 		}
 	}
+	return buf.String()
+}
+
+func writeLogs(buf *strings.Builder, logs []traceLogData, start time.Time) {
+	for _, entry := range logs {
+		fmt.Fprintf(buf, "% 10.3fms % 10.3fms%s",
+			1000*entry.Timestamp.Sub(start).Seconds(),
+			1000*entry.timeSincePrev.Seconds(),
+			strings.Repeat("    ", entry.depth+1))
+		fmt.Fprint(buf, entry.Msg.StripMarkers())
+		buf.WriteByte('\n')
+	}
+}
+
+// StringWithoutOrphanSpans renders a string excluding orphaned spans.
+// See String for more information.
+func (r Recording) StringWithoutOrphanSpans() string {
+	if len(r) == 0 {
+		return "<empty recording>"
+	}
+
+	var buf strings.Builder
+	start := r[0].StartTime
+	logs := r.visitSpan(r[0], 0 /* depth */)
+	writeLogs(&buf, logs, start)
 	return buf.String()
 }
 

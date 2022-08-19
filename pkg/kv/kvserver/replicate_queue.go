@@ -765,17 +765,31 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	// traces from a child context into its parent.
 	{
 		ctx := repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
-		rec := sp.GetConfiguredRecording()
+		var rec tracingpb.Recording
 		processDuration := timeutil.Since(processStart)
 		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
+
+		loggingNeeded := err != nil || exceededDuration
+		if loggingNeeded {
+			rec = sp.GetConfiguredRecording()
+			// If we have a verbose tracing span from execChangeReplicasTxn, orphan it
+			// in the recording so that we can render the traces to the log without it,
+			// as the traces from this span (and its children) are highly verbose.
+			for i, recordedSpan := range rec {
+				if recordedSpan.Operation == replicaChangeTxnName && recordedSpan.Verbose {
+					rec[i].ParentSpanID = 0
+				}
+			}
+		}
+
 		if err != nil {
 			// TODO(sarkesian): Utilize Allocator log channel once available.
-			log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec)
+			log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec.StringWithoutOrphanSpans())
 		} else if exceededDuration {
 			// TODO(sarkesian): Utilize Allocator log channel once available.
 			log.Infof(ctx, "processing replica took %s, exceeding threshold of %s\ntrace:\n%s",
-				processDuration, loggingThreshold, rec)
+				processDuration, loggingThreshold, rec.StringWithoutOrphanSpans())
 		}
 	}
 
