@@ -372,6 +372,9 @@ func TestValidateTableDesc(t *testing.T) {
 	boolTrue := true
 	negativeOne := int64(-1)
 	negativeOneFloat := float64(-1)
+	pointer := func(s string) *string {
+		return &s
+	}
 
 	testData := []struct {
 		err  string
@@ -2039,6 +2042,243 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{FractionStaleRows: &negativeOneFloat},
 			}},
+		{`row-level TTL expiration expression "missing_col" refers to unknown columns`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"a"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+				RowLevelTTL: &catpb.RowLevelTTL{
+					ExpirationExpr: catpb.Expression("missing_col"),
+				},
+			}},
+		{`"ttl_expire_after" and/or "ttl_expiration_expression" must be set`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"a"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+				RowLevelTTL: &catpb.RowLevelTTL{
+					SelectBatchSize: 5,
+				},
+			}},
+		{`expected column crdb_internal_expiration: column "crdb_internal_expiration" does not exist`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"a"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+				RowLevelTTL: &catpb.RowLevelTTL{
+					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
+				},
+			}},
+		{`expected DEFAULT expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a"},
+					{
+						ID:           2,
+						Name:         "crdb_internal_expiration",
+						Hidden:       true,
+						OnUpdateExpr: pointer("current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'"),
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"a", "crdb_internal_expiration"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+				RowLevelTTL: &catpb.RowLevelTTL{
+					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
+				},
+			}},
+		{`expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a"},
+					{
+						ID:          2,
+						Name:        "crdb_internal_expiration",
+						Hidden:      true,
+						DefaultExpr: pointer("current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'"),
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"a", "crdb_internal_expiration"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+				RowLevelTTL: &catpb.RowLevelTTL{
+					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
+				},
+			}},
+		{`"ttl_select_batch_size" must be at least 1`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a"},
+					{
+						ID:           2,
+						Name:         "crdb_internal_expiration",
+						Hidden:       true,
+						OnUpdateExpr: pointer("current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'"),
+						DefaultExpr:  pointer("current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'"),
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"a", "crdb_internal_expiration"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+				RowLevelTTL: &catpb.RowLevelTTL{
+					DurationExpr:    catpb.Expression("INTERVAL '2 minutes'"),
+					SelectBatchSize: -2,
+				},
+			}},
+		{`unimplemented: non-ascending ordering on PRIMARY KEYs are not supported with row-level TTL`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a"},
+					{
+						ID:           2,
+						Name:         "crdb_internal_expiration",
+						Hidden:       true,
+						OnUpdateExpr: pointer("current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'"),
+						DefaultExpr:  pointer("current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'"),
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"a", "crdb_internal_expiration"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_DESC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+				RowLevelTTL: &catpb.RowLevelTTL{
+					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
+				},
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
@@ -2443,7 +2683,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				DependsOn: []descpb.ID{51},
 			}},
 		},
-		{
+		{ // 15
 			err: `depended-on-by function "f" (100) has no corresponding depends-on forward reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -2455,7 +2695,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ // 16
 			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
