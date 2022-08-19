@@ -21,13 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -87,9 +85,8 @@ const (
 	// details.
 	multiColWeight = 9.0 / 10.0
 
-	// defaultColSize is the default size of a column in bytes. This is used when
-	// the table statistics have an avgSize of 0 for a given column and not all
-	// columns are NULL.
+	// defaultColSize is the default size of a column in bytes. This is used
+	// when the table statistics have an avgSize of 0 for a given column.
 	defaultColSize = 4.0
 
 	// maxValuesForFullHistogramFromCheckConstraint is the maximum number of
@@ -536,23 +533,6 @@ func (sb *statisticsBuilder) colStatLeaf(
 		}
 		// Only one of the null values counts towards the distinct count.
 		colStat.DistinctCount = s.RowCount - max(colStat.NullCount-1, 0)
-
-		if colSet.Len() == 1 {
-			// If there was only one key in the column set, and it wasn't found in the
-			// cache above, then we don't have statistics on this column so we use the
-			// default size.
-			// TODO(harding): Base the AvgSize on the type of the column.
-			colStat.AvgSize = defaultColSize
-		} else {
-			// Compute the average column size by adding the size of each member of
-			// the lax key together.
-			avgSize := 0.0
-			colSet.ForEach(func(i opt.ColumnID) {
-				colStatLeaf := sb.colStatLeaf(opt.MakeColSet(i), s, fd, notNullCols)
-				avgSize += colStatLeaf.AvgSize
-			})
-			colStat.AvgSize = avgSize
-		}
 		return colStat
 	}
 
@@ -562,7 +542,6 @@ func (sb *statisticsBuilder) colStatLeaf(
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = UnknownDistinctCountRatio * s.RowCount
 		colStat.NullCount = UnknownNullCountRatio * s.RowCount
-		colStat.AvgSize = defaultColSize
 		if notNullCols.Contains(col) {
 			colStat.NullCount = 0
 		}
@@ -579,21 +558,17 @@ func (sb *statisticsBuilder) colStatLeaf(
 	} else {
 		distinctCount := 1.0
 		nullCount := s.RowCount
-		avgSize := 0.0
 		colSet.ForEach(func(i opt.ColumnID) {
 			colStatLeaf := sb.colStatLeaf(opt.MakeColSet(i), s, fd, notNullCols)
 			distinctCount *= colStatLeaf.DistinctCount
 			// Multiply by the expected chance of collisions with nulls already
 			// collected.
 			nullCount *= colStatLeaf.NullCount / s.RowCount
-			// Add the average size of the columns together.
-			avgSize += colStatLeaf.AvgSize
 		})
 		// Fetch the colStat again since it may now have a different address.
 		colStat, _ = s.ColStats.Lookup(colSet)
 		colStat.DistinctCount = min(distinctCount, s.RowCount)
 		colStat.NullCount = min(nullCount, s.RowCount)
-		colStat.AvgSize = avgSize
 	}
 
 	return colStat
@@ -658,8 +633,19 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 
 			var cols opt.ColSet
+			var colOrd int
 			for i := 0; i < stat.ColumnCount(); i++ {
-				cols.Add(tabID.ColumnID(stat.ColumnOrdinal(i)))
+				colOrd = stat.ColumnOrdinal(i)
+				cols.Add(tabID.ColumnID(colOrd))
+			}
+
+			// We currently only use average column sizes of single column
+			// statistics, so we can ignore multi-column average sizes.
+			if stat.ColumnCount() == 1 && stat.AvgSize() != 0 {
+				if stats.AvgColSizes == nil {
+					stats.AvgColSizes = make([]uint64, tab.ColumnCount())
+				}
+				stats.AvgColSizes[colOrd] = stat.AvgSize()
 			}
 
 			needHistogram := cols.Len() == 1 && stat.Histogram() != nil &&
@@ -691,7 +677,6 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				//    non-inverted histogram that we should be using instead.
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
-				colStat.AvgSize = float64(stat.AvgSize())
 				if needHistogram && !invertedStatistic {
 					// A statistic is inverted if the column is invertible and its
 					// histogram contains buckets of types BYTES.
@@ -732,10 +717,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 						invColStat.DistinctCount = max(invColStat.Histogram.DistinctValuesCount(), 1)
 						// Inverted indexes don't have nulls.
 						invColStat.NullCount = 0
-						if stat.AvgSize() == 0 {
-							invColStat.AvgSize = defaultColSize
-						} else {
-							invColStat.AvgSize = float64(stat.AvgSize())
+						if stat.AvgSize() != 0 {
+							if stats.AvgColSizes == nil {
+								stats.AvgColSizes = make([]uint64, tab.ColumnCount())
+							}
+							stats.AvgColSizes[invertedColOrd] = stat.AvgSize()
 						}
 					}
 				}
@@ -763,6 +749,18 @@ func (sb *statisticsBuilder) colStatTable(
 	tableFD := MakeTableFuncDep(sb.md, tabID)
 	tableNotNullCols := tableNotNullCols(sb.md, tabID)
 	return sb.colStatLeaf(colSet, tableStats, tableFD, tableNotNullCols)
+}
+
+func (sb *statisticsBuilder) colAvgSize(tabID opt.TableID, col opt.ColumnID) uint64 {
+	tableStats := sb.makeTableStatistics(tabID)
+	ord := tabID.ColumnOrdinal(col)
+	if ord >= len(tableStats.AvgColSizes) {
+		return defaultColSize
+	}
+	if avgSize := tableStats.AvgColSizes[ord]; avgSize > 0 {
+		return avgSize
+	}
+	return defaultColSize
 }
 
 // +------+
@@ -1092,7 +1090,6 @@ func (sb *statisticsBuilder) colStatProject(
 		// above.
 		inputColStat := sb.colStatFromChild(reqInputCols, prj, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
-		colStat.AvgSize = inputColStat.AvgSize
 		if nonNullFound {
 			colStat.NullCount = 0
 		} else {
@@ -1101,7 +1098,6 @@ func (sb *statisticsBuilder) colStatProject(
 	} else {
 		// There are no columns in this expression, so it must be a constant.
 		colStat.DistinctCount = 1
-		colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		if nonNullFound {
 			colStat.NullCount = 0
 		} else {
@@ -1530,7 +1526,6 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			}
 			colStat, _ = s.ColStats.Add(colSet)
 			colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
-			colStat.AvgSize = leftColStat.AvgSize + rightColStat.AvgSize
 		}
 
 		// Null count estimation - assume an inner join and then bump the null count later
@@ -1709,7 +1704,6 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = s.RowCount
-	colStat.AvgSize = 0
 
 	// Some of the requested columns may be from the input index.
 	reqInputCols := colSet.Intersection(inputCols)
@@ -1717,7 +1711,6 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		inputColStat := sb.colStatFromChild(reqInputCols, join, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
-		colStat.AvgSize += inputColStat.AvgSize
 	}
 
 	// Other requested columns may be from the primary index.
@@ -1744,8 +1737,6 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		f1 := lookupColStat.NullCount / inputStats.RowCount
 		f2 := colStat.NullCount / inputStats.RowCount
 		colStat.NullCount = inputStats.RowCount * f1 * f2
-
-		colStat.AvgSize += lookupColStat.AvgSize
 	}
 
 	if colSet.Intersects(relProps.NotNullCols) {
@@ -1913,7 +1904,6 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		colStat.DistinctCount = 1
 		// TODO(itsbilal): Handle case where the scalar resolves to NULL.
 		colStat.NullCount = 0
-		colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		return colStat
 	}
 
@@ -1927,7 +1917,6 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		colStat, _ = s.ColStats.Add(colSet)
 		inputColStat = sb.colStatFromChild(groupingColSet, groupNode, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
-		colStat.AvgSize = inputColStat.AvgSize
 	} else {
 		// Make a copy so we don't modify the original
 		colStat = sb.copyColStatFromChild(colSet, groupNode, s)
@@ -2026,19 +2015,14 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 	case opt.UnionOp, opt.UnionAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount + rightColStat.DistinctCount
 		colStat.NullCount = leftNullCount + rightNullCount
-		leftRowCount := sb.statsFromChild(setNode, 0 /* childIdx */).RowCount
-		rightRowCount := sb.statsFromChild(setNode, 1 /* childIdx */).RowCount
-		colStat.AvgSize = (leftColStat.AvgSize*leftRowCount + rightColStat.AvgSize*rightRowCount) / (leftRowCount + rightRowCount)
 
 	case opt.IntersectOp, opt.IntersectAllOp:
 		colStat.DistinctCount = min(leftColStat.DistinctCount, rightColStat.DistinctCount)
 		colStat.NullCount = min(leftNullCount, rightNullCount)
-		colStat.AvgSize = leftColStat.AvgSize
 
 	case opt.ExceptOp, opt.ExceptAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount
 		colStat.NullCount = max(leftNullCount-rightNullCount, 0)
-		colStat.AvgSize = leftColStat.AvgSize
 	}
 
 	// Use the actual null counts for bag operations, and normalize them for set
@@ -2119,9 +2103,6 @@ func (sb *statisticsBuilder) colStatValues(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = float64(len(distinct))
 	colStat.NullCount = float64(nullCount)
-	// TODO(harding): The AvgSize would be more accurate if we took the width and/
-	// or type of the values.
-	colStat.AvgSize = float64(defaultColSize * colSet.Len())
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2165,9 +2146,6 @@ func (sb *statisticsBuilder) colStatLiteralValues(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = float64(len(distinct))
 	colStat.NullCount = float64(nullCount)
-	// TODO(harding): The AvgSize would be more accurate if we took the width and/
-	// or type of the values.
-	colStat.AvgSize = float64(defaultColSize * colSet.Len())
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2318,8 +2296,6 @@ func (sb *statisticsBuilder) colStatMax1Row(
 	if colSet.Intersects(max1Row.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
-	inputColStat := sb.colStatFromChild(colSet, max1Row, 0 /* childIdx */)
-	colStat.AvgSize = inputColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2351,7 +2327,6 @@ func (sb *statisticsBuilder) colStatOrdinality(
 	colStat, _ := s.ColStats.Add(colSet)
 
 	inputColStat := sb.colStatFromChild(colSet, ord, 0 /* childIdx */)
-	colStat.AvgSize = inputColStat.AvgSize
 
 	if colSet.Contains(ord.ColID) {
 		// The ordinality column is a key, so every row is distinct.
@@ -2416,20 +2391,16 @@ func (sb *statisticsBuilder) colStatWindow(
 		if colSet.SubsetOf(windowCols) {
 			// The generated columns are the only columns being requested.
 			colStat.NullCount = 0
-			// TODO(harding): make AvgSize more accurate.
-			colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		} else {
-			// Copy NullCount and AvgSize from child.
+			// Copy NullCount from child.
 			colSetChild := colSet.Difference(windowCols)
 			inputColStat := sb.colStatFromChild(colSetChild, window, 0 /* childIdx */)
 			colStat.NullCount = inputColStat.NullCount
-			colStat.AvgSize = inputColStat.AvgSize
 		}
 	} else {
 		inputColStat := sb.colStatFromChild(colSet, window, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
-		colStat.AvgSize = inputColStat.AvgSize
 	}
 
 	if colSet.Intersects(relProps.NotNullCols) {
@@ -2494,7 +2465,6 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = s.RowCount
-	colStat.AvgSize = 0
 
 	// Some of the requested columns may be from the input.
 	reqInputCols := colSet.Intersection(inputCols)
@@ -2502,13 +2472,11 @@ func (sb *statisticsBuilder) colStatProjectSet(
 		inputColStat := sb.colStatFromChild(reqInputCols, projectSet, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount * (s.RowCount / inputStats.RowCount)
-		colStat.AvgSize += inputColStat.AvgSize
 	}
 
 	// Other requested columns may be from the output columns of the zip.
 	zipCols := projectSet.Zip.OutputCols()
 	reqZipCols := colSet.Difference(inputCols).Intersection(zipCols)
-	colStat.AvgSize += float64(defaultColSize * reqZipCols.Len())
 	if !reqZipCols.Empty() {
 		// Calculate the distinct count and null count for the zip columns
 		// after the cross join has been applied.
@@ -2608,7 +2576,6 @@ func (sb *statisticsBuilder) colStatWithScan(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
-	colStat.AvgSize = inColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2646,7 +2613,6 @@ func (sb *statisticsBuilder) colStatMutation(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
-	colStat.AvgSize = inColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2670,7 +2636,6 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = 0
-	colStat.AvgSize = defaultColSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2694,7 +2659,6 @@ func (sb *statisticsBuilder) colStatUnknown(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = s.RowCount
 	colStat.NullCount = 0
-	colStat.AvgSize = float64(defaultColSize * colSet.Len())
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2743,7 +2707,6 @@ func (sb *statisticsBuilder) copyColStat(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inputColStat.DistinctCount
 	colStat.NullCount = inputColStat.NullCount
-	colStat.AvgSize = inputColStat.AvgSize
 	return colStat
 }
 
@@ -2807,12 +2770,6 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	// The distinct and null counts should be no larger than the row count.
 	colStat.DistinctCount = min(colStat.DistinctCount, rowCount)
 	colStat.NullCount = min(colStat.NullCount, rowCount)
-
-	// If there are non-nulls in the column but the avgSize is 0, use the default
-	// column size.
-	if rowCount > 0 && colStat.AvgSize == 0 && colStat.NullCount < rowCount {
-		colStat.AvgSize = float64(defaultColSize * colStat.Cols.Len())
-	}
 
 	// Uniformly reduce the size of each histogram bucket so the number of values
 	// is no larger than the row count.
@@ -3853,7 +3810,6 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	colStat, _ := s.ColStats.Add(multiColSet)
 	colStat.DistinctCount = maxNewDistinct + distinctCountRange*(1-fdStrength)
 	colStat.NullCount = multiColNullCount
-	colStat.AvgSize = inputColStat.AvgSize
 	multiColSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
 
 	// multiColSelectivity must be at least as large as singleColSelectivity,
@@ -4709,7 +4665,6 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 				}
 				numValues = int(distinctVals)
 			}
-			var avgSize float64
 			var histogram []cat.HistogramBucket
 
 			distinctCount := max(float64(numValues), 1)
@@ -4718,7 +4673,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 				// Each single-column prefix value from the Spans is a sample value.
 				// Give each sample value its own bucket, up to a maximum of 200
 				// buckets, with even distribution.
-				encodedHistogram, unencodedBuckets, err := stats.EquiDepthHistogram(sb.evalCtx,
+				_, unencodedBuckets, err := stats.EquiDepthHistogram(sb.evalCtx,
 					dataType,
 					values, /* samples */
 					numRows,
@@ -4728,7 +4683,6 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 				// This shouldn't error out, but if it does, let's not punish the user.
 				// Just build stats without the histogram in that case.
 				if err == nil {
-					avgSize = avgSizeFromEncodedHistogram(encodedHistogram)
 					histogram = unencodedBuckets
 				} else {
 					useHistogram = false
@@ -4737,15 +4691,11 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 					)
 				}
 			}
-			if avgSize == float64(0) {
-				avgSize = avgSizeFromDatums(values)
-			}
 
 			// Modify the actual stats entry in statistics.ColStats that can be looked
 			// up via a ColSet.
 			colStat.DistinctCount = distinctCount
 			colStat.NullCount = nullCount
-			colStat.AvgSize = avgSize
 			if useHistogram {
 				colStat.Histogram = &props.Histogram{}
 				colStat.Histogram.Init(sb.evalCtx, firstColID, histogram)
@@ -4756,33 +4706,4 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 		}
 	}
 	return false
-}
-
-func avgSizeFromEncodedHistogram(encodedHistogram stats.HistogramData) float64 {
-	dataSize := 0
-	numValues := len(encodedHistogram.Buckets)
-	if numValues == 0 {
-		return defaultColSize
-	}
-	for j := range encodedHistogram.Buckets {
-		dataSize += len(encodedHistogram.Buckets[j].UpperBound)
-	}
-	return float64(dataSize / numValues)
-}
-
-func avgSizeFromDatums(values tree.Datums) float64 {
-	dataSize := 0
-	numValues := len(values)
-	if numValues == 0 {
-		return defaultColSize
-	}
-	for _, value := range values {
-		encoded, err := keyside.Encode(nil, value, encoding.Ascending)
-		if err != nil {
-			dataSize = int(defaultColSize) * numValues
-			break
-		}
-		dataSize += len(encoded)
-	}
-	return float64(dataSize / numValues)
 }

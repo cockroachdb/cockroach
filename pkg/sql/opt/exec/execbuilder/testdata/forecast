@@ -193,7 +193,7 @@ scan g
  ├── columns: a:1
  ├── constraint: /1: [/0 - /99]
  ├── cardinality: [0 - 100]
- ├── stats: [rows=12, distinct(1)=10, null(1)=0, avgsize(1)=1]
+ ├── stats: [rows=12, distinct(1)=10, null(1)=0]
  │   histogram(1)=  0 1.3333 0 0.66667 0 0.66667 0 1.3333 0 1.3333 0 0.66667 0 0.66667 0 1.3333 0 1.3333 0 0.66667 0 0.66667 0 1.3333
  │                <---- 0 ------- 1 ------- 2 ------ 3 ------ 4 ------- 5 ------- 6 ------ 7 ------ 8 ------- 9 ------ 10 ------ 11 -
  ├── cost: 21.13
@@ -413,7 +413,7 @@ scan s
  ├── columns: b:1
  ├── constraint: /1: [/0 - /99]
  ├── cardinality: [0 - 100]
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │   histogram(1)=
  ├── cost: 10.02
  ├── key: (1)
@@ -591,7 +591,7 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h >= '1988-08-07'
 scan c
  ├── columns: h:1
  ├── constraint: /1: [/'1988-08-07 00:00:00+00:00' - ]
- ├── stats: [rows=24, distinct(1)=24, null(1)=0, avgsize(1)=7]
+ ├── stats: [rows=24, distinct(1)=24, null(1)=0]
  │   histogram(1)=  0               1               5               1               5               1               5               1               5               0
  │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
  ├── cost: 39.7

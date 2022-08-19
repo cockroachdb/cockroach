@@ -41,12 +41,12 @@ with &1 (foo)
  ├── fd: (6)-->(7,8)
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=10, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=10, null(3)=0]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── with-scan &1 (foo)
@@ -55,7 +55,7 @@ with &1 (foo)
       │    ├──  a.x:1(int) => x:6(int)
       │    ├──  a.y:2(int) => y:7(int)
       │    └──  a.s:3(string) => s:8(string)
-      ├── stats: [rows=5000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=400, null(7)=0, avgsize(7)=4, distinct(8)=10, null(8)=0, avgsize(8)=4]
+      ├── stats: [rows=5000, distinct(6)=5000, null(6)=0, distinct(7)=400, null(7)=0, distinct(8)=10, null(8)=0]
       ├── key: (6)
       └── fd: (6)-->(7,8)
 
@@ -84,19 +84,19 @@ with &1 (t0)
  │    ├── left columns: column1:1(int) column2:2(oid) column3:9(date) column4:4(string)
  │    ├── right columns: column1:5(int) column2:6(oid) column3:7(date) column4:8(string)
  │    ├── cardinality: [1 - 2]
- │    ├── stats: [rows=2, distinct(10-13)=2, null(10-13)=0, avgsize(10-13)=16]
+ │    ├── stats: [rows=2, distinct(10-13)=2, null(10-13)=0]
  │    ├── key: (10-13)
  │    ├── values
  │    │    ├── columns: column1:1(int!null) column2:2(oid!null) column4:4(string!null) column3:9(date)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(1,2,4,9)=1, null(1,2,4,9)=0, avgsize(1,2,4,9)=16]
+ │    │    ├── stats: [rows=1, distinct(1,2,4,9)=1, null(1,2,4,9)=0]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1,2,4,9)
  │    │    └── (0, 0, '', NULL) [type=tuple{int, oid, string, date}]
  │    └── values
  │         ├── columns: column1:5(int) column2:6(oid!null) column3:7(date!null) column4:8(string)
  │         ├── cardinality: [1 - 1]
- │         ├── stats: [rows=1, distinct(5-8)=1, null(5-8)=0, avgsize(5-8)=16]
+ │         ├── stats: [rows=1, distinct(5-8)=1, null(5-8)=0]
  │         ├── key: ()
  │         ├── fd: ()-->(5-8)
  │         └── (NULL, 0, '1970-09-08', NULL) [type=tuple{int, oid, date, string}]
@@ -134,13 +134,13 @@ with &1 (t0)
            │    │    ├── select
            │    │    │    ├── columns: true_agg:27(bool!null)
            │    │    │    ├── cardinality: [0 - 1]
-           │    │    │    ├── stats: [rows=1, distinct(27)=1, null(27)=0, avgsize(27)=4]
+           │    │    │    ├── stats: [rows=1, distinct(27)=1, null(27)=0]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(27)
            │    │    │    ├── scalar-group-by
            │    │    │    │    ├── columns: true_agg:27(bool)
            │    │    │    │    ├── cardinality: [1 - 1]
-           │    │    │    │    ├── stats: [rows=1, distinct(27)=1, null(27)=0, avgsize(27)=4]
+           │    │    │    │    ├── stats: [rows=1, distinct(27)=1, null(27)=0]
            │    │    │    │    ├── key: ()
            │    │    │    │    ├── fd: ()-->(27)
            │    │    │    │    ├── values
@@ -199,11 +199,11 @@ project
  │         ├── fd: ()-->(6)
  │         ├── select
  │         │    ├── columns: c.id:6(string!null)
- │         │    ├── stats: [rows=10, distinct(6)=1, null(6)=0, avgsize(6)=4]
+ │         │    ├── stats: [rows=10, distinct(6)=1, null(6)=0]
  │         │    ├── fd: ()-->(6)
  │         │    ├── scan test [as=c]
  │         │    │    ├── columns: c.id:6(string)
- │         │    │    └── stats: [rows=1000, distinct(6)=100, null(6)=10, avgsize(6)=4]
+ │         │    │    └── stats: [rows=1000, distinct(6)=100, null(6)=10]
  │         │    └── filters
  │         │         └── c.id:6 = 'bar' [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar']; tight), fd=()-->(6)]
  │         ├── with-scan &1 (hierarchy)

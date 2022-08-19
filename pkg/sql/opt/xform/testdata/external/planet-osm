@@ -1727,7 +1727,7 @@ ORDER BY
 sort
  ├── columns: way:69!null int_tc_type:100!null
  ├── immutable
- ├── stats: [rows=2632.056, distinct(69)=2632.06, null(69)=0, avgsize(69)=4]
+ ├── stats: [rows=2632.056, distinct(69)=2632.06, null(69)=0]
  ├── key: (69)
  ├── fd: (69)-->(100)
  ├── ordering: +69
@@ -1736,40 +1736,40 @@ sort
       ├── grouping columns: p.way:69!null
       ├── internal-ordering: +148 opt(29,69)
       ├── immutable
-      ├── stats: [rows=2632.056, distinct(69)=2632.06, null(69)=0, avgsize(69)=4]
+      ├── stats: [rows=2632.056, distinct(69)=2632.06, null(69)=0]
       ├── key: (69)
       ├── fd: (69)-->(100)
       ├── sort
       │    ├── columns: p.highway:29!null p.way:69!null l.highway:100!null l.way:142!null column1:147!null column2:148!null
       │    ├── immutable
-      │    ├── stats: [rows=386640.5, distinct(69)=2632.06, null(69)=0, avgsize(69)=4, distinct(100)=5, null(100)=0, avgsize(100)=4, distinct(147)=5, null(147)=0, avgsize(147)=4]
+      │    ├── stats: [rows=386640.5, distinct(69)=2632.06, null(69)=0, distinct(100)=5, null(100)=0, distinct(147)=5, null(147)=0]
       │    ├── fd: ()-->(29), (100)==(147), (147)==(100)
       │    ├── ordering: +148 opt(29,69) [actual: +148]
       │    └── inner-join (hash)
       │         ├── columns: p.highway:29!null p.way:69!null l.highway:100!null l.way:142!null column1:147!null column2:148!null
       │         ├── immutable
-      │         ├── stats: [rows=386640.5, distinct(69)=2632.06, null(69)=0, avgsize(69)=4, distinct(100)=5, null(100)=0, avgsize(100)=4, distinct(147)=5, null(147)=0, avgsize(147)=4]
+      │         ├── stats: [rows=386640.5, distinct(69)=2632.06, null(69)=0, distinct(100)=5, null(100)=0, distinct(147)=5, null(147)=0]
       │         ├── fd: ()-->(29), (100)==(147), (147)==(100)
       │         ├── inner-join (lookup planet_osm_line [as=l])
       │         │    ├── columns: p.highway:29!null p.way:69!null l.highway:100 l.way:142!null
       │         │    ├── key columns: [218] = [143]
       │         │    ├── lookup columns are key
       │         │    ├── immutable
-      │         │    ├── stats: [rows=3926737, distinct(29)=1, null(29)=0, avgsize(29)=4, distinct(69)=2632.06, null(69)=0, avgsize(69)=4, distinct(100)=31, null(100)=1.52957e+06, avgsize(100)=4, distinct(142)=146376, null(142)=0, avgsize(142)=4]
+      │         │    ├── stats: [rows=3926737, distinct(29)=1, null(29)=0, distinct(69)=2632.06, null(69)=0, distinct(100)=31, null(100)=1.52957e+06, distinct(142)=146376, null(142)=0]
       │         │    ├── fd: ()-->(29)
       │         │    ├── inner-join (inverted planet_osm_line@planet_osm_line_way_idx [as=l])
       │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:218!null
       │         │    │    ├── inverted-expr
       │         │    │    │    └── st_dwithin(p.way:69, l.way:217, 100.0)
-      │         │    │    ├── stats: [rows=3926737, distinct(29)=1, null(29)=0, avgsize(29)=4, distinct(218)=148586, null(218)=0, avgsize(218)=4]
+      │         │    │    ├── stats: [rows=3926737, distinct(29)=1, null(29)=0, distinct(218)=148586, null(218)=0]
       │         │    │    ├── fd: ()-->(29)
       │         │    │    ├── select
       │         │    │    │    ├── columns: p.highway:29!null p.way:69
-      │         │    │    │    ├── stats: [rows=2632.056, distinct(29)=1, null(29)=0, avgsize(29)=4, distinct(69)=2632.06, null(69)=0, avgsize(69)=4]
+      │         │    │    │    ├── stats: [rows=2632.056, distinct(29)=1, null(29)=0, distinct(69)=2632.06, null(69)=0]
       │         │    │    │    ├── fd: ()-->(29)
       │         │    │    │    ├── scan planet_osm_point [as=p]
       │         │    │    │    │    ├── columns: p.highway:29 p.way:69
-      │         │    │    │    │    └── stats: [rows=146192, distinct(29)=19, null(29)=98815, avgsize(29)=4, distinct(69)=146192, null(69)=0, avgsize(69)=4]
+      │         │    │    │    │    └── stats: [rows=146192, distinct(29)=19, null(29)=98815, distinct(69)=146192, null(69)=0]
       │         │    │    │    └── filters
       │         │    │    │         └── p.highway:29 = 'turning_circle' [outer=(29), constraints=(/29: [/'turning_circle' - /'turning_circle']; tight), fd=()-->(29)]
       │         │    │    └── filters (true)
@@ -1778,7 +1778,7 @@ sort
       │         ├── values
       │         │    ├── columns: column1:147!null column2:148!null
       │         │    ├── cardinality: [5 - 5]
-      │         │    ├── stats: [rows=5, distinct(147)=5, null(147)=0, avgsize(147)=4, distinct(148)=5, null(148)=0, avgsize(148)=4]
+      │         │    ├── stats: [rows=5, distinct(147)=5, null(147)=0, distinct(148)=5, null(148)=0]
       │         │    ├── ('tertiary', 1)
       │         │    ├── ('unclassified', 2)
       │         │    ├── ('residential', 3)
