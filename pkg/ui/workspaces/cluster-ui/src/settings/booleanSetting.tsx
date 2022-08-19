@@ -23,7 +23,7 @@ export interface BooleanSettingProps {
   tooltipText: JSX.Element;
 }
 
-export function BooleanSetting(props: BooleanSettingProps) {
+export function BooleanSetting(props: BooleanSettingProps): React.ReactElement {
   const { text, enabled, tooltipText } = props;
   const label = enabled ? "enabled" : "disabled";
   const boolClass = enabled

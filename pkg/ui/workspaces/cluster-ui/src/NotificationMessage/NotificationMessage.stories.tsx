@@ -84,7 +84,7 @@ const NotificationFrame: FunctionComponent<ReactProps> = ({ children }) => (
   </section>
 );
 
-export const Demo = () => (
+export const Demo = (): React.ReactElement => (
   <NotificationsDemo>
     <h1>Notification Types</h1>
     <NotificationsMessageTypes>

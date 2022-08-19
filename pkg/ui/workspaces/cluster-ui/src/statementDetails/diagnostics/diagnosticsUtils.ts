@@ -28,7 +28,7 @@ export function getDiagnosticsStatus(
 export function sortByRequestedAtField(
   a: IStatementDiagnosticsReport,
   b: IStatementDiagnosticsReport,
-) {
+): number {
   const activatedOnA = a.requested_at?.seconds?.toNumber();
   const activatedOnB = b.requested_at?.seconds?.toNumber();
   if (isUndefined(activatedOnA) && isUndefined(activatedOnB)) {
@@ -46,7 +46,7 @@ export function sortByRequestedAtField(
 export function sortByCompletedField(
   a: IStatementDiagnosticsReport,
   b: IStatementDiagnosticsReport,
-) {
+): number {
   const completedA = a.completed ? 1 : -1;
   const completedB = b.completed ? 1 : -1;
   if (completedA < completedB) {
@@ -61,7 +61,7 @@ export function sortByCompletedField(
 export function sortByStatementFingerprintField(
   a: IStatementDiagnosticsReport,
   b: IStatementDiagnosticsReport,
-) {
+): number {
   const statementFingerprintA = a.statement_fingerprint;
   const statementFingerprintB = b.statement_fingerprint;
   if (

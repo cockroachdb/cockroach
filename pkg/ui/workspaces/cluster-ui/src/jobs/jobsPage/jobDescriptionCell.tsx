@@ -22,7 +22,7 @@ const tableCx = classNames.bind(sortedTableStyles);
 type Job = cockroach.server.serverpb.IJobResponse;
 
 export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
-  render() {
+  render(): React.ReactElement {
     // If a [SQL] job.statement exists, it means that job.description
     // is a human-readable message. Otherwise job.description is a SQL
     // statement.

@@ -14,8 +14,8 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 type INodesResponse = cockroach.server.serverpb.INodesResponse;
 
-export const getNodeStatus = () => {
-  const nodeResp: INodeStatus = {
+export const getNodeStatus = (): INodeStatus => {
+  return {
     desc: {
       node_id: 1,
       address: {
@@ -969,7 +969,6 @@ export const getNodeStatus = () => {
     total_system_memory: Long.fromString("17179869184"),
     num_cpus: 4,
   };
-  return nodeResp;
 };
 
 export const getNodesResponse = (): INodesResponse => {

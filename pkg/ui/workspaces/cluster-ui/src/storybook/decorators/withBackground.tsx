@@ -10,6 +10,6 @@
 
 import React from "react";
 
-export const withBackground = (storyFn: any) => (
+export const withBackground = (storyFn: any): React.ReactElement => (
   <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
 );
