@@ -70,7 +70,6 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.DB,
-		execCfg.InternalExecutor,
 		execCfg.IndexBackfiller,
 		execCfg.IndexMerger,
 		NewRangeCounter(execCfg.DB, execCfg.DistSQLPlanner),

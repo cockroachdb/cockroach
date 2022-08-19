@@ -125,7 +125,7 @@ func (a *Cache) GetAuthInfo(
 
 	var usersTableDesc catalog.TableDescriptor
 	var roleOptionsTableDesc catalog.TableDescriptor
-	err = f.Txn(ctx, ie, db, func(
+	err = f.Txn(ctx, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
@@ -297,7 +297,7 @@ func (a *Cache) GetDefaultSettings(
 ) (settingsEntries []SettingsCacheEntry, err error) {
 	var dbRoleSettingsTableDesc catalog.TableDescriptor
 	var databaseID descpb.ID
-	err = f.Txn(ctx, ie, db, func(
+	err = f.Txn(ctx, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		_, dbRoleSettingsTableDesc, err = descriptors.GetImmutableTableByName(

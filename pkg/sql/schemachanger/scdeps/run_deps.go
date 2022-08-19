@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -35,7 +34,6 @@ import (
 func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db *kv.DB,
-	internalExecutor sqlutil.InternalExecutor,
 	backfiller scexec.Backfiller,
 	merger scexec.Merger,
 	rangeCounter backfiller.RangeCounter,
@@ -55,7 +53,6 @@ func NewJobRunDependencies(
 	return &jobExecutionDeps{
 		collectionFactory:     collectionFactory,
 		db:                    db,
-		internalExecutor:      internalExecutor,
 		backfiller:            backfiller,
 		merger:                merger,
 		rangeCounter:          rangeCounter,
@@ -77,7 +74,6 @@ func NewJobRunDependencies(
 type jobExecutionDeps struct {
 	collectionFactory     *descs.CollectionFactory
 	db                    *kv.DB
-	internalExecutor      sqlutil.InternalExecutor
 	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
@@ -108,7 +104,7 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	var createdJobs []jobspb.JobID
 	var tableStatsToRefresh []descpb.ID
-	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
+	err := d.collectionFactory.Txn(ctx, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		pl := d.job.Payload()
@@ -156,7 +152,9 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 		d.jobRegistry.NotifyToResume(ctx, createdJobs...)
 	}
 	if len(tableStatsToRefresh) > 0 {
-		err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		err := d.collectionFactory.Txn(ctx, d.db, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			for _, id := range tableStatsToRefresh {
 				tbl, err := descriptors.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
 				if err != nil {

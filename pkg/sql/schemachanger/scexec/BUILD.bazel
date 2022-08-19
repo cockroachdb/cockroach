@@ -88,7 +88,6 @@ go_test(
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sqlutil",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

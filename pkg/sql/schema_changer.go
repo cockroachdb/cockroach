@@ -1354,7 +1354,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
 	var otherJobIDs []jobspb.JobID
-	err := sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, func(
+	err := sc.execCfg.CollectionFactory.Txn(ctx, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		depMutationJobs = depMutationJobs[:0]
@@ -2474,7 +2474,7 @@ func (sc *SchemaChanger) txn(
 			return err
 		}
 	}
-	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
+	return sc.execCfg.CollectionFactory.Txn(ctx, sc.db, f)
 }
 
 // txnWithExecutor is to run internal executor within a txn.
