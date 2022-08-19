@@ -61,13 +61,14 @@ CREATE USER testuser
 exec-sql user=testuser
 BACKUP INTO 'nodelocal://0/test2'
 ----
-pq: only users with the admin role are allowed to perform full cluster backups
+pq: only users with admin role or the BACKUP system privilege are allowed to perform the backup
 
 # Database backup as a non-admin user should have CONNECT on database and SELECT on tables.
 exec-sql user=testuser
 BACKUP DATABASE d2 TO 'nodelocal://0/d2'
 ----
 pq: user testuser does not have CONNECT privilege on database d2
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
 
 exec-sql
 GRANT CONNECT ON DATABASE d2 TO testuser;
@@ -78,6 +79,7 @@ exec-sql user=testuser
 BACKUP TABLE d2.t INTO 'nodelocal://0/d2-table'
 ----
 pq: user testuser does not have SELECT privilege on relation t
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
 
 exec-sql
 GRANT SELECT ON TABLE d2.t TO testuser;
@@ -93,6 +95,7 @@ exec-sql user=testuser
 BACKUP DATABASE d2 INTO 'nodelocal://0/d2-schema';
 ----
 pq: user testuser does not have USAGE privilege on schema sc2
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
 
 exec-sql
 GRANT USAGE ON SCHEMA sc2 TO testuser;
@@ -111,6 +114,7 @@ exec-sql user=testuser
 BACKUP DATABASE d2 INTO 'nodelocal://0/d2-schema';
 ----
 pq: user testuser does not have USAGE privilege on type greeting
+HINT: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
 
 exec-sql
 GRANT USAGE ON TYPE d2.greeting TO testuser;
@@ -120,10 +124,12 @@ GRANT USAGE ON TYPE d2.greeting TO testuser;
 exec-sql server=s2 user=testuser
 BACKUP DATABASE d2 INTO 'nodelocal://0/d2';
 ----
+NOTICE: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d2.
 
 exec-sql server=s2 user=testuser
 BACKUP TABLE d2.t INTO 'nodelocal://0/d2-table';
 ----
+NOTICE: The existing privileges required for backup are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
 
 # Test that implicit access is disallowed when the testing knob is not set.
 new-server name=s3 share-io-dir=s1

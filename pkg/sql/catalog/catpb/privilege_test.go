@@ -87,6 +87,7 @@ func TestPrivilege(t *testing.T) {
 				{username.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 				{username.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 				{testUser, []privilege.Privilege{
+					{Kind: privilege.BACKUP},
 					{Kind: privilege.CREATE},
 					{Kind: privilege.DELETE},
 					{Kind: privilege.DROP},
@@ -112,7 +113,7 @@ func TestPrivilege(t *testing.T) {
 		},
 		// Ensure revoking USAGE from a user with ALL privilege on a type
 		// leaves the user with no privileges.
-		{testUser, privilege.List{privilege.ALL}, privilege.List{privilege.USAGE},
+		{testUser, privilege.List{privilege.ALL}, privilege.List{privilege.BACKUP, privilege.USAGE},
 			[]catpb.UserPrivilege{
 				{username.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -127,22 +128,22 @@ func TestPrivilege(t *testing.T) {
 			},
 			privilege.Type,
 		},
-		// Ensure revoking CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
+		// Ensure revoking BACKUP, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
 		// from a user with ALL privilege on a table leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.CREATE, privilege.DROP, privilege.SELECT, privilege.INSERT,
+			privilege.List{privilege.BACKUP, privilege.CREATE, privilege.DROP, privilege.SELECT, privilege.INSERT,
 				privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
 			[]catpb.UserPrivilege{
 				{username.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
-		// Ensure revoking CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
+		// Ensure revoking BACKUP, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
 		// from a user with ALL privilege on a database leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.SELECT,
+			privilege.List{privilege.BACKUP, privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.SELECT,
 				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
 			[]catpb.UserPrivilege{
 				{username.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
@@ -579,7 +580,7 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			true,
 			privilege.List{privilege.CREATE},
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, privilege.List{privilege.ALL}, username.AdminRoleName()),
 			testUser, privilege.Table,
@@ -613,8 +614,8 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			testUser, privilege.Table,
 			false,
 			privilege.List{privilege.CREATE},
-			privilege.List{privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
-			privilege.List{privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.SELECT, privilege.INSERT}, privilege.List{privilege.INSERT}, username.AdminRoleName()),
 			testUser, privilege.Table,
