@@ -212,7 +212,12 @@ func (ir *indexRecommendation) init(
 	ir.existingIndex = hypTable.existingRedundantIndex(index)
 
 	// Only store columns useful to the statement plan, found in scannedColOrds.
-	ir.newStoredColOrds = index.storedColsOrdSet.Intersection(scannedColOrds)
+	for i := range index.storedCols {
+		colOrd := index.storedCols[i].Column.Ordinal()
+		if scannedColOrds.Contains(colOrd) {
+			ir.newStoredColOrds.Add(colOrd)
+		}
+	}
 
 	// If there is no existing index, return.
 	if ir.existingIndex == nil {
@@ -243,8 +248,12 @@ func (ir *indexRecommendation) redundantRecommendation() bool {
 // addStoredColOrds updates an index recommendation's newStoredColOrds field to
 // also contain the scannedColOrds columns.
 func (ir *indexRecommendation) addStoredColOrds(scannedColOrds util.FastIntSet) {
-	scannedStoredColOrds := ir.index.storedColsOrdSet.Intersection(scannedColOrds)
-	ir.newStoredColOrds.UnionWith(scannedStoredColOrds)
+	for i := range ir.index.storedCols {
+		colOrd := ir.index.storedCols[i].Column.Ordinal()
+		if scannedColOrds.Contains(colOrd) {
+			ir.newStoredColOrds.Add(colOrd)
+		}
+	}
 }
 
 // indexCols returns the explicit key columns of the index, used in
