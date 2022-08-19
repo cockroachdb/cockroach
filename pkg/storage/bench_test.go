@@ -108,7 +108,15 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 }
 
 func BenchmarkMVCCExportToSST(b *testing.B) {
+	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
+
+	// To run and compare on range keys:
+	//
+	//     go test ./pkg/storage -run - -count 5 -bench BenchmarkMVCCExportToSST -timeout 500m 2>&1 | tee bench.txt
+	//     for flavor in numRangeKeys=0 numRangeKeys=1 numRangeKeys=100; do grep -E "${flavor}[^0-9]+" bench.txt | sed -E "s/${flavor}+/X/" > $flavor.txt; done
+	//     benchstat numRangeKeys\={0,1}.txt
+	//     benchstat numRangeKeys\={0,100}.txt
 
 	numKeys := []int{64, 512, 1024, 8192, 65536}
 	numRevisions := []int{1, 10, 100}
@@ -120,7 +128,17 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 				b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
 					for _, exportAllRevisionsVal := range exportAllRevisions {
 						b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
-							runMVCCExportToSST(b, numKey, numRevision, exportAllRevisionsVal)
+							for _, numRangeKeys := range []int{0, 1, 100} {
+								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+									opts := mvccExportToSSTOpts{
+										numKeys:            numKey,
+										numRevisions:       numRevision,
+										exportAllRevisions: exportAllRevisionsVal,
+										numRangeKeys:       numRangeKeys,
+									}
+									runMVCCExportToSST(b, opts)
+								})
+							}
 						})
 					}
 				})
@@ -1606,7 +1624,12 @@ func runBatchApplyBatchRepr(
 	b.StopTimer()
 }
 
-func runMVCCExportToSST(b *testing.B, numKeys int, numRevisions int, exportAllRevisions bool) {
+type mvccExportToSSTOpts struct {
+	numKeys, numRevisions, numRangeKeys int
+	exportAllRevisions                  bool
+}
+
+func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
 	engine := setupMVCCPebble(b, dir)
@@ -1615,14 +1638,50 @@ func runMVCCExportToSST(b *testing.B, numKeys int, numRevisions int, exportAllRe
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	batch := engine.NewUnindexedBatch(true /* writeOnly */)
-	for i := 0; i < numKeys; i++ {
-		key := make([]byte, 16)
-		key = append(key, 'a', 'a', 'a')
+	mkKey := func(i int) roachpb.Key {
+		var key []byte
+		key = append(key, keys.LocalMax...)
+		key = append(key, bytes.Repeat([]byte{'a'}, 19)...)
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
+		return key
+	}
 
-		for j := 0; j < numRevisions; j++ {
-			mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}
+	mkWall := func(j int) int64 {
+		wt := int64(j + 2)
+		return wt
+	}
+
+	// Write range keys.
+	func() {
+		rng := rand.New(rand.NewSource(12345))
+		batch := engine.NewBatch()
+		defer batch.Close()
+		for i := 0; i < opts.numRangeKeys; i++ {
+			// NB: regular keys are written at ts 2+, so this is below any of the
+			// regular writes and thus won't delete anything.
+			ts := hlc.Timestamp{WallTime: 1, Logical: int32(i + 1)}
+			start := rng.Intn(opts.numKeys)
+			end := start + rng.Intn(opts.numKeys-start) + 1
+			// As a special case, if we're only writing one range key, write it across
+			// the entire span.
+			if opts.numRangeKeys == 1 {
+				start = 0
+				end = opts.numKeys + 1
+			}
+			startKey := mkKey(start)
+			endKey := mkKey(end)
+			require.NoError(b, MVCCDeleteRangeUsingTombstone(
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+		}
+		require.NoError(b, batch.Commit(false /* sync */))
+	}()
+
+	batch := engine.NewBatch()
+	for i := 0; i < opts.numKeys; i++ {
+		key := mkKey(i)
+
+		for j := 0; j < opts.numRevisions; j++ {
+			mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: mkWall(j), Logical: 0}}
 			mvccValue := MVCCValue{Value: roachpb.MakeValueFromString("foobar")}
 			err := batch.PutMVCC(mvccKey, mvccValue)
 			if err != nil {
@@ -1638,31 +1697,89 @@ func runMVCCExportToSST(b *testing.B, numKeys int, numRevisions int, exportAllRe
 		b.Fatal(err)
 	}
 
+	startWall := mkWall(opts.numRevisions/2 - 1) // exclusive, at least 1, so never see rangedels
+	endWall := mkWall(opts.numRevisions + 1)     // see latest revision for every key
+	var expKVsInSST int
+	if opts.exportAllRevisions {
+		// First, compute how many revisions are visible for each key.
+		// Could probably use a closed formula for this but this works.
+		for i := 0; i < opts.numRevisions; i++ {
+			wall := mkWall(i)
+			if wall > startWall && wall <= endWall {
+				expKVsInSST++
+			}
+		}
+		// Then compute the total.
+		expKVsInSST *= opts.numKeys
+	} else {
+		// See one revision per key.
+		expKVsInSST = opts.numKeys
+	}
+
+	var buf bytes.Buffer
+	buf.Grow(1 << 20)
 	b.ResetTimer()
+	b.StopTimer()
+	var assertLen int // buf.Len shouldn't change between runs
 	for i := 0; i < b.N; i++ {
-		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
-		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
+		buf.Reset()
+		b.StartTimer()
+		startTS := hlc.Timestamp{WallTime: startWall, Logical: math.MaxInt32} // use 1.infinity to avoid rangedels at 1.<n>
+		endTS := hlc.Timestamp{WallTime: endWall}
 		_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
 			StartKey:           MVCCKey{Key: keys.LocalMax},
 			EndKey:             roachpb.KeyMax,
 			StartTS:            startTS,
 			EndTS:              endTS,
-			ExportAllRevisions: exportAllRevisions,
+			ExportAllRevisions: opts.exportAllRevisions,
 			TargetSize:         0,
 			MaxSize:            0,
 			StopMidKey:         false,
-		}, noopWriter{})
+		}, &buf)
 		if err != nil {
 			b.Fatal(err)
 		}
+		b.StopTimer()
+
+		if i == 0 {
+			require.NotZero(b, buf.Len())
+			assertLen = buf.Len()
+		}
+
+		require.Equal(b, assertLen, buf.Len())
 	}
-	b.StopTimer()
+
+	// Run sanity checks on last produced SST.
+	it, err := NewPebbleMemSSTIterator(
+		buf.Bytes(), true /* verify */, IterOptions{
+			LowerBound: keys.LocalMax,
+			UpperBound: roachpb.KeyMax,
+			KeyTypes:   IterKeyTypePointsAndRanges,
+		},
+	)
+	it.SeekGE(MakeMVCCMetadataKey(roachpb.LocalMax))
+	require.NoError(b, err)
+	var n int // points
+	var r int // range key stacks
+	for {
+		ok, err := it.Valid()
+		require.NoError(b, err)
+		if !ok {
+			break
+		}
+		hasPoint, hasRange := it.HasPointAndRange()
+		if hasPoint {
+			n++
+		}
+		if hasRange && it.RangeKeyChanged() {
+			r++
+		}
+		it.Next()
+	}
+	require.Equal(b, expKVsInSST, n)
+	// Should not see any rangedel stacks.
+	require.Zero(b, r)
 }
-
-type noopWriter struct{}
-
-func (noopWriter) Close() error                { return nil }
-func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 func runCheckSSTConflicts(
 	b *testing.B, numEngineKeys, numVersions, numSstKeys int, overlap, usePrefixSeek bool,
