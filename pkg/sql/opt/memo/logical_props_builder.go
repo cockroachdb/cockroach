@@ -86,7 +86,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// Not Null Columns
 	// ----------------
 	// Initialize not-NULL columns from the table schema.
-	rel.NotNullCols = tableNotNullCols(md, scan.Table)
+	rel.NotNullCols = makeTableNotNullCols(md, scan.Table).Copy()
 	// Union not-NULL columns with not-NULL columns in the constraint.
 	if scan.Constraint != nil {
 		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.evalCtx))
@@ -474,7 +474,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	// ----------------
 	// Add not-NULL columns from the table schema, and filter out any not-NULL
 	// columns from the input that are not projected by the index join.
-	rel.NotNullCols = tableNotNullCols(md, indexJoin.Table)
+	rel.NotNullCols = makeTableNotNullCols(md, indexJoin.Table).Copy()
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
 	// Outer Columns
@@ -2095,7 +2095,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 			}
 		}
 
-		relational.NotNullCols = tableNotNullCols(md, join.Table)
+		relational.NotNullCols = makeTableNotNullCols(md, join.Table).Copy()
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		relational.Cardinality = props.AnyCardinality
 		relational.FuncDeps.CopyFrom(MakeTableFuncDep(md, join.Table))
@@ -2112,7 +2112,7 @@ func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder)
 	if relational.OutputCols.Empty() {
 		md := join.Memo().Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
-		relational.NotNullCols = tableNotNullCols(md, join.Table)
+		relational.NotNullCols = makeTableNotNullCols(md, join.Table).Copy()
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		relational.Cardinality = props.AnyCardinality
 
@@ -2162,7 +2162,7 @@ func ensureInputPropsForIndex(
 	if relProps.OutputCols.Empty() {
 		relProps.OutputCols = md.TableMeta(tabID).IndexColumns(indexOrd)
 		relProps.OutputCols.IntersectionWith(outputCols)
-		relProps.NotNullCols = tableNotNullCols(md, tabID)
+		relProps.NotNullCols = makeTableNotNullCols(md, tabID).Copy()
 		relProps.NotNullCols.IntersectionWith(relProps.OutputCols)
 		relProps.Cardinality = props.AnyCardinality
 		relProps.FuncDeps.CopyFrom(MakeTableFuncDep(md, tabID))
@@ -2171,9 +2171,17 @@ func ensureInputPropsForIndex(
 	}
 }
 
-// tableNotNullCols returns the set of not-NULL non-mutation columns from the given table.
-func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
-	cs := opt.ColSet{}
+// makeTableNotNullCols returns the set of not-NULL non-mutation columns from
+// the given table. The set is derived lazily and is cached in the metadata,
+// since it may be accessed multiple times during query optimization.
+func makeTableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
+	cs, ok := md.TableAnnotation(tabID, opt.NotNullAnnID).(opt.ColSet)
+	if ok {
+		// Already made.
+		return cs
+	}
+
+	cs = opt.ColSet{}
 	tab := md.Table(tabID)
 
 	// Only iterate over non-mutation columns, since even non-null mutation
@@ -2185,6 +2193,8 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 			cs.Add(tabID.ColumnID(i))
 		}
 	}
+
+	md.SetTableAnnotation(tabID, opt.NotNullAnnID, cs)
 	return cs
 }
 
