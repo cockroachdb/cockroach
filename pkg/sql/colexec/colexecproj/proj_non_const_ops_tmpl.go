@@ -103,6 +103,7 @@ func (p _OP_NAME) Next() coldata.Batch {
 	//     variable of type `colexecutils.BinaryOverloadHelper`.
 	// */}}
 	_overloadHelper := p.BinaryOverloadHelper
+	_ctx := p.Ctx
 	// {{end}}
 	batch := p.Input.Next()
 	n := batch.Length()

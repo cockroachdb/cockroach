@@ -235,9 +235,9 @@ func TestNormalizeExpr(t *testing.T) {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
 			rOrig := typedExpr.String()
-			ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			defer ctx.TestingMon.Stop(context.Background())
-			r, err := normalize.Expr(ctx, typedExpr)
+			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			defer evalCtx.Stop(context.Background())
+			r, err := normalize.Expr(context.Background(), evalCtx, typedExpr)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
@@ -245,7 +245,7 @@ func TestNormalizeExpr(t *testing.T) {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
 			// Normalizing again should be a no-op.
-			r2, err := normalize.Expr(ctx, r)
+			r2, err := normalize.Expr(context.Background(), evalCtx, r)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}

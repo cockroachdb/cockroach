@@ -370,7 +370,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	evalContext := eval.NewTestingEvalContext(st)
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%v", tc.raw), func(t *testing.T) {
-			got, err := mysqlValueToDatum(tc.raw, tc.typ, evalContext)
+			got, err := mysqlValueToDatum(context.Background(), tc.raw, tc.typ, evalContext)
 			if err != nil {
 				t.Fatal(err)
 			}

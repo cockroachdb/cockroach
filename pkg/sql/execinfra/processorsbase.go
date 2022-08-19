@@ -270,7 +270,7 @@ func (h *ProcOutputHelper) ProcessRow(
 	if len(h.renderExprs) > 0 {
 		// Rendering.
 		for i := range h.renderExprs {
-			datum, err := h.renderExprs[i].Eval(row)
+			datum, err := h.renderExprs[i].Eval(ctx, row)
 			if err != nil {
 				return nil, false, err
 			}

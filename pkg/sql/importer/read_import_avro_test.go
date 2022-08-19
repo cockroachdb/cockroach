@@ -226,7 +226,7 @@ func (t *testRecordStream) Row() error {
 	r, err := t.producer.Row()
 	if err == nil {
 		t.rowNum++
-		err = t.consumer.FillDatums(r, t.rowNum, t.conv)
+		err = t.consumer.FillDatums(context.Background(), r, t.rowNum, t.conv)
 	}
 	return err
 }

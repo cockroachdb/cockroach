@@ -566,7 +566,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				ret, err := geoindex.NewS2GeometryIndex(*cfg.S2Geometry).CoveringGeometry(evalCtx.Context, g.Geometry)
+				ret, err := geoindex.NewS2GeometryIndex(*cfg.S2Geometry).CoveringGeometry(ctx, g.Geometry)
 				if err != nil {
 					return nil, err
 				}
@@ -589,11 +589,11 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				cfg, err := applyGeoindexConfigStorageParams(evalCtx.Context, evalCtx, *startCfg, string(params))
+				cfg, err := applyGeoindexConfigStorageParams(ctx, evalCtx, *startCfg, string(params))
 				if err != nil {
 					return nil, err
 				}
-				ret, err := geoindex.NewS2GeometryIndex(*cfg.S2Geometry).CoveringGeometry(evalCtx.Context, g.Geometry)
+				ret, err := geoindex.NewS2GeometryIndex(*cfg.S2Geometry).CoveringGeometry(ctx, g.Geometry)
 				if err != nil {
 					return nil, err
 				}
@@ -612,7 +612,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		geographyOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				cfg := geoindex.DefaultGeographyIndexConfig().S2Geography
-				ret, err := geoindex.NewS2GeographyIndex(*cfg).CoveringGeography(evalCtx.Context, g.Geography)
+				ret, err := geoindex.NewS2GeographyIndex(*cfg).CoveringGeography(ctx, g.Geography)
 				if err != nil {
 					return nil, err
 				}
@@ -632,11 +632,11 @@ var geoBuiltins = map[string]builtinDefinition{
 				params := tree.MustBeDString(args[1])
 
 				startCfg := geoindex.DefaultGeographyIndexConfig()
-				cfg, err := applyGeoindexConfigStorageParams(evalCtx.Context, evalCtx, *startCfg, string(params))
+				cfg, err := applyGeoindexConfigStorageParams(ctx, evalCtx, *startCfg, string(params))
 				if err != nil {
 					return nil, err
 				}
-				ret, err := geoindex.NewS2GeographyIndex(*cfg.S2Geography).CoveringGeography(evalCtx.Context, g.Geography)
+				ret, err := geoindex.NewS2GeographyIndex(*cfg.S2Geography).CoveringGeography(ctx, g.Geography)
 				if err != nil {
 					return nil, err
 				}

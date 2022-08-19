@@ -243,9 +243,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			planningMode = distSQLLocalOnlyPlanning
 		}
 		err := opc.runExecBuilder(
+			ctx,
 			&p.curPlan,
 			&p.stmt,
-			newDistSQLSpecExecFactory(p, planningMode),
+			newDistSQLSpecExecFactory(ctx, p, planningMode),
 			execMemo,
 			p.EvalContext(),
 			p.autoCommit,
@@ -277,9 +278,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// TODO(yuzefovich): remove this logic when deleting old
 				// execFactory.
 				err = opc.runExecBuilder(
+					ctx,
 					&p.curPlan,
 					&p.stmt,
-					newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning),
+					newDistSQLSpecExecFactory(ctx, p, distSQLLocalOnlyPlanning),
 					execMemo,
 					p.EvalContext(),
 					p.autoCommit,
@@ -297,9 +299,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 	// If we got here, we did not create a plan above.
 	return opc.runExecBuilder(
+		ctx,
 		&p.curPlan,
 		&p.stmt,
-		newExecFactory(p),
+		newExecFactory(ctx, p),
 		execMemo,
 		p.EvalContext(),
 		p.autoCommit,
@@ -599,6 +602,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 // result in planTop. If required, also captures explain data using the explain
 // factory.
 func (opc *optPlanningCtx) runExecBuilder(
+	ctx context.Context,
 	planTop *planTop,
 	stmt *Statement,
 	f exec.Factory,
@@ -614,7 +618,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld = execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld = execbuilder.New(ctx, f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -623,7 +627,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
-		bld = execbuilder.New(explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld = execbuilder.New(ctx, explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err

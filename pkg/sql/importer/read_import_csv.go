@@ -192,7 +192,7 @@ var _ importRowConsumer = &csvRowConsumer{}
 
 // FillDatums() implements importRowConsumer interface
 func (c *csvRowConsumer) FillDatums(
-	row interface{}, rowNum int64, conv *row.DatumRowConverter,
+	ctx context.Context, row interface{}, rowNum int64, conv *row.DatumRowConverter,
 ) error {
 	record := row.([]csv.Record)
 	datumIdx := 0
@@ -219,7 +219,7 @@ func (c *csvRowConsumer) FillDatums(
 			conv.Datums[datumIdx] = tree.DNull
 		} else {
 			var err error
-			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], field.Val, conv.EvalCtx)
+			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(ctx, conv.VisibleColTypes[i], field.Val, conv.EvalCtx)
 			if err != nil {
 				// Fallback to parsing as a string literal. This allows us to support
 				// both array expressions (like `ARRAY[1, 2, 3]`) and literals (like

@@ -206,7 +206,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 					CurChunk:        nil,
 					CurVal:          0,
 				}
-				require.NoError(t, j.RequestChunk(evalCtx, annot, seqMetadata))
+				require.NoError(t, j.RequestChunk(ctx, evalCtx, annot, seqMetadata))
 				getJobProgressQuery := `SELECT progress FROM system.jobs J WHERE J.id = $1`
 
 				var progressBytes []byte

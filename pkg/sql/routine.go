@@ -66,7 +66,7 @@ func (p *planner) EvalRoutineExpr(
 	}
 
 	// Execute each statement in the routine sequentially.
-	ef := newExecFactory(p)
+	ef := newExecFactory(ctx, p)
 	for i := 0; i < expr.NumStmts; i++ {
 		if err := func() error {
 			opName := "udf-stmt-" + expr.Name + "-" + strconv.Itoa(i)

@@ -33,8 +33,10 @@ import (
 )
 
 // BinaryOp evaluates a tree.BinaryEvalOp.
-func BinaryOp(evalCtx *Context, op tree.BinaryEvalOp, left, right tree.Datum) (tree.Datum, error) {
-	return op.Eval(evalCtx.Context, (*evaluator)(evalCtx), left, right)
+func BinaryOp(
+	ctx context.Context, evalCtx *Context, op tree.BinaryEvalOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	return op.Eval(ctx, (*evaluator)(evalCtx), left, right)
 }
 
 func (e *evaluator) EvalAppendToMaybeNullArrayOp(

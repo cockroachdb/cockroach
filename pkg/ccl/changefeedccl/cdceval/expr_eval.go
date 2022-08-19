@@ -448,7 +448,7 @@ func (e *exprEval) typeCheck(
 	if err != nil {
 		return nil, err
 	}
-	return normalize.Expr(e.evalCtx, typedExpr)
+	return normalize.Expr(ctx, e.evalCtx, typedExpr)
 }
 
 // evalExpr evaluates typed expression and returns resulting datum.

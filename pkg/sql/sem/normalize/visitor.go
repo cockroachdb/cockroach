@@ -11,6 +11,8 @@
 package normalize
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -18,8 +20,10 @@ import (
 )
 
 // Expr normalizes the provided expr.
-func Expr(evalCtx *eval.Context, typedExpr tree.TypedExpr) (tree.TypedExpr, error) {
-	v := MakeNormalizeVisitor(evalCtx)
+func Expr(
+	ctx context.Context, evalCtx *eval.Context, typedExpr tree.TypedExpr,
+) (tree.TypedExpr, error) {
+	v := MakeNormalizeVisitor(ctx, evalCtx)
 	expr, _ := tree.WalkExpr(&v, typedExpr)
 	if v.err != nil {
 		return nil, v.err
@@ -29,6 +33,7 @@ func Expr(evalCtx *eval.Context, typedExpr tree.TypedExpr) (tree.TypedExpr, erro
 
 // Visitor supports the execution of Expr.
 type Visitor struct {
+	ctx     context.Context
 	evalCtx *eval.Context
 	err     error
 
@@ -38,8 +43,8 @@ type Visitor struct {
 var _ tree.Visitor = &Visitor{}
 
 // MakeNormalizeVisitor creates a Visitor instance.
-func MakeNormalizeVisitor(evalCtx *eval.Context) Visitor {
-	return Visitor{evalCtx: evalCtx, fastIsConstVisitor: fastIsConstVisitor{evalCtx: evalCtx}}
+func MakeNormalizeVisitor(ctx context.Context, evalCtx *eval.Context) Visitor {
+	return Visitor{ctx: ctx, evalCtx: evalCtx, fastIsConstVisitor: fastIsConstVisitor{evalCtx: evalCtx}}
 }
 
 // Err retrieves the error field in the Visitor.
@@ -80,7 +85,7 @@ func (v *Visitor) VisitPost(expr tree.Expr) tree.Expr {
 
 	// Evaluate all constant expressions.
 	if v.isConst(expr) {
-		value, err := eval.Expr(v.evalCtx.Context, v.evalCtx, expr.(tree.TypedExpr))
+		value, err := eval.Expr(v.ctx, v.evalCtx, expr.(tree.TypedExpr))
 		if err != nil {
 			// Ignore any errors here (e.g. division by zero), so they can happen
 			// during execution where they are correctly handled. Note that in some

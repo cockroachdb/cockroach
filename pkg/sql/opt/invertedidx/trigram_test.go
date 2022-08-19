@@ -11,6 +11,7 @@
 package invertedidx_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -35,7 +36,7 @@ func TestTryFilterTrigram(t *testing.T) {
 		t.Fatal(err)
 	}
 	var f norm.Factory
-	f.Init(evalCtx, tc)
+	f.Init(context.Background(), evalCtx, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)
@@ -101,6 +102,7 @@ func TestTryFilterTrigram(t *testing.T) {
 		// the index when we expect to and we have the correct values for tight,
 		// unique, and remainingFilters.
 		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(
+			context.Background(),
 			evalCtx,
 			&f,
 			filters,

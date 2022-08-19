@@ -145,7 +145,7 @@ func (e *evaluator) EvalCaseExpr(ctx context.Context, expr *tree.CaseExpr) (tree
 			if err != nil {
 				return nil, err
 			}
-			d, err := evalComparison(e.ctx(), treecmp.MakeComparisonOperator(treecmp.EQ), val, arg)
+			d, err := evalComparison(ctx, e.ctx(), treecmp.MakeComparisonOperator(treecmp.EQ), val, arg)
 			if err != nil {
 				return nil, err
 			}
@@ -257,7 +257,7 @@ func (e *evaluator) EvalComparisonExpr(
 
 	op := expr.Operator
 	if op.Symbol.HasSubOperator() {
-		return ComparisonExprWithSubOperator(e.ctx(), expr, left, right)
+		return ComparisonExprWithSubOperator(ctx, e.ctx(), expr, left, right)
 	}
 
 	_, newLeft, newRight, _, not := tree.FoldComparisonExprWithDatums(op, left, right)
@@ -452,7 +452,7 @@ func (e *evaluator) EvalNullIfExpr(ctx context.Context, expr *tree.NullIfExpr) (
 	if err != nil {
 		return nil, err
 	}
-	cond, err := evalComparison(e.ctx(), treecmp.MakeComparisonOperator(treecmp.EQ), expr1, expr2)
+	cond, err := evalComparison(ctx, e.ctx(), treecmp.MakeComparisonOperator(treecmp.EQ), expr1, expr2)
 	if err != nil {
 		return nil, err
 	}
@@ -632,7 +632,7 @@ func (e *evaluator) EvalRoutineExpr(
 			}
 		}
 	}
-	return e.Planner.EvalRoutineExpr(e.Context, routine, input)
+	return e.Planner.EvalRoutineExpr(ctx, routine, input)
 }
 
 func (e *evaluator) EvalTuple(ctx context.Context, t *tree.Tuple) (tree.Datum, error) {

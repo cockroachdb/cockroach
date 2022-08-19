@@ -11,6 +11,8 @@
 package xform
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -80,6 +82,7 @@ import (
 // themselves match this same rule. However, adding their replace expressions to
 // the memo group will be a no-op, because they're already present.
 type explorer struct {
+	ctx     context.Context
 	evalCtx *eval.Context
 	o       *Optimizer
 	f       *norm.Factory
@@ -97,6 +100,7 @@ func (e *explorer) init(o *Optimizer) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*e = explorer{
+		ctx:     o.ctx,
 		evalCtx: o.evalCtx,
 		o:       o,
 		f:       o.Factory(),

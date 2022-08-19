@@ -74,7 +74,7 @@ func TestTypeCheckNormalize(t *testing.T) {
 			}
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			typedExpr, err := normalize.Expr(evalCtx, typeChecked)
+			typedExpr, err := normalize.Expr(ctx, evalCtx, typeChecked)
 			if err != nil {
 				t.Fatal(err)
 			}

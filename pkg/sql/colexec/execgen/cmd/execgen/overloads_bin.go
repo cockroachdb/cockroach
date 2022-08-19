@@ -952,7 +952,7 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 func executeBinOpOnDatums(prelude, targetElem, leftDatumElem, rightDatumElem string) string {
 	codeBlock := fmt.Sprintf(`
 			%s
-			_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, %s.(tree.Datum), %s.(tree.Datum))
+			_res, err := eval.BinaryOp(_ctx, _overloadHelper.EvalCtx, _overloadHelper.BinOp, %s.(tree.Datum), %s.(tree.Datum))
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}`, prelude, leftDatumElem, rightDatumElem,

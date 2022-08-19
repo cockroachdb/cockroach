@@ -33,7 +33,7 @@ import (
 func TestMetadata(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var f norm.Factory
-	f.Init(&evalCtx, nil /* catalog */)
+	f.Init(context.Background(), &evalCtx, nil /* catalog */)
 	md := f.Metadata()
 
 	schID := md.AddSchema(&testcat.Schema{})

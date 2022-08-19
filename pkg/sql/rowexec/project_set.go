@@ -169,7 +169,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			ps.exprHelpers[i].Row = row
 
 			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
-			gen, err := eval.GetGenerator(ps.EvalCtx, fn)
+			gen, err := eval.GetGenerator(ps.Ctx, ps.EvalCtx, fn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -237,7 +237,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 			// Do we still need to produce the scalar value? (first row)
 			if !ps.done[i] {
 				// Yes. Produce it once, then indicate it's "done".
-				value, err := ps.exprHelpers[i].Eval(ps.rowBuffer)
+				value, err := ps.exprHelpers[i].Eval(ps.Ctx, ps.rowBuffer)
 				if err != nil {
 					return false, err
 				}

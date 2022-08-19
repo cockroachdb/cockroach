@@ -873,7 +873,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Check whether the filter can constrain the index.
 		spanExpr, constraint, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
+			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
 		)
 		if !ok {
 			// A span expression to constrain the inverted index could not be
@@ -1441,6 +1441,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// optional filters generated from CHECK constraints and computed column
 		// expressions to help constrain non-inverted prefix columns.
 		spanExpr, _, _, _, ok := invertedidx.TryFilterInvertedIndex(
+			c.e.ctx,
 			c.e.evalCtx,
 			c.e.f, filters,
 			nil, /* optionalFilters */

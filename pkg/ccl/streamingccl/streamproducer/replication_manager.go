@@ -9,6 +9,8 @@
 package streamproducer
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -58,9 +60,9 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	evalCtx *eval.Context,
+	ctx context.Context, evalCtx *eval.Context,
 ) (streaming.ReplicationStreamManager, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}

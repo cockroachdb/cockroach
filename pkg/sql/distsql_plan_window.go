@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -19,7 +21,7 @@ import (
 )
 
 func createWindowFnSpec(
-	planCtx *PlanningCtx, plan *PhysicalPlan, funcInProgress *windowFuncHolder,
+	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan, funcInProgress *windowFuncHolder,
 ) (execinfrapb.WindowerSpec_WindowFn, *types.T, error) {
 	for _, argIdx := range funcInProgress.argsIdxs {
 		if argIdx >= uint32(len(plan.GetResultTypes())) {
@@ -59,7 +61,7 @@ func createWindowFnSpec(
 	if funcInProgress.frame != nil {
 		// funcInProgress has a custom window frame.
 		frameSpec := execinfrapb.WindowerSpec_Frame{}
-		if err := frameSpec.InitFromAST(funcInProgress.frame, planCtx.EvalContext()); err != nil {
+		if err := frameSpec.InitFromAST(ctx, funcInProgress.frame, planCtx.EvalContext()); err != nil {
 			return execinfrapb.WindowerSpec_WindowFn{}, outputType, err
 		}
 		funcInProgressSpec.Frame = &frameSpec

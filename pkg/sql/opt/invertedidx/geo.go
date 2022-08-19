@@ -337,7 +337,7 @@ var _ invertedFilterPlanner = &geoFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -375,11 +375,11 @@ func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	//
 	// See geoindex.CommuteRelationshipMap for the full list of mappings.
 	invertedExpr, pfState := extractGeoFilterCondition(
-		evalCtx.Context, g.factory, expr, args, false /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
+		ctx, g.factory, expr, args, false /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 	)
 	if _, ok := invertedExpr.(inverted.NonInvertedColExpression); ok {
 		invertedExpr, pfState = extractGeoFilterCondition(
-			evalCtx.Context, g.factory, expr, args, true /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
+			ctx, g.factory, expr, args, true /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 		)
 	}
 	if !invertedExpr.IsTight() {

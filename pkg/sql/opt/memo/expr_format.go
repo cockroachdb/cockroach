@@ -145,12 +145,14 @@ func (f ExprFmtFlags) HasFlags(subset ExprFmtFlags) bool {
 
 // FormatExpr returns a string representation of the given expression, formatted
 // according to the specified flags.
-func FormatExpr(e opt.Expr, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) string {
+func FormatExpr(
+	ctx context.Context, e opt.Expr, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
+) string {
 	if catalog == nil {
 		// Automatically hide qualifications if we have no catalog.
 		flags |= ExprFmtHideQualifications
 	}
-	f := MakeExprFmtCtx(flags, mem, catalog)
+	f := MakeExprFmtCtx(ctx, flags, mem, catalog)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }
@@ -159,6 +161,7 @@ func FormatExpr(e opt.Expr, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) 
 // need to know the formatting flags and memo in order to format. In addition,
 // a reusable bytes buffer avoids unnecessary allocations.
 type ExprFmtCtx struct {
+	Ctx    context.Context
 	Buffer *bytes.Buffer
 
 	// Flags controls how the expression is formatted.
@@ -177,21 +180,30 @@ type ExprFmtCtx struct {
 	nameGen *ExprNameGenerator
 }
 
+// makeExprFmtCtxForString creates an expression formatting context from a new
+// buffer with the context.Background(). This method is designed to be used in
+// stringer.String implementations.
+func makeExprFmtCtxForString(flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) ExprFmtCtx {
+	return MakeExprFmtCtxBuffer(context.Background(), &bytes.Buffer{}, flags, mem, catalog)
+}
+
 // MakeExprFmtCtx creates an expression formatting context from a new buffer.
-func MakeExprFmtCtx(flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) ExprFmtCtx {
-	return MakeExprFmtCtxBuffer(&bytes.Buffer{}, flags, mem, catalog)
+func MakeExprFmtCtx(
+	ctx context.Context, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
+) ExprFmtCtx {
+	return MakeExprFmtCtxBuffer(ctx, &bytes.Buffer{}, flags, mem, catalog)
 }
 
 // MakeExprFmtCtxBuffer creates an expression formatting context from an
 // existing buffer.
 func MakeExprFmtCtxBuffer(
-	buf *bytes.Buffer, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
+	ctx context.Context, buf *bytes.Buffer, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
 ) ExprFmtCtx {
 	var nameGen *ExprNameGenerator
 	if mem != nil && mem.saveTablesPrefix != "" {
 		nameGen = NewExprNameGenerator(mem.saveTablesPrefix)
 	}
-	return ExprFmtCtx{Buffer: buf, Flags: flags, Memo: mem, Catalog: catalog, nameGen: nameGen}
+	return ExprFmtCtx{Ctx: ctx, Buffer: buf, Flags: flags, Memo: mem, Catalog: catalog, nameGen: nameGen}
 }
 
 // HasFlags tests whether the given flags are all set.

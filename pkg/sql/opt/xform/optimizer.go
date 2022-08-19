@@ -132,7 +132,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 		stateMap: make(map[groupStateKey]*groupState),
 	}
 	o.cancelChecker.Reset(ctx)
-	o.f.Init(evalCtx, catalog)
+	o.f.Init(ctx, evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 
@@ -1065,7 +1065,7 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if disabledRules.Contains(int(ruleName)) {
-			log.Infof(o.evalCtx.Context, "disabled rule matched: %s", ruleName.String())
+			log.Infof(o.ctx, "disabled rule matched: %s", ruleName.String())
 			return false
 		}
 		return true
@@ -1121,7 +1121,7 @@ func (o *Optimizer) recomputeCostImpl(
 
 // FormatExpr is a convenience wrapper for memo.FormatExpr.
 func (o *Optimizer) FormatExpr(e opt.Expr, flags memo.ExprFmtFlags) string {
-	return memo.FormatExpr(e, flags, o.mem, o.catalog)
+	return memo.FormatExpr(o.ctx, e, flags, o.mem, o.catalog)
 }
 
 // CustomFuncs exports the xform.CustomFuncs for testing purposes.

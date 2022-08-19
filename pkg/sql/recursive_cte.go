@@ -139,7 +139,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		rows:  lastWorkingRows,
 		label: n.label,
 	}
-	newPlan, err := n.genIterationFn(newExecFactory(params.p), buf)
+	newPlan, err := n.genIterationFn(newExecFactory(params.ctx, params.p), buf)
 	if err != nil {
 		return false, err
 	}

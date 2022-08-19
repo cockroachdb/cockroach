@@ -88,7 +88,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return normalize.Expr(evalCtx, typedExpr)
+			return normalize.Expr(ctx, evalCtx, typedExpr)
 		})
 	})
 }
@@ -104,7 +104,7 @@ func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) 
 	}
 
 	bld := execbuilder.New(
-		nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
+		ctx, nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
 		evalCtx, false, /* allowAutoCommit */
 	)
 	expr, err := bld.BuildScalar()
@@ -193,7 +193,7 @@ func TestTimeConversion(t *testing.T) {
 
 	for _, test := range tests {
 		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.TestingMon.Stop(context.Background())
+		defer ctx.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
 		if err != nil {

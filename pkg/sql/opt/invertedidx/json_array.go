@@ -371,7 +371,7 @@ var _ invertedFilterPlanner = &jsonOrArrayFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,

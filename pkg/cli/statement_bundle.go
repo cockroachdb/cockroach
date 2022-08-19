@@ -160,7 +160,7 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 				}
 				placeholderToColMap[n] = pair[1]
 			}
-			inputs, outputs, err := getExplainCombinations(conn, explainPrefix, placeholderToColMap, bundle)
+			inputs, outputs, err := getExplainCombinations(ctx, conn, explainPrefix, placeholderToColMap, bundle)
 			if err != nil {
 				return err
 			}
@@ -205,6 +205,7 @@ type bucketKey struct {
 // Columns are linked to placeholders by the --placeholder=n=schema.table.col
 // commandline flags.
 func getExplainCombinations(
+	ctx context.Context,
 	conn clisqlclient.Conn,
 	explainPrefix string,
 	placeholderToColMap map[int]string,
@@ -310,7 +311,7 @@ func getExplainCombinations(
 				}
 				upperBound := bucket["upper_bound"].(string)
 				bucketMap[key] = []string{upperBound}
-				datum, err := rowenc.ParseDatumStringAs(colType, upperBound, &evalCtx)
+				datum, err := rowenc.ParseDatumStringAs(ctx, colType, upperBound, &evalCtx)
 				if err != nil {
 					panic("failed parsing datum string as " + datum.String() + " " + err.Error())
 				}

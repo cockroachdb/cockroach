@@ -11,6 +11,7 @@
 package physicalplan
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -122,6 +123,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			action: func(p *PhysicalPlan) {
 				if err := p.AddRendering(
+					context.Background(),
 					[]tree.TypedExpr{
 						&tree.IndexedVar{Idx: 10},
 						&tree.IndexedVar{Idx: 11},
@@ -148,6 +150,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			action: func(p *PhysicalPlan) {
 				if err := p.AddRendering(
+					context.Background(),
 					[]tree.TypedExpr{
 						&tree.IndexedVar{Idx: 11},
 						&tree.IndexedVar{Idx: 13},

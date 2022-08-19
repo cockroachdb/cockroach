@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -23,13 +24,13 @@ import (
 // Note this is extracted to a different file to prevent churn on the pgwire
 // test, which records line numbers.
 func crdbInternalSendNotice(
-	evalCtx *eval.Context, severity string, msg string,
+	ctx context.Context, evalCtx *eval.Context, severity string, msg string,
 ) (tree.Datum, error) {
 	if evalCtx.ClientNoticeSender == nil {
 		return nil, errors.AssertionFailedf("notice sender not set")
 	}
 	evalCtx.ClientNoticeSender.BufferClientNotice(
-		evalCtx.Context,
+		ctx,
 		pgnotice.NewWithSeverityf(strings.ToUpper(severity), "%s", msg),
 	)
 	return tree.NewDInt(0), nil

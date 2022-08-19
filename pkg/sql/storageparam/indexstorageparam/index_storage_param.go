@@ -13,6 +13,8 @@
 package indexstorageparam
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -44,7 +46,7 @@ func getS2ConfigFromIndex(indexDesc *descpb.IndexDescriptor) *geoindex.S2Config 
 }
 
 func (po *Setter) applyS2ConfigSetting(
-	evalCtx *eval.Context, key string, expr tree.Datum, min int64, max int64,
+	ctx context.Context, evalCtx *eval.Context, key string, expr tree.Datum, min int64, max int64,
 ) error {
 	s2Config := getS2ConfigFromIndex(po.IndexDesc)
 	if s2Config == nil {
@@ -55,7 +57,7 @@ func (po *Setter) applyS2ConfigSetting(
 		)
 	}
 
-	val, err := paramparse.DatumAsInt(evalCtx, key, expr)
+	val, err := paramparse.DatumAsInt(ctx, evalCtx, key, expr)
 	if err != nil {
 		return errors.Wrapf(err, "error decoding %q", key)
 	}
@@ -81,12 +83,12 @@ func (po *Setter) applyS2ConfigSetting(
 }
 
 func (po *Setter) applyGeometryIndexSetting(
-	evalCtx *eval.Context, key string, expr tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, key string, expr tree.Datum,
 ) error {
 	if po.IndexDesc.GeoConfig.S2Geometry == nil {
 		return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be applied to GEOMETRY spatial indexes", key)
 	}
-	val, err := paramparse.DatumAsFloat(evalCtx, key, expr)
+	val, err := paramparse.DatumAsFloat(ctx, evalCtx, key, expr)
 	if err != nil {
 		return errors.Wrapf(err, "error decoding %q", key)
 	}
@@ -107,19 +109,23 @@ func (po *Setter) applyGeometryIndexSetting(
 
 // Set implements the Setter interface.
 func (po *Setter) Set(
-	semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, expr tree.Datum,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	key string,
+	expr tree.Datum,
 ) error {
 	switch key {
 	case `fillfactor`:
-		return storageparam.SetFillFactor(evalCtx, key, expr)
+		return storageparam.SetFillFactor(ctx, evalCtx, key, expr)
 	case `s2_max_level`:
-		return po.applyS2ConfigSetting(evalCtx, key, expr, 0, 30)
+		return po.applyS2ConfigSetting(ctx, evalCtx, key, expr, 0, 30)
 	case `s2_level_mod`:
-		return po.applyS2ConfigSetting(evalCtx, key, expr, 1, 3)
+		return po.applyS2ConfigSetting(ctx, evalCtx, key, expr, 1, 3)
 	case `s2_max_cells`:
-		return po.applyS2ConfigSetting(evalCtx, key, expr, 1, 32)
+		return po.applyS2ConfigSetting(ctx, evalCtx, key, expr, 1, 32)
 	case `geometry_min_x`, `geometry_max_x`, `geometry_min_y`, `geometry_max_y`:
-		return po.applyGeometryIndexSetting(evalCtx, key, expr)
+		return po.applyGeometryIndexSetting(ctx, evalCtx, key, expr)
 	// `bucket_count` is handled in schema changer when creating hash sharded
 	// indexes.
 	case `bucket_count`:
@@ -136,7 +142,7 @@ func (po *Setter) Set(
 }
 
 // Reset implements the StorageParameterObserver interface.
-func (po *Setter) Reset(evalCtx *eval.Context, key string) error {
+func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) error {
 	return errors.AssertionFailedf("non-implemented codepath")
 }
 

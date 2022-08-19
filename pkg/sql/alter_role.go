@@ -618,7 +618,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 		strVal, err = n.sVar.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues, params.p.Txn())
 	} else {
 		// No string converter defined, use the default one.
-		strVal, err = getStringVal(params.EvalContext(), n.varName, n.typedValues)
+		strVal, err = getStringVal(params.ctx, params.EvalContext(), n.varName, n.typedValues)
 	}
 	if err != nil {
 		return "", err

@@ -15,6 +15,7 @@
 package physicalplan
 
 import (
+	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -567,6 +568,7 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
+	ctx context.Context,
 	exprs []tree.TypedExpr,
 	exprCtx ExprContext,
 	indexVarMap []int,
@@ -627,7 +629,7 @@ func (p *PhysicalPlan) AddRendering(
 	post.RenderExprs = make([]execinfrapb.Expression, len(exprs))
 	for i, e := range exprs {
 		var err error
-		post.RenderExprs[i], err = MakeExpression(e, exprCtx, compositeMap)
+		post.RenderExprs[i], err = MakeExpression(ctx, e, exprCtx, compositeMap)
 		if err != nil {
 			return err
 		}
@@ -704,12 +706,12 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddFilter(
-	expr tree.TypedExpr, exprCtx ExprContext, indexVarMap []int,
+	ctx context.Context, expr tree.TypedExpr, exprCtx ExprContext, indexVarMap []int,
 ) error {
 	if expr == nil {
 		return errors.Errorf("nil filter")
 	}
-	filter, err := MakeExpression(expr, exprCtx, indexVarMap)
+	filter, err := MakeExpression(ctx, expr, exprCtx, indexVarMap)
 	if err != nil {
 		return err
 	}
@@ -729,7 +731,9 @@ func (p *PhysicalPlan) AddFilter(
 // that is placed on the given node.
 //
 // For no limit, count should be MaxInt64.
-func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) error {
+func (p *PhysicalPlan) AddLimit(
+	ctx context.Context, count int64, offset int64, exprCtx ExprContext,
+) error {
 	if count < 0 {
 		return errors.Errorf("negative limit")
 	}
@@ -792,7 +796,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 		}
 		p.SetLastStagePost(post, p.GetResultTypes())
 		if limitZero {
-			if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
+			if err := p.AddFilter(ctx, tree.DBoolFalse, exprCtx, nil); err != nil {
 				return err
 			}
 		}
@@ -826,7 +830,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 		p.GetResultTypes(),
 	)
 	if limitZero {
-		if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
+		if err := p.AddFilter(ctx, tree.DBoolFalse, exprCtx, nil); err != nil {
 			return err
 		}
 	}
