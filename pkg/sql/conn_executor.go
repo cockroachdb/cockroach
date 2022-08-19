@@ -282,7 +282,7 @@ type Server struct {
 	// reportedStatsController.
 	reportedStatsController *sslocal.Controller
 
-	insights insights.Registry
+	insights insights.Provider
 
 	reCache *tree.RegexpCache
 
@@ -358,14 +358,14 @@ type ServerMetrics struct {
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */)
 	serverMetrics := makeServerMetrics(cfg)
-	outliersRegistry := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
+	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
-		outliersRegistry,
+		insightsProvider.Writer(),
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
@@ -378,7 +378,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
-		outliersRegistry,
+		insightsProvider.Writer(),
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
@@ -391,7 +391,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool:                    pool,
 		reportedStats:           reportedSQLStats,
 		reportedStatsController: reportedSQLStatsController,
-		insights:                outliersRegistry,
+		insights:                insightsProvider,
 		reCache:                 tree.NewRegexpCache(512),
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
@@ -545,6 +545,12 @@ func (s *Server) GetSchemaTelemetryController() *schematelemetrycontroller.Contr
 // sql.Server's index usage stats.
 func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
 	return s.indexUsageStatsController
+}
+
+// GetInsightsReader returns the insights.Reader for the current sql.Server's
+// detected execution insights.
+func (s *Server) GetInsightsReader() insights.Reader {
+	return s.insights.Reader()
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.

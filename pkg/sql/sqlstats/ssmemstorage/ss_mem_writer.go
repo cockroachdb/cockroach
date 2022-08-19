@@ -181,7 +181,7 @@ func (s *Container) RecordStatement(
 		contention = &value.ExecStats.ContentionTime
 	}
 
-	s.outliersRegistry.ObserveStatement(value.SessionID, &insights.Statement{
+	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
 		ID:                   value.StatementID,
 		FingerprintID:        stmtFingerprintID,
 		LatencyInSeconds:     value.ServiceLatency,
@@ -311,7 +311,7 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 	}
 
-	s.outliersRegistry.ObserveTransaction(value.SessionID, &insights.Transaction{
+	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
 		ID:            value.TransactionID,
 		FingerprintID: key})
 
