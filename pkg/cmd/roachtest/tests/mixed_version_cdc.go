@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -268,13 +267,15 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(node int) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		t.Status("creating changefeed")
 		db := u.conn(ctx, t, node)
-		cdcClusterSettings(t, sqlutils.MakeSQLRunner(db))
 
-		opts := []string{"updated", fmt.Sprintf("resolved='%s'", resolvedInterval)}
-		if _, err := db.Exec(
-			fmt.Sprintf("CREATE CHANGEFEED FOR %s.%s INTO $1 WITH %s", targetDB, targetTable, strings.Join(opts, ", ")),
-			cmvt.kafka.sinkURL(ctx),
-		); err != nil {
+		options := []cdcOption{
+			{"updated", ""},
+			{"resolved", fmt.Sprintf("'%s'", resolvedInterval)},
+		}
+		_, err := newChangefeedCreator(db, fmt.Sprintf("%s.%s", targetDB, targetTable), cmvt.kafka.sinkURL(ctx)).
+			With(options...).
+			Create()
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
