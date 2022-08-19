@@ -21,7 +21,9 @@ interface AnchorProps {
 
 const cx = classnames.bind(styles);
 
-export function Anchor(props: React.PropsWithChildren<AnchorProps>) {
+export function Anchor(
+  props: React.PropsWithChildren<AnchorProps>,
+): React.ReactElement {
   const { href, target, children, onClick, className } = props;
   return (
     <a

@@ -188,7 +188,7 @@ export class TransactionsPage extends React.Component<
     };
   };
 
-  clearRefreshDataTimeout() {
+  clearRefreshDataTimeout(): void {
     if (this.refreshDataTimeout != null) {
       clearTimeout(this.refreshDataTimeout);
     }
@@ -196,7 +196,7 @@ export class TransactionsPage extends React.Component<
 
   // Scheudle the next data request depending on the time
   // range key.
-  resetPolling(key: string) {
+  resetPolling(key: string): void {
     this.clearRefreshDataTimeout();
     if (key !== "Custom") {
       this.refreshDataTimeout = setTimeout(

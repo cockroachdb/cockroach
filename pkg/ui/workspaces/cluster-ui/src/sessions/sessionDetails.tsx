@@ -14,7 +14,7 @@ import { sessionAttr } from "src/util/constants";
 import { Helmet } from "react-helmet";
 import { Loading } from "../loading";
 import _ from "lodash";
-import { Link, RouteComponentProps } from "react-router-dom";
+import { RouteComponentProps } from "react-router-dom";
 
 import {
   getStatusClassname,

@@ -14,7 +14,7 @@ import { analyticsActions, AppState } from "src/store";
 import { SessionsState } from "src/store/sessions";
 
 import { createSelector } from "reselect";
-import { OwnProps, SessionsPage } from "./index";
+import { SessionsPage } from "./index";
 
 import { actions as sessionsActions } from "src/store/sessions";
 import { actions as localStorageActions } from "src/store/localStorage";
