@@ -41,7 +41,7 @@ type Cluster interface {
 	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
 	Put(ctx context.Context, src, dest string, opts ...option.Option)
 	PutE(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
-	PutLibraries(ctx context.Context, libraryDir string) error
+	PutLibraries(ctx context.Context, libraryDir string, libraries []string) error
 	Stage(
 		ctx context.Context, l *logger.Logger, application, versionOrSHA, dir string, opts ...option.Option,
 	) error
@@ -71,6 +71,7 @@ type Cluster interface {
 	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 
 	// SQL clients to nodes.
+
 	Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB
 	ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error)
 	ConnEAsUser(ctx context.Context, l *logger.Logger, node int, user string) (*gosql.DB, error)
