@@ -73,7 +73,7 @@ func slurpSSTablesLatestKey(
 			LowerBound: keys.LocalMax,
 			UpperBound: keys.MaxKey,
 		}
-		sst, err := storage.NewPebbleSSTIterator([]sstable.ReadableFile{file}, iterOpts)
+		sst, err := storage.NewPebbleSSTIterator([][]sstable.ReadableFile{{file}}, iterOpts, false /* forwardOnly */)
 		if err != nil {
 			t.Fatal(err)
 		}

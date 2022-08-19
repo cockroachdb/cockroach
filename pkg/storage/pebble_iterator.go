@@ -105,13 +105,20 @@ func newPebbleIteratorByCloning(
 }
 
 // newPebbleSSTIterator creates a new Pebble iterator for the given SSTs.
-func newPebbleSSTIterator(files []sstable.ReadableFile, opts IterOptions) (*pebbleIterator, error) {
+func newPebbleSSTIterator(
+	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
 	p.init(nil, opts, StandardDurability, true /* supportsRangeKeys */)
 
+	var externalIterOpts []pebble.ExternalIterOption
+	if forwardOnly {
+		externalIterOpts = append(externalIterOpts, pebble.ExternalIterForwardOnly{})
+	}
+
 	var err error
-	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files); err != nil {
+	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...); err != nil {
 		p.Close()
 		return nil, err
 	}
@@ -228,7 +235,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
 		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64)
-		p.options.RangeKeyMasking.Filter = &p.maskFilter
+		p.options.RangeKeyMasking.Filter = p.getBlockPropertyFilterMask
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
@@ -879,6 +886,10 @@ func (p *pebbleIterator) SupportsPrev() bool {
 // GetRawIter is part of the EngineIterator interface.
 func (p *pebbleIterator) GetRawIter() *pebble.Iterator {
 	return p.iter
+}
+
+func (p *pebbleIterator) getBlockPropertyFilterMask() pebble.BlockPropertyFilterMask {
+	return &p.maskFilter
 }
 
 func (p *pebbleIterator) destroy() {

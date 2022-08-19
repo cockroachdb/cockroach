@@ -19,17 +19,25 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-// NewPebbleSSTIterator returns an `MVCCIterator` for the provided SST files.
-// The SSTs are merged during iteration. The file slice must be sorted in
-// reverse chronological order: a key in a file at a lower index will shadow the
-// same key contained within a file at a higher index.
+// NewPebbleSSTIterator returns an `MVCCIterator` for the provided "levels" of
+// SST files.  The SSTs are merged during iteration. Each subslice's sstables
+// must have non-overlapping point keys, and be ordered by point key in
+// ascending order. Range keys may overlap arbitrarily, including within a
+// subarray. The outer slice of levels must be sorted in reverse chronological
+// order: a key in a file in a level at a lower index will shadow the same key
+// contained within a file in a level at a higher index.
+//
+// If the iterator is only going to be used for forward iteration, the caller
+// may pass forwardOnly=true for better performance.
 //
 // TODO(erikgrinaker): This currently has significant performance overhead
 // compared with sstIterator. This must be optimized, and then replace (or be
 // used in) NewSSTIterator and NewMemSSTIterator. It should also replace
 // MultiIterator.
-func NewPebbleSSTIterator(files []sstable.ReadableFile, opts IterOptions) (MVCCIterator, error) {
-	return newPebbleSSTIterator(files, opts)
+func NewPebbleSSTIterator(
+	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+) (MVCCIterator, error) {
+	return newPebbleSSTIterator(files, opts, forwardOnly)
 }
 
 // NewPebbleMemSSTIterator returns an `MVCCIterator` for the provided SST data,
@@ -47,7 +55,7 @@ func NewPebbleMultiMemSSTIterator(
 	for _, sst := range ssts {
 		files = append(files, vfs.NewMemFile(sst))
 	}
-	iter, err := NewPebbleSSTIterator(files, opts)
+	iter, err := NewPebbleSSTIterator([][]sstable.ReadableFile{files}, opts, false /* forwardOnly */)
 	if err != nil {
 		return nil, err
 	}
