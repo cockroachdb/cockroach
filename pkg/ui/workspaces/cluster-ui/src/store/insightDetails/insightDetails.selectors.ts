@@ -8,7 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./workloadInsights";
-export * from "./workloadInsightDetails";
-export * from "./utils";
-export * from "./types";
+import { createSelector } from "reselect";
+import { adminUISelector } from "../utils/selectors";
+
+export const selectInsightDetails = createSelector(
+  adminUISelector,
+  adminUiState => {
+    if (!adminUiState.insights) return [];
+    return adminUiState.insightDetails.data;
+  },
+);

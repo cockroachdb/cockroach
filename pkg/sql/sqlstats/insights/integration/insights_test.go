@@ -110,8 +110,8 @@ func TestInsightsIntegration(t *testing.T) {
 			return err
 		}
 
-		if status != "completed" {
-			return fmt.Errorf("expected 'completed', but was %s", status)
+		if status != "Completed" {
+			return fmt.Errorf("expected 'Completed', but was %s", status)
 		}
 
 		delayFromTable := endInsights.Sub(startInsights).Seconds()
