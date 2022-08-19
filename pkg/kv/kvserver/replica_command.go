@@ -2265,8 +2265,18 @@ func execChangeReplicasTxn(
 	if err := args.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
+
+		// Use a child tracing span for txn sub-operations to decrease verbosity.
+		sp := tracing.SpanFromContext(ctx)
+		tCtx := ctx
+		if sp != nil {
+			tCtx, sp = tracing.EnsureChildSpan(ctx, sp.Tracer(), fmt.Sprintf("%s-txn", replicaChangeTxnName),
+				tracing.WithRecording(tracingpb.RecordingStructured))
+			defer sp.Finish()
+		}
+
 		desc, dbDescValue, skip, err := conditionalGetDescValueFromDB(
-			ctx, txn, referenceDesc.StartKey, false /* forUpdate */, check)
+			tCtx, txn, referenceDesc.StartKey, false /* forUpdate */, check)
 		if err != nil {
 			return err
 		}
@@ -2277,7 +2287,7 @@ func execChangeReplicasTxn(
 		}
 		// Note that we are now using the descriptor from KV, not the one passed
 		// into this method.
-		crt, err := prepareChangeReplicasTrigger(ctx, desc, chgs, args.testForceJointConfig)
+		crt, err := prepareChangeReplicasTrigger(tCtx, desc, chgs, args.testForceJointConfig)
 		if err != nil {
 			return err
 		}
@@ -2331,25 +2341,25 @@ func execChangeReplicasTxn(
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(ctx, b, descKey, dbDescValue, crt.Desc); err != nil {
+			if err := updateRangeDescriptor(tCtx, b, descKey, dbDescValue, crt.Desc); err != nil {
 				return err
 			}
 
 			// Run transaction up to this point to create txn record early (see #9265).
-			if err := txn.Run(ctx, b); err != nil {
+			if err := txn.Run(tCtx, b); err != nil {
 				return err
 			}
 		}
 
 		// Log replica change into range event log.
 		err = recordRangeEventsInLog(
-			ctx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, args.logChange,
+			tCtx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, args.logChange,
 		)
 		if err != nil {
 			return err
 		}
 		err = recordRangeEventsInLog(
-			ctx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, args.logChange,
+			tCtx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, args.logChange,
 		)
 		if err != nil {
 			return err
@@ -2370,7 +2380,7 @@ func execChangeReplicasTxn(
 				ChangeReplicasTrigger: crt,
 			},
 		})
-		if err := txn.Run(ctx, b); err != nil {
+		if err := txn.Run(tCtx, b); err != nil {
 			log.Eventf(ctx, "%v", err)
 			return err
 		}

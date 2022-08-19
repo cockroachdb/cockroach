@@ -22,12 +22,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
 func (s *Store) insertRangeLogEvent(
 	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
 ) error {
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "insert-range-log", tracing.WithRecording(tracingpb.RecordingStructured))
+	defer sp.Finish()
+
 	// Record range log event to console log.
 	var info string
 	if event.Info != nil {
