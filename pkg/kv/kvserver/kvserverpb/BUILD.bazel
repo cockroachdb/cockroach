@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "//pkg/util/tracing/tracingpb",
     ],
 )
 
