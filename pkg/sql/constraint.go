@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -124,7 +125,7 @@ func (p *planner) ConstrainPrimaryIndexSpanByExpr(
 
 	ic.Init(
 		fe, nil, indexCols, notNullIndexCols, nil,
-		consolidate, evalCtx, &nf, nil,
+		consolidate, evalCtx, &nf, partition.PrefixSorter{},
 	)
 
 	remaining := ic.RemainingFilters()

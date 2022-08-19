@@ -209,7 +209,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(tabID)
 	index := tabMeta.Table.Index(indexOrd)
-	ps, _ := tabMeta.IndexPartitionLocality(index.Ordinal(), index, c.e.evalCtx)
+	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
 	columns := make([]opt.OrderingColumn, index.LaxKeyColumnCount())
 	var notNullCols opt.ColSet
 	for i := range columns {
