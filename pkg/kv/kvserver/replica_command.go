@@ -1034,7 +1034,7 @@ func (r *Replica) changeReplicasImpl(
 	// here.
 	swaps := getInternalChangesForExplicitPromotionsAndDemotions(targets.voterDemotions, targets.nonVoterPromotions)
 	if len(swaps) > 0 {
-		desc, err = execChangeReplicasTxn(ctx, desc, reason, details, swaps, changeReplicasTxnArgs{
+		desc, err = execChangeReplicasTxn(ctx, r.store.cfg.Tracer(), desc, reason, details, swaps, changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
 			liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 			logChange:                            r.store.logChange,
@@ -1114,7 +1114,7 @@ func (r *Replica) changeReplicasImpl(
 		for _, rem := range removals {
 			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemoveNonVoter}}
 			var err error
-			desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs,
+			desc, err = execChangeReplicasTxn(ctx, r.store.cfg.Tracer(), desc, reason, details, iChgs,
 				changeReplicasTxnArgs{
 					db:                                   r.store.DB(),
 					liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
@@ -1256,7 +1256,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 	// TODO(tbg): reconsider this.
 	s := r.store
 	return execChangeReplicasTxn(
-		ctx, desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
+		ctx, s.cfg.Tracer(), desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 		changeReplicasTxnArgs{
 			db:                                   s.DB(),
 			liveAndDeadReplicas:                  s.cfg.StorePool.LiveAndDeadReplicas,
@@ -1271,7 +1271,7 @@ func (r *Replica) TestingRemoveLearner(
 	ctx context.Context, beforeDesc *roachpb.RangeDescriptor, target roachpb.ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
 	desc, err := execChangeReplicasTxn(
-		ctx, beforeDesc, kvserverpb.ReasonAbandonedLearner, "",
+		ctx, r.store.cfg.Tracer(), beforeDesc, kvserverpb.ReasonAbandonedLearner, "",
 		[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 		changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
@@ -1348,7 +1348,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
-			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
+			ctx, store.cfg.Tracer(), desc, kvserverpb.ReasonAbandonedLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 			changeReplicasTxnArgs{db: store.DB(),
 				liveAndDeadReplicas:                  store.cfg.StorePool.LiveAndDeadReplicas,
@@ -1723,7 +1723,7 @@ func (r *Replica) initializeRaftLearners(
 		iChgs := []internalReplicationChange{{target: target, typ: iChangeType}}
 		var err error
 		desc, err = execChangeReplicasTxn(
-			ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
+			ctx, r.store.cfg.Tracer(), desc, reason, details, iChgs, changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
 				liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            r.store.logChange,
@@ -1876,7 +1876,7 @@ func (r *Replica) execReplicationChangesForVoters(
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
 	}
 
-	desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
+	desc, err = execChangeReplicasTxn(ctx, r.store.cfg.Tracer(), desc, reason, details, iChgs, changeReplicasTxnArgs{
 		db:                                   r.store.DB(),
 		liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 		logChange:                            r.store.logChange,
@@ -1933,7 +1933,7 @@ func (r *Replica) tryRollbackRaftLearner(
 
 	rollbackFn := func(ctx context.Context) error {
 		_, err := execChangeReplicasTxn(
-			ctx, rangeDesc, reason, details,
+			ctx, r.store.cfg.Tracer(), rangeDesc, reason, details,
 			[]internalReplicationChange{{target: target, typ: removeChgType}},
 			changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
@@ -2211,6 +2211,7 @@ type changeReplicasTxnArgs struct {
 // their expectations.
 func execChangeReplicasTxn(
 	ctx context.Context,
+	tracer *tracing.Tracer,
 	referenceDesc *roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
@@ -2264,6 +2265,16 @@ func execChangeReplicasTxn(
 	if err := args.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
+
+		// The transaction uses a child tracing span so that low-level database
+		// traces from the operations within can be encapsulated in this span,
+		// which may belong to a parent tracing span used for logging traces
+		// representing higher-level operations, such as replicate queue processing.
+		parentCtx := ctx
+		parentSp := tracing.SpanFromContext(ctx)
+		ctx, sp := tracer.StartSpanCtx(ctx, replicaChangeTxnName, tracing.WithParent(parentSp))
+		defer sp.Finish()
+
 		desc, dbDescValue, skip, err := conditionalGetDescValueFromDB(
 			ctx, txn, referenceDesc.StartKey, false /* forUpdate */, check)
 		if err != nil {
@@ -2280,7 +2291,7 @@ func execChangeReplicasTxn(
 		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
+		log.Infof(parentCtx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
 
 		// NB: we haven't written any intents yet, so even in the unlikely case in which
 		// this is held up, we won't block anyone else.
