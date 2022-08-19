@@ -127,7 +127,7 @@ var (
 	// it takes for a single reduction run.
 	lock syncutil.RWMutex
 	// seenIssues tracks the seen github issues.
-	seenIssues = map[string]bool{}
+	seenIssues = map[string]struct{}{}
 
 	connRE         = regexp.MustCompile(`(?m)^sql:\s*(postgresql://.*)$`)
 	panicRE        = regexp.MustCompile(`(?m)^(panic: .*?)( \[recovered\])?$`)
@@ -308,11 +308,9 @@ func (s WorkerSetup) failure(ctx context.Context, initSQL []string, stmt string,
 	// at once.
 	defer lock.Unlock()
 	sqlFilteredMessage := fmt.Sprintf("sql: %s", filteredMessage)
-	alreadySeen := seenIssues[sqlFilteredMessage]
-	if !alreadySeen {
-		seenIssues[sqlFilteredMessage] = true
-	}
-	if alreadySeen {
+	if _, alreadySeen := seenIssues[sqlFilteredMessage]; !alreadySeen {
+		seenIssues[sqlFilteredMessage] = struct{}{}
+	} else {
 		fmt.Println("already found", message)
 		return nil
 	}

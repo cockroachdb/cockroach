@@ -114,7 +114,7 @@ var (
 	// LogUnknown determines whether unknown types encountered during
 	// statement walking.
 	LogUnknown   bool
-	unknownTypes = map[string]bool{}
+	unknownTypes = map[string]struct{}{}
 )
 
 func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
@@ -360,8 +360,8 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			default:
 				if LogUnknown {
 					n := fmt.Sprintf("%T", node)
-					if !unknownTypes[n] {
-						unknownTypes[n] = true
+					if _, ok := unknownTypes[n]; !ok {
+						unknownTypes[n] = struct{}{}
 						fmt.Println("UNKNOWN", n)
 					}
 				}

@@ -2089,9 +2089,11 @@ func TestLint(t *testing.T) {
 			"--",
 			"ccl",
 			"cli",
+			"cmd",
 			"server",
 			"sql/opt/norm*.go",
 			":!*_test.go",
+			":!*testdata*",
 		)
 		if err != nil {
 			t.Fatal(err)

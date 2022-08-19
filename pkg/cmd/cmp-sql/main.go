@@ -74,14 +74,14 @@ func main() {
 	}
 
 	// Record unique errors and mismatches and only show them once.
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	sawErr := func(err error) string {
 		s := reduceErr(err)
 		// Ignore error strings after the first semicolon.
 		res := fmt.Sprintf("ERR: %s", s)
-		if !seen[res] {
+		if _, ok := seen[res]; !ok {
 			fmt.Print(err, "\n\n")
-			seen[res] = true
+			seen[res] = struct{}{}
 		}
 		return res
 	}
@@ -151,8 +151,8 @@ func main() {
 							confs[vi].Port,
 							v,
 						)
-						if !seen[mismatch] {
-							seen[mismatch] = true
+						if _, ok := seen[mismatch]; !ok {
+							seen[mismatch] = struct{}{}
 							fmt.Print("MISMATCH:\n", mismatch)
 							fmt.Println(repro)
 						}
