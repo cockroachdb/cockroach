@@ -5712,12 +5712,24 @@ func MVCCIsSpanEmpty(
 
 // MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
 // interval (StartTS, EndTS] as a Pebble SST. See MVCCExportOptions for options.
+// StartTS may be zero.
 //
-// Tombstones are included if all revisions are requested (all tombstones) or if
-// the StartTS is non-zero (latest tombstone), including both MVCC point
-// tombstones and MVCC range tombstones. Intents within the time interval will
-// return a WriteIntentError, while intents outside the time interval are
-// ignored.
+// This comes in two principal flavors: all revisions or latest revision only.
+// In all-revisions mode, exports everything matching the span and time bounds,
+// i.e. extracts contiguous blocks of MVCC history. In latest-revision mode,
+// extracts just the changes necessary to transform an MVCC snapshot at StartTS
+// into one equivalent to the data at EndTS, but without including all
+// intermediate revisions not visible at EndTS. The latter mode is used for
+// incremental backups that can only be restored to EndTS, the former allows
+// restoring to any intermediate timestamp.
+//
+// Tombstones (both point and MVCC range tombstones) are treated like revisions.
+// That is, if all revisions are requested, all tombstones in (StartTS, EndTS]
+// and overlapping [StartKey, EndKey) are returned. If only the latest revision
+// is requested, only the most recent matching tombstone is returned.
+//
+// Intents within the time and span bounds will return a WriteIntentError, while
+// intents outside are ignored.
 //
 // Returns an export summary and a resume key that allows resuming the export if
 // it reached a limit. Data is written to dest as it is collected. If an error
