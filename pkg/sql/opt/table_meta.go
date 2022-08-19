@@ -111,7 +111,7 @@ var tableAnnIDCount TableAnnID
 // called. Calling more than this number of times results in a panic. Having
 // a maximum enables a static annotation array to be inlined into the metadata
 // table struct.
-const maxTableAnnIDCount = 2
+const maxTableAnnIDCount = 3
 
 // TableMeta stores information about one of the tables stored in the metadata.
 //
