@@ -1,4 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_test(
@@ -7,15 +8,17 @@ go_test(
     srcs = [
         "main_test.go",
         "schemachanger_ccl_test.go",
+        ":test_gen_backup_non_ccl",  # keep
+        ":test_gen_ccl",  # keep
     ],
     data = glob(["testdata/**"]) + [
         "//pkg/sql/schemachanger:testdata",
     ],
     embed = [":schemachangerccl"],
     shard_count = 16,
+    tags = ["cpu:3"],
     deps = [
         "//pkg/base",
-        "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/utilccl",
@@ -23,11 +26,11 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -40,6 +43,44 @@ go_library(
     srcs = ["doc.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/schemachangerccl",
     visibility = ["//visibility:public"],
+)
+
+sctest_gen(
+    name = "test_gen_backup_non_ccl",
+    out = "backup_base_generated_test.go",
+    ccl = True,
+    new_cluster_func = "newCluster",
+    package = "schemachangerccl",
+    suffix = "base",
+    test_data = [
+        "//pkg/sql/schemachanger:end_to_end_testdata",
+    ],
+    tests = ["Backup"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen_ccl",
+    out = "ccl_generated_test.go",
+    ccl = True,
+    new_cluster_func = "newCluster",
+    package = "schemachangerccl",
+    suffix = "ccl",
+    test_data = glob(["testdata/end_to_end/**"]),
+    tests = [
+        "Backup",
+        "EndToEndSideEffects",
+        "GenerateSchemaChangeCorpus",
+        "Pause",
+        "Rollback",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 get_x_data(name = "get_x_data")
