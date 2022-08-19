@@ -102,7 +102,7 @@ func TestIngester_Disabled(t *testing.T) {
 	ingester := newConcurrentBufferIngester(&fakeRegistry{enable: false})
 	ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
 	ingester.ObserveTransaction(clusterunique.ID{}, &Transaction{})
-	require.Nil(t, ingester.(*concurrentBufferIngester).guard.eventBuffer[0])
+	require.Nil(t, ingester.guard.eventBuffer[0])
 }
 
 type fakeRegistry struct {
@@ -112,10 +112,6 @@ type fakeRegistry struct {
 		syncutil.RWMutex
 		events []testEvent
 	}
-}
-
-func (r *fakeRegistry) Start(context.Context, *stop.Stopper) {
-	// No-op.
 }
 
 func (r *fakeRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {

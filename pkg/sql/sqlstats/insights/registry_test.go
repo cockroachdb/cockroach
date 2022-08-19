@@ -165,7 +165,7 @@ func TestRegistry(t *testing.T) {
 	})
 }
 
-func observeStatementExecution(registry Registry, idBase uint64, latencyInSeconds float64) {
+func observeStatementExecution(registry registry, idBase uint64, latencyInSeconds float64) {
 	sessionID := clusterunique.ID{Uint128: uint128.FromInts(2, 0)}
 	txnID := uuid.FromUint128(uint128.FromInts(1, idBase))
 	stmtID := clusterunique.ID{Uint128: uint128.FromInts(0, idBase)}
@@ -173,7 +173,7 @@ func observeStatementExecution(registry Registry, idBase uint64, latencyInSecond
 	registry.ObserveTransaction(sessionID, &Transaction{ID: txnID})
 }
 
-func assertInsightStatementIDs(t *testing.T, registry Registry, expected []uint64) {
+func assertInsightStatementIDs(t *testing.T, registry registry, expected []uint64) {
 	var actual []uint64
 	registry.IterateInsights(context.Background(), func(ctx context.Context, insight *Insight) {
 		actual = append(actual, insight.Statement.ID.Lo)
