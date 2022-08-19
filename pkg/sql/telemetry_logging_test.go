@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -93,6 +94,7 @@ func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
 // and are sampled according to the configured sample rate.
 func TestTelemetryLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86118, "flaky test")
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
