@@ -86,7 +86,7 @@ type intentInterleavingIter struct {
 	constraint intentInterleavingIterConstraint
 
 	// iter is for iterating over MVCC keys and interleaved intents.
-	iter MVCCIterator
+	iter *pebbleIterator // MVCCIterator
 	// The valid value from iter.Valid() after the last positioning call.
 	iterValid bool
 	// When iterValid = true, this contains the result of iter.UnsafeKey(). We
@@ -96,7 +96,7 @@ type intentInterleavingIter struct {
 
 	// intentIter is for iterating over separated intents, so that
 	// intentInterleavingIter can make them look as if they were interleaved.
-	intentIter      EngineIterator
+	intentIter      *pebbleIterator // EngineIterator
 	intentIterState pebble.IterValidityState
 	// The decoded key from the lock table. This is an unsafe key
 	// in that it is only valid when intentIter has not been
@@ -255,17 +255,21 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 		// constrainedToGlobal.
 		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
+
+	// All readers given to intentInterleavingIter construct pebbleIterators, so
+	// we can use the concrete type here to avoid the cost of dynamic dispatch.
+	//
 	// Note that we can reuse intentKeyBuf, intentLimitKeyBuf after
 	// NewEngineIterator returns.
-	intentIter := reader.NewEngineIterator(intentOpts)
+	intentIter := reader.NewEngineIterator(intentOpts).(*pebbleIterator)
 
 	// The creation of these iterators can race with concurrent mutations, which
 	// may make them inconsistent with each other. So we clone here, to ensure
 	// consistency (certain Reader implementations already ensure consistency,
 	// and we use that when possible to save allocations).
-	var iter MVCCIterator
+	var iter *pebbleIterator
 	if reader.ConsistentIterators() {
-		iter = reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		iter = maybeUnwrapUnsafeIter(reader.NewMVCCIterator(MVCCKeyIterKind, opts)).(*pebbleIterator)
 	} else {
 		iter = newPebbleIteratorByCloning(
 			intentIter.GetRawIter(), opts, StandardDurability, reader.SupportsRangeKeys())
@@ -1275,6 +1279,16 @@ type unsafeMVCCIterator struct {
 func maybeWrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
 	if util.RaceEnabled {
 		return &unsafeMVCCIterator{MVCCIterator: iter}
+	}
+	return iter
+}
+
+// gcassert:inline
+func maybeUnwrapUnsafeIter(iter MVCCIterator) MVCCIterator {
+	if util.RaceEnabled {
+		if unsafeIter, ok := iter.(*unsafeMVCCIterator); ok {
+			return unsafeIter.MVCCIterator
+		}
 	}
 	return iter
 }
