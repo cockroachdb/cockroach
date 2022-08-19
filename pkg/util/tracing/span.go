@@ -416,6 +416,9 @@ func (sp *Span) RecordingType() tracingpb.RecordingType {
 
 // IsVerbose returns true if the Span is verbose. See SetVerbose for details.
 func (sp *Span) IsVerbose() bool {
+	if sp == nil {
+		return false
+	}
 	return sp.RecordingType() == tracingpb.RecordingVerbose
 }
 
