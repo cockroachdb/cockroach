@@ -6432,7 +6432,7 @@ func populateExecutionInsights(
 		}
 
 		indexRecommendations := tree.NewDArray(types.String)
-		for _, recommendation := range insight.Statement.IndexRecommendation {
+		for _, recommendation := range insight.Statement.IndexRecommendations {
 			if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
 				return err
 			}
@@ -6446,7 +6446,7 @@ func populateExecutionInsights(
 			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Statement.FingerprintID)))),
 			problems,
 			tree.NewDString(insight.Statement.Query),
-			tree.NewDString(insight.Statement.Status),
+			tree.NewDString(insight.Statement.Status.String()),
 			startTimestamp,
 			endTimestamp,
 			tree.MakeDBool(tree.DBool(insight.Statement.FullScan)),

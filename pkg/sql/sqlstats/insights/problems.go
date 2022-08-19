@@ -17,8 +17,16 @@ type problems struct {
 }
 
 func (p *problems) examine(stmt *Statement) (result []Problem) {
+	if len(stmt.IndexRecommendations) > 0 {
+		result = append(result, Problem_SuboptimalPlan)
+	}
+
 	if stmt.Retries >= HighRetryCountThreshold.Get(&p.st.SV) {
 		result = append(result, Problem_HighRetryCount)
+	}
+
+	if stmt.Status == Statement_Failed {
+		result = append(result, Problem_FailedExecution)
 	}
 
 	if len(result) == 0 {
