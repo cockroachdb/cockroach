@@ -12,7 +12,7 @@ import { Moment } from "moment";
 import { Filters } from "../queryFilter";
 
 export enum InsightNameEnum {
-  highContentionTime = "highContentionTime",
+  highContentionTime = "HighContentionTime",
   unknown = "Unknown",
   planRegression = "PlanRegression",
   suboptimalPlan = "SuboptimalPlan",
@@ -80,6 +80,7 @@ export type StatementInsightEvent = {
   query: string;
   application: string;
   insights: Insight[];
+  indexRecommendations: string[];
 };
 
 export type Insight = {
@@ -143,7 +144,7 @@ const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
     `due to outdated statistics or missing indexes.`;
   return {
     name: InsightNameEnum.suboptimalPlan,
-    label: "Sub-Optimal Plan",
+    label: "Suboptimal Plan",
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -228,10 +229,12 @@ export type InsightType =
   | "DROP_INDEX"
   | "CREATE_INDEX"
   | "REPLACE_INDEX"
-  | "HIGH_WAIT_TIME"
-  | "HIGH_RETRIES"
-  | "SUBOPTIMAL_PLAN"
-  | "FAILED";
+  | "HighContentionTime"
+  | "HighRetryCount"
+  | "SuboptimalPlan"
+  | "PlanRegression"
+  | "FAILED"
+  | "Unknown";
 
 export interface InsightRecommendation {
   type: InsightType;
@@ -259,6 +262,6 @@ export interface executionDetails {
 }
 
 export interface insightDetails {
-  duration: number;
+  duration?: number;
   description: string;
 }
