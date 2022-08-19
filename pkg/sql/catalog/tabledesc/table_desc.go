@@ -674,3 +674,8 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 func (desc *wrapper) GetInProgressImportStartTime() int64 {
 	return desc.ImportStartWallTime
 }
+
+// GetLastMVCCBulkOp returns true if last bulk operation was MVCC.
+func (desc *wrapper) GetLastMVCCBulkOp() bool {
+	return desc.LastMVCCBulkOp
+}

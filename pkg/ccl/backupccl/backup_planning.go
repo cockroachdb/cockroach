@@ -930,10 +930,13 @@ func planSchedulePTSChaining(
 }
 
 // getReintroducedSpans checks to see if any spans need to be re-backed up from
-// ts = 0. This may be the case if a span was OFFLINE in the previous backup and
-// has come back online since. The entire span needs to be re-backed up because
-// we may otherwise miss AddSSTable requests which write to a timestamp older
-// than the last incremental.
+// ts = 0. This will be the case if 1) the table was offline in the previous
+// backup; and 2) the table returned online before this backup began via a
+// non-mvcc operation.
+//
+// The entire span needs to be re-backed up because there may have been a
+// non-mvcc bulk operation that occurred after the last backup which re-wrote
+// history captured in the last backup.
 func getReintroducedSpans(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -946,41 +949,41 @@ func getReintroducedSpans(
 
 	offlineInLastBackup := make(map[descpb.ID]struct{})
 	lastBackup := prevBackups[len(prevBackups)-1]
+
 	for _, desc := range lastBackup.Descriptors {
-		// TODO(pbardea): Also check that lastWriteTime is set once those are
-		// populated on the table descriptor.
 		if table, _, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Offline() {
 			offlineInLastBackup[table.GetID()] = struct{}{}
 		}
 	}
-
-	// If the table was offline in the last backup, but becomes PUBLIC, then it
-	// needs to be re-included since we may have missed non-transactional writes.
+	// If the table was offline in the last backup, but becomes PUBLIC via
+	// non-mvcc operation _exactly_ at the time of this backup, then it needs to
+	// be re-included.
 	tablesToReinclude := make([]catalog.TableDescriptor, 0)
 	for _, desc := range tables {
-		if _, wasOffline := offlineInLastBackup[desc.GetID()]; wasOffline && desc.Public() {
+		if _, wasOffline := offlineInLastBackup[desc.GetID()]; wasOffline && desc.Public() && !desc.GetLastMVCCBulkOp() {
 			tablesToReinclude = append(tablesToReinclude, desc)
 			reintroducedTables[desc.GetID()] = struct{}{}
 		}
 	}
 
-	// Tables should be re-introduced if any revision of the table was PUBLIC. A
-	// table may have been OFFLINE at the time of the last backup, and OFFLINE at
-	// the time of the current backup, but may have been PUBLIC at some time in
-	// between.
+	// Tables should be re-introduced if any revision of the table --  during this
+	// incremental backup's time 	interval--  brought it online via a non-MVCC
+	// bulk operation. A table may have been OFFLINE at the time of the last
+	// backup, conducting an MVCC operation, but returned online via a non mvcc
+	// operation (e.g. an import rollback via ClearRange).
 	for _, rev := range revs {
 		rawTable, _, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTable == nil {
 			continue
 		}
 		table := tabledesc.NewBuilder(rawTable).BuildImmutableTable()
-		if _, wasOffline := offlineInLastBackup[table.GetID()]; wasOffline && table.Public() {
+		if _, wasOffline := offlineInLastBackup[table.GetID()]; wasOffline && table.Public() && !table.GetLastMVCCBulkOp() {
 			tablesToReinclude = append(tablesToReinclude, table)
 			reintroducedTables[table.GetID()] = struct{}{}
 		}
 	}
 
-	// All revisions of the table that we're re-introducing must also be
+	// All revisions of the tables that we're re-introducing must also be
 	// considered.
 	allRevs := make([]backuppb.BackupManifest_DescriptorRevision, 0, len(revs))
 	for _, rev := range revs {
@@ -1399,11 +1402,11 @@ func createBackupManifest(
 
 		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
-		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
+		reintroducedSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
 			return backuppb.BackupManifest{}, err
 		}
-		newSpans = append(newSpans, tableSpans...)
+		newSpans = append(newSpans, reintroducedSpans...)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion

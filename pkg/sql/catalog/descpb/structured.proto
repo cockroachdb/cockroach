@@ -1184,7 +1184,10 @@ message TableDescriptor {
   // This field is non zero if this table is offline during an import.
   optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
 
-  // Next ID: 55
+  // LastMVCCBulkOp indicates the last bulk ingestion to complete on this table was MVCC compatible
+  optional bool last_mvcc_bulk_op = 55 [(gogoproto.nullable) = false, (gogoproto.customname) = "LastMVCCBulkOp"];
+
+  // Next ID: 56
 }
 
 // SurvivalGoal is the survival goal for a database.

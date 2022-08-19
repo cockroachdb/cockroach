@@ -1,0 +1,9 @@
+# test that we properly fully backup an offline span when it can be non-mvcc
+#
+# TODO(msbutler): waiting for https://github.com/cockroachdb/cockroach/pull/86689 to land
+# Part 1 - ensure clear range induces full reintroduction of spans
+# - begin import jobs and pause it
+# - run inc backup - verify inc has captured the data
+# - roll it back it back non-mvcc
+# - run an inc backup and ensure we reintroduce the table spans
+#

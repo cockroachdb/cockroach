@@ -724,6 +724,9 @@ type TableDescriptor interface {
 	// GetInProgressImportStartTime returns the start wall time of the in progress import,
 	// if it exists.
 	GetInProgressImportStartTime() int64
+
+	// LastMVCCOp is true if the last operation was mvcc.
+	GetLastMVCCBulkOp() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

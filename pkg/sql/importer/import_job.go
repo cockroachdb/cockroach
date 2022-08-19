@@ -562,10 +562,16 @@ func prepareNewTablesForIngestion(
 		}
 	}
 
+	// In a fully upgraded 22.2 cluster, all AddSStable operations are MVCC compatible.
+	mvccSafe := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2)
+
 	// tableDescs contains the same slice as newMutableTableDescriptors but
 	// as tabledesc.TableDescriptor.
 	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
+		if mvccSafe {
+			newMutableTableDescriptors[i].SetLastMVCCBulkOp(true)
+		}
 		newMutableTableDescriptors[i].SetOffline("importing")
 		tableDescs[i] = newMutableTableDescriptors[i]
 	}
@@ -680,7 +686,9 @@ func (r *importResumer) prepareSchemasForIngestion(
 	return schemaMetadata, err
 }
 
-// bindImportStarTime writes the ImportStarTime to the descriptor.
+// bindImportStarTime writes the ImportStarTime to the descriptor. The caller
+// MUST check the cluster has fully upgraded to 22.2, where all AddSSTable
+// requests are MVCC.
 func bindImportStartTime(
 	ctx context.Context, p sql.JobExecContext, id catid.DescID, startWallTime int64,
 ) error {
@@ -694,6 +702,7 @@ func bindImportStartTime(
 		if err := mutableDesc.InitializeImport(startWallTime); err != nil {
 			return err
 		}
+		mutableDesc.SetLastMVCCBulkOp(true)
 		if err := descsCol.WriteDesc(
 			ctx, false /* kvTrace */, mutableDesc, txn,
 		); err != nil {
@@ -1572,6 +1581,9 @@ func (r *importResumer) dropTables(
 		return err
 	}
 	intoDesc.SetPublic()
+	if !useDeleteRange {
+		intoDesc.SetLastMVCCBulkOp(false)
+	}
 	intoDesc.FinalizeImport()
 	const kvTrace = false
 	if err := descsCol.WriteDescToBatch(ctx, kvTrace, intoDesc, b); err != nil {

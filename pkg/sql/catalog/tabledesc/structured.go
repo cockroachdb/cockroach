@@ -2544,6 +2544,13 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
+// SetLastMVCCBulkOp implements the MutableDescriptor interface. This function
+// should only get called if the cluster has fully upgraded to 22.2, where all
+// AddSSTable requests are MVCC.
+func (desc *Mutable) SetLastMVCCBulkOp(isMVCC bool) {
+	desc.LastMVCCBulkOp = isMVCC
+}
+
 // IsLocalityRegionalByRow implements the TableDescriptor interface.
 func (desc *wrapper) IsLocalityRegionalByRow() bool {
 	return desc.LocalityConfig.GetRegionalByRow() != nil

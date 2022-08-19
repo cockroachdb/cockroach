@@ -879,6 +879,9 @@ func createImportingDescriptors(
 
 	// Set the new descriptors' states to offline.
 	for _, desc := range mutableTables {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2) {
+			desc.SetLastMVCCBulkOp(true)
+		}
 		desc.SetOffline("restoring")
 	}
 	for _, desc := range typesToWrite {
