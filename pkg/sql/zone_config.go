@@ -258,6 +258,19 @@ func GetZoneConfigInTxn(
 	return zoneID, zone, subzone, nil
 }
 
+// GetHydratedZoneConfigForTenantsRange returns the zone config for RANGE
+// TENANTS.
+func GetHydratedZoneConfigForTenantsRange(
+	ctx context.Context, txn *kv.Txn,
+) (*zonepb.ZoneConfig, error) {
+	return GetHydratedZoneConfigForNamedZone(
+		ctx,
+		txn,
+		keys.SystemSQLCodec,
+		zonepb.TenantsZoneName,
+	)
+}
+
 // GetHydratedZoneConfigForNamedZone returns a zone config for the given named
 // zone. Any missing fields are filled through the RANGE DEFAULT zone config.
 func GetHydratedZoneConfigForNamedZone(

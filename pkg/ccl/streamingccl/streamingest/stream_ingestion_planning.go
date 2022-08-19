@@ -129,7 +129,12 @@ func ingestionPlanHook(
 				State: descpb.TenantInfo_ADD,
 			},
 		}
-		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo); err != nil {
+
+		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo, initialTenantZoneConfig); err != nil {
 			return err
 		}
 

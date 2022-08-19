@@ -1075,11 +1075,17 @@ func createImportingDescriptors(
 				}
 			}
 
-			for _, tenant := range details.Tenants {
-				// Mark the tenant info as adding.
-				tenant.State = descpb.TenantInfo_ADD
-				if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant); err != nil {
+			if len(details.Tenants) > 0 {
+				initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, txn)
+				if err != nil {
 					return err
+				}
+				for _, tenant := range details.Tenants {
+					// Mark the tenant info as adding.
+					tenant.State = descpb.TenantInfo_ADD
+					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant, initialTenantZoneConfig); err != nil {
+						return err
+					}
 				}
 			}
 
