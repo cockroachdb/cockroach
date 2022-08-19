@@ -11,6 +11,8 @@
 package colexecdisk
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -32,6 +34,7 @@ const (
 // the in-memory hash aggregator as the "main" strategy for the hash-based
 // partitioner and the external sort + ordered aggregator as the "fallback".
 func NewExternalHashAggregator(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
 	newAggArgs *colexecagg.NewAggregatorArgs,
@@ -47,7 +50,7 @@ func NewExternalHashAggregator(
 		// We don't need to track the input tuples when we have already spilled.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
 		return colexec.NewHashAggregator(
-			&newAggArgs, nil /* newSpillingQueueArgs */, hashTableAllocator,
+			ctx, &newAggArgs, nil /* newSpillingQueueArgs */, hashTableAllocator,
 			outputUnlimitedAllocator, maxOutputBatchMemSize,
 		)
 	}
@@ -62,7 +65,7 @@ func NewExternalHashAggregator(
 			partitionedInputs[0], newAggArgs.InputTypes,
 			makeOrdering(spec.GroupCols), maxNumberActivePartitions,
 		)
-		return colexec.NewOrderedAggregator(&newAggArgs)
+		return colexec.NewOrderedAggregator(ctx, &newAggArgs)
 	}
 	eha := newHashBasedPartitioner(
 		newAggArgs.Allocator,

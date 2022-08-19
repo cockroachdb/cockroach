@@ -118,7 +118,7 @@ func (ef *execFactory) ConstructExport(
 	}
 
 	if err := featureflag.CheckEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.execCfg,
 		featureExportEnabled,
 		"EXPORT",
@@ -134,7 +134,7 @@ func (ef *execFactory) ConstructExport(
 		return nil, errors.Errorf("unsupported export format: %q", fileSuffix)
 	}
 
-	destinationDatum, err := eval.Expr(ef.planner.EvalContext().Context, ef.planner.EvalContext(), fileName)
+	destinationDatum, err := eval.Expr(ef.ctx, ef.planner.EvalContext(), fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (ef *execFactory) ConstructExport(
 	if !ok {
 		return nil, errors.Errorf("expected string value for the file location")
 	}
-	admin, err := ef.planner.HasAdminRole(ef.planner.EvalContext().Context)
+	admin, err := ef.planner.HasAdminRole(ef.ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -167,7 +167,7 @@ func (ef *execFactory) ConstructExport(
 					"are allowed to access the specified %s URI", conf.Provider.String()))
 		}
 	}
-	optVals, err := evalStringOptions(ef.planner.EvalContext(), options, exportOptionExpectValues)
+	optVals, err := evalStringOptions(ef.ctx, ef.planner.EvalContext(), options, exportOptionExpectValues)
 	if err != nil {
 		return nil, err
 	}
