@@ -726,6 +726,19 @@ Also see: ` + build.MakeIssueURL(53404) + `
 `,
 	}
 
+	ServerManaged = FlagInfo{
+		Name:   "managed",
+		EnvVar: "COCKROACH_MANAGED",
+		Description: `
+Indicate that the node is being run as part of a managed service/ This primarily
+impacts log redaction policies. Certain logged information such as filepaths,
+network addresses, and CLI argument lists are considered sensitive information
+in on-premises deployments. However, when the node is being run as part of a
+managed service (e.g. CockroachCloud), this type of information is no longer
+considered sensitive, and should be logged in an unredacted form to aid in support.
+`,
+	}
+
 	ExternalIODisableHTTP = FlagInfo{
 		Name:        "external-io-disable-http",
 		Description: `Disable use of HTTP when accessing external data.`,

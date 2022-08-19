@@ -99,6 +99,11 @@ type loggingT struct {
 		// to this logger already.
 		active        bool
 		firstUseStack string
+
+		// managed indicates whether we're running as part of a managed service
+		// (sourced from the WithManaged FlagsOption). Impacts log redaction
+		// policies for log args marked with SafeManaged.
+		managed bool
 	}
 
 	allSinkInfos sinkInfoRegistry
@@ -215,6 +220,24 @@ func (l *loggingT) signalFatalCh() {
 	default:
 		close(l.mu.fatalCh)
 	}
+}
+
+// setManaged configures the logging setup to indicate if we are
+// running as part of a managed service. see safeManaged for details
+// on how this impacts log redaction policies.
+func (l *loggingT) setManaged(isManaged bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.mu.managed = isManaged
+}
+
+// setManaged indicates if the logging setup is being run as part
+// of a managed service. see safeManaged for details on how this
+// impacts log redaction policies.
+func (l *loggingT) isManaged() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.mu.managed
 }
 
 // outputLogEntry marshals a log entry proto into bytes, and writes
