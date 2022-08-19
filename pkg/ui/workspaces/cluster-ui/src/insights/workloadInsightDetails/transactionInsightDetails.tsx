@@ -37,7 +37,11 @@ import {
 } from "src/insightsTable/insightsTable";
 import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import { getInsightEventDetailsFromState } from "../utils";
-import { EventExecution, InsightRecommendation } from "../types";
+import {
+  EventExecution,
+  InsightNameEnum,
+  InsightRecommendation,
+} from "../types";
 
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
@@ -47,21 +51,22 @@ import { InsightsError } from "../insightsErrorComponent";
 
 const tableCx = classNames.bind(insightTableStyles);
 
-export interface InsightDetailsStateProps {
+export interface TransactionInsightDetailsStateProps {
   insightEventDetails: InsightEventDetailsResponse;
   insightError: Error | null;
 }
 
-export interface InsightDetailsDispatchProps {
+export interface TransactionInsightDetailsDispatchProps {
   refreshInsightDetails: (req: InsightEventDetailsRequest) => void;
 }
 
-export type InsightDetailsProps = InsightDetailsStateProps &
-  InsightDetailsDispatchProps &
-  RouteComponentProps<unknown>;
+export type TransactionInsightDetailsProps =
+  TransactionInsightDetailsStateProps &
+    TransactionInsightDetailsDispatchProps &
+    RouteComponentProps<unknown>;
 
-export class InsightDetails extends React.Component<InsightDetailsProps> {
-  constructor(props: InsightDetailsProps) {
+export class TransactionInsightDetails extends React.Component<TransactionInsightDetailsProps> {
+  constructor(props: TransactionInsightDetailsProps) {
     super(props);
   }
 
@@ -101,13 +106,13 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
     const insightsColumns = makeInsightsColumns(isCockroachCloud);
 
     function insightsTableData(): InsightRecommendation[] {
-      const recs = [];
+      const recs: InsightRecommendation[] = [];
       let rec: InsightRecommendation;
       insightDetails.insights.forEach(insight => {
-        switch (insight.name.toString()) {
-          case "HIGH_WAIT_TIME":
+        switch (insight.name) {
+          case InsightNameEnum.highContentionTime:
             rec = {
-              type: "HIGH_WAIT_TIME",
+              type: "HighContentionTime",
               details: {
                 duration: insightDetails.elapsedTime,
                 description: insight.description,
@@ -228,11 +233,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
             page={"Transaction Insight details"}
             error={this.props.insightError}
             render={this.renderContent}
-            renderError={() =>
-              InsightsError({
-                execType: "transaction insights",
-              })
-            }
+            renderError={() => InsightsError()}
           />
         </section>
       </div>
