@@ -76,7 +76,7 @@ index-join t
            ├── inverted constraint: /5/1
            │    └── spans: ["", ""]
            ├── flags: force-index=a_idx
-           ├── stats: [rows=1020, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(5)=4, null(5)=0, avgsize(5)=4]
+           ├── stats: [rows=1020, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
            │   histogram(5)=  0    10    0   990    0    10    0    10
            │                <--- '\x43' --- '\x89' --- '\x8a' --- '\x8b'
            ├── key: (1)
@@ -96,7 +96,7 @@ index-join t
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
       │    └── spans: ["\x8a", "\x8a"]
-      ├── stats: [rows=10, distinct(5)=1, null(5)=0, avgsize(5)=4]
+      ├── stats: [rows=10, distinct(5)=1, null(5)=0]
       │   histogram(5)=  0    10    0    0
       │                <--- '\x8a' --- '\x8b'
       └── key: (1)
@@ -109,7 +109,7 @@ SELECT * FROM t WHERE a @> '{2}' OR a @> '{3}'
 index-join t
  ├── columns: k:1(int!null) a:2(int[]!null)
  ├── immutable
- ├── stats: [rows=333.3333, distinct(2)=3, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=333.3333, distinct(2)=3, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -123,7 +123,7 @@ index-join t
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans: ["\x8a", "\x8c")
-           ├── stats: [rows=20, distinct(1)=19.6078, null(1)=0, avgsize(1)=4, distinct(5)=2, null(5)=0, avgsize(5)=4]
+           ├── stats: [rows=20, distinct(1)=19.6078, null(1)=0, distinct(5)=2, null(5)=0]
            │   histogram(5)=  0    10    0    10
            │                <--- '\x8a' --- '\x8b'
            ├── key: (1)
@@ -150,7 +150,7 @@ select
  │         ├── inverted constraint: /5/1
  │         │    └── spans: ["C", "C"]
  │         ├── flags: force-index=a_idx
- │         ├── stats: [rows=10, distinct(5)=1, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=10, distinct(5)=1, null(5)=0]
  │         │   histogram(5)=  0    10    0    0
  │         │                <--- '\x43' --- '\x44'
  │         └── key: (1)
@@ -188,7 +188,7 @@ select
  │              │    └── spans
  │              │         ├── ["C", "C"]
  │              │         └── ["\x8a", "\x8a"]
- │              ├── stats: [rows=20, distinct(1)=19.6078, null(1)=0, avgsize(1)=4, distinct(5)=2, null(5)=0, avgsize(5)=4]
+ │              ├── stats: [rows=20, distinct(1)=19.6078, null(1)=0, distinct(5)=2, null(5)=0]
  │              │   histogram(5)=  0    10    0    10    0    0
  │              │                <--- '\x43' --- '\x8a' --- '\x8b'
  │              ├── key: (1)
@@ -227,7 +227,7 @@ select
  │              │    └── spans
  │              │         ├── ["C", "C"]
  │              │         └── ["\x8a", "\x8c")
- │              ├── stats: [rows=30, distinct(1)=29.4118, null(1)=0, avgsize(1)=4, distinct(5)=3, null(5)=0, avgsize(5)=4]
+ │              ├── stats: [rows=30, distinct(1)=29.4118, null(1)=0, distinct(5)=3, null(5)=0]
  │              │   histogram(5)=  0    10    0    10    0    10
  │              │                <--- '\x43' --- '\x8a' --- '\x8b'
  │              ├── key: (1)
@@ -272,7 +272,7 @@ select
  │              │    └── spans
  │              │         ├── ["C", "C"]
  │              │         └── ["\x8a", "\x8c")
- │              ├── stats: [rows=30, distinct(1)=29.4118, null(1)=0, avgsize(1)=4, distinct(5)=3, null(5)=0, avgsize(5)=4]
+ │              ├── stats: [rows=30, distinct(1)=29.4118, null(1)=0, distinct(5)=3, null(5)=0]
  │              │   histogram(5)=  0    10    0    10    0    10
  │              │                <--- '\x43' --- '\x8a' --- '\x8b'
  │              ├── key: (1)

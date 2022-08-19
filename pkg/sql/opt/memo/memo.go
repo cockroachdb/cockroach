@@ -445,6 +445,17 @@ func (m *Memo) RequestColStatTable(
 	return nil, false
 }
 
+// RequestColAvgSize calculates and returns the column's average size statistic.
+// The column must exist in the table with ID tabId.
+func (m *Memo) RequestColAvgSize(tabID opt.TableID, col opt.ColumnID) uint64 {
+	// When SetRoot is called, the statistics builder may have been cleared.
+	// If this happens, we can't serve the request anymore.
+	if m.logPropsBuilder.sb.md != nil {
+		return m.logPropsBuilder.sb.colAvgSize(tabID, col)
+	}
+	return defaultColSize
+}
+
 // RowsProcessed calculates and returns the number of rows processed by the
 // relational expression. It is currently only supported for joins.
 func (m *Memo) RowsProcessed(expr RelExpr) (_ float64, ok bool) {

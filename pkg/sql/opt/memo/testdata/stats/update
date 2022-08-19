@@ -41,7 +41,7 @@ WHERE x > 'foo'
 with &1
  ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
  ├── volatile, mutations
- ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0, avgsize(12)=4]
+ ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0]
  ├── key: (12)
  ├── fd: ()-->(13,14)
  ├── update xyz
@@ -50,22 +50,22 @@ with &1
  │    ├── update-mapping:
  │    │    └── y_new:11 => xyz.y:2
  │    ├── volatile, mutations
- │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(2,3)
  │    └── project
  │         ├── columns: y_new:11(int!null) xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float!null) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
- │         ├── stats: [rows=10, distinct(6)=10, null(6)=0, avgsize(6)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4]
+ │         ├── stats: [rows=10, distinct(6)=10, null(6)=0, distinct(8)=1, null(8)=0, distinct(11)=1, null(11)=0]
  │         ├── key: (6)
  │         ├── fd: ()-->(8,11), (6)-->(7,9,10)
  │         ├── select
  │         │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float!null) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
- │         │    ├── stats: [rows=10, distinct(6)=10, null(6)=0, avgsize(6)=4, distinct(8)=1, null(8)=0, avgsize(8)=4]
+ │         │    ├── stats: [rows=10, distinct(6)=10, null(6)=0, distinct(8)=1, null(8)=0]
  │         │    ├── key: (6)
  │         │    ├── fd: ()-->(8), (6)-->(7,9,10)
  │         │    ├── scan xyz
  │         │    │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
- │         │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │         │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=10]
  │         │    │    ├── key: (6)
  │         │    │    └── fd: (6)-->(7-10)
  │         │    └── filters
@@ -74,7 +74,7 @@ with &1
  │              └── 5 [as=y_new:11, type=int]
  └── select
       ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
-      ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0, avgsize(12)=4]
+      ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0]
       ├── key: (12)
       ├── fd: ()-->(13,14)
       ├── with-scan &1
@@ -83,7 +83,7 @@ with &1
       │    │    ├──  xyz.x:1(string) => x:12(string)
       │    │    ├──  xyz.y:2(int) => y:13(int)
       │    │    └──  xyz.z:3(float) => z:14(float)
-      │    ├── stats: [rows=10, distinct(12)=10, null(12)=0, avgsize(12)=4, distinct(13)=1, null(13)=0, avgsize(13)=4, distinct(14)=1, null(14)=0, avgsize(14)=4]
+      │    ├── stats: [rows=10, distinct(12)=10, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0]
       │    ├── key: (12)
       │    └── fd: ()-->(13,14)
       └── filters
@@ -141,12 +141,12 @@ WITH q AS (UPDATE child SET c = p FROM parent WHERE p = 1 RETURNING p) SELECT * 
 with &2 (q)
  ├── columns: p:18(int!null)
  ├── volatile, mutations
- ├── stats: [rows=1000, distinct(18)=1, null(18)=0, avgsize(18)=4]
+ ├── stats: [rows=1000, distinct(18)=1, null(18)=0]
  ├── fd: ()-->(18)
  ├── project
  │    ├── columns: parent.p:11(int)
  │    ├── volatile, mutations
- │    ├── stats: [rows=1000, distinct(11)=1, null(11)=0, avgsize(11)=4]
+ │    ├── stats: [rows=1000, distinct(11)=1, null(11)=0]
  │    ├── fd: ()-->(11)
  │    └── update child
  │         ├── columns: x:1(int) child.c:2(int!null) rowid:3(int!null) parent.p:11(int) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
@@ -155,27 +155,27 @@ with &2 (q)
  │         │    └── parent.p:11 => child.c:2
  │         ├── input binding: &1
  │         ├── volatile, mutations
- │         ├── stats: [rows=1000, distinct(11)=1, null(11)=0, avgsize(11)=4]
+ │         ├── stats: [rows=1000, distinct(11)=1, null(11)=0]
  │         ├── key: (3)
  │         ├── fd: ()-->(2,11-13), (2)==(11), (11)==(2), (3)-->(1)
  │         ├── select
  │         │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    ├── stats: [rows=1000, distinct(11)=1, null(11)=0, avgsize(11)=4]
+ │         │    ├── stats: [rows=1000, distinct(11)=1, null(11)=0]
  │         │    ├── key: (8)
  │         │    ├── fd: ()-->(11-13), (8)-->(6,7,9,10)
  │         │    ├── inner-join (cross)
  │         │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    │    ├── stats: [rows=1000000, distinct(8)=1000, null(8)=0, avgsize(8)=4, distinct(11)=1000, null(11)=0, avgsize(11)=4]
+ │         │    │    ├── stats: [rows=1000000, distinct(8)=1000, null(8)=0, distinct(11)=1000, null(11)=0]
  │         │    │    ├── key: (8,11)
  │         │    │    ├── fd: (8)-->(6,7,9,10), (11)-->(12,13)
  │         │    │    ├── scan child
  │         │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid)
- │         │    │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │         │    │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │         │    │    │    ├── key: (8)
  │         │    │    │    └── fd: (8)-->(6,7,9,10)
  │         │    │    ├── scan parent
  │         │    │    │    ├── columns: parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0, avgsize(11)=4]
+ │         │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
  │         │    │    │    ├── key: (11)
  │         │    │    │    └── fd: (11)-->(12,13)
  │         │    │    └── filters (true)
@@ -191,23 +191,23 @@ with &2 (q)
  │                        │    ├── columns: c:14(int!null)
  │                        │    ├── mapping:
  │                        │    │    └──  parent.p:11(int) => c:14(int)
- │                        │    ├── stats: [rows=1000, distinct(14)=1, null(14)=0, avgsize(14)=4]
+ │                        │    ├── stats: [rows=1000, distinct(14)=1, null(14)=0]
  │                        │    └── fd: ()-->(14)
  │                        ├── scan parent
  │                        │    ├── columns: parent.p:15(int!null)
- │                        │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0, avgsize(15)=4]
+ │                        │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0]
  │                        │    └── key: (15)
  │                        └── filters
  │                             └── c:14 = parent.p:15 [type=bool, outer=(14,15), constraints=(/14: (/NULL - ]; /15: (/NULL - ]), fd=(14)==(15), (15)==(14)]
  └── select
       ├── columns: p:18(int!null)
-      ├── stats: [rows=1000, distinct(18)=1, null(18)=0, avgsize(18)=4]
+      ├── stats: [rows=1000, distinct(18)=1, null(18)=0]
       ├── fd: ()-->(18)
       ├── with-scan &2 (q)
       │    ├── columns: p:18(int)
       │    ├── mapping:
       │    │    └──  parent.p:11(int) => p:18(int)
-      │    ├── stats: [rows=1000, distinct(18)=1, null(18)=0, avgsize(18)=4]
+      │    ├── stats: [rows=1000, distinct(18)=1, null(18)=0]
       │    └── fd: ()-->(18)
       └── filters
            └── p:18 = 1 [type=bool, outer=(18), constraints=(/18: [/1 - /1]; tight), fd=()-->(18)]
