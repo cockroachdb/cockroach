@@ -13,7 +13,7 @@ import { Tooltip } from "@cockroachlabs/ui-components";
 import { ExecutionType, ActiveExecution } from "./types";
 import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
-import { DATE_FORMAT, Duration } from "src/util";
+import { capitalize, DATE_FORMAT, Duration } from "src/util";
 import { StatusIcon } from "./statusIcon";
 
 export type ExecutionsColumn =
@@ -28,11 +28,6 @@ export type ExecutionsColumn =
   | "status"
   | "timeSpentBlocking"
   | "timeSpentWaiting";
-
-export function capitalize(str: string): string {
-  if (!str) return str;
-  return str[0].toUpperCase() + str.substring(1);
-}
 
 export const executionsColumnLabels: Record<
   ExecutionsColumn,

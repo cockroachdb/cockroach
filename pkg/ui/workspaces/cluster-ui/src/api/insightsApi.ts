@@ -62,12 +62,12 @@ function transactionContentionResultsToEventState(
       .asMilliseconds(),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
     application: row.app_name,
-    insightName: highWaitTimeQuery.name,
+    insightName: highContentionTimeQuery.name,
     execType: InsightExecEnum.TRANSACTION,
   }));
 }
 
-const highWaitTimeQuery: InsightQuery<
+const highContentionTimeQuery: InsightQuery<
   TransactionContentionResponseColumns,
   InsightEventsResponse
 > = {
@@ -98,20 +98,20 @@ const highWaitTimeQuery: InsightQuery<
   toState: transactionContentionResultsToEventState,
 };
 
-// getInsightEventState is currently hardcoded to use the High Wait Time insight type
+// getInsightEventState is currently hardcoded to use the High Contention Time insight type
 // for transaction contention events.
 export function getInsightEventState(): Promise<InsightEventsResponse> {
   const request: SqlExecutionRequest = {
     statements: [
       {
-        sql: `${highWaitTimeQuery.query}`,
+        sql: `${highContentionTimeQuery.query}`,
       },
     ],
     execute: true,
   };
   return executeSql<TransactionContentionResponseColumns>(request).then(
     result => {
-      return highWaitTimeQuery.toState(result);
+      return highContentionTimeQuery.toState(result);
     },
   );
 }
@@ -165,12 +165,12 @@ function transactionContentionDetailsResultsToEventState(
     tableName: row.table_name,
     indexName: row.index_name,
     contendedKey: row.key,
-    insightName: highWaitTimeQuery.name,
+    insightName: highContentionTimeQuery.name,
     execType: InsightExecEnum.TRANSACTION,
   }));
 }
 
-const highWaitTimeDetailsQuery = (
+const highContentionTimeDetailsQuery = (
   id: string,
 ): InsightQuery<
   TransactionContentionDetailsResponseColumns,
@@ -223,12 +223,12 @@ const highWaitTimeDetailsQuery = (
   };
 };
 
-// getInsightEventState is currently hardcoded to use the High Wait Time insight type
+// getInsightEventState is currently hardcoded to use the High Contention Time insight type
 // for transaction contention events.
 export function getInsightEventDetailsState(
   req: InsightEventDetailsRequest,
 ): Promise<InsightEventDetailsResponse> {
-  const detailsQuery = highWaitTimeDetailsQuery(req.id);
+  const detailsQuery = highContentionTimeDetailsQuery(req.id);
   const request: SqlExecutionRequest = {
     statements: [
       {
@@ -265,6 +265,7 @@ type ExecutionInsightsResponseRow = {
   contention: string; // interval
   last_retry_reason?: string;
   problems: string[];
+  index_recommendations: string[];
 };
 
 export type StatementInsights = StatementInsightEvent[];
@@ -301,6 +302,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       lastRetryReason: row.last_retry_reason,
       timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
       problems: row.problems,
+      indexRecommendations: row.index_recommendations,
       insights: null,
     };
   });
@@ -332,6 +334,7 @@ const statementInsightsQuery: InsightQuery<
       retries,
       contention,
       last_retry_reason,
+      index_recommendations,
       problems,
       row_number()                          OVER (
         PARTITION BY txn_fingerprint_id
