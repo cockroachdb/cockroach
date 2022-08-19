@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -60,10 +62,32 @@ func stmtDiagListBundlesInternal(ctx context.Context, conn Conn) ([]StmtDiagBund
 		} else if err != nil {
 			return nil, err
 		}
+		i, ok := vals[0].(int64)
+		if !ok {
+			// We're arriving in this function via the interactive shell,
+			// with result type inference disabled.
+			// The value has been read as a string.
+			i, err = strconv.ParseInt(vals[0].(string), 10, 64)
+			if err != nil {
+				return nil, err
+			}
+		}
+		d, ok := vals[2].(time.Time)
+		if !ok {
+			// We're arriving in this function via the interactive shell,
+			// with result type inference disabled.
+			// The value has been read as a string.
+			ts := vals[2].(string)
+			ts = strings.TrimSuffix(ts, "+00")
+			d, err = time.Parse("2006-01-02 15:04:05.999999", ts)
+			if err != nil {
+				return nil, err
+			}
+		}
 		info := StmtDiagBundleInfo{
-			ID:          vals[0].(int64),
+			ID:          i,
 			Statement:   vals[1].(string),
-			CollectedAt: vals[2].(time.Time),
+			CollectedAt: d,
 		}
 		result = append(result, info)
 	}
