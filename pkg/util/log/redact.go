@@ -210,3 +210,43 @@ func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
 func SafeOperational(s interface{}) redact.SafeValue {
 	return redact.Safe(s)
 }
+
+// SafeManaged marks the provided argument as safe from a redaction
+// perspective in cases where the node is being run as part of a managed
+// service. This is indicated via the `--managed` CLI flag.
+//
+// Certain types of data is normally considered "sensitive" from a
+// redaction perspective when logged from on-premises deployments, such
+// as CLI arguments and HTTP addresses. However, when running in a
+// managed service, such as CockroachCloud, this information is already
+// known to the operators and does not need to be treated as sensitive.
+//
+// NB: If the argument itself implements the redact.SafeFormatter interface,
+// then we delegate to its implementation in either case.
+func SafeManaged(a interface{}) interface{} {
+	if !logging.isManaged() {
+		return a
+	}
+	return safeManaged{a}
+}
+
+// safeManaged is a wrapper type used to mark a logging argument as safe
+// when running as part of a managed service.
+type safeManaged struct {
+	// a is the wrapped logging argument.
+	a interface{}
+}
+
+// SafeFormat implements the redact.SafeFormatter interface. Any object
+// wrapped in safeManaged is considered safe from a redaction perspective
+// if we are running as part of a managed service.
+//
+// NB: If the underlying object itself implements redact.SafeFormatter,
+// we delegate redaction to that implementation.
+func (sm safeManaged) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(redact.Safe(sm.a))
+}
+
+func (sm safeManaged) String() string {
+	return redact.StringWithoutMarkers(sm)
+}

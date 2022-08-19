@@ -78,7 +78,7 @@ func IsActive() (active bool, firstUse string) {
 // ApplyConfig applies the given configuration.
 //
 // The returned logShutdownFn can be used to gracefully shut down logging facilities.
-func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
+func ApplyConfig(config logconfig.Config, os ...FlagsOption) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
@@ -99,6 +99,14 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// fd2CaptureCleanupFn is the cleanup function for the fd2 capture,
 	// which is populated if fd2 capture is enabled, below.
 	fd2CaptureCleanupFn := func() {}
+
+	var opts flagsOptions
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		opts = o.apply(opts)
+	}
 
 	closer := newBufferedSinkCloser()
 	// logShutdownFn is the returned cleanup function, whose purpose
@@ -131,6 +139,9 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// registry.
 	logging.allLoggers.clear()
 	logging.allSinkInfos.clear()
+
+	// Indicate whether we're running in a managed environment. Impacts redaction policies.
+	logging.setManaged(opts.managed)
 
 	// If capture of internal fd2 writes is enabled, set it up here.
 	if config.CaptureFd2.Enable {
