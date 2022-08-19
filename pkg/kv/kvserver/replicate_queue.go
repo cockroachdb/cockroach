@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -985,25 +984,6 @@ func (rq *replicateQueue) addOrReplaceVoters(
 				break
 			}
 		}
-		// Determines whether we can remove the leaseholder without first
-		// transferring the lease away. The call to allocator below makes sure
-		// that we proceed with the change only if we replace the removed replica
-		// with a VOTER_INCOMING.
-		lhRemovalAllowed := repl.store.cfg.Settings.Version.IsActive(ctx,
-			clusterversion.EnableLeaseHolderRemoval)
-		if !lhRemovalAllowed {
-			// See about transferring the lease away if we're about to remove the
-			// leaseholder.
-			done, err := rq.maybeTransferLeaseAway(
-				ctx, repl, existingVoters[removeIdx].StoreID, dryRun, nil /* canTransferLeaseFrom */)
-			if err != nil {
-				return false, err
-			}
-			if done {
-				// Lease was transferred away. Next leaseholder is going to take over.
-				return false, nil
-			}
-		}
 	}
 
 	lhBeingRemoved := removeIdx >= 0 && existingVoters[removeIdx].StoreID == repl.store.StoreID()
@@ -1549,8 +1529,7 @@ func (rq *replicateQueue) considerRebalance(
 
 		// Determines whether we can remove the leaseholder without first
 		// transferring the lease away
-		lhRemovalAllowed := addTarget != (roachpb.ReplicationTarget{}) &&
-			repl.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+		lhRemovalAllowed := addTarget != (roachpb.ReplicationTarget{})
 		lhBeingRemoved := removeTarget.StoreID == repl.store.StoreID()
 
 		if !ok {
