@@ -866,10 +866,12 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 	p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
 
 	for i := 0; i < p.itersBeforeSeek; i++ {
+		prevTS := p.curUnsafeKey.Timestamp
 		if !p.iterNext() {
 			return false
 		}
-		if !bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) {
+		if (!prevTS.IsEmpty() && prevTS.LessEq(p.curUnsafeKey.Timestamp)) ||
+			!bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) {
 			p.incrementItersBeforeSeek()
 			return true
 		}

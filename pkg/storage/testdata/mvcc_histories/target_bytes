@@ -576,7 +576,7 @@ with t=A ts=11,0 targetbytes=32
   scan      k=k end=o reverse=true
 ----
 scan: "k" -> /BYTES/b @11.000000000,0
-scan: resume span ["l","o") RESUME_BYTE_LIMIT nextBytes=25
+scan: resume span ["k","o") RESUME_BYTE_LIMIT nextBytes=25
 scan: 25 bytes (target 32)
 scan: "n" -> /BYTES/b @11.000000000,0
 scan: resume span ["k","m\x00") RESUME_BYTE_LIMIT nextBytes=25
