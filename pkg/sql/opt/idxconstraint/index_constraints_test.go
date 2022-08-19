@@ -69,7 +69,7 @@ func TestIndexConstraints(t *testing.T) {
 			var err error
 
 			var f norm.Factory
-			f.Init(&evalCtx, nil /* catalog */)
+			f.Init(context.Background(), &evalCtx, nil /* catalog */)
 			md := f.Metadata()
 
 			for _, arg := range d.CmdArgs {
@@ -136,7 +136,7 @@ func TestIndexConstraints(t *testing.T) {
 				remainingFilter := ic.RemainingFilters()
 				if !remainingFilter.IsTrue() {
 					execBld := execbuilder.New(
-						nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
+						context.Background(), nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
 						&remainingFilter, &evalCtx, false, /* allowAutoCommit */
 					)
 					expr, err := execBld.BuildScalar()
@@ -222,7 +222,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			var f norm.Factory
-			f.Init(&evalCtx, nil /* catalog */)
+			f.Init(context.Background(), &evalCtx, nil /* catalog */)
 			md := f.Metadata()
 			var sv testutils.ScalarVars
 			err := sv.Init(md, strings.Split(tc.vars, ", "))

@@ -115,7 +115,7 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 		planText.WriteString(b.optimizer.FormatMemo(xform.FmtPretty))
 	}
 
-	f := memo.MakeExprFmtCtx(fmtFlags, b.mem, b.catalog)
+	f := memo.MakeExprFmtCtx(b.ctx, fmtFlags, b.mem, b.catalog)
 	f.FormatExpr(explain.Input)
 	planText.WriteString(f.Buffer.String())
 
@@ -151,7 +151,7 @@ func (b *Builder) buildExplain(explainExpr *memo.ExplainExpr) (execPlan, error) 
 			ef := explain.NewFactory(gf)
 
 			explainBld := New(
-				ef, b.optimizer, b.mem, b.catalog, explainExpr.Input, b.evalCtx, b.initialAllowAutoCommit,
+				b.ctx, ef, b.optimizer, b.mem, b.catalog, explainExpr.Input, b.evalCtx, b.initialAllowAutoCommit,
 			)
 			explainBld.disableTelemetry = true
 			plan, err := explainBld.Build()

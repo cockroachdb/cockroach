@@ -41,6 +41,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 
 	// Build the scalar expression and format it as a single string.
 	bld := New(
+		f.Ctx,
 		nil, /* factory */
 		nil, /* optimizer */
 		f.Memo,

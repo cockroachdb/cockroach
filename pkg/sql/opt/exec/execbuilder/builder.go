@@ -52,6 +52,7 @@ func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).
 type Builder struct {
+	ctx              context.Context
 	factory          exec.Factory
 	optimizer        *xform.Optimizer
 	mem              *memo.Memo
@@ -179,6 +180,7 @@ type Builder struct {
 // `transaction_rows_read_err` guardrail is disabled.). It should be false if
 // the statement is executed as part of an explicit transaction.
 func New(
+	ctx context.Context,
 	factory exec.Factory,
 	optimizer *xform.Optimizer,
 	mem *memo.Memo,
@@ -193,6 +195,7 @@ func New(
 		mem:                    mem,
 		catalog:                catalog,
 		e:                      e,
+		ctx:                    ctx,
 		evalCtx:                evalCtx,
 		allowAutoCommit:        allowAutoCommit,
 		initialAllowAutoCommit: allowAutoCommit,

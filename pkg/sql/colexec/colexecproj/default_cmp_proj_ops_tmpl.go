@@ -77,10 +77,10 @@ func (d *defaultCmp_KINDProjOp) Next() coldata.Batch {
 			// is no need to check whether sel is non-nil.
 			// {{if .IsRightConst}}
 			//gcassert:bce
-			res, err := d.adapter.Eval(nonConstColumn[i], d.constArg)
+			res, err := d.adapter.Eval(d.Ctx, nonConstColumn[i], d.constArg)
 			// {{else}}
 			//gcassert:bce
-			res, err := d.adapter.Eval(leftColumn[i], rightColumn[i])
+			res, err := d.adapter.Eval(d.Ctx, leftColumn[i], rightColumn[i])
 			// {{end}}
 			if err != nil {
 				colexecerror.ExpectedError(err)

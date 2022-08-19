@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -134,7 +136,7 @@ func (h *joinPlanningHelper) joinOutColumns(
 // join columns as described above) to values that make sense in the joiner (0
 // to N-1 for the left input columns, N to N+M-1 for the right input columns).
 func (h *joinPlanningHelper) remapOnExpr(
-	planCtx *PlanningCtx, onCond tree.TypedExpr,
+	ctx context.Context, planCtx *PlanningCtx, onCond tree.TypedExpr,
 ) (execinfrapb.Expression, error) {
 	if onCond == nil {
 		return execinfrapb.Expression{}, nil
@@ -155,7 +157,7 @@ func (h *joinPlanningHelper) remapOnExpr(
 		idx++
 	}
 
-	return physicalplan.MakeExpression(onCond, planCtx, joinColMap)
+	return physicalplan.MakeExpression(ctx, onCond, planCtx, joinColMap)
 }
 
 // eqCols produces a slice of ordinal references for the plan columns specified

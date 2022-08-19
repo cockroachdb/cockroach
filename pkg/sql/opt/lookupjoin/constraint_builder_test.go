@@ -63,7 +63,7 @@ func TestLookupConstraints(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			testCatalog := testcat.New()
 			var f norm.Factory
-			f.Init(&evalCtx, testCatalog)
+			f.Init(context.Background(), &evalCtx, testCatalog)
 			md := f.Metadata()
 
 			for _, arg := range d.CmdArgs {
@@ -319,7 +319,7 @@ func makeFiltersExpr(
 
 func formatScalar(e opt.Expr, f *norm.Factory, evalCtx *eval.Context) string {
 	execBld := execbuilder.New(
-		nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
+		context.Background(), nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
 		e, evalCtx, false, /* allowAutoCommit */
 	)
 	expr, err := execBld.BuildScalar()
@@ -347,7 +347,7 @@ type testFilterBuilder struct {
 func makeFilterBuilder(t *testing.T) testFilterBuilder {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var f norm.Factory
-	f.Init(&evalCtx, nil)
+	f.Init(context.Background(), &evalCtx, nil)
 	cat := testcat.New()
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (i INT PRIMARY KEY, b BOOL)"); err != nil {
 		t.Fatal(err)

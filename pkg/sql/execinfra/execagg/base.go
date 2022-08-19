@@ -98,7 +98,7 @@ func GetAggregateConstructor(
 			err = errors.Wrapf(err, "%s", argument)
 			return
 		}
-		d, err = h.Eval(nil /* row */)
+		d, err = h.Eval(ctx, nil /* row */)
 		if err != nil {
 			err = errors.Wrapf(err, "%s", argument)
 			return

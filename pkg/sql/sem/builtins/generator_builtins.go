@@ -1570,7 +1570,7 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 func makeJSONPopulateRecordGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Exprs,
 ) (eval.ValueGenerator, error) {
-	tuple, j, err := jsonPopulateRecordEvalArgs(evalCtx, args)
+	tuple, j, err := jsonPopulateRecordEvalArgs(ctx, evalCtx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -1593,12 +1593,12 @@ func makeJSONPopulateRecordGenerator(
 // one of the jsonPopulateRecord variants, and returns the correctly-typed
 // tuple of default values, and the JSON input or nil if it was SQL NULL.
 func jsonPopulateRecordEvalArgs(
-	evalCtx *eval.Context, args tree.Exprs,
+	ctx context.Context, evalCtx *eval.Context, args tree.Exprs,
 ) (tuple *tree.DTuple, jsonInputOrNil json.JSON, err error) {
 	evalled := make(tree.Datums, len(args))
 	for i := range args {
 		var err error
-		evalled[i], err = eval.Expr(evalCtx.Context, evalCtx, args[i].(tree.TypedExpr))
+		evalled[i], err = eval.Expr(ctx, evalCtx, args[i].(tree.TypedExpr))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1665,7 +1665,7 @@ func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
 func makeJSONPopulateRecordSetGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Exprs,
 ) (eval.ValueGenerator, error) {
-	tuple, j, err := jsonPopulateRecordEvalArgs(evalCtx, args)
+	tuple, j, err := jsonPopulateRecordEvalArgs(ctx, evalCtx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -2184,7 +2184,7 @@ func makeRangeKeyIterator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -2254,7 +2254,7 @@ func makePayloadsForSpanGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -2355,7 +2355,7 @@ func makePayloadsForTraceGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -174,13 +174,13 @@ func TestExprString(t *testing.T) {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.TestingMon.Stop(context.Background())
-		normalized, err := normalize.Expr(ctx, typedExpr)
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		defer evalCtx.Stop(context.Background())
+		normalized, err := normalize.Expr(context.Background(), evalCtx, typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		normalized2, err := normalize.Expr(ctx, typedExpr2)
+		normalized2, err := normalize.Expr(context.Background(), evalCtx, typedExpr2)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}

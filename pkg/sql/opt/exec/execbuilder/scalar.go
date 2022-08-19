@@ -721,7 +721,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 		// TODO(mgartner): Add support for subqueries inside UDF bodies.
 		ef := ref.(exec.Factory)
-		eb := New(ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
 		eb.disableTelemetry = true
 		plan, err := eb.Build()
 		if err != nil {

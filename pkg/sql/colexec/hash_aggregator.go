@@ -194,6 +194,7 @@ func randomizeHashAggregatorMaxBuffered() {
 // the disk-backed operator. Pass in nil in order to not track all input
 // tuples.
 func NewHashAggregator(
+	ctx context.Context,
 	args *colexecagg.NewAggregatorArgs,
 	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
 	hashTableAllocator *colmem.Allocator,
@@ -201,7 +202,7 @@ func NewHashAggregator(
 	maxOutputBatchMemSize int64,
 ) colexecop.ResettableOperator {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		args, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
+		ctx, args, args.Spec.Aggregations, hashAggregatorAllocSize, colexecagg.HashAggKind,
 	)
 	if err != nil {
 		colexecerror.InternalError(err)
