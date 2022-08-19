@@ -101,7 +101,7 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.6.1-0.20210625163953-8ddee489636a
 	github.com/kisielk/gotool v1.0.0
-	github.com/knz/go-libedit v1.10.1
+	github.com/knz/bubbline v0.0.0-20220827122546-c9506833727d
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.0
 	github.com/kr/text v0.2.0
@@ -112,7 +112,7 @@ require (
 	github.com/lufia/iostat v1.2.1
 	github.com/maruel/panicparse/v2 v2.2.2
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
-	github.com/mattn/go-isatty v0.0.14
+	github.com/mattn/go-isatty v0.0.16
 	github.com/mattn/goveralls v0.0.2
 	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
@@ -161,8 +161,8 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
+	golang.org/x/sys v0.0.0-20220825204002-c680a09ffe64
+	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	golang.org/x/tools v0.1.11
@@ -199,6 +199,7 @@ require (
 	github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74 // indirect
 	github.com/apache/thrift v0.16.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.11.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.3 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.9 // indirect
@@ -212,6 +213,9 @@ require (
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/charmbracelet/bubbles v0.13.0 // indirect
+	github.com/charmbracelet/bubbletea v0.22.1 // indirect
+	github.com/charmbracelet/lipgloss v0.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/djherbis/atime v1.1.0 // indirect
@@ -277,7 +281,8 @@ require (
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-ieproxy v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.10 // indirect
+	github.com/mattn/go-localereader v0.0.1 // indirect
+	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.0.21 // indirect
@@ -290,6 +295,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/mostynb/go-grpc-compression v1.1.12 // indirect
+	github.com/muesli/termenv v0.12.0 // indirect
 	github.com/mwitkow/go-proto-validators v0.0.0-20180403085117-0950a7990007 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
@@ -302,11 +308,12 @@ require (
 	github.com/pquerna/cachecontrol v0.0.0-20200921180117-858c6e7e6b7e // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
-	github.com/rivo/uniseg v0.1.0 // indirect
+	github.com/rivo/uniseg v0.3.4 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/rs/xid v1.3.0 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/sahilm/fuzzy v0.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/slok/go-http-metrics v0.10.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
@@ -338,6 +345,7 @@ require (
 	github.com/Azure/go-autorest/autorest/azure/cli v0.4.3 // indirect
 	github.com/DataDog/zstd v1.5.0 // indirect
 	github.com/andybalholm/cascadia v1.2.0 // indirect
+	github.com/containerd/console v1.0.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.6.2 // indirect
@@ -346,7 +354,11 @@ require (
 	github.com/golang-commonmark/mdurl v0.0.0-20180910110917-8d018c6567d6 // indirect
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-zglob v0.0.3 // indirect
+	github.com/muesli/ansi v0.0.0-20211031195517-c9f0611b6c70 // indirect
+	github.com/muesli/cancelreader v0.2.2 // indirect
+	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
 	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	// The indicated commit is required on top of v1.0.0-RC3 because
@@ -364,8 +376,6 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc
 
-replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7
-
 // At the time of writing (i.e. as of this version below) the `etcd` repo is in the process of properly introducing
 // modules, and as part of that uses an unsatisfiable version for this dependency (v3.0.0-00010101000000-000000000000).
 // We just force it to the same SHA as the `go.etcd.io/etcd/raft/v3` module (they live in the same VCS root).
@@ -374,3 +384,7 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
+
+// Until this issue gets fixed:
+// https://github.com/bazelbuild/bazel-gazelle/issues/1319
+replace github.com/rivo/uniseg => github.com/cockroachdb/uniseg v0.3.4
