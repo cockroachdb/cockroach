@@ -19,6 +19,8 @@ import {
   getLabel,
 } from "../execTableCommon";
 import { ActiveTransaction, ExecutionType } from "../types";
+import { Tooltip } from "@cockroachlabs/ui-components";
+import { limitText } from "../../util";
 
 export function makeActiveTransactionsColumns(
   isCockroachCloud: boolean,
@@ -30,9 +32,11 @@ export function makeActiveTransactionsColumns(
       name: "mostRecentStatement",
       title: executionsTableTitles.mostRecentStatement(execType),
       cell: (item: ActiveTransaction) => (
-        <Link to={`/execution/statement/${item.statementID}`}>
-          {item.query}
-        </Link>
+        <Tooltip placement="bottom" content={item.query}>
+          <Link to={`/execution/statement/${item.statementID}`}>
+            {limitText(item.query || "", 70)}
+          </Link>
+        </Tooltip>
       ),
       sort: (item: ActiveTransaction) => item.query,
     },

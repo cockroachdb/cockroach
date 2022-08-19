@@ -9,12 +9,13 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { SortedTable, ColumnDescriptor } from "../../sortedtable";
+import { ColumnDescriptor, SortedTable } from "../../sortedtable";
 import { ContendedExecution, ExecutionType } from "../types";
 import { Link } from "react-router-dom";
 import { StatusIcon } from "../statusIcon";
 import { executionsTableTitles } from "../execTableCommon";
-import { DATE_FORMAT, Duration } from "../../util";
+import { DATE_FORMAT, Duration, limitText } from "../../util";
+import { Tooltip } from "@cockroachlabs/ui-components";
 
 const getID = (item: ContendedExecution, execType: ExecutionType) =>
   execType === "transaction"
@@ -24,7 +25,7 @@ const getID = (item: ContendedExecution, execType: ExecutionType) =>
 export function makeContentionColumns(
   execType: ExecutionType,
 ): ColumnDescriptor<ContendedExecution>[] {
-  const columns: ColumnDescriptor<ContendedExecution>[] = [
+  return [
     {
       name: "executionID",
       title: executionsTableTitles.executionID(execType),
@@ -42,9 +43,11 @@ export function makeContentionColumns(
       name: "mostRecentStatement",
       title: executionsTableTitles.mostRecentStatement(execType),
       cell: item => (
-        <Link to={`/execution/statement/${item.statementExecutionID}`}>
-          {item.query}
-        </Link>
+        <Tooltip placement="bottom" content={item.query}>
+          <Link to={`/execution/statement/${item.statementExecutionID}`}>
+            {limitText(item.query, 50)}
+          </Link>
+        </Tooltip>
       ),
       sort: item => item.query,
     },
@@ -72,7 +75,6 @@ export function makeContentionColumns(
       sort: item => item.contentionTime.asSeconds(),
     },
   ];
-  return columns;
 }
 
 interface ContentionTableProps {
