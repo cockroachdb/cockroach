@@ -87,6 +87,8 @@ type changeAggregator struct {
 	lastFlush      time.Time
 	flushFrequency time.Duration
 
+	// flushSkipped set if flush was skipped.
+	flushSkipped bool
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
 	frontier *schemaChangeFrontier
@@ -563,7 +565,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
-	checkpointFrontier := advanced &&
+	checkpointFrontier := (advanced || ca.flushSkipped) &&
 		(forceFlush || timeutil.Since(ca.lastFlush) > ca.flushFrequency)
 
 	// At a lower frequency we checkpoint specific spans in the job progress
@@ -574,10 +576,13 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		canCheckpointSpans(&ca.flowCtx.Cfg.Settings.SV, ca.lastFlush)
 
 	if checkpointFrontier || checkpointSpans {
-		defer func() {
-			ca.lastFlush = timeutil.Now()
-		}()
+		ca.lastFlush = timeutil.Now()
+		ca.flushSkipped = false
 		return ca.flushFrontier()
+	}
+
+	if advanced && !checkpointFrontier {
+		ca.flushSkipped = true
 	}
 
 	return nil
