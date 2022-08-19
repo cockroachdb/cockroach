@@ -1245,7 +1245,7 @@ func (i *intentInterleavingIter) SupportsPrev() bool {
 	return true
 }
 
-// unsageMVCCIterator is used in RaceEnabled test builds to randomly inject
+// unsafeMVCCIterator is used in RaceEnabled test builds to randomly inject
 // changes to unsafe keys retrieved from MVCCIterators.
 type unsafeMVCCIterator struct {
 	MVCCIterator
@@ -1254,8 +1254,12 @@ type unsafeMVCCIterator struct {
 	rawMVCCKeyBuf []byte
 }
 
-func wrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
-	return &unsafeMVCCIterator{MVCCIterator: iter}
+// gcassert:inline
+func maybeWrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
+	if util.RaceEnabled {
+		return &unsafeMVCCIterator{MVCCIterator: iter}
+	}
+	return iter
 }
 
 var _ MVCCIterator = &unsafeMVCCIterator{}
