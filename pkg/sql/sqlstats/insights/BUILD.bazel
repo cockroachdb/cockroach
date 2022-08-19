@@ -45,7 +45,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/clusterunique",
         "//pkg/util/stop",
-        "//pkg/util/syncutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_stretchr_testify//require",
