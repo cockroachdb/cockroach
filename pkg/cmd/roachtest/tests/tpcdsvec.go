@@ -33,19 +33,19 @@ func registerTPCDSVec(r registry.Registry) {
 		withStatsSlowerWarningThreshold = 1.25
 	)
 
-	queriesToSkip := map[int]bool{
+	queriesToSkip := map[int]struct{}{
 		// These queries don't complete within 5 minutes.
-		1:  true,
-		64: true,
+		1:  {},
+		64: {},
 
 		// These queries contain unsupported function 'rollup' (#46280).
-		5:  true,
-		14: true,
-		18: true,
-		22: true,
-		67: true,
-		77: true,
-		80: true,
+		5:  {},
+		14: {},
+		18: {},
+		22: {},
+		67: {},
+		77: {},
+		80: {},
 	}
 
 	tpcdsTables := []string{

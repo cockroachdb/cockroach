@@ -164,13 +164,13 @@ func runHTTP(protocPath, genDocPath, protocFlags, outPath string) error {
 	// also present in the messages map. Useful to recurse into types that have
 	// other types.
 	extraMessages := func(name string) []string {
-		seen := make(map[string]bool)
+		seen := make(map[string]struct{})
 		var extraFn func(name string) []string
 		extraFn = func(name string) []string {
-			if seen[name] {
+			if _, ok := seen[name]; ok {
 				return nil
 			}
-			seen[name] = true
+			seen[name] = struct{}{}
 			msg, ok := messages[name]
 			if !ok {
 				return nil

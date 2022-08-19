@@ -273,7 +273,7 @@ func (g Grammar) ExtractProduction(
 ) ([]byte, error) {
 	names := []token{token(name)}
 	b := new(bytes.Buffer)
-	done := map[token]bool{token(name): true}
+	done := map[token]struct{}{token(name): {}}
 	for i := 0; i < len(names); i++ {
 		if i > 0 {
 			b.WriteString("\n")
@@ -284,9 +284,9 @@ func (g Grammar) ExtractProduction(
 			return nil, fmt.Errorf("couldn't find %s", n)
 		}
 		walkToken(prods, func(t token) {
-			if !done[t] && descend {
+			if _, ok := done[t]; !ok && descend {
 				names = append(names, t)
-				done[t] = true
+				done[t] = struct{}{}
 			}
 		})
 		fmt.Fprintf(b, "%s ::=\n", n)

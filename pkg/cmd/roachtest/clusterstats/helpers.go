@@ -60,7 +60,7 @@ func TrimTaggedSeries(
 	highTS := int64(math.MinInt64)
 	longest := 0
 	result := make(map[string]map[string]StatSeries)
-	skip := make(map[string]bool)
+	skip := make(map[string]struct{})
 
 	// Find the highest start timestamp and the lowest end timestamp. These
 	// will be used as the bounds for all the series. If there exists a nil or
@@ -72,7 +72,7 @@ func TrimTaggedSeries(
 			// entries is nil or 0 length. Filter it out and continue to the
 			// next.
 			if len(series) < 1 {
-				skip[labelName] = true
+				skip[labelName] = struct{}{}
 				break
 			}
 			seriesLength := len(series)

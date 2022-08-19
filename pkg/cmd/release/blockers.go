@@ -306,7 +306,7 @@ func fetchOpenBlockers(client githubClient, releaseBranchLabel string) (*openBlo
 // through issue.Project.Name values found in the issues' timeline.
 // Returns nil if no project name found.
 func mostRecentProjectName(client githubClient, issueNum int) (string, error) {
-	removedProjects := make(map[string]bool)
+	removedProjects := make(map[string]struct{})
 	events, err := client.issueEvents(issueNum)
 	if err != nil {
 		return "", err
@@ -328,7 +328,7 @@ func mostRecentProjectName(client githubClient, issueNum int) (string, error) {
 			// Add ProjectName to a removedProjects "stack", so
 			// that we don't return this Project when we eventually
 			// get to the earlier "added" project event.
-			removedProjects[projectName] = true
+			removedProjects[projectName] = struct{}{}
 		} else if events[i].Event == eventAddedProject {
 
 			if _, exists := removedProjects[projectName]; exists {
