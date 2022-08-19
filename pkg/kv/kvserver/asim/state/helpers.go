@@ -121,14 +121,14 @@ func NewTestStateReplCounts(storeReplicas map[StoreID]int, replsPerRange int) St
 	nextKey := 0
 	freeKeys := []Key{}
 	splitKeys := []Key{}
-	rangeStoreMap := make(map[Key]map[StoreID]bool)
+	rangeStoreMap := make(map[Key]map[StoreID]struct{})
 	replicas := make(map[Key][]StoreID)
 
 	addKey := func() {
 		splitKeys = append(splitKeys, Key(nextKey))
 		freeKeys = append(freeKeys, Key(nextKey))
 		replicas[Key(nextKey)] = make([]StoreID, 0, 1)
-		rangeStoreMap[Key(nextKey)] = make(map[StoreID]bool)
+		rangeStoreMap[Key(nextKey)] = make(map[StoreID]struct{})
 		nextKey++
 	}
 
@@ -142,12 +142,12 @@ func NewTestStateReplCounts(storeReplicas map[StoreID]int, replsPerRange int) St
 				// current store. We then associate the store with this key as
 				// a replica to be created.
 				for i, key := range freeKeys {
-					if ok := rangeStoreMap[key][storeID]; !ok {
+					if _, ok := rangeStoreMap[key][storeID]; !ok {
 						// The key is not associated with this store, we may
 						// use it.
 						foundKey = true
 						replicas[key] = append(replicas[key], storeID)
-						rangeStoreMap[key][storeID] = true
+						rangeStoreMap[key][storeID] = struct{}{}
 						// Check if the number of stores associated with this
 						// key is equal to the replication factor; If so, it is
 						// now full in terms of stores. Remove it  from the
