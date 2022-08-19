@@ -66,7 +66,7 @@ type TypedExpr interface {
 	// should be replaced prior to expression evaluation by an
 	// appropriate WalkExpr. For example, Placeholder should be replaced
 	// by the argument passed from the client.
-	Eval(ExprEvaluator) (Datum, error)
+	Eval(context.Context, ExprEvaluator) (Datum, error)
 }
 
 // VariableExpr is an Expr that may change per row. It is used to

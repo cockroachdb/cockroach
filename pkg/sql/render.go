@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -57,8 +58,12 @@ type renderNode struct {
 	reqOrdering ReqOrdering
 }
 
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+var _ eval.IndexedVarContainer = &renderNode{}
+
+// IndexedVarEval implements the eval.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	panic("renderNode can't be run in local mode")
 }
 

@@ -58,7 +58,7 @@ func (s *srf) TypeCheck(
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (s *srf) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
+func (s *srf) Eval(_ context.Context, _ tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("srf must be replaced before evaluation"))
 }
 

@@ -77,7 +77,7 @@ var builtins = map[string]builtinDefinition{
     tree.Overload{
       Types:      tree.VariadicType{VarType: types.String},
       ReturnType: tree.FixedReturnType(types.String),
-      Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+      Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
         return tree.DNull, fmt.Errorf("nothing to see here")
       },
     },
@@ -349,7 +349,7 @@ check your solution against ours.
       tree.Overload{
         Types:      tree.VariadicType{VarType: types.String},
         ReturnType: tree.FixedReturnType(types.String),
-        Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+        Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
           users := map[string]string{
             "bdarnell": "Ben Darnell",
             "pmattis":  "Peter Mattis",

@@ -248,7 +248,7 @@ func (d *dummyColumn) TypeCheck(
 	return d, nil
 }
 
-func (*dummyColumn) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
+func (*dummyColumn) Eval(ctx context.Context, v tree.ExprEvaluator) (tree.Datum, error) {
 	panic("dummyColumnItem.EvalVisit() is undefined")
 }
 

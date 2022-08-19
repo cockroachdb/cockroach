@@ -9,6 +9,7 @@
 package cdceval
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -61,7 +62,7 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx context.Context, evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
 				rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
 				if rowEvalCtx.updatedRow.IsDeleted() {
 					return tree.DBoolTrue, nil
@@ -130,7 +131,7 @@ func cdcTimestampBuiltin(
 			{
 				Types:      tree.ArgTypes{},
 				ReturnType: tree.FixedReturnType(types.Decimal),
-				Fn: func(evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				Fn: func(ctx context.Context, evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
 					rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
 					return eval.TimestampToDecimalDatum(tsFn(rowEvalCtx)), nil
 				},
@@ -145,7 +146,7 @@ func cdcTimestampBuiltin(
 	return tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
 }
 
-func prevRowAsJSON(evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
+func prevRowAsJSON(ctx context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
 	rec := rowEvalContextFromEvalContext(evalCtx)
 	if rec.memo.prevJSON != nil {
 		return rec.memo.prevJSON, nil

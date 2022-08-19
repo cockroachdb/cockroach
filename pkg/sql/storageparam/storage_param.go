@@ -68,7 +68,7 @@ func Set(
 		if typedExpr, err = normalize.Expr(evalCtx, typedExpr); err != nil {
 			return err
 		}
-		datum, err := eval.Expr(evalCtx, typedExpr)
+		datum, err := eval.Expr(ctx, evalCtx, typedExpr)
 		if err != nil {
 			return err
 		}

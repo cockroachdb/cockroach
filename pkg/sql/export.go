@@ -134,7 +134,7 @@ func (ef *execFactory) ConstructExport(
 		return nil, errors.Errorf("unsupported export format: %q", fileSuffix)
 	}
 
-	destinationDatum, err := eval.Expr(ef.planner.EvalContext(), fileName)
+	destinationDatum, err := eval.Expr(ef.planner.EvalContext().Context, ef.planner.EvalContext(), fileName)
 	if err != nil {
 		return nil, err
 	}
