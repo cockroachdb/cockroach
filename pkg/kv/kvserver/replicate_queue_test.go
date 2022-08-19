@@ -688,9 +688,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	opName := "process replica"
 	errRegexp, err := regexp.Compile(`error processing replica:.*boom`)
@@ -715,6 +713,15 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	// Validate that the trace is included in the log message.
 	require.Regexp(t, traceRegexp, entry.Message)
 	require.Regexp(t, opRegexp, entry.Message)
+
+	// Validate that the logged trace filtered out the verbose execChangeReplicasTxn
+	// child span, as well as the verbose child spans tracing txn operations.
+	require.NotRegexp(t, `operation:change-replica-update-desc`, entry.Message)
+	require.NotRegexp(t, `operation:txn coordinator send`, entry.Message)
+	require.NotRegexp(t, `operation:log-range-event`, entry.Message)
+
+	// Validate that the logged trace includes the changes to the descriptor.
+	require.Regexp(t, `change replicas \(add.*remove.*\): existing descriptor`, entry.Message)
 
 	// Validate that the trace was logged with the correct tags for the replica.
 	require.Regexp(t, fmt.Sprintf("n%d", repl.NodeID()), entry.Tags)
