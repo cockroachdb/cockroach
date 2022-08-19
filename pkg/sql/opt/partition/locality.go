@@ -145,16 +145,15 @@ func PrefixesToString(prefixes []Prefix) string {
 // determined.
 func HasMixOfLocalAndRemotePartitions(
 	evalCtx *eval.Context, index cat.Index,
-) (localPartitions *util.FastIntSet, ok bool) {
+) (localPartitions util.FastIntSet, ok bool) {
 	if index.PartitionCount() < 2 {
-		return nil, false
+		return util.FastIntSet{}, false
 	}
 	var localRegion string
 	if localRegion, ok = evalCtx.GetLocalRegion(); !ok {
-		return nil, false
+		return util.FastIntSet{}, false
 	}
 	var foundLocal, foundRemote bool
-	localPartitions = &util.FastIntSet{}
 	for i, n := 0, index.PartitionCount(); i < n; i++ {
 		part := index.Partition(i)
 		if IsZoneLocal(part.Zone(), localRegion) {
