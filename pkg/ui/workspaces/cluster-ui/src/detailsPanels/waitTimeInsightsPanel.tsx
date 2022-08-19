@@ -16,16 +16,15 @@ import React from "react";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
 import { ContendedExecution, ExecutionType } from "src/activeExecutions";
-import { Duration } from "../util";
+import { capitalize, Duration } from "../util";
 
-import { Heading, Text } from "@cockroachlabs/ui-components";
+import { Heading } from "@cockroachlabs/ui-components";
 import { ExecutionContentionTable } from "../activeExecutions/activeTransactionsTable/execContentionTable";
 import styles from "../statementDetails/statementDetails.module.scss";
-import { capitalize } from "../activeExecutions/execTableCommon";
 const cx = classNames.bind(styles);
 
 export const WaitTimeInsightsLabels = {
-  SECTION_HEADING: "Wait Time Insights",
+  SECTION_HEADING: "Contention Time Insights",
   BLOCKED_SCHEMA: "Blocked Schema",
   BLOCKED_DATABASE: "Blocked Database",
   BLOCKED_TABLE: "Blocked Table",
