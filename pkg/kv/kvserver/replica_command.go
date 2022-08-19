@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -3322,8 +3321,7 @@ func (r *Replica) relocateOne(
 		}
 		// Determines whether we can remove the leaseholder without first
 		// transferring the lease away.
-		lhRemovalAllowed = len(args.votersToAdd) > 0 &&
-			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+		lhRemovalAllowed = len(args.votersToAdd) > 0
 		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
 		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
 		if args.targetType == allocatorimpl.VoterTarget {
