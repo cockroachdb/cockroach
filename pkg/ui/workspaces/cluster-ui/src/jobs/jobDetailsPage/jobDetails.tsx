@@ -76,6 +76,8 @@ export class JobDetails extends React.Component<JobDetailsProps> {
 
   renderContent = (): React.ReactElement => {
     const job = this.props.job;
+    const nextRun = TimestampToMoment(job.next_run);
+    const hasNextRun = nextRun.isAfter();
     return (
       <>
         <Row gutter={24}>
@@ -88,10 +90,14 @@ export class JobDetails extends React.Component<JobDetailsProps> {
             <SummaryCard>
               <h3 className={jobCx("summary--card--title")}>Status</h3>
               <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
-              <h3 className={jobCx("summary--card--title", "secondary")}>
-                Next Planned Execution Time:
-              </h3>
-              {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
+              {hasNextRun && (
+                <>
+                  <h3 className={jobCx("summary--card--title", "secondary")}>
+                    Next Planned Execution Time:
+                  </h3>
+                  {nextRun.format(DATE_FORMAT_24_UTC)}
+                </>
+              )}
             </SummaryCard>
           </Col>
           <Col className="gutter-row" span={12}>
