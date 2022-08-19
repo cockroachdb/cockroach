@@ -25,6 +25,7 @@ import (
 // exposes the set of currently retained outliers.
 type registry struct {
 	detector detector
+	problems *problems
 
 	// Note that this single mutex places unnecessary constraints on outlier
 	// detection and reporting. We will develop a higher-throughput system
@@ -49,7 +50,11 @@ func newRegistry(st *cluster.Settings, metrics Metrics) Registry {
 		detector: compositeDetector{detectors: []detector{
 			latencyThresholdDetector{st: st},
 			newAnomalyDetector(st, metrics),
-		}}}
+		}},
+		problems: &problems{
+			st: st,
+		},
+	}
 	r.mu.statements = make(map[clusterunique.ID][]*Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
 	return r
@@ -77,23 +82,24 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 	statements := r.mu.statements[sessionID]
 	delete(r.mu.statements, sessionID)
 
-	concerns := make(map[clusterunique.ID][]Concern, len(statements))
-
-	hasConcerns := false
+	slowStatements := make(map[clusterunique.ID]struct{})
 	for _, s := range statements {
-		concerns[s.ID] = r.detector.examine(s)
-		if len(concerns[s.ID]) > 0 {
-			hasConcerns = true
+		if r.detector.isSlow(s) {
+			slowStatements[s.ID] = struct{}{}
 		}
 	}
 
-	if hasConcerns {
+	if len(slowStatements) > 0 {
 		for _, s := range statements {
+			var p []Problem
+			if _, ok := slowStatements[s.ID]; ok {
+				p = r.problems.examine(s)
+			}
 			r.mu.outliers.Add(s.ID, &Insight{
 				Session:     &Session{ID: sessionID},
 				Transaction: transaction,
 				Statement:   s,
-				Concerns:    concerns[s.ID],
+				Problems:    p,
 			})
 		}
 	}

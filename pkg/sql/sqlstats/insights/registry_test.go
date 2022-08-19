@@ -47,7 +47,7 @@ func TestRegistry(t *testing.T) {
 			Session:     session,
 			Transaction: transaction,
 			Statement:   statement,
-			Concerns:    []Concern{Concern_SlowExecution},
+			Problems:    []Problem{Problem_Unknown},
 		}}
 		var actual []*Insight
 
@@ -121,12 +121,12 @@ func TestRegistry(t *testing.T) {
 			Session:     session,
 			Transaction: transaction,
 			Statement:   statement,
-			Concerns:    []Concern{Concern_SlowExecution},
+			Problems:    []Problem{Problem_Unknown},
 		}, {
 			Session:     otherSession,
 			Transaction: otherTransaction,
 			Statement:   otherStatement,
-			Concerns:    []Concern{Concern_SlowExecution},
+			Problems:    []Problem{Problem_Unknown},
 		}}
 		var actual []*Insight
 		registry.IterateInsights(
