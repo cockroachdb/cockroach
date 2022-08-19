@@ -58,24 +58,28 @@ query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            t              testuser   BACKUP          false
 test           s            t              testuser   CREATE          false
 test           s            t              testuser   DELETE          false
 test           s            t              testuser   DROP            false
 test           s            t              testuser   INSERT          false
 test           s            t              testuser   UPDATE          false
 test           s            t              testuser   ZONECONFIG      false
+test           s            t              testuser2  BACKUP          false
 test           s            t              testuser2  CREATE          false
 test           s            t              testuser2  DELETE          false
 test           s            t              testuser2  DROP            false
 test           s            t              testuser2  INSERT          false
 test           s            t              testuser2  UPDATE          false
 test           s            t              testuser2  ZONECONFIG      false
+test           s2           t              testuser   BACKUP          false
 test           s2           t              testuser   CREATE          false
 test           s2           t              testuser   DELETE          false
 test           s2           t              testuser   DROP            false
 test           s2           t              testuser   INSERT          false
 test           s2           t              testuser   UPDATE          false
 test           s2           t              testuser   ZONECONFIG      false
+test           s2           t              testuser2  BACKUP          false
 test           s2           t              testuser2  CREATE          false
 test           s2           t              testuser2  DELETE          false
 test           s2           t              testuser2  DROP            false

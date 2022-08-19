@@ -71,10 +71,12 @@ CREATE TYPE t2 AS ENUM()
 query TTTTTB colnames
 SHOW GRANTS ON TYPE t2
 ----
-database_name  schema_name  type_name  grantee  privilege_type  is_grantable
-test           public       t2         admin    ALL             true
-test           public       t2         public   USAGE           false
-test           public       t2         root     ALL             true
+database_name  schema_name  type_name  grantee    privilege_type  is_grantable
+test           public       t2         admin      ALL             true
+test           public       t2         public     USAGE           false
+test           public       t2         root       ALL             true
+test           public       t2         testuser   BACKUP          false
+test           public       t2         testuser2  BACKUP          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM testuser, testuser2
