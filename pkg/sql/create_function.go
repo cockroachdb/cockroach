@@ -205,13 +205,15 @@ func (n *createFunctionNode) getMutableFuncDesc(
 	pbArgs := make([]descpb.FunctionDescriptor_Argument, len(n.cf.Args))
 	argNameSeen := make(map[tree.Name]struct{})
 	for i, arg := range n.cf.Args {
-		if _, ok := argNameSeen[arg.Name]; ok {
-			// Argument names cannot be used more than once.
-			return nil, false, pgerror.Newf(
-				pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", arg.Name,
-			)
+		if arg.Name != "" {
+			if _, ok := argNameSeen[arg.Name]; ok {
+				// Argument names cannot be used more than once.
+				return nil, false, pgerror.Newf(
+					pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", arg.Name,
+				)
+			}
+			argNameSeen[arg.Name] = struct{}{}
 		}
-		argNameSeen[arg.Name] = struct{}{}
 		pbArg, err := makeFunctionArg(params.ctx, arg, params.p)
 		if err != nil {
 			return nil, false, err
