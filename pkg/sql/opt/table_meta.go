@@ -96,8 +96,9 @@ func (t TableID) index() int {
 //   ann := md.TableAnnotation(TableID(1), myAnnID)
 //
 // Currently, the following annotations are in use:
-//   - WeakKeys: weak keys derived from the base table
+//   - FuncDeps: functional dependencies derived from the base table
 //   - Stats: statistics derived from the base table
+//   - NotNullCols: not null columns derived from the base table
 //
 // To add an additional annotation, increase the value of maxTableAnnIDCount and
 // add a call to NewTableAnnID.
@@ -110,7 +111,10 @@ var tableAnnIDCount TableAnnID
 // called. Calling more than this number of times results in a panic. Having
 // a maximum enables a static annotation array to be inlined into the metadata
 // table struct.
-const maxTableAnnIDCount = 2
+const maxTableAnnIDCount = 3
+
+// NotNullAnnID is the annotation ID for table not null columns.
+var NotNullAnnID = NewTableAnnID()
 
 // TableMeta stores information about one of the tables stored in the metadata.
 //
