@@ -50,7 +50,7 @@ func TestCastToCollatedString(t *testing.T) {
 			}
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			val, err := eval.Expr(evalCtx, typedexpr)
+			val, err := eval.Expr(ctx, evalCtx, typedexpr)
 			if err != nil {
 				t.Fatal(err)
 			}

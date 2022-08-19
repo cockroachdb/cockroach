@@ -276,7 +276,7 @@ func (ec *Context) MustGetPlaceholderValue(p *tree.Placeholder) tree.Datum {
 	if !ok {
 		panic(errors.AssertionFailedf("fail"))
 	}
-	out, err := Expr(ec, e)
+	out, err := Expr(ec.Context, ec, e)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "fail"))
 	}
@@ -631,7 +631,7 @@ func arrayOfType(typ *types.T) (*tree.DArray, error) {
 func UnwrapDatum(evalCtx *Context, d tree.Datum) tree.Datum {
 	d = tree.UnwrapDOidWrapper(d)
 	if p, ok := d.(*tree.Placeholder); ok && evalCtx != nil && evalCtx.HasPlaceholders() {
-		ret, err := Expr(evalCtx, p)
+		ret, err := Expr(evalCtx.Context, evalCtx, p)
 		if err != nil {
 			// If we fail to evaluate the placeholder, it's because we don't have
 			// a placeholder available. Just return the placeholder and someone else

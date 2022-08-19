@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
@@ -88,18 +89,20 @@ func makeOverlapsOverloads() []tree.Overload {
 
 // overlapsBuiltinFunc checks if two time periods overlaps, and returns possible
 // error.
-func overlapsBuiltinFunc(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+func overlapsBuiltinFunc(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
 	var err error
 	s1, e1, s2, e2 := args[0], args[1], args[2], args[3]
-	s1, e1, err = normalizeTimePeriodToEndpoints(ctx, s1, e1)
+	s1, e1, err = normalizeTimePeriodToEndpoints(evalCtx, s1, e1)
 	if err != nil {
 		return nil, err
 	}
-	s2, e2, err = normalizeTimePeriodToEndpoints(ctx, s2, e2)
+	s2, e2, err = normalizeTimePeriodToEndpoints(evalCtx, s2, e2)
 	if err != nil {
 		return nil, err
 	}
-	return evalOverlaps(ctx, s1, e1, s2, e2)
+	return evalOverlaps(evalCtx, s1, e1, s2, e2)
 }
 
 // evalOverlaps checks if two intervals overlap, return a bool
@@ -114,9 +117,9 @@ func overlapsBuiltinFunc(ctx *eval.Context, args tree.Datums) (tree.Datum, error
 // `s` represents `interval start`, `e` represents `interval end`.
 // `1/2` represents interval 1/2.
 func evalOverlaps(
-	ctx *eval.Context, s1 tree.Datum, e1 tree.Datum, s2 tree.Datum, e2 tree.Datum,
+	evalCtx *eval.Context, s1 tree.Datum, e1 tree.Datum, s2 tree.Datum, e2 tree.Datum,
 ) (tree.Datum, error) {
-	compS1E1, err := s1.CompareError(ctx, e1)
+	compS1E1, err := s1.CompareError(evalCtx, e1)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +127,7 @@ func evalOverlaps(
 		s1, e1 = e1, s1
 	}
 
-	compS2E2, err := s2.CompareError(ctx, e2)
+	compS2E2, err := s2.CompareError(evalCtx, e2)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +135,7 @@ func evalOverlaps(
 		s2, e2 = e2, s2
 	}
 
-	compS1S2, err := s1.CompareError(ctx, s2)
+	compS1S2, err := s1.CompareError(evalCtx, s2)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +143,7 @@ func evalOverlaps(
 
 	// Case s1 > s2.
 	case 1:
-		compS1E2, err := s1.CompareError(ctx, e2)
+		compS1E2, err := s1.CompareError(evalCtx, e2)
 		if err != nil {
 			return nil, err
 		}
@@ -153,7 +156,7 @@ func evalOverlaps(
 
 	// Case s1 < s2.
 	case -1:
-		compS2E1, err := s2.CompareError(ctx, e1)
+		compS2E1, err := s2.CompareError(evalCtx, e1)
 		if err != nil {
 			return nil, err
 		}
@@ -173,7 +176,7 @@ func evalOverlaps(
 // normalizeTimePeriodToEndpoints is to normalize a time period to a
 // representation of two endpoints.
 func normalizeTimePeriodToEndpoints(
-	ctx *eval.Context, s tree.Datum, e tree.Datum,
+	evalCtx *eval.Context, s tree.Datum, e tree.Datum,
 ) (tree.Datum, tree.Datum, error) {
 	var err error
 	switch eType := e.(type) {
@@ -199,7 +202,7 @@ func normalizeTimePeriodToEndpoints(
 				return nil, nil, err
 			}
 		case *tree.DTimestampTZ:
-			endTime := duration.Add(sType.Time.In(ctx.GetLocation()), eType.Duration)
+			endTime := duration.Add(sType.Time.In(evalCtx.GetLocation()), eType.Duration)
 			et, err = tree.MakeDTimestampTZ(endTime, time.Microsecond)
 			if err != nil {
 				return nil, nil, err

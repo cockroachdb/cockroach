@@ -113,6 +113,8 @@ const header = `// Copyright 2022 The Cockroach Authors.
 // tree.XYZ in a new file, you may get the confusing error: undefined: XYZ.
 // Run './dev generate bazel' to fix this.
 package tree
+
+import "context"
 `
 
 func findTypesWithMethod(ins *inspector.Inspector, filter func(decl *ast.FuncDecl) bool) stringSet {

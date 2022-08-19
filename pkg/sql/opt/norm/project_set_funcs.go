@@ -122,7 +122,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 				panic(errors.AssertionFailedf("unexpected GeneratorWithExprs"))
 			}
 			generator, err := function.Overload.
-				Generator.(eval.GeneratorOverload)(c.f.evalCtx, tree.Datums{t.Value})
+				Generator.(eval.GeneratorOverload)(c.f.evalCtx.Context, c.f.evalCtx, tree.Datums{t.Value})
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator retrieval failed"))
 			}

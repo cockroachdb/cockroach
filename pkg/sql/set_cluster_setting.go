@@ -332,7 +332,7 @@ func writeSettingInternal(
 			}
 		} else {
 			// Setting a non-DEFAULT value.
-			value, err := eval.Expr(evalCtx, value)
+			value, err := eval.Expr(ctx, evalCtx, value)
 			if err != nil {
 				return err
 			}

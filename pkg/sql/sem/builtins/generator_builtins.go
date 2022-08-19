@@ -106,7 +106,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverload(
 			tree.ArgTypes{{"aclitems", types.StringArray}},
 			aclexplodeGeneratorType,
-			func(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+			func(_ context.Context, _ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				return aclexplodeGenerator{}, nil
 			},
 			"Produces a virtual table containing aclitem stuff ("+
@@ -121,7 +121,7 @@ var generators = map[string]builtinDefinition{
 				{"end_key", types.Bytes},
 			},
 			spanKeyIteratorType,
-			func(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
 				if err != nil {
 					return nil, err
@@ -144,7 +144,7 @@ var generators = map[string]builtinDefinition{
 				{"span", types.BytesArray},
 			},
 			spanKeyIteratorType,
-			func(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
 				if err != nil {
 					return nil, err
@@ -205,13 +205,13 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverload(
 			tree.ArgTypes{{"name", types.String}},
 			types.Int,
-			func(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				s, ok := tree.AsDString(args[0])
 				if !ok {
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				name := string(s)
-				gen, ok := ctx.TestingKnobs.CallbackGenerators[name]
+				gen, ok := evalCtx.TestingKnobs.CallbackGenerators[name]
 				if !ok {
 					return nil, errors.Errorf("callback %q not registered", name)
 				}
@@ -587,16 +587,18 @@ func (g *gistPlanGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{tree.NewDString(g.rows[g.index])}, nil
 }
 
-func makeDecodePlanGistGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeDecodePlanGistGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	gist := string(tree.MustBeDString(args[0]))
-	return &gistPlanGenerator{gist: gist, evalCtx: ctx, external: false}, nil
+	return &gistPlanGenerator{gist: gist, evalCtx: evalCtx, external: false}, nil
 }
 
 func makeDecodeExternalPlanGistGenerator(
-	ctx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	gist := string(tree.MustBeDString(args[0]))
-	return &gistPlanGenerator{gist: gist, evalCtx: ctx, external: true}, nil
+	return &gistPlanGenerator{gist: gist, evalCtx: evalCtx, external: true}, nil
 }
 
 func makeGeneratorOverload(
@@ -605,12 +607,12 @@ func makeGeneratorOverload(
 	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info, volatility)
 }
 
-var unsuitableUseOfGeneratorFn = func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+var unsuitableUseOfGeneratorFn = func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
 }
 
 var unsuitableUseOfGeneratorFnWithExprs eval.FnWithExprsOverload = func(
-	_ *eval.Context, _ tree.Exprs,
+	_ context.Context, _ *eval.Context, _ tree.Exprs,
 ) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("generator functions cannot be evaluated as scalars")
 }
@@ -639,9 +641,9 @@ type regexpSplitToTableGenerator struct {
 
 func makeRegexpSplitToTableGeneratorFactory(hasFlags bool) eval.GeneratorOverload {
 	return func(
-		ctx *eval.Context, args tree.Datums,
+		ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 	) (eval.ValueGenerator, error) {
-		words, err := regexpSplit(ctx, args, hasFlags)
+		words, err := regexpSplit(evalCtx, args, hasFlags)
 		if err != nil {
 			return nil, err
 		}
@@ -680,7 +682,9 @@ type optionsToTableGenerator struct {
 	idx int
 }
 
-func makeOptionsToTableGenerator(_ *eval.Context, d tree.Datums) (eval.ValueGenerator, error) {
+func makeOptionsToTableGenerator(
+	_ context.Context, _ *eval.Context, d tree.Datums,
+) (eval.ValueGenerator, error) {
 	arr := tree.MustBeDArray(d[0])
 	return &optionsToTableGenerator{arr: arr, idx: -1}, nil
 }
@@ -745,7 +749,9 @@ var keywordsValueGeneratorType = types.MakeLabeledTuple(
 	[]string{"word", "catcode", "catdesc"},
 )
 
-func makeKeywordsGenerator(_ *eval.Context, _ tree.Datums) (eval.ValueGenerator, error) {
+func makeKeywordsGenerator(
+	_ context.Context, _ *eval.Context, _ tree.Datums,
+) (eval.ValueGenerator, error) {
 	return &keywordsValueGenerator{}, nil
 }
 
@@ -862,7 +868,9 @@ func seriesGenTSTZValue(s *seriesValueGenerator) (tree.Datums, error) {
 	return tree.Datums{ts}, nil
 }
 
-func makeSeriesGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeSeriesGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	start := int64(tree.MustBeDInt(args[0]))
 	stop := int64(tree.MustBeDInt(args[1]))
 	step := int64(1)
@@ -882,7 +890,9 @@ func makeSeriesGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator
 	}, nil
 }
 
-func makeTSSeriesGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeTSSeriesGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	start := args[0].(*tree.DTimestamp).Time
 	stop := args[1].(*tree.DTimestamp).Time
 	step := args[2].(*tree.DInterval).Duration
@@ -901,7 +911,9 @@ func makeTSSeriesGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerat
 	}, nil
 }
 
-func makeTSTZSeriesGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeTSTZSeriesGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	start := args[0].(*tree.DTimestampTZ).Time
 	stop := args[1].(*tree.DTimestampTZ).Time
 	step := args[2].(*tree.DInterval).Duration
@@ -946,7 +958,9 @@ func (s *seriesValueGenerator) Values() (tree.Datums, error) {
 	return s.genValue(s)
 }
 
-func makeVariadicUnnestGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeVariadicUnnestGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	var arrays []*tree.DArray
 	for _, a := range args {
 		arrays = append(arrays, tree.MustBeDArray(a))
@@ -1008,7 +1022,9 @@ func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 	return s.datums, nil
 }
 
-func makeArrayGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeArrayGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	arr := tree.MustBeDArray(args[0])
 	return &arrayValueGenerator{array: arr}, nil
 }
@@ -1049,7 +1065,7 @@ func (s *arrayValueGenerator) Values() (tree.Datums, error) {
 }
 
 func makeExpandArrayGenerator(
-	evalCtx *eval.Context, args tree.Datums,
+	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	arr := tree.MustBeDArray(args[0])
 	g := &expandArrayValueGenerator{avg: arrayValueGenerator{array: arr}}
@@ -1098,7 +1114,7 @@ func (s *expandArrayValueGenerator) Values() (tree.Datums, error) {
 }
 
 func makeGenerateSubscriptsGenerator(
-	evalCtx *eval.Context, args tree.Datums,
+	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	var arr *tree.DArray
 	dim := 1
@@ -1185,7 +1201,9 @@ type unaryValueGenerator struct {
 
 var unaryValueGeneratorType = types.EmptyTuple
 
-func makeUnaryGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeUnaryGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	return &unaryValueGenerator{}, nil
 }
 
@@ -1264,11 +1282,15 @@ type jsonArrayGenerator struct {
 var errJSONCallOnNonArray = pgerror.New(pgcode.InvalidParameterValue,
 	"cannot be called on a non-array")
 
-func makeJSONArrayAsJSONGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeJSONArrayAsJSONGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	return makeJSONArrayGenerator(args, false)
 }
 
-func makeJSONArrayAsTextGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeJSONArrayAsTextGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	return makeJSONArrayGenerator(args, true)
 }
 
@@ -1339,7 +1361,9 @@ type jsonObjectKeysGenerator struct {
 	iter *json.ObjectIterator
 }
 
-func makeJSONObjectKeysGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeJSONObjectKeysGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	target := tree.MustBeDJSON(args[0])
 	iter, err := target.ObjectIter()
 	if err != nil {
@@ -1436,11 +1460,15 @@ type jsonEachGenerator struct {
 	asText bool
 }
 
-func makeJSONEachImplGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeJSONEachImplGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	return makeJSONEachGenerator(args, false)
 }
 
-func makeJSONEachTextImplGenerator(_ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeJSONEachTextImplGenerator(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	return makeJSONEachGenerator(args, true)
 }
 
@@ -1540,7 +1568,7 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 }
 
 func makeJSONPopulateRecordGenerator(
-	evalCtx *eval.Context, args tree.Exprs,
+	ctx context.Context, evalCtx *eval.Context, args tree.Exprs,
 ) (eval.ValueGenerator, error) {
 	tuple, j, err := jsonPopulateRecordEvalArgs(evalCtx, args)
 	if err != nil {
@@ -1570,7 +1598,7 @@ func jsonPopulateRecordEvalArgs(
 	evalled := make(tree.Datums, len(args))
 	for i := range args {
 		var err error
-		evalled[i], err = eval.Expr(evalCtx, args[i].(tree.TypedExpr))
+		evalled[i], err = eval.Expr(evalCtx.Context, evalCtx, args[i].(tree.TypedExpr))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1635,7 +1663,7 @@ func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
 }
 
 func makeJSONPopulateRecordSetGenerator(
-	evalCtx *eval.Context, args tree.Exprs,
+	ctx context.Context, evalCtx *eval.Context, args tree.Exprs,
 ) (eval.ValueGenerator, error) {
 	tuple, j, err := jsonPopulateRecordEvalArgs(evalCtx, args)
 	if err != nil {
@@ -1700,7 +1728,9 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 	return output.D, nil
 }
 
-func makeJSONRecordGenerator(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeJSONRecordGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	target := tree.MustBeDJSON(args[0])
 	return &jsonRecordGenerator{
 		evalCtx: evalCtx,
@@ -1788,7 +1818,7 @@ type jsonRecordSetGenerator struct {
 }
 
 func makeJSONRecordSetGenerator(
-	evalCtx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	arr := tree.MustBeDJSON(args[0])
 	return &jsonRecordSetGenerator{
@@ -1854,9 +1884,9 @@ type checkConsistencyGenerator struct {
 var _ eval.ValueGenerator = &checkConsistencyGenerator{}
 
 func makeCheckConsistencyGenerator(
-	ctx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	if !ctx.Codec.ForSystemTenant() {
+	if !evalCtx.Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(
 			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 	}
@@ -1890,7 +1920,7 @@ func makeCheckConsistencyGenerator(
 		mode = roachpb.ChecksumMode_CHECK_STATS
 	}
 
-	if ctx.ConsistencyChecker == nil {
+	if evalCtx.ConsistencyChecker == nil {
 		return nil, errors.WithIssueLink(
 			errors.AssertionFailedf("no consistency checker configured"),
 			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/88222"},
@@ -1898,8 +1928,8 @@ func makeCheckConsistencyGenerator(
 	}
 
 	return &checkConsistencyGenerator{
-		txn:                ctx.Txn,
-		consistencyChecker: ctx.ConsistencyChecker,
+		txn:                evalCtx.Txn,
+		consistencyChecker: evalCtx.ConsistencyChecker,
 		from:               keyFrom,
 		to:                 keyTo,
 		mode:               mode,
@@ -2150,9 +2180,11 @@ type rangeKeyIterator struct {
 var _ eval.ValueGenerator = &rangeKeyIterator{}
 var _ eval.ValueGenerator = &spanKeyIterator{}
 
-func makeRangeKeyIterator(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeRangeKeyIterator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -2162,7 +2194,7 @@ func makeRangeKeyIterator(ctx *eval.Context, args tree.Datums) (eval.ValueGenera
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: ctx.Mon.MakeBoundAccount(),
+			acc: evalCtx.Mon.MakeBoundAccount(),
 		},
 		rangeID: rangeID,
 	}, nil
@@ -2219,10 +2251,10 @@ type payloadsForSpanGenerator struct {
 }
 
 func makePayloadsForSpanGenerator(
-	ctx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -2233,7 +2265,7 @@ func makePayloadsForSpanGenerator(
 		)
 	}
 	spanID := tracingpb.SpanID(*(args[0].(*tree.DInt)))
-	span := ctx.Tracer.GetActiveSpanByID(spanID)
+	span := evalCtx.Tracer.GetActiveSpanByID(spanID)
 	if span == nil {
 		return nil, nil
 	}
@@ -2320,10 +2352,10 @@ type payloadsForTraceGenerator struct {
 }
 
 func makePayloadsForTraceGenerator(
-	ctx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -2342,8 +2374,8 @@ func makePayloadsForTraceGenerator(
 									) SELECT *
 										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
 
-	it, err := ctx.Planner.QueryIteratorEx(
-		ctx.Ctx(),
+	it, err := evalCtx.Planner.QueryIteratorEx(
+		evalCtx.Ctx(),
 		"crdb_internal.payloads_for_trace",
 		sessiondata.NoSessionDataOverride,
 		query,
@@ -2469,13 +2501,13 @@ func (s *showCreateAllSchemasGenerator) Close(ctx context.Context) {
 // We use the timestamp of when the generator is created as the
 // timestamp to pass to AS OF SYSTEM TIME for looking up the create schema
 func makeShowCreateAllSchemasGenerator(
-	ctx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
 	return &showCreateAllSchemasGenerator{
-		evalPlanner: ctx.Planner,
+		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         ctx.Mon.MakeBoundAccount(),
+		acc:         evalCtx.Mon.MakeBoundAccount(),
 	}, nil
 }
 
@@ -2625,14 +2657,14 @@ func (s *showCreateAllTablesGenerator) Close(ctx context.Context) {
 // timestamp to pass to AS OF SYSTEM TIME for looking up the create table
 // and alter table statements.
 func makeShowCreateAllTablesGenerator(
-	ctx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
 	return &showCreateAllTablesGenerator{
-		evalPlanner: ctx.Planner,
+		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         ctx.Mon.MakeBoundAccount(),
-		sessionData: ctx.SessionData(),
+		acc:         evalCtx.Mon.MakeBoundAccount(),
+		sessionData: evalCtx.SessionData(),
 	}, nil
 }
 
@@ -2706,12 +2738,12 @@ func (s *showCreateAllTypesGenerator) Close(ctx context.Context) {
 // We use the timestamp of when the generator is created as the
 // timestamp to pass to AS OF SYSTEM TIME for looking up the create type
 func makeShowCreateAllTypesGenerator(
-	ctx *eval.Context, args tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	dbName := string(tree.MustBeDString(args[0]))
 	return &showCreateAllTypesGenerator{
-		evalPlanner: ctx.Planner,
+		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         ctx.Mon.MakeBoundAccount(),
+		acc:         evalCtx.Mon.MakeBoundAccount(),
 	}, nil
 }

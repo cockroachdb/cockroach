@@ -606,7 +606,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 		return "", nil
 	}
 	for i, v := range n.typedValues {
-		d, err := eval.Expr(params.EvalContext(), v)
+		d, err := eval.Expr(params.ctx, params.EvalContext(), v)
 		if err != nil {
 			return "", err
 		}

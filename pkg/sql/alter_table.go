@@ -1248,7 +1248,7 @@ func updateSequenceDependencies(
 func injectTableStats(
 	params runParams, desc catalog.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
-	val, err := eval.Expr(params.EvalContext(), statsExpr)
+	val, err := eval.Expr(params.ctx, params.EvalContext(), statsExpr)
 	if err != nil {
 		return err
 	}

@@ -58,7 +58,7 @@ func prepareExpr(t *testing.T, datumExpr string) tree.Datum {
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
-	d, err := eval.Expr(evalCtx, typedExpr)
+	d, err := eval.Expr(ctx, evalCtx, typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}

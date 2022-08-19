@@ -277,7 +277,7 @@ func EvalShardBucketCount(
 		if err != nil {
 			return 0, err
 		}
-		d, err := eval.Expr(evalCtx, typedExpr)
+		d, err := eval.Expr(ctx, evalCtx, typedExpr)
 		if err != nil {
 			return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, invalidBucketCountMsg, typedExpr)
 		}

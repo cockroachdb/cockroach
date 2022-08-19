@@ -66,7 +66,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return fmt.Sprint(err)
 			}
-			r, err := eval.Expr(evalCtx, e)
+			r, err := eval.Expr(ctx, evalCtx, e)
 			if err != nil {
 				return fmt.Sprint(err)
 			}
@@ -206,7 +206,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err := eval.Expr(ctx, typedExpr)
+		r, err := eval.Expr(context.Background(), ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -245,7 +245,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err = eval.Expr(ctx, typedExpr)
+		r, err = eval.Expr(context.Background(), ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -365,8 +365,8 @@ func TestEvalError(t *testing.T) {
 		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 		if err == nil {
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			defer evalCtx.Stop(context.Background())
-			_, err = eval.Expr(evalCtx, typedExpr)
+			defer evalCtx.Stop(ctx)
+			_, err = eval.Expr(ctx, evalCtx, typedExpr)
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
