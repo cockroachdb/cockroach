@@ -10,5 +10,22 @@
 
 package kvserverpb
 
+import "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+
 // SafeValue implements the redact.SafeValue interface.
 func (SnapshotRequest_Type) SafeValue() {}
+
+type ResponseWithTracingSpans interface {
+	GetRecordedSpans() tracingpb.Recording
+}
+
+var _ ResponseWithTracingSpans = (*SnapshotResponse)(nil)
+var _ ResponseWithTracingSpans = (*DelegateSnapshotResponse)(nil)
+
+func (m *SnapshotResponse) GetRecordedSpans() tracingpb.Recording {
+	return m.CollectedSpans
+}
+
+func (m *DelegateSnapshotResponse) GetRecordedSpans() tracingpb.Recording {
+	return m.CollectedSpans
+}

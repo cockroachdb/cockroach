@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -396,7 +397,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 		if req.Header != nil {
 			err := errors.New("client error: provided a header mid-stream")
-			return noSnap, sendSnapshotError(stream, err)
+			return noSnap, sendSnapshotError(stream, err, nil)
 		}
 
 		if req.KVBatch != nil {
@@ -462,7 +463,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
 				err = errors.Wrap(err, "client error: invalid snapshot")
-				return noSnap, sendSnapshotError(stream, err)
+				return noSnap, sendSnapshotError(stream, err, nil)
 			}
 
 			inSnap := IncomingSnapshot{
@@ -906,6 +907,8 @@ func (s *Store) checkSnapshotOverlapLocked(
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
+	sp := tracing.SpanFromContext(ctx)
+
 	// Draining nodes will generally not be rebalanced to (see the filtering that
 	// happens in getStoreListFromIDsLocked()), but in case they are, they should
 	// reject the incoming rebalancing snapshots.
@@ -920,7 +923,7 @@ func (s *Store) receiveSnapshot(
 			// getStoreListFromIDsLocked(). Is that sound? Don't we want to
 			// upreplicate to draining nodes if there are no other candidates?
 		case kvserverpb.SnapshotRequest_REBALANCE:
-			return sendSnapshotError(stream, errors.New(storeDrainingMsg))
+			return sendSnapshotError(stream, errors.New(storeDrainingMsg), nil)
 		default:
 			// If this a new snapshot type that this cockroach version does not know
 			// about, we let it through.
@@ -929,7 +932,7 @@ func (s *Store) receiveSnapshot(
 
 	if fn := s.cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
 		if err := fn(header); err != nil {
-			return sendSnapshotError(stream, err)
+			return sendSnapshotError(stream, err, nil)
 		}
 	}
 
@@ -991,7 +994,7 @@ func (s *Store) receiveSnapshot(
 		snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 		if err != nil {
 			err = errors.Wrap(err, "invalid snapshot")
-			return sendSnapshotError(stream, err)
+			return sendSnapshotError(stream, err, nil)
 		}
 
 		ss = &kvBatchSnapshotStrategy{
@@ -1003,7 +1006,7 @@ func (s *Store) receiveSnapshot(
 	default:
 		return sendSnapshotError(stream,
 			errors.Errorf("%s,r%d: unknown snapshot strategy: %s",
-				s, header.State.Desc.RangeID, header.Strategy),
+				s, header.State.Desc.RangeID, header.Strategy), nil,
 		)
 	}
 
@@ -1028,9 +1031,9 @@ func (s *Store) receiveSnapshot(
 			s.metrics.RangeSnapshotUnknownRcvdBytes.Inc(inc)
 		}
 	}
-	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "receive snapshot data")
-	inSnap, err := ss.Receive(ctx, stream, *header, recordBytesReceived)
-	sp.Finish() // Ensure that the tracing span is closed, even if ss.Receive errors
+	rCtx, rSp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "receive snapshot data")
+	defer rSp.Finish() // Ensure that the tracing span is closed, even if ss.Receive errors
+	inSnap, err := ss.Receive(rCtx, stream, *header, recordBytesReceived)
 	if err != nil {
 		return err
 	}
@@ -1042,15 +1045,20 @@ func (s *Store) receiveSnapshot(
 	// abandoning application half-way through if the caller goes away.
 	applyCtx := s.AnnotateCtx(context.Background())
 	if err := s.processRaftSnapshotRequest(applyCtx, header, inSnap); err != nil {
-		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"),
+			sp.GetConfiguredRecording())
 	}
-	return stream.Send(&kvserverpb.SnapshotResponse{Status: kvserverpb.SnapshotResponse_APPLIED})
+	return stream.Send(&kvserverpb.SnapshotResponse{
+		Status:         kvserverpb.SnapshotResponse_APPLIED,
+		CollectedSpans: sp.GetConfiguredRecording(),
+	})
 }
 
-func sendSnapshotError(stream incomingSnapshotStream, err error) error {
+func sendSnapshotError(stream incomingSnapshotStream, err error, recordedSpans tracingpb.Recording) error {
 	return stream.Send(&kvserverpb.SnapshotResponse{
-		Status:  kvserverpb.SnapshotResponse_ERROR,
-		Message: err.Error(),
+		Status:         kvserverpb.SnapshotResponse_ERROR,
+		Message:        err.Error(),
+		CollectedSpans: recordedSpans,
 	})
 }
 
@@ -1340,7 +1348,7 @@ func SendEmptySnapshot(
 		kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE,
 		engSnapshot,
 		desc.RangeID,
-		raftentry.NewCache(1), // cache is not used
+		raftentry.NewCache(1),                                  // cache is not used
 		func(func(SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
 		desc.StartKey,
 	)
@@ -1410,6 +1418,23 @@ type noopStorePool struct{}
 
 func (n noopStorePool) Throttle(storepool.ThrottleReason, string, roachpb.StoreID) {}
 
+// importSnapshotTracingSpans incorporates traces collected in a
+// (Delegated)SnapshotResponse into the current context's tracing span.
+func importSnapshotTracingSpans(ctx context.Context, resp kvserverpb.ResponseWithTracingSpans) {
+	// Import the remotely collected spans, if any.
+	if len(resp.GetRecordedSpans()) != 0 {
+		span := tracing.SpanFromContext(ctx)
+		if span == nil {
+			log.Warningf(
+				ctx,
+				"trying to ingest remote spans but there is no recording span set up",
+			)
+		} else {
+			span.ImportRemoteRecording(resp.GetRecordedSpans())
+		}
+	}
+}
+
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
@@ -1447,6 +1472,7 @@ func sendSnapshot(
 		storePool.Throttle(storepool.ThrottleFailed, err.Error(), to.StoreID)
 		return err
 	}
+	importSnapshotTracingSpans(ctx, resp)
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
 		storePool.Throttle(storepool.ThrottleFailed, resp.Message, to.StoreID)
@@ -1526,6 +1552,7 @@ func sendSnapshot(
 	if err != nil {
 		return errors.Wrapf(err, "%s: remote failed to apply snapshot", to)
 	}
+	importSnapshotTracingSpans(ctx, resp)
 	// NB: wait for EOF which ensures that all processing on the server side has
 	// completed (such as defers that might be run after the previous message was
 	// received).
@@ -1533,6 +1560,7 @@ func sendSnapshot(
 		if err != nil {
 			return errors.Wrapf(err, "%s: expected EOF, got resp=%v with error", to, unexpectedResp)
 		}
+		importSnapshotTracingSpans(ctx, resp)
 		return errors.Newf("%s: expected EOF, got resp=%v", to, unexpectedResp)
 	}
 	switch resp.Status {
@@ -1601,18 +1629,7 @@ func delegateSnapshot(
 			unexpectedResp,
 		)
 	}
-	// Import the remotely collected spans, if any.
-	if len(resp.CollectedSpans) != 0 {
-		span := tracing.SpanFromContext(ctx)
-		if span == nil {
-			log.Warningf(
-				ctx,
-				"trying to ingest remote spans but there is no recording span set up",
-			)
-		} else {
-			span.ImportRemoteRecording(resp.CollectedSpans)
-		}
-	}
+	importSnapshotTracingSpans(ctx, resp)
 	switch resp.SnapResponse.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
 		return errors.Newf("%s", resp.SnapResponse.Message)
