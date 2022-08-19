@@ -193,10 +193,6 @@ const (
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
-	// EnableNewChangefeedOptions enables the usage of new changefeed options
-	// such as end_time, initial_scan_only, and setting the value of initial_scan
-	// to 'yes|no|only'
-	EnableNewChangefeedOptions
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -377,10 +373,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableNewStoreRebalancer,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
-	},
-	{
-		Key:     EnableNewChangefeedOptions,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
 	},
 	{
 		Key:     V22_1,
