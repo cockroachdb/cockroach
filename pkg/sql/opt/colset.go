@@ -50,7 +50,7 @@ func MakeColSet(vals ...ColumnID) ColSet {
 
 // Add adds a column to the set. No-op if the column is already in the set.
 func (s *ColSet) Add(col ColumnID) {
-	if col <= 0 {
+	if buildutil.CrdbTestBuild && col <= 0 {
 		panic(errors.AssertionFailedf("col must be greater than 0"))
 	}
 	s.set.Add(setVal(col))
