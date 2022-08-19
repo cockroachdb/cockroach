@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -41,6 +42,15 @@ type config struct {
 }
 
 var debugLog *loggerT
+
+// redactionPolicyManaged is the env var used to indicate that the node is being
+// run as part of a managed service (e.g. CockroachCloud). Certain logged information
+// such as filepaths, network addresses, and CLI argument lists are considered
+// sensitive information in on-premises deployments. However, when the node is being
+// run as part of a managed service (e.g. CockroachCloud), this type of information is
+// no longer considered sensitive, and should be logged in an unredacted form to aid
+// in support escalations.
+const redactionPolicyManagedEnvVar = "COCKROACH_REDACTION_POLICY_MANAGED"
 
 func init() {
 	logflags.InitFlags(
@@ -131,6 +141,9 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// registry.
 	logging.allLoggers.clear()
 	logging.allSinkInfos.clear()
+
+	// Indicate whether we're running in a managed environment. Impacts redaction policies.
+	logging.setManagedRedactionPolicy(envutil.EnvOrDefaultBool(redactionPolicyManagedEnvVar, false))
 
 	// If capture of internal fd2 writes is enabled, set it up here.
 	if config.CaptureFd2.Enable {
