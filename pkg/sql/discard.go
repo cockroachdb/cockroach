@@ -22,28 +22,39 @@ import (
 // Discard implements the DISCARD statement.
 // See https://www.postgresql.org/docs/9.6/static/sql-discard.html for details.
 func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error) {
-	switch s.Mode {
+	return &discardNode{mode: s.Mode}, nil
+}
+
+type discardNode struct {
+	mode tree.DiscardMode
+}
+
+func (n *discardNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *discardNode) Values() tree.Datums            { return nil }
+func (n *discardNode) Close(_ context.Context)        {}
+func (n *discardNode) startExec(params runParams) error {
+	switch n.mode {
 	case tree.DiscardModeAll:
-		if !p.autoCommit {
-			return nil, pgerror.New(pgcode.ActiveSQLTransaction,
+		if !params.p.autoCommit {
+			return pgerror.New(pgcode.ActiveSQLTransaction,
 				"DISCARD ALL cannot run inside a transaction block")
 		}
 
 		// RESET ALL
-		if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(
+		if err := params.p.sessionDataMutatorIterator.applyOnEachMutatorError(
 			func(m sessionDataMutator) error {
-				return resetSessionVars(ctx, m)
+				return resetSessionVars(params.ctx, m)
 			},
 		); err != nil {
-			return nil, err
+			return err
 		}
 
 		// DEALLOCATE ALL
-		p.preparedStatements.DeleteAll(ctx)
+		params.p.preparedStatements.DeleteAll(params.ctx)
 	default:
-		return nil, errors.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
+		return errors.AssertionFailedf("unknown mode for DISCARD: %d", n.mode)
 	}
-	return newZeroNode(nil /* columns */), nil
+	return nil
 }
 
 func resetSessionVars(ctx context.Context, m sessionDataMutator) error {
