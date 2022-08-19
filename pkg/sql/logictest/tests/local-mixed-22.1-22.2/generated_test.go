@@ -79,9 +79,9 @@ func TestLogic_new_schema_changer_mixed(
 	runLogicTest(t, "new_schema_changer_mixed")
 }
 
-func TestLogic_system_privileges_mixed(
+func TestLogic_synthetic_privileges_mixed(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "system_privileges_mixed")
+	runLogicTest(t, "synthetic_privileges_mixed")
 }
