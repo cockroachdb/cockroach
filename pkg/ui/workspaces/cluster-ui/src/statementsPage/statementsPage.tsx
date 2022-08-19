@@ -285,13 +285,13 @@ export class StatementsPage extends React.Component<
     });
   };
 
-  clearRefreshDataTimeout() {
+  clearRefreshDataTimeout(): void {
     if (this.refreshDataTimeout != null) {
       clearTimeout(this.refreshDataTimeout);
     }
   }
 
-  resetPolling(key: string) {
+  resetPolling(key: string): void {
     this.clearRefreshDataTimeout();
     if (key !== "Custom") {
       this.refreshDataTimeout = setTimeout(

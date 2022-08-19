@@ -30,11 +30,11 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
     this.nodeRef = React.createRef();
   }
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.addEventListener();
   }
 
-  componentWillUnmount() {
+  componentWillUnmount(): void {
     this.removeEventListener();
   }
 
@@ -55,15 +55,15 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
     }
   };
 
-  addEventListener = () => {
+  addEventListener = (): void => {
     addEventListener("click", this.onClick);
   };
 
-  removeEventListener = () => {
+  removeEventListener = (): void => {
     removeEventListener("click", this.onClick);
   };
 
-  render() {
+  render(): React.ReactElement {
     const { children, mountNodePosition = "initial" } = this.props;
     const classes = cx(
       "outside-event-handler",

@@ -86,7 +86,7 @@ export const statusOptions = [
   { value: "retrying", name: "Retrying" },
 ];
 
-export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
+export function jobHasOneOfStatuses(job: Job, ...statuses: string[]): boolean {
   return statuses.indexOf(job.status) !== -1;
 }
 

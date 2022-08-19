@@ -22,7 +22,6 @@ import {
   calculateActiveFilters,
   defaultFilters,
   Filter,
-  Filters,
   getFullFiltersAsStringRecord,
 } from "src/queryFilter/filter";
 import { getInsightEventFiltersFromURL } from "src/queryFilter/utils";
@@ -37,13 +36,8 @@ import {
   getAppsFromTransactionInsights,
   getInsightsFromState,
   InsightEventFilters,
-  InsightExecOptions,
 } from "src/insights";
-import {
-  EmptyInsightsTablePlaceholder,
-  DropDownSelect,
-  WorkloadInsightsError,
-} from "../util";
+import { EmptyInsightsTablePlaceholder, WorkloadInsightsError } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
 
 import styles from "src/statementsPage/statementsPage.module.scss";

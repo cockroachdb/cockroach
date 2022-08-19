@@ -14,7 +14,10 @@ interface IconProps {
   className?: string;
 }
 
-export const DatabaseIcon = ({ className, ...props }: IconProps) => (
+export const DatabaseIcon = ({
+  className,
+  ...props
+}: IconProps): React.ReactElement => (
   <svg viewBox="0 0 14 14" className={className} {...props}>
     <path
       fillRule="evenodd"
