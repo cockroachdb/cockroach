@@ -70,17 +70,17 @@ func (e *MissingTableErr) GetTableName() string {
 // CheckExpansions determines if matched targets are covered by the specified
 // descriptors.
 func (d DescriptorsMatched) CheckExpansions(coveredDBs []descpb.ID) error {
-	covered := make(map[descpb.ID]bool)
+	covered := make(map[descpb.ID]struct{})
 	for _, i := range coveredDBs {
-		covered[i] = true
+		covered[i] = struct{}{}
 	}
 	for _, i := range d.RequestedDBs {
-		if !covered[i.GetID()] {
+		if _, ok := covered[i.GetID()]; !ok {
 			return errors.Errorf("cannot RESTORE DATABASE from a backup of individual tables (use SHOW BACKUP to determine available tables)")
 		}
 	}
 	for _, i := range d.ExpandedDB {
-		if !covered[i] {
+		if _, ok := covered[i]; !ok {
 			return errors.Errorf("cannot RESTORE <database>.* from a backup of individual tables (use SHOW BACKUP to determine available tables)")
 		}
 	}

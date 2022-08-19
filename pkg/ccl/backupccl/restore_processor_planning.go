@@ -61,7 +61,7 @@ func distRestore(
 	execCtx sql.JobExecContext,
 	jobID int64,
 	chunks [][]execinfrapb.RestoreSpanEntry,
-	pkIDs map[uint64]bool,
+	pkIDs map[uint64]bool, //nolint:maptobool
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	tableRekeys []execinfrapb.TableRekey,

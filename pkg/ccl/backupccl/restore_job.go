@@ -599,7 +599,7 @@ func spansForAllRestoreTableIndexes(
 		return false
 	}
 
-	added := make(map[tableAndIndex]bool, len(tables))
+	added := make(map[tableAndIndex]struct{}, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
 		if skipTableData(table) {
@@ -609,7 +609,7 @@ func spansForAllRestoreTableIndexes(
 			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.GetID())), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
-			added[tableAndIndex{tableID: table.GetID(), indexID: index.GetID()}] = true
+			added[tableAndIndex{tableID: table.GetID(), indexID: index.GetID()}] = struct{}{}
 		}
 	}
 	// If there are desc revisions, ensure that we also add any index spans
@@ -630,11 +630,11 @@ func spansForAllRestoreTableIndexes(
 			}
 			for _, idx := range tbl.ActiveIndexes() {
 				key := tableAndIndex{tableID: tbl.GetID(), indexID: idx.GetID()}
-				if !added[key] {
+				if _, ok := added[key]; !ok {
 					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.GetID())), false); err != nil {
 						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 					}
-					added[key] = true
+					added[key] = struct{}{}
 				}
 			}
 		}
@@ -1189,7 +1189,7 @@ func createImportingDescriptors(
 		tenantRekeys = append(tenantRekeys, isBackupFromSystemTenantRekey)
 	}
 
-	pkIDs := make(map[uint64]bool)
+	pkIDs := make(map[uint64]bool) //nolint:maptobool
 	for _, tbl := range tables {
 		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
 	}
@@ -2496,10 +2496,10 @@ func (r *restoreResumer) restoreSystemUsers(
 		if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
 			insertUser = `INSERT INTO system.users ("username", "hashedPassword", "isRole", "user_id") VALUES ($1, $2, $3, $4)`
 		}
-		newUsernames := make(map[string]bool)
+		newUsernames := make(map[string]struct{})
 		args := make([]interface{}, 4)
 		for _, user := range users {
-			newUsernames[user[0].String()] = true
+			newUsernames[user[0].String()] = struct{}{}
 			args[0] = user[0]
 			args[1] = user[1]
 			args[2] = user[2]
@@ -2550,7 +2550,7 @@ func (r *restoreResumer) restoreSystemTables(
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.SystemTablesMigrated == nil {
-		details.SystemTablesMigrated = make(map[string]bool)
+		details.SystemTablesMigrated = make(map[string]bool) //nolint:maptobool
 	}
 	// Iterate through all the tables that we're restoring, and if it was restored
 	// to the temporary system DB then populate the metadata required to restore
