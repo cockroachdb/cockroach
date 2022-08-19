@@ -79,6 +79,7 @@ import ActiveTransactionDetails from "./views/transactions/activeTransactionDeta
 import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
 import InsightsOverviewPage from "src/views/insights/insightsOverview";
+import WorkloadInsightDetailsPageConnected from "src/views/insights/workloadInsightDetailsPageConnected";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -296,11 +297,16 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     from={`/transaction/:${aggregatedTsAttr}/:${txnFingerprintIdAttr}`}
                     to={`/transaction/:${txnFingerprintIdAttr}`}
                   />
+
                   {/* Insights */}
                   <Route
                     exact
                     path="/insights"
                     component={InsightsOverviewPage}
+                  />
+                  <Route
+                    path={"/insights/:id"}
+                    component={WorkloadInsightDetailsPageConnected}
                   />
 
                   {/* debug pages */}

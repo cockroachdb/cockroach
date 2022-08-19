@@ -1659,7 +1659,7 @@ pkg/util/log/eventpb/json_encode_generated.go: $(EVENTPBGEN_PKG) pkg/util/log/ev
 	mv -f $@.tmp $@
 
 pkg/util/log/logpb/json_encode_generated.go: $(EVENTPBGEN_PKG) pkg/util/log/logpb/event.proto | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) ./$< json_encode_go pkg/util/log/logpb/event.proto >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) ./$< --package logpb json_encode_go pkg/util/log/logpb/event.proto >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/logging.md: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap

@@ -35,9 +35,19 @@ func TestProblems(t *testing.T) {
 			problems:  []Problem{Problem_Unknown},
 		},
 		{
+			name:      "suboptimal plan",
+			statement: &Statement{IndexRecommendations: []string{"THIS IS AN INDEX RECOMMENDATION"}},
+			problems:  []Problem{Problem_SuboptimalPlan},
+		},
+		{
 			name:      "high retry count",
 			statement: &Statement{Retries: 10},
 			problems:  []Problem{Problem_HighRetryCount},
+		},
+		{
+			name:      "failed execution",
+			statement: &Statement{Status: Statement_Failed},
+			problems:  []Problem{Problem_FailedExecution},
 		},
 	}
 	for _, tc := range testCases {

@@ -82,9 +82,7 @@ build:crosslinuxs390x --config=crosslinuxs390xbase
 build:crosslinuxs390xbase --platforms=//build/toolchains:cross_linux_s390x
 build:crosslinuxs390xbase --config=cross
 
-# Developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
-# NB: This is consumed in `BUILD` files (see build/toolchains/BUILD.bazel).
-build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
+# devdarwinx86_64 is a legacy setting that implies `--config=dev`.
 build:devdarwinx86_64 --config=dev
 build:dev --config=simplestamp
 build:dev --action_env=PATH

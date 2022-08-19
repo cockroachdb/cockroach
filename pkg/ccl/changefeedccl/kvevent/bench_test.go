@@ -24,72 +24,99 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkMemBuffer(b *testing.B) {
-	rand, _ := randutil.NewTestRand()
+	log.Infof(context.Background(), "b.N=%d", b.N)
 
-	run := func() {
-		ba, release := getBoundAccountWithBudget(4096)
-		defer release()
-
-		metrics := kvevent.MakeMetrics(time.Minute)
-
-		// Arrange for mem buffer to notify us when it waits for resources.
-		waitCh := make(chan struct{}, 1)
-		notifyWait := func(ctx context.Context, poolName string, r quotapool.Request) {
-			select {
-			case waitCh <- struct{}{}:
-			default:
+	eventPool := func() []kvevent.Event {
+		const valSize = 16 << 10
+		rng, _ := randutil.NewTestRand()
+		p := make([]kvevent.Event, 32<<10)
+		for i := range p {
+			if rng.Int31()%20 == 0 {
+				p[i] = kvevent.MakeResolvedEvent(generateSpan(rng), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE)
+			} else {
+				p[i] = kvevent.MakeKVEvent(
+					makeKV(rng, valSize),
+					roachpb.Value{RawBytes: randutil.RandBytes(rng, rng.Intn(valSize))},
+					hlc.Timestamp{})
 			}
 		}
+		return p
+	}()
 
-		st := cluster.MakeTestingClusterSettings()
-		buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics, quotapool.OnWaitStart(notifyWait))
-		defer func() {
-			require.NoError(b, buf.CloseWithReason(context.Background(), nil))
-		}()
+	ba, release := getBoundAccountWithBudget(1 << 30)
+	defer release()
 
-		producerCtx, stopProducers := context.WithCancel(context.Background())
-		wg := ctxgroup.WithContext(producerCtx)
-		defer func() {
-			_ = wg.Wait() // Ignore error -- this group returns context cancellation.
-		}()
+	b.ResetTimer()
+	b.ReportAllocs()
 
-		numRows := 0
-		wg.GoCtx(func(ctx context.Context) error {
-			for {
-				err := buf.Add(ctx, kvevent.MakeResolvedEvent(generateSpan(b, rand), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE))
-				if err != nil {
-					return err
-				}
-				numRows++
-			}
-		})
+	metrics := kvevent.MakeMetrics(time.Minute)
+	st := cluster.MakeTestingClusterSettings()
 
-		<-waitCh
-		writtenRows := numRows
+	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics)
+	defer func() {
+		require.NoError(b, buf.CloseWithReason(context.Background(), nil))
+	}()
 
-		for i := 0; i < writtenRows; i++ {
-			e, err := buf.Get(context.Background())
+	addToBuff := func(ctx context.Context) error {
+		rng, _ := randutil.NewTestRand()
+		for {
+			err := buf.Add(ctx, eventPool[rng.Intn(len(eventPool))])
 			if err != nil {
-				b.Fatal("could not read from buffer")
+				return err
+			}
+		}
+	}
+
+	consumedN := make(chan struct{})
+	consumeBuf := func(ctx context.Context) error {
+		const flushBytes = 32 << 20
+		var alloc kvevent.Alloc
+		defer alloc.Release(ctx)
+
+		for consumed := 0; ; {
+			e, err := buf.Get(ctx)
+			if err != nil {
+				return err
 			}
 			a := e.DetachAlloc()
-			a.Release(context.Background())
+			alloc.Merge(&a)
+
+			if alloc.Bytes() > flushBytes || e.Type() == kvevent.TypeFlush || consumed+int(alloc.Events()) >= b.N {
+				consumed += int(alloc.Events())
+				alloc.Release(ctx)
+			}
+
+			if consumed >= b.N {
+				close(consumedN)
+				return nil
+			}
 		}
-		stopProducers()
 	}
 
-	for i := 0; i < b.N; i++ {
-		run()
+	producerCtx, stopProducers := context.WithCancel(context.Background())
+	wg := ctxgroup.WithContext(producerCtx)
+
+	// During backfill, we start 3*number of nodes producers; Simulate ~10 node cluster.
+	for i := 0; i < 32; i++ {
+		wg.GoCtx(addToBuff)
 	}
+	// We only have 1 consumer.
+	wg.GoCtx(consumeBuf)
+
+	<-consumedN
+	b.StopTimer() // Done with this benchmark after we consumed N events.
+
+	stopProducers()
+	_ = wg.Wait() // Ignore error -- this group returns context cancellation.
 }
 
-func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {
+func generateSpan(rng *rand.Rand) roachpb.Span {
 	start := rng.Intn(2 << 20)
 	end := start + rng.Intn(2<<20)
 	startDatum := tree.NewDInt(tree.DInt(start))
@@ -102,7 +129,7 @@ func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {
 		encoding.Ascending,
 	)
 	if err != nil {
-		b.Fatal("could not generate key")
+		panic(err)
 	}
 
 	endKey, err := keyside.Encode(
@@ -111,7 +138,7 @@ func generateSpan(b *testing.B, rng *rand.Rand) roachpb.Span {
 		encoding.Ascending,
 	)
 	if err != nil {
-		b.Fatal("could not generate key")
+		panic(err)
 	}
 
 	return roachpb.Span{

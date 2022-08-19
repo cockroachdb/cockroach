@@ -35,6 +35,10 @@ stubComponentInModule(
   "src/views/insights/workloadInsightsPageConnected",
   "default",
 );
+stubComponentInModule(
+  "src/views/insights/workloadInsightDetailsPageConnected",
+  "default",
+);
 
 import React from "react";
 import { Action, Store } from "redux";
@@ -424,6 +428,12 @@ describe("Routing to", () => {
     test("routes to <InsightsOverviewPage> component", () => {
       navigateToPath("/insights");
       screen.getByTestId("workloadInsightsPageConnected");
+    });
+  });
+  describe("'/insights/insightID' path", () => {
+    test("routes to <WorkloadInsightDetailsPageConnected> component", () => {
+      navigateToPath("/insights/insightID");
+      screen.getByTestId("workloadInsightDetailsPageConnected");
     });
   });
   {

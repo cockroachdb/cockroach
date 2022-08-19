@@ -15,7 +15,11 @@ import {
   defaultFilters,
   SortSetting,
   InsightEventFilters,
+  api,
 } from "@cockroachlabs/cluster-ui";
+import { RouteComponentProps } from "react-router-dom";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { getMatchParamByName } from "src/util/query";
 
 export const filtersLocalSetting = new LocalSetting<
   AdminUIState,
@@ -37,5 +41,19 @@ export const selectInsights = createSelector(
   adminUiState => {
     if (!adminUiState.insights) return [];
     return adminUiState.insights.data;
+  },
+);
+
+export const selectInsightDetails = createSelector(
+  [
+    (state: AdminUIState) => state.cachedData.insightDetails,
+    (_state: AdminUIState, props: RouteComponentProps) => props,
+  ],
+  (insight, props): CachedDataReducerState<api.InsightEventDetailsResponse> => {
+    const insightId = getMatchParamByName(props.match, "id");
+    if (!insight) {
+      return null;
+    }
+    return insight[insightId];
   },
 );

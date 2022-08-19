@@ -19,6 +19,7 @@ export const insightsColumnLabels = {
   startTime: "Start Time (UTC)",
   elapsedTime: "Elapsed Time",
   applicationName: "Application",
+  fingerprintID: "Fingerprint ID",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -111,6 +112,17 @@ export const insightsTableTitles: InsightsTableTitleType = {
         content={<p>The name of the application that ran the {execType}.</p>}
       >
         {getLabel("applicationName")}
+      </Tooltip>
+    );
+  },
+  fingerprintID: (execType: InsightExecEnum) => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={<p>The {execType} fingerprint ID.</p>}
+      >
+        {getLabel("fingerprintID", execType)}
       </Tooltip>
     );
   },
