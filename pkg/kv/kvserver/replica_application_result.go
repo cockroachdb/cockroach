@@ -118,7 +118,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; filter != nil {
 		var newPropRetry int
 		newPropRetry, pErr = filter(kvserverbase.ApplyFilterArgs{
-			CmdID:                cmd.idKey,
+			CmdID:                cmd.ID,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
@@ -192,7 +192,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	// lease here - if we got this far, we know that everything but the
 	// index is valid at this point in the log.
 	p := cmd.proposal
-	if p.applied || cmd.raftCmd.MaxLeaseIndex != p.command.MaxLeaseIndex {
+	if p.applied || cmd.Cmd.MaxLeaseIndex != p.command.MaxLeaseIndex {
 		// If the command associated with this rejected raft entry already
 		// applied then we don't want to repropose it. Doing so could lead
 		// to duplicate application of the same proposal.
@@ -236,7 +236,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	if pErr != nil {
 		return pErr
 	}
-	log.VEventf(ctx, 2, "reproposed command %x", cmd.idKey)
+	log.VEventf(ctx, 2, "reproposed command %x", cmd.ID)
 	return nil
 }
 
