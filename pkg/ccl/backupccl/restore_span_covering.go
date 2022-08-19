@@ -30,6 +30,8 @@ func (ie intervalSpan) Range() interval.Range {
 	return interval.Range{Start: []byte(ie.Key), End: []byte(ie.EndKey)}
 }
 
+const targetRestoreSpanSize = 384 << 20
+
 // makeSimpleImportSpans partitions the spans of requiredSpans into a covering
 // of RestoreSpanEntry's which each have all overlapping files from the passed
 // backups assigned to them. The spans of requiredSpans are trimmed/removed
@@ -51,11 +53,17 @@ func (ie intervalSpan) Range() interval.Range {
 //  [f, i): 3, 5, 6, 8
 //  [l, m): 9
 // This example is tested in TestRestoreEntryCoverExample.
+//
+// If targetSize > 0, then spans which would be added to the right-hand side of
+// the first level are instead used to extend the current rightmost span in
+// if its current data size plus that of the new span is less than the target
+// size.
 func makeSimpleImportSpans(
 	requiredSpans []roachpb.Span,
 	backups []backuppb.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
 	lowWaterMark roachpb.Key,
+	targetSize int64,
 ) []execinfrapb.RestoreSpanEntry {
 	if len(backups) < 1 {
 		return nil
@@ -78,6 +86,8 @@ func makeSimpleImportSpans(
 
 		for layer := range backups {
 			covPos := spanCoverStart
+			var curCovGrowSize int64
+
 			// TODO(dt): binary search to the first file in required span?
 			for _, f := range backups[layer].Files {
 				if sp := span.Intersect(f.Span); sp.Valid() {
@@ -87,6 +97,11 @@ func makeSimpleImportSpans(
 					}
 					if len(cover) == spanCoverStart {
 						cover = append(cover, makeEntry(span.Key, sp.EndKey, fileSpec))
+						if f.EntryCounts.DataSize > 0 {
+							curCovGrowSize = f.EntryCounts.DataSize
+						} else {
+							curCovGrowSize = 16 << 20
+						}
 					} else {
 						// Add each file to every matching partition in the cover.
 						for i := covPos; i < len(cover) && cover[i].Span.Key.Compare(sp.EndKey) < 0; i++ {
@@ -102,9 +117,30 @@ func makeSimpleImportSpans(
 							}
 						}
 						// If this file extends beyond the end of the last partition of the
-						// cover, append a new partition for the uncovered span.
+						// cover, append a new partition for the uncovered span or grow the
+						// last one.
 						if covEnd := cover[len(cover)-1].Span.EndKey; sp.EndKey.Compare(covEnd) > 0 {
-							cover = append(cover, makeEntry(covEnd, sp.EndKey, fileSpec))
+							sz := f.EntryCounts.DataSize
+							// If the backup didn't record a file size, just assume it is 16mb
+							// for the purposes of estimating the span size.
+							if sz == 0 {
+								sz = 16 << 20
+							}
+							// If this is the first layer and the size added to the current
+							// right-most slice of the cover plus this item size is less than
+							// our target size per span, then we can just grow the right-most
+							// cover to include this file span and update its running size.
+							// TODO(dt): can we remove layer==0 here and allow later layers to
+							// grow the RHS of the cover to better handle a sequential write
+							// workload in incremental backups?
+							if layer == 0 && curCovGrowSize+sz < targetSize {
+								cover[len(cover)-1].Span.EndKey = sp.EndKey
+								cover[len(cover)-1].Files = append(cover[len(cover)-1].Files, fileSpec)
+								curCovGrowSize += sz
+							} else {
+								cover = append(cover, makeEntry(covEnd, sp.EndKey, fileSpec))
+								curCovGrowSize = sz
+							}
 						}
 					}
 				} else if span.EndKey.Compare(f.Span.Key) <= 0 {
@@ -121,6 +157,7 @@ func makeSimpleImportSpans(
 
 func makeEntry(start, end roachpb.Key, f execinfrapb.RestoreFileSpec) execinfrapb.RestoreSpanEntry {
 	return execinfrapb.RestoreSpanEntry{
-		Span: roachpb.Span{Key: start, EndKey: end}, Files: []execinfrapb.RestoreFileSpec{f},
+		Span:  roachpb.Span{Key: start, EndKey: end},
+		Files: []execinfrapb.RestoreFileSpec{f},
 	}
 }

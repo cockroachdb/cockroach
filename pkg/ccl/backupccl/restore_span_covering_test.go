@@ -119,6 +119,8 @@ func checkRestoreCovering(
 	return nil
 }
 
+const noSpanTargetSize = 0
+
 func TestRestoreEntryCoverExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -144,7 +146,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}},
 		{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}},
 	}
-	cover := makeSimpleImportSpans(spans, backups, nil, nil)
+	cover := makeSimpleImportSpans(spans, backups, nil, nil, noSpanTargetSize)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "c"), Files: paths("1", "4", "6")},
 		{Span: sp("c", "e"), Files: paths("2", "4", "6")},
@@ -164,7 +166,7 @@ func TestRestoreEntryCover(t *testing.T) {
 				backups := MockBackupChain(numBackups, spans, files, r)
 
 				t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d", numBackups, spans, files), func(t *testing.T) {
-					cover := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil)
+					cover := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil, noSpanTargetSize)
 					if err := checkRestoreCovering(backups, backups[numBackups-1].Spans, cover); err != nil {
 						t.Fatal(err)
 					}
