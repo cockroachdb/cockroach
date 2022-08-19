@@ -126,7 +126,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// means checking whether we have an expanded relationship (grant.Role ∈ ... ∈ grant.Member)
 	// For each grant.Role, we lookup all the roles it is a member of.
 	// After adding a given edge (grant.Member ∈ grant.Role), we add the edge to the list as well.
-	allRoleMemberships := make(map[username.SQLUsername]map[username.SQLUsername]bool)
+	allRoleMemberships := make(map[username.SQLUsername]map[username.SQLUsername]bool) //nolint:maptobool
 	for _, r := range inputRoles {
 		allRoles, err := p.MemberOfWithAdminOption(ctx, r)
 		if err != nil {
@@ -152,7 +152,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 			}
 			// Add the new membership. We don't care about the actual bool value.
 			if _, ok := allRoleMemberships[m]; !ok {
-				allRoleMemberships[m] = make(map[username.SQLUsername]bool)
+				allRoleMemberships[m] = make(map[username.SQLUsername]bool) //nolint:maptobool
 			}
 			allRoleMemberships[m][r] = false
 		}

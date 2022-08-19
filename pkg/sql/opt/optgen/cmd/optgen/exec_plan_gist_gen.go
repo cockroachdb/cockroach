@@ -48,12 +48,12 @@ func (g *execPlanGistGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 // boolAllowList includes all the "bool" operator properties that affect the
 // output of EXPLAIN (SHAPE) and therefore should be included in the gist.
-var boolAllowList = map[string]bool{
-	"autoCommit":        true,
-	"leftEqColsAreKey":  true,
-	"rightEqColsAreKey": true,
-	"eqColsAreKey":      true,
-	"all":               true,
+var boolAllowList = map[string]struct{}{
+	"autoCommit":        {},
+	"leftEqColsAreKey":  {},
+	"rightEqColsAreKey": {},
+	"eqColsAreKey":      {},
+	"all":               {},
 }
 
 func (g *execPlanGistGen) genPlanGistFactory() {
@@ -88,7 +88,7 @@ func (g *execPlanGistGen) genPlanGistFactory() {
 				expr = name
 				encoder = "encodeResultColumns"
 			case "bool":
-				if boolAllowList[name] {
+				if _, ok := boolAllowList[name]; ok {
 					expr = name
 					encoder = "encodeBool"
 				}
@@ -156,7 +156,7 @@ func (g *execPlanGistGen) genPlanGistDecoder() {
 			case "colinfo.ResultColumns":
 				decoder = "decodeResultColumns"
 			case "bool":
-				if boolAllowList[name] {
+				if _, ok := boolAllowList[name]; ok {
 					decoder = "decodeBool"
 				}
 			case "descpb.JoinType":

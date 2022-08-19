@@ -397,14 +397,14 @@ func assignSequenceOwner(
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
 ) error {
-	optionsSeen := map[string]bool{}
+	optionsSeen := map[string]struct{}{}
 	for _, option := range optsNode {
 		// Error on duplicate options.
 		_, seenBefore := optionsSeen[option.Name]
 		if seenBefore {
 			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
-		optionsSeen[option.Name] = true
+		optionsSeen[option.Name] = struct{}{}
 		switch option.Name {
 		case tree.SeqOptOwnedBy:
 			if p == nil {
@@ -453,14 +453,14 @@ func assignSequenceOwner(
 
 // checkDupSeqOption check if there is any duplicate sequence option.
 func checkDupSeqOption(optsNode tree.SequenceOptions) error {
-	optionsSeen := map[string]bool{}
+	optionsSeen := map[string]struct{}{}
 	for _, option := range optsNode {
 		// Error on duplicate options.
 		_, seenBefore := optionsSeen[option.Name]
 		if seenBefore {
 			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
-		optionsSeen[option.Name] = true
+		optionsSeen[option.Name] = struct{}{}
 	}
 	return nil
 }

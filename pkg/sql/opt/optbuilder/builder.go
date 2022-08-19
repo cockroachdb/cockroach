@@ -151,7 +151,7 @@ type Builder struct {
 	// statement to true if all mutations of that table are simple inserts
 	// (without ON CONFLICT) or false otherwise. All mutated tables will have an
 	// entry in the map.
-	areAllTableMutationsSimpleInserts map[cat.StableID]bool
+	areAllTableMutationsSimpleInserts map[cat.StableID]bool //nolint:maptobool
 }
 
 // New creates a new Builder structure initialized with the given

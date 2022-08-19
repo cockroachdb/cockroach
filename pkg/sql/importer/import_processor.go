@@ -345,9 +345,9 @@ func ingestKvs(
 		}
 	}
 
-	isPK := make(map[tableAndIndex]bool, len(spec.Tables))
+	isPK := make(map[tableAndIndex]struct{}, len(spec.Tables))
 	for _, t := range spec.Tables {
-		isPK[tableAndIndex{tableID: t.Desc.ID, indexID: t.Desc.PrimaryIndex.ID}] = true
+		isPK[tableAndIndex{tableID: t.Desc.ID, indexID: t.Desc.PrimaryIndex.ID}] = struct{}{}
 	}
 
 	// We create two bulk adders so as to combat the excessive flushing of small
@@ -521,7 +521,7 @@ func ingestKvs(
 				// TODO(adityamaru): There is a potential optimization of plumbing the
 				// different putters, and differentiating based on their type. It might be
 				// more efficient than parsing every kv.
-				if isPK[tableAndIndex{tableID: catid.DescID(tableID), indexID: catid.IndexID(indexID)}] {
+				if _, ok := isPK[tableAndIndex{tableID: catid.DescID(tableID), indexID: catid.IndexID(indexID)}]; ok {
 					if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 						if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 							return errors.Wrap(err, "duplicate key in primary index")

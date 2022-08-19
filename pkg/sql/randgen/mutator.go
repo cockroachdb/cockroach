@@ -411,10 +411,10 @@ func foreignKeyMutator(
 
 	// Keep track of referencing columns since we have a limitation that a
 	// column can only be used by one FK.
-	usedCols := map[tree.TableName]map[tree.Name]bool{}
+	usedCols := map[tree.TableName]map[tree.Name]struct{}{}
 
 	// Keep track of table dependencies to prevent circular dependencies.
-	dependsOn := map[tree.TableName]map[tree.TableName]bool{}
+	dependsOn := map[tree.TableName]map[tree.TableName]struct{}{}
 
 	var tables []*tree.CreateTable
 	for _, stmt := range stmts {
@@ -445,8 +445,8 @@ func foreignKeyMutator(
 		}
 		tables = append(tables, table)
 		byName[table.Table] = table
-		usedCols[table.Table] = map[tree.Name]bool{}
-		dependsOn[table.Table] = map[tree.TableName]bool{}
+		usedCols[table.Table] = map[tree.Name]struct{}{}
+		dependsOn[table.Table] = map[tree.TableName]struct{}{}
 		for _, def := range table.Defs {
 			switch def := def.(type) {
 			case *tree.ColumnTableDef:
@@ -483,7 +483,7 @@ func foreignKeyMutator(
 				// We don't support FK references from computed columns (#46672).
 				continue
 			}
-			if usedCols[table.Table][c.Name] {
+			if _, ok := usedCols[table.Table][c.Name]; ok {
 				continue
 			}
 			fkCols = append(fkCols, c)
@@ -575,9 +575,9 @@ func foreignKeyMutator(
 				refColumns[i].Column = c.Name
 			}
 			for _, c := range fkCols {
-				usedCols[table.Table][c.Name] = true
+				usedCols[table.Table][c.Name] = struct{}{}
 			}
-			dependsOn[table.Table][ref.Table] = true
+			dependsOn[table.Table][ref.Table] = struct{}{}
 			ref.Defs = append(ref.Defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: tree.IndexTableDef{
 					Columns: refColumns,

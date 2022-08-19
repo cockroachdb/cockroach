@@ -107,11 +107,11 @@ func EncodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 }
 
-var mustQuoteMap = map[byte]bool{
-	' ': true,
-	',': true,
-	'{': true,
-	'}': true,
+var mustQuoteMap = map[byte]struct{}{
+	' ': {},
+	',': {},
+	'{': {},
+	'}': {},
 }
 
 // EncodeSQLString writes a string literal to buf. All unicode and
@@ -146,7 +146,7 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 		}
 		ch := byte(r)
 		if r >= 0x20 && r < 0x7F {
-			if mustQuoteMap[ch] {
+			if _, ok := mustQuoteMap[ch]; ok {
 				// We have to quote this string - ignore bareStrings setting
 				bareStrings = false
 			}

@@ -875,14 +875,16 @@ func populateTableConstraints(
 		switch con.Kind {
 		case descpb.ConstraintTypePK:
 			if !p.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns {
-				colHiddenMap := make(map[descpb.ColumnID]bool, len(table.AllColumns()))
+				colHiddenMap := make(map[descpb.ColumnID]struct{}, len(table.AllColumns()))
 				for i := range table.AllColumns() {
 					col := table.AllColumns()[i]
-					colHiddenMap[col.GetID()] = col.IsHidden()
+					if col.IsHidden() {
+						colHiddenMap[col.GetID()] = struct{}{}
+					}
 				}
 				allHidden := true
 				for _, colIdx := range con.Index.KeyColumnIDs {
-					if !colHiddenMap[colIdx] {
+					if _, ok := colHiddenMap[colIdx]; !ok {
 						allHidden = false
 						break
 					}

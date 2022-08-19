@@ -257,7 +257,7 @@ type Planner interface {
 	MemberOfWithAdminOption(
 		ctx context.Context,
 		member username.SQLUsername,
-	) (map[username.SQLUsername]bool, error)
+	) (map[username.SQLUsername]bool, error) //nolint:maptobool
 
 	// ExternalReadFile reads the content from an external file URI.
 	ExternalReadFile(ctx context.Context, uri string) ([]byte, error)

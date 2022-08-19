@@ -202,14 +202,14 @@ func AssignSequenceOptions(
 
 	// Fill in all other options.
 	var restartVal *int64
-	optionsSeen := map[string]bool{}
+	optionsSeen := map[string]struct{}{}
 	for _, option := range optsNode {
 		// Error on duplicate options.
 		_, seenBefore := optionsSeen[option.Name]
 		if seenBefore {
 			return errors.New("conflicting or redundant options")
 		}
-		optionsSeen[option.Name] = true
+		optionsSeen[option.Name] = struct{}{}
 
 		switch option.Name {
 		case tree.SeqOptCycle:

@@ -245,7 +245,7 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
-	colsWithPrimaryKeyConstraint := make(map[tree.Name]bool)
+	colsWithPrimaryKeyConstraint := make(map[tree.Name]struct{})
 
 	// Copy column definition slice, since we will modify it below. This
 	// ensures, that  nothing bad happens on a transaction retry errors, for
@@ -262,13 +262,13 @@ func (n *createTableNode) startExec(params runParams) error {
 		case *tree.UniqueConstraintTableDef:
 			if v.PrimaryKey {
 				for _, indexEle := range v.IndexTableDef.Columns {
-					colsWithPrimaryKeyConstraint[indexEle.Column] = true
+					colsWithPrimaryKeyConstraint[indexEle.Column] = struct{}{}
 				}
 			}
 
 		case *tree.ColumnTableDef:
 			if v.PrimaryKey.IsPrimaryKey {
-				colsWithPrimaryKeyConstraint[v.Name] = true
+				colsWithPrimaryKeyConstraint[v.Name] = struct{}{}
 			}
 		}
 	}

@@ -512,7 +512,7 @@ func (b *Builder) resolveSchemaForCreate(
 
 func (b *Builder) checkMultipleMutations(tab cat.Table, simpleInsert bool) {
 	if b.areAllTableMutationsSimpleInserts == nil {
-		b.areAllTableMutationsSimpleInserts = make(map[cat.StableID]bool)
+		b.areAllTableMutationsSimpleInserts = make(map[cat.StableID]bool) //nolint:maptobool
 	}
 	allSimpleInserts, prevMutations := b.areAllTableMutationsSimpleInserts[tab.ID()]
 	if !prevMutations {

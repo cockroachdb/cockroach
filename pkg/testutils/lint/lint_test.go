@@ -2085,7 +2085,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`map\[.*\]bool`,
+			`map\[[^]]*\]bool`,
 			"--",
 			"ccl",
 			"cli",
@@ -2095,7 +2095,8 @@ func TestLint(t *testing.T) {
 			"internal",
 			"kv",
 			"server",
-			"sql/opt/norm*.go",
+			"sql",
+			":!sql/schemachanger*",
 			":!*_test.go",
 			":!*testdata*",
 		)

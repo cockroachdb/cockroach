@@ -71,7 +71,7 @@ func NewMembershipCache(account mon.BoundAccount, stopper *stop.Stopper) *Member
 }
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
-type userRoleMembership map[username.SQLUsername]bool
+type userRoleMembership map[username.SQLUsername]bool //nolint:maptobool
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
@@ -103,7 +103,7 @@ type AuthorizationAccessor interface {
 
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
-	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
+	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error) //nolint:maptobool
 
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
@@ -429,7 +429,7 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 // method.
 func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername,
-) (map[username.SQLUsername]bool, error) {
+) (map[username.SQLUsername]bool, error) { //nolint:maptobool
 	return MemberOfWithAdminOption(
 		ctx,
 		p.execCfg,
@@ -451,7 +451,7 @@ func MemberOfWithAdminOption(
 	descsCol *descs.Collection,
 	txn *kv.Txn,
 	member username.SQLUsername,
-) (map[username.SQLUsername]bool, error) {
+) (map[username.SQLUsername]bool, error) { //nolint:maptobool
 	if txn == nil || !txn.IsOpen() {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
@@ -519,13 +519,13 @@ func MemberOfWithAdminOption(
 			)
 		},
 	)
-	var memberships map[username.SQLUsername]bool
+	var memberships map[username.SQLUsername]bool //nolint:maptobool
 	select {
 	case res := <-ch:
 		if res.Err != nil {
 			return nil, res.Err
 		}
-		memberships = res.Val.(map[username.SQLUsername]bool)
+		memberships = res.Val.(map[username.SQLUsername]bool) //nolint:maptobool
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -575,8 +575,8 @@ func resolveMemberOfWithAdminOption(
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	singleQuery bool,
-) (map[username.SQLUsername]bool, error) {
-	ret := map[username.SQLUsername]bool{}
+) (map[username.SQLUsername]bool, error) { //nolint:maptobool
+	ret := map[username.SQLUsername]bool{} //nolint:maptobool
 	if singleQuery {
 		type membership struct {
 			role    username.SQLUsername

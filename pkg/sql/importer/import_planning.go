@@ -804,14 +804,14 @@ func importPlanHook(
 
 			// Validate target columns.
 			var intoCols []string
-			isTargetCol := make(map[string]bool)
+			isTargetCol := make(map[string]struct{})
 			for _, name := range importStmt.IntoCols {
 				active, err := tabledesc.FindPublicColumnsWithNames(found, tree.NameList{name})
 				if err != nil {
 					return errors.Wrap(err, "verifying target columns")
 				}
 
-				isTargetCol[active[0].GetName()] = true
+				isTargetCol[active[0].GetName()] = struct{}{}
 				intoCols = append(intoCols, active[0].GetName())
 			}
 
@@ -819,7 +819,8 @@ func importPlanHook(
 			// expressions are nullable.
 			if len(isTargetCol) != 0 {
 				for _, col := range found.VisibleColumns() {
-					if !(isTargetCol[col.GetName()] || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
+					_, isTargetColumn := isTargetCol[col.GetName()]
+					if !(isTargetColumn || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
 						return errors.Newf(
 							"all non-target columns in IMPORT INTO must be nullable "+
 								"or have default expressions, or have computed expressions"+
@@ -827,7 +828,7 @@ func importPlanHook(
 							col.GetName(),
 						)
 					}
-					if isTargetCol[col.GetName()] && col.IsComputed() {
+					if isTargetColumn && col.IsComputed() {
 						return schemaexpr.CannotWriteToComputedColError(col.GetName())
 					}
 				}

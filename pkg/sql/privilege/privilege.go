@@ -94,7 +94,7 @@ const (
 	ExternalConnection ObjectType = "external_connection"
 )
 
-var isDescriptorBacked = map[ObjectType]bool{
+var isDescriptorBacked = map[ObjectType]bool{ //nolint:maptobool
 	Database:           true,
 	Schema:             true,
 	Table:              true,
