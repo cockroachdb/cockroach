@@ -516,7 +516,7 @@ func TestConsolidateSpans(t *testing.T) {
 			spans := parseSpans(&evalCtx, tc.s)
 			var c Constraint
 			c.Init(kc, &spans)
-			c.ConsolidateSpans(kc.EvalCtx, nil)
+			c.ConsolidateSpans(kc.EvalCtx, partition.PrefixSorter{})
 			if res := c.Spans.String(); res != tc.e {
 				t.Errorf("expected  %s  got  %s", tc.e, res)
 			}
