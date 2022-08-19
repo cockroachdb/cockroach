@@ -20,7 +20,7 @@ export const transactionInsightsPropsFixture: TransactionInsightsViewProps = {
       queries: [
         "SELECT IFNULL(a, b) FROM (SELECT (SELECT code FROM promo_codes WHERE code > $1 ORDER BY code LIMIT _) AS a, (SELECT code FROM promo_codes ORDER BY code LIMIT _) AS b)",
       ],
-      insightName: "HIGH_WAIT_TIME",
+      insightName: "HighContentionTime",
       startTime: moment.utc("2022.08.10"),
       elapsedTimeMillis: moment.duration("00:00:00.25").asMilliseconds(),
       application: "demo",
@@ -34,7 +34,7 @@ export const transactionInsightsPropsFixture: TransactionInsightsViewProps = {
         "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
         "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
       ],
-      insightName: "HIGH_WAIT_TIME",
+      insightName: "HighContentionTime",
       startTime: moment.utc("2022.08.10"),
       elapsedTimeMillis: moment.duration("00:00:00.25").asMilliseconds(),
       application: "demo",
@@ -47,7 +47,7 @@ export const transactionInsightsPropsFixture: TransactionInsightsViewProps = {
       queries: [
         "UPSERT INTO vehicle_location_histories VALUES ($1, $2, now(), $3, $4)",
       ],
-      insightName: "HIGH_WAIT_TIME",
+      insightName: "HighContentionTime",
       startTime: moment.utc("2022.08.10"),
       elapsedTimeMillis: moment.duration("00:00:00.25").asMilliseconds(),
       application: "demo",

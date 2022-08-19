@@ -20,6 +20,7 @@ import { InsightExecEnum, StatementInsightEvent } from "src/insights";
 import { InsightCell, insightsTableTitles } from "../util";
 import { StatementInsights } from "../../../api";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import { Link } from "react-router-dom";
 
 interface StatementInsightsTable {
   data: StatementInsights;
@@ -35,7 +36,11 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StatementInsigh
     {
       name: "executionID",
       title: insightsTableTitles.executionID(execType),
-      cell: (item: StatementInsightEvent) => item.statementID,
+      cell: (item: StatementInsightEvent) => (
+        <Link to={`/insights/statement/${item.statementID}`}>
+          {String(item.statementID)}
+        </Link>
+      ),
       sort: (item: StatementInsightEvent) => item.statementID,
     },
     {
