@@ -42,12 +42,12 @@ var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
 var _ sqlstats.Writer = &Container{}
 
-func getStatusString(statementError error) string {
+func getStatus(statementError error) insights.Statement_Status {
 	if statementError == nil {
-		return "completed"
+		return insights.Statement_Completed
 	}
 
-	return "failed"
+	return insights.Statement_Failed
 }
 
 // RecordStatement implements sqlstats.Writer interface.
@@ -182,25 +182,25 @@ func (s *Container) RecordStatement(
 	}
 
 	s.outliersRegistry.ObserveStatement(value.SessionID, &insights.Statement{
-		ID:                  value.StatementID,
-		FingerprintID:       stmtFingerprintID,
-		LatencyInSeconds:    value.ServiceLatency,
-		Query:               value.Query,
-		Status:              getStatusString(value.StatementError),
-		StartTime:           value.StartTime,
-		EndTime:             value.EndTime,
-		FullScan:            value.FullScan,
-		User:                value.SessionData.User().Normalized(),
-		ApplicationName:     value.SessionData.ApplicationName,
-		Database:            value.SessionData.Database,
-		PlanGist:            value.PlanGist,
-		Retries:             int64(value.AutoRetryCount),
-		AutoRetryReason:     autoRetryReason,
-		RowsRead:            value.RowsRead,
-		RowsWritten:         value.RowsWritten,
-		Nodes:               value.Nodes,
-		Contention:          contention,
-		IndexRecommendation: value.IndexRecommendations,
+		ID:                   value.StatementID,
+		FingerprintID:        stmtFingerprintID,
+		LatencyInSeconds:     value.ServiceLatency,
+		Query:                value.Query,
+		Status:               getStatus(value.StatementError),
+		StartTime:            value.StartTime,
+		EndTime:              value.EndTime,
+		FullScan:             value.FullScan,
+		User:                 value.SessionData.User().Normalized(),
+		ApplicationName:      value.SessionData.ApplicationName,
+		Database:             value.SessionData.Database,
+		PlanGist:             value.PlanGist,
+		Retries:              int64(value.AutoRetryCount),
+		AutoRetryReason:      autoRetryReason,
+		RowsRead:             value.RowsRead,
+		RowsWritten:          value.RowsWritten,
+		Nodes:                value.Nodes,
+		Contention:           contention,
+		IndexRecommendations: value.IndexRecommendations,
 	})
 
 	return stats.ID, nil
