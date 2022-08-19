@@ -56,6 +56,7 @@ type DB interface {
 		startFrom hlc.Timestamp,
 		withDiff bool,
 		eventC chan<- kvcoord.RangeFeedMessage,
+		opts ...kvcoord.RangeFeedOption,
 	) error
 
 	// Scan encapsulates scanning a key span at a given point in time. The method

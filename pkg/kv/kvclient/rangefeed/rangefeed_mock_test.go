@@ -54,6 +54,7 @@ func (m *mockClient) RangeFeed(
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
 	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC)
 }
