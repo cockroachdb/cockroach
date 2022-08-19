@@ -60,6 +60,11 @@ message Transaction {
 }
 
 message Statement {
+  enum Status {
+    Completed = 0;
+    Failed = 1;
+  }
+
   bytes id = 1 [(gogoproto.customname) = "ID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
     (gogoproto.nullable) = false];
@@ -67,7 +72,7 @@ message Statement {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
   double latency_in_seconds = 3;
   string query = 4;
-  string status = 5;
+  Status status = 5;
   google.protobuf.Timestamp start_time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   google.protobuf.Timestamp end_time = 7 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   bool full_scan = 8;
@@ -82,7 +87,7 @@ message Statement {
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 17;
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
-  repeated string index_recommendation = 19;
+  repeated string index_recommendations = 19;
 
 }
 
