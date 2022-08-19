@@ -52,7 +52,7 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, &sql.MemoryMetrics{}, &execCfg, sessionData)
 		defer cleanup()
 		ec := p.(interface{ EvalContext() *eval.Context }).EvalContext()
-		return newReplicationStreamManagerWithPrivilegesCheck(ec)
+		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec)
 	}
 
 	for _, tc := range []struct {

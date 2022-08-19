@@ -626,7 +626,7 @@ func (p *planner) TypeAsString(
 	if err != nil {
 		return nil, err
 	}
-	evalFn := p.makeStringEvalFn(typedE)
+	evalFn := p.makeStringEvalFn(ctx, typedE)
 	return func() (string, error) {
 		isNull, str, err := evalFn()
 		if err != nil {
@@ -647,12 +647,14 @@ func (p *planner) TypeAsStringOrNull(
 	if err != nil {
 		return nil, err
 	}
-	return p.makeStringEvalFn(typedE), nil
+	return p.makeStringEvalFn(ctx, typedE), nil
 }
 
-func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {
+func (p *planner) makeStringEvalFn(
+	ctx context.Context, typedE tree.TypedExpr,
+) func() (bool, string, error) {
 	return func() (bool, string, error) {
-		d, err := eval.Expr(p.EvalContext().Context, p.EvalContext(), typedE)
+		d, err := eval.Expr(ctx, p.EvalContext(), typedE)
 		if err != nil {
 			return false, "", err
 		}
@@ -679,7 +681,7 @@ func (p *planner) TypeAsBool(
 	}
 	evalFn := p.makeBoolEvalFn(typedE)
 	return func() (bool, error) {
-		isNull, b, err := evalFn()
+		isNull, b, err := evalFn(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -690,9 +692,9 @@ func (p *planner) TypeAsBool(
 	}, nil
 }
 
-func (p *planner) makeBoolEvalFn(typedE tree.TypedExpr) func() (bool, bool, error) {
-	return func() (bool, bool, error) {
-		d, err := eval.Expr(p.EvalContext().Context, p.EvalContext(), typedE)
+func (p *planner) makeBoolEvalFn(typedE tree.TypedExpr) func(context.Context) (bool, bool, error) {
+	return func(ctx context.Context) (bool, bool, error) {
+		d, err := eval.Expr(ctx, p.EvalContext(), typedE)
 		if err != nil {
 			return false, false, err
 		}
@@ -721,7 +723,10 @@ const (
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
 func evalStringOptions(
-	evalCtx *eval.Context, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	opts []exec.KVOption,
+	optValidate map[string]KVStringOptValidate,
 ) (map[string]string, error) {
 	res := make(map[string]string, len(opts))
 	for _, opt := range opts {
@@ -730,7 +735,7 @@ func evalStringOptions(
 		if !ok {
 			return nil, errors.Errorf("invalid option %q", k)
 		}
-		val, err := eval.Expr(evalCtx.Context, evalCtx, opt.Value)
+		val, err := eval.Expr(ctx, evalCtx, opt.Value)
 		if err != nil {
 			return nil, err
 		}

@@ -138,7 +138,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 					break
 				}
 				// Compute join.
-				predMatched, err := a.pred.eval(params.EvalContext(), a.run.leftRow, rrow)
+				predMatched, err := a.pred.eval(params.ctx, params.EvalContext(), a.run.leftRow, rrow)
 				if err != nil {
 					return false, err
 				}
@@ -247,7 +247,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	opName := "apply-join-iteration-" + strconv.Itoa(a.iterationCount)
 	ctx, sp := tracing.ChildSpan(params.ctx, opName)
 	defer sp.Finish()
-	p, err := a.planRightSideFn(ctx, newExecFactory(params.p), leftRow)
+	p, err := a.planRightSideFn(ctx, newExecFactory(ctx, params.p), leftRow)
 	if err != nil {
 		return err
 	}

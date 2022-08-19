@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,6 +36,7 @@ import (
 )
 
 type distSQLSpecExecFactory struct {
+	ctx     context.Context
 	planner *planner
 	dsp     *DistSQLPlanner
 	// planCtx should not be used directly - getPlanCtx() should be used instead.
@@ -59,8 +62,11 @@ const (
 	distSQLLocalOnlyPlanning
 )
 
-func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exec.Factory {
+func newDistSQLSpecExecFactory(
+	ctx context.Context, p *planner, planningMode distSQLPlanningMode,
+) exec.Factory {
 	e := &distSQLSpecExecFactory{
+		ctx:                  ctx,
 		planner:              p,
 		dsp:                  p.extendedEvalCtx.DistSQLPlanner,
 		singleTenant:         p.execCfg.Codec.ForSystemTenant(),
@@ -72,8 +78,7 @@ func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exe
 		distribute = DistributionTypeSystemTenantOnly
 	}
 	evalCtx := p.ExtendedEvalContext()
-	e.planCtx = e.dsp.NewPlanningCtx(evalCtx.Ctx(), evalCtx, e.planner,
-		e.planner.txn, distribute)
+	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx, e.planner, e.planner.txn, distribute)
 	return e
 }
 
@@ -134,15 +139,13 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 			specifiedInQuery: true,
 		}
 		planNodesToClose = []planNode{v}
-		// TODO: don't use a stored context.
-		ctx := planCtx.EvalContext().Context
-		physPlan, err = e.dsp.wrapPlan(ctx, planCtx, v, e.planningMode != distSQLLocalOnlyPlanning)
+		physPlan, err = e.dsp.wrapPlan(e.ctx, planCtx, v, e.planningMode != distSQLLocalOnlyPlanning)
 	} else {
 		// We can create a spec for the values processor, so we don't create a
 		// valuesNode.
 		colTypes := getTypesFromResultColumns(cols)
 		var spec *execinfrapb.ValuesCoreSpec
-		spec, err = e.dsp.createValuesSpecFromTuples(planCtx, rows, colTypes)
+		spec, err = e.dsp.createValuesSpecFromTuples(e.ctx, planCtx, rows, colTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -166,9 +169,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			e, e.planner, table, index, params, reqOrdering,
 			func(d *delayedNode) (exec.Node, error) {
 				planCtx := e.getPlanCtx(cannotDistribute)
-				// TODO: don't use a stored context.
-				ctx := planCtx.EvalContext().Context
-				physPlan, err := e.dsp.wrapPlan(ctx, planCtx, d, e.planningMode != distSQLLocalOnlyPlanning)
+				physPlan, err := e.dsp.wrapPlan(e.ctx, planCtx, d, e.planningMode != distSQLLocalOnlyPlanning)
 				if err != nil {
 					return nil, err
 				}
@@ -274,7 +275,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	err = e.dsp.planTableReaders(
-		planCtx.EvalContext().Context, // TODO: don't use a stored context.
+		e.ctx,
 		e.getPlanCtx(recommendation),
 		p,
 		&tableReaderPlanningInfo{
@@ -329,7 +330,7 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	recommendation := e.checkExprsAndMaybeMergeLastStage([]tree.TypedExpr{filter}, physPlan)
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
-	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
+	if err := physPlan.AddFilter(e.ctx, filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
 		return nil, err
 	}
 	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
@@ -394,7 +395,7 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 
 	newColMap := identityMap(physPlan.PlanToStreamColMap, len(exprs))
 	if err := physPlan.AddRendering(
-		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
+		e.ctx, exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
 		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
 	); err != nil {
 		return nil, err
@@ -447,6 +448,7 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 }
 
 func populateAggFuncSpec(
+	ctx context.Context,
 	spec *execinfrapb.AggregatorSpec_Aggregation,
 	funcName string,
 	distinct bool,
@@ -475,7 +477,7 @@ func populateAggFuncSpec(
 		argumentsColumnTypes = make([]*types.T, len(constArgs))
 		for k, argument := range constArgs {
 			var err error
-			spec.Arguments[k], err = physicalplan.MakeExpression(argument, planCtx, nil)
+			spec.Arguments[k], err = physicalplan.MakeExpression(ctx, argument, planCtx, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -506,7 +508,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 			spec := &aggregationSpecs[i]
 			argColsScratch[0] = col
 			_, err = populateAggFuncSpec(
-				spec, builtins.AnyNotNull, false /* distinct*/, argColsScratch,
+				e.ctx, spec, builtins.AnyNotNull, false /* distinct*/, argColsScratch,
 				nil /* constArgs */, noFilter, planCtx, physPlan,
 			)
 			if err != nil {
@@ -519,7 +521,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 		spec := &aggregationSpecs[i]
 		agg := &aggregations[j]
 		argumentsColumnTypes[i], err = populateAggFuncSpec(
-			spec, agg.FuncName, agg.Distinct, agg.ArgCols,
+			e.ctx, spec, agg.FuncName, agg.Distinct, agg.ArgCols,
 			agg.ConstArgs, agg.Filter, planCtx, physPlan,
 		)
 		if err != nil {
@@ -527,6 +529,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 		}
 	}
 	if err := e.dsp.planAggregators(
+		e.ctx,
 		planCtx,
 		physPlan,
 		&aggregatorPlanningInfo{
@@ -712,7 +715,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	for i := range typs {
 		typs[i] = fixedVals[i].ResolvedType()
 	}
-	valuesSpec, err := e.dsp.createValuesSpecFromTuples(planCtx, [][]tree.TypedExpr{fixedVals}, typs)
+	valuesSpec, err := e.dsp.createValuesSpecFromTuples(e.ctx, planCtx, [][]tree.TypedExpr{fixedVals}, typs)
 	if err != nil {
 		return zigzagPlanningSide{}, err
 	}
@@ -766,7 +769,7 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	resultColumns := make(colinfo.ResultColumns, 0, len(leftResultColumns)+len(rightResultColumns))
 	resultColumns = append(resultColumns, leftResultColumns...)
 	resultColumns = append(resultColumns, rightResultColumns...)
-	p, err := e.dsp.planZigzagJoin(planCtx, zigzagPlanningInfo{
+	p, err := e.dsp.planZigzagJoin(e.ctx, planCtx, zigzagPlanningInfo{
 		sides:       sides,
 		columns:     resultColumns,
 		onCond:      onCond,
@@ -786,11 +789,11 @@ func (e *distSQLSpecExecFactory) ConstructLimit(
 	// Note that we pass in nil slice for exprs because we will evaluate both
 	// expressions below, locally.
 	recommendation := e.checkExprsAndMaybeMergeLastStage(nil /* exprs */, physPlan)
-	count, offset, err := evalLimit(e.planner.EvalContext(), limitExpr, offsetExpr)
+	count, offset, err := evalLimit(e.ctx, e.planner.EvalContext(), limitExpr, offsetExpr)
 	if err != nil {
 		return nil, err
 	}
-	if err = physPlan.AddLimit(count, offset, e.getPlanCtx(recommendation)); err != nil {
+	if err = physPlan.AddLimit(e.ctx, count, offset, e.getPlanCtx(recommendation)); err != nil {
 		return nil, err
 	}
 	// Since addition of limit and/or offset doesn't change any properties of
@@ -825,6 +828,7 @@ func (e *distSQLSpecExecFactory) ConstructProjectSet(
 	physPlan, plan := getPhysPlan(n)
 	cols := append(plan.physPlan.ResultColumns, zipCols...)
 	err := e.dsp.addProjectSet(
+		e.ctx,
 		physPlan,
 		// Currently, projectSetProcessors are always planned as a "grouping"
 		// stage (meaning a single processor on the gateway), so we use
@@ -886,7 +890,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 
 	// We cannot create the explained plan in the same PlanInfrastructure with the
 	// "outer" plan. Create a separate factory.
-	newFactory := newDistSQLSpecExecFactory(e.planner, e.planningMode)
+	newFactory := newDistSQLSpecExecFactory(e.ctx, e.planner, e.planningMode)
 	plan, err := buildFn(newFactory)
 	// Release the resources acquired during the physical planning right away.
 	newFactory.(*distSQLSpecExecFactory).planCtx.getCleanupFunc()()
@@ -915,7 +919,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	}
 
 	planCtx := e.getPlanCtx(cannotDistribute)
-	physPlan, err := e.dsp.wrapPlan(planCtx.EvalContext().Context, planCtx, explainNode, e.planningMode != distSQLLocalOnlyPlanning)
+	physPlan, err := e.dsp.wrapPlan(e.ctx, planCtx, explainNode, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
@@ -1063,7 +1067,7 @@ func (e *distSQLSpecExecFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (e
 		return nil, err
 	}
 	planCtx := e.getPlanCtx(cannotDistribute)
-	physPlan, err := e.dsp.wrapPlan(planCtx.EvalContext().Context, planCtx, plan, e.planningMode != distSQLLocalOnlyPlanning)
+	physPlan, err := e.dsp.wrapPlan(e.ctx, planCtx, plan, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
@@ -1187,7 +1191,7 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	// We always try to distribute the join, but planJoiners() itself might
 	// decide not to.
 	planCtx := e.getPlanCtx(shouldDistribute)
-	onExpr, err := helper.remapOnExpr(planCtx, onCond)
+	onExpr, err := helper.remapOnExpr(e.ctx, planCtx, onCond)
 	if err != nil {
 		return nil, err
 	}

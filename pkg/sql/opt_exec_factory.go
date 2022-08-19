@@ -13,6 +13,7 @@ package sql
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/url"
@@ -47,6 +48,7 @@ import (
 )
 
 type execFactory struct {
+	ctx     context.Context
 	planner *planner
 	// alloc is allocated lazily the first time it is needed and shared among
 	// all mutation planNodes created by the factory. It should not be accessed
@@ -59,8 +61,9 @@ type execFactory struct {
 
 var _ exec.Factory = &execFactory{}
 
-func newExecFactory(p *planner) *execFactory {
+func newExecFactory(ctx context.Context, p *planner) *execFactory {
 	return &execFactory{
+		ctx:     ctx,
 		planner: p,
 	}
 }
@@ -1195,7 +1198,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
-	c := makeStmtEnvCollector(ef.planner.EvalContext().Context, ie.(*InternalExecutor))
+	c := makeStmtEnvCollector(ef.ctx, ie.(*InternalExecutor))
 
 	// Show the version of Cockroach running.
 	if err := c.PrintVersion(&out.buf); err != nil {
@@ -1750,7 +1753,7 @@ func (ef *execFactory) ConstructDeleteRange(
 
 	splitter := span.NoopSplitter()
 	canUsePointDelete := ef.planner.ExecCfg().Settings.Version.IsActive(
-		ef.planner.EvalContext().Context, clusterversion.DeleteRequestReturnKey,
+		ef.ctx, clusterversion.DeleteRequestReturnKey,
 	)
 	if canUsePointDelete {
 		splitter = span.MakeSplitterForDelete(
@@ -1776,7 +1779,7 @@ func (ef *execFactory) ConstructCreateTable(
 	schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE TABLE",
 	); err != nil {
@@ -1793,7 +1796,7 @@ func (ef *execFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE TABLE",
 	); err != nil {
@@ -1823,7 +1826,7 @@ func (ef *execFactory) ConstructCreateView(
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE VIEW",
 	); err != nil {
@@ -1856,7 +1859,7 @@ func (ef *execFactory) ConstructCreateFunction(
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE FUNCTION",
 	); err != nil {
@@ -1943,7 +1946,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX SPLIT AT",
 	); err != nil {
@@ -1955,7 +1958,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
-	expirationTime, err := parseExpirationTime(ef.planner.EvalContext(), expiration)
+	expirationTime, err := parseExpirationTime(ef.ctx, ef.planner.EvalContext(), expiration)
 	if err != nil {
 		return nil, err
 	}
@@ -1973,7 +1976,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX UNSPLIT AT",
 	); err != nil {
@@ -1994,7 +1997,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX UNSPLIT ALL",
 	); err != nil {
@@ -2050,7 +2053,7 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
-	reasonDatum, err := eval.Expr(ef.planner.EvalContext().Context, ef.planner.EvalContext(), reason)
+	reasonDatum, err := eval.Expr(ef.ctx, ef.planner.EvalContext(), reason)
 	if err != nil {
 		return nil, err
 	}
@@ -2130,6 +2133,7 @@ func (ef *execFactory) ConstructExplain(
 	}
 
 	plan, err := buildFn(&execFactory{
+		ctx:       ef.ctx,
 		planner:   ef.planner,
 		isExplain: true,
 	})
