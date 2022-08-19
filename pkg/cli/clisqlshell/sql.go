@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
@@ -42,7 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
-	readline "github.com/knz/go-libedit"
+	"github.com/knz/bubbline"
+	"github.com/knz/bubbline/editline"
 )
 
 const (
@@ -136,7 +138,7 @@ type cliState struct {
 
 	conn clisqlclient.Conn
 	// ins is used to read lines if isInteractive is true.
-	ins readline.EditLine
+	ins *bubbline.Editor
 	// buf is used to read lines if isInteractive is false.
 	buf *bufio.Reader
 	// singleStatement is set to true when this state level
@@ -267,10 +269,8 @@ func (c *cliState) printCliHelp() {
 	fmt.Fprintln(c.iCtx.stdout)
 }
 
-const noLineEditor readline.EditLine = -1
-
 func (c *cliState) hasEditor() bool {
-	return c.ins != noLineEditor
+	return c.ins != nil
 }
 
 // addHistory persists a line of input to the readline history file.
@@ -782,7 +782,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 		}
 
-		c.ins.SetLeftPrompt(c.continuePrompt)
+		c.ins.Prompt = c.continuePrompt
 		return nextState
 	}
 
@@ -848,7 +848,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	c.currentPrompt = c.fullPrompt
 
 	// Configure the editor to use the new prompt.
-	c.ins.SetLeftPrompt(c.currentPrompt)
+	c.ins.Prompt = c.currentPrompt
 
 	return nextState
 }
@@ -919,49 +919,118 @@ func (c *cliState) refreshDatabaseName() string {
 
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachsql_history")
 
-// GetCompletions implements the readline.CompletionGenerator interface.
-func (c *cliState) GetCompletions(s string) []string {
-	sql, _ := c.ins.GetLineInfo()
+func convertRunes(v [][]rune, line, col int) string {
+	var b strings.Builder
+	for l := 0; l < line+1; l++ {
+		row := v[line]
+		end := len(row)
+		if l == line {
+			end = col
+		}
+		b.WriteString(string(row[:end]))
+		b.WriteByte('\n')
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
 
+// GetCompletions implements the editline AutoComplete interface.
+func (c *cliState) GetCompletions(
+	v [][]rune, line, col int,
+) (msg string, consume int, extraInput []string) {
 	// In COPY mode, just add a tab character.
 	if c.inCopy() {
-		return []string{s + "\t"}
+		return "", 0, []string{"\t"}
 	}
 
-	if !strings.HasSuffix(sql, "??") {
-		query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, len(sql), lexbase.EscapeSQLString(sql))
-		var rows [][]string
+	if col > 1 && v[line][col-1] == '?' && v[line][col-2] == '?' {
+		// This is a syntax check.
+		sql := convertRunes(v, line, col)
+		helpText, err := c.serverSideParse(sql)
+		if helpText != "" {
+			// We have a completion suggestion. Use that.
+			msg = fmt.Sprintf("\nSuggestion:\n%s\n", helpText)
+		} else if err != nil {
+			// Some other error. Display it.
+			var buf strings.Builder
+			clierror.OutputError(&buf, err, true /*showSeverity*/, false /*verbose*/)
+			msg = buf.String()
+		}
+		return msg, 0, nil
+	}
+
+	var complete []string
+	msg = "No match. Try ?? followed by space."
+	word, p := editline.FindWordStart(v, line, col)
+	if word != "" {
+		// Retrieve the list of keywords.
+		var kwlist [][]string
 		var err error
 		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
-			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
+			const query = `SELECT upper(word) FROM pg_catalog.pg_get_keywords()`
+			_, kwlist, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
 			return err
 		})
-
 		if err != nil {
-			clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
+			var buf strings.Builder
+			clierror.OutputError(&buf, err, true /*showSeverity*/, false /*verbose*/)
+			msg = buf.String()
+			return msg, 0, nil
 		}
 
-		var completions []string
-		for _, row := range rows {
-			completions = append(completions, row[0])
+		var proclist [][]string
+		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+			const query = `SELECT DISTINCT proname||'(' FROM pg_catalog.pg_proc`
+			_, proclist, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
+			return err
+		})
+		if err != nil {
+			var buf strings.Builder
+			clierror.OutputError(&buf, err, true /*showSeverity*/, false /*verbose*/)
+			msg = buf.String()
+			return msg, 0, nil
 		}
 
-		return completions
-	}
+		// Try auto-complete keywords.
+		uw := strings.ToUpper(word)
+		complete = []string{""}
+		for _, k := range kwlist {
+			keyword := k[0]
+			if strings.HasPrefix(keyword, uw) {
+				complete = append(complete, keyword)
+			}
+		}
+		lw := strings.ToLower(word)
+		for _, p := range proclist {
+			procname := p[0]
+			if strings.HasPrefix(procname, lw) {
+				complete = append(complete, procname)
+			}
+		}
 
-	helpText, err := c.serverSideParse(sql)
-	if helpText != "" {
-		// We have a completion suggestion. Use that.
-		fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
-	} else if err != nil {
-		// Some other error. Display it.
-		fmt.Fprintln(c.iCtx.stdout)
-		clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
+		if len(complete) == 1 {
+			// No match.
+			complete = complete[:0]
+			msg = "No match. Try ?? followed by space."
+		} else if len(complete) == 2 {
+			// Just 1 match.
+			complete[0] = complete[1]
+			consume = col - p
+			complete = complete[:1]
+			msg = ""
+		} else {
+			// Find longest common prefix.
+			first, last := complete[1], complete[len(complete)-1]
+			if len(last) > 0 && last[0] >= 'a' && last[0] <= 'z' {
+				// We're completing both uppercase keywords and lowercase
+				// procnames. Lowercase the pre-filled prefix.
+				first = strings.ToLower(first)
+			}
+			complete[0] = editline.FindLongestCommonPrefix(first, last)
+			consume = col - p
+			msg = ""
+		}
 	}
-
-	// After the suggestion or error, re-display the prompt and current entry.
-	fmt.Fprint(c.iCtx.stdout, c.currentPrompt, sql)
-	return nil
+	return msg, consume, complete
 }
 
 func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
@@ -1011,8 +1080,8 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 	if c.buf == nil {
 		l, err = c.ins.GetLine()
 		if len(l) > 0 && l[len(l)-1] == '\n' {
-			// Strip the final newline.
-			l = l[:len(l)-1]
+			// Strip the final newlines, if any.
+			l = strings.TrimRight(l, "\n")
 		} else {
 			// There was no newline at the end of the input
 			// (e.g. Ctrl+C was entered). Force one.
@@ -1048,7 +1117,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		}
 		// In any case, process one line.
 
-	case errors.Is(err, readline.ErrInterrupted):
+	case errors.Is(err, bubbline.ErrInterrupted):
 		if !c.cliCtx.IsInteractive {
 			// Ctrl+C terminates non-interactive shells in all cases.
 			c.exitErr = err
@@ -1644,7 +1713,7 @@ func (c *cliState) runIncludeInternal(
 
 		conn:       c.conn,
 		includeDir: filepath.Dir(filename),
-		ins:        noLineEditor,
+		ins:        nil,
 		buf:        input,
 		levels:     level,
 
@@ -1719,6 +1788,55 @@ func (c *cliState) doPrepareStatementLine(
 	}
 
 	return checkState
+}
+
+func (c *cliState) CheckInputComplete(v [][]rune, line, col int) bool {
+	// The input is complete in either of the following cases:
+	// - we're in COPY mode (always 1 line at a time);
+	// OR
+	// - there's just one line of input; AND EITHER:
+	//   - the current line of input starts with `\` (client-side command);
+	//   - the input is "quit", "exit" or "help";
+	// OR:
+	// - or the last token in the input is a semicolon;
+	//   and the cursor is either at the end of the input,
+	//   or it is positioned in the middle of a word (cursor
+	//   on non-space; and position before is non-space).
+
+	if c.inCopy() {
+		return true
+	}
+
+	if len(v) == 1 {
+		inputLine := string(v[0])
+		clientSideCommand := len(inputLine) > 0 && inputLine[0] == '\\'
+		if clientSideCommand || inputLine == "exit" || inputLine == "help" || inputLine == "quit" {
+			return true
+		}
+	}
+
+	cursorAtEndOfInput := line+1 >= len(v) && col+1 >= len(v[line])
+	cursorOnNonSpace := col < len(v[line]) && !unicode.IsSpace(v[line][col])
+	prevNonSpace := col > 0 && col-1 < len(v[line]) && !unicode.IsSpace(v[line][col-1])
+	possibleEndOfInput := cursorAtEndOfInput || (cursorOnNonSpace && prevNonSpace)
+
+	if !possibleEndOfInput {
+		return false
+	}
+
+	// A possibly longer SQL statement. We need to tokenize, which means we need
+	// all the input as a string.
+	var buf strings.Builder
+	for i := 0; i < len(v); i++ {
+		buf.WriteString(string(v[i]))
+		buf.WriteByte('\n')
+	}
+	lastTok, ok := scanner.LastLexicalToken(buf.String())
+	if !ok {
+		return false
+	}
+	endOfStmt := isEndOfStatement(lastTok)
+	return endOfStmt
 }
 
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
@@ -2044,31 +2162,10 @@ func (c *cliState) configurePreShellDefaults(
 	if c.cliCtx.IsInteractive && c.sqlExecCtx.TerminalOutput {
 		// The readline initialization is not placed in
 		// the doStart() method because of the defer.
-		c.ins, c.exitErr = readline.InitFiles("cockroach",
-			true, /* wideChars */
-			cmdIn, c.iCtx.stdout, c.iCtx.stderr)
-		if errors.Is(c.exitErr, readline.ErrWidecharNotSupported) {
-			fmt.Fprintln(c.iCtx.stderr, "warning: wide character support disabled")
-			c.ins, c.exitErr = readline.InitFiles("cockroach",
-				false, cmdIn, c.iCtx.stdout, c.iCtx.stderr)
-		}
-		if c.exitErr != nil {
-			return cleanupFn, c.exitErr
-		}
-		// The readline library may have a custom file descriptor for stdout.
-		// Use that for further output.
-		c.iCtx.stdout = c.ins.Stdout()
-		c.iCtx.queryOutputFile = c.ins.Stdout()
-
-		// If the user has used bind -v or bind -l in their ~/.editrc,
-		// this will reset the standard bindings. However we really
-		// want in this shell that Ctrl+C, tab, Ctrl+Z and Ctrl+R
-		// always have the same meaning.  So reload these bindings
-		// explicitly no matter what ~/.editrc may have changed.
-		c.ins.RebindControlKeys()
+		c.ins = bubbline.New()
 		cleanupFn = func() { c.ins.Close() }
 	} else {
-		c.ins = noLineEditor
+		c.ins = nil
 		c.buf = bufio.NewReader(cmdIn)
 		cleanupFn = func() {}
 	}
@@ -2085,22 +2182,21 @@ func (c *cliState) configurePreShellDefaults(
 			c.iCtx.customPromptPattern = debugPromptPattern
 		}
 
-		c.ins.SetCompleter(c)
-		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
-			fmt.Fprintf(c.iCtx.stderr, "warning: cannot enable history: %v\n ", err)
+		c.ins.AutoComplete = c.GetCompletions
+		c.ins.CheckInputComplete = c.CheckInputComplete
+		c.ins.NextPrompt = "-> "
+
+		homeDir, err := envutil.HomeDir()
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "warning: cannot retrieve user information: %v\nwarning: history will not be saved\n", err)
 		} else {
-			homeDir, err := envutil.HomeDir()
+			histFile := filepath.Join(homeDir, cmdHistFile)
+			err = c.ins.LoadHistory(histFile)
 			if err != nil {
-				fmt.Fprintf(c.iCtx.stderr, "warning: cannot retrieve user information: %v\nwarning: history will not be saved\n", err)
-			} else {
-				histFile := filepath.Join(homeDir, cmdHistFile)
-				err = c.ins.LoadHistory(histFile)
-				if err != nil {
-					fmt.Fprintf(c.iCtx.stderr, "warning: cannot load the command-line history (file corrupted?): %v\n", err)
-					fmt.Fprintf(c.iCtx.stderr, "note: the history file will be cleared upon first entry\n")
-				}
-				c.ins.SetAutoSaveHistory(histFile, true)
+				fmt.Fprintf(c.iCtx.stderr, "warning: cannot load the command-line history (file corrupted?): %v\n", err)
+				fmt.Fprintf(c.iCtx.stderr, "note: the history file will be cleared upon first entry\n")
 			}
+			c.ins.SetAutoSaveHistory(histFile, true)
 		}
 	}
 
