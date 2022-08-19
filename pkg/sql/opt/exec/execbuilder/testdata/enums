@@ -121,13 +121,13 @@ distinct-on
  ├── grouping columns: x:1
  ├── internal-ordering: +1
  ├── cardinality: [0 - 4]
- ├── stats: [rows=4, distinct(1)=4, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  ├── cost: 1114.88
  ├── key: (1)
  ├── distribution: test
  └── scan checks@checks_x_y_idx
       ├── columns: x:1
-      ├── stats: [rows=1000, distinct(1)=4, null(1)=0, avgsize(1)=4]
+      ├── stats: [rows=1000, distinct(1)=4, null(1)=0]
       ├── cost: 1104.82
       ├── ordering: +1
       ├── distribution: test
@@ -172,28 +172,28 @@ union
  ├── right columns: nulls.x:6
  ├── internal-ordering: +11
  ├── cardinality: [0 - 5]
- ├── stats: [rows=5, distinct(11)=5, null(11)=1, avgsize(11)=4]
+ ├── stats: [rows=5, distinct(11)=5, null(11)=1]
  ├── cost: 2276.86667
  ├── key: (11)
  ├── distribution: test
  ├── interesting orderings: (+11)
  ├── project
  │    ├── columns: nulls.x:1
- │    ├── stats: [rows=333.3333, distinct(1)=5, null(1)=3.33333, avgsize(1)=4]
+ │    ├── stats: [rows=333.3333, distinct(1)=5, null(1)=3.33333]
  │    ├── cost: 1138.40333
  │    ├── ordering: +1
  │    ├── distribution: test
  │    ├── interesting orderings: (+1)
  │    └── select
  │         ├── columns: nulls.x:1 y:2
- │         ├── stats: [rows=333.3333, distinct(1)=5, null(1)=3.33333, avgsize(1)=4, distinct(2)=33.3333, null(2)=0, avgsize(2)=4]
+ │         ├── stats: [rows=333.3333, distinct(1)=5, null(1)=3.33333, distinct(2)=33.3333, null(2)=0]
  │         ├── cost: 1135.05
  │         ├── ordering: +1
  │         ├── distribution: test
  │         ├── interesting orderings: (+1,+2)
  │         ├── scan nulls@nulls_x_y_idx
  │         │    ├── columns: nulls.x:1 y:2
- │         │    ├── stats: [rows=1000, distinct(1)=5, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
+ │         │    ├── stats: [rows=1000, distinct(1)=5, null(1)=10, distinct(2)=100, null(2)=10]
  │         │    ├── cost: 1125.02
  │         │    ├── ordering: +1
  │         │    ├── distribution: test
@@ -203,21 +203,21 @@ union
  │              └── y:2 < 0 [outer=(2), constraints=(/2: (/NULL - /-1]; tight)]
  └── project
       ├── columns: nulls.x:6
-      ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333, avgsize(6)=4]
+      ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333]
       ├── cost: 1138.40333
       ├── ordering: +6
       ├── distribution: test
       ├── interesting orderings: (+6)
       └── select
            ├── columns: nulls.x:6 y:7
-           ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333, avgsize(6)=4, distinct(7)=33.3333, null(7)=0, avgsize(7)=4]
+           ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333, distinct(7)=33.3333, null(7)=0]
            ├── cost: 1135.05
            ├── ordering: +6
            ├── distribution: test
            ├── interesting orderings: (+6,+7)
            ├── scan nulls@nulls_x_y_idx
            │    ├── columns: nulls.x:6 y:7
-           │    ├── stats: [rows=1000, distinct(6)=5, null(6)=10, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4]
+           │    ├── stats: [rows=1000, distinct(6)=5, null(6)=10, distinct(7)=100, null(7)=10]
            │    ├── cost: 1125.02
            │    ├── ordering: +6
            │    ├── distribution: test

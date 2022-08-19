@@ -21,7 +21,7 @@ SELECT * FROM a WHERE a = 'foo'
 scan a@a_a_idx
  ├── columns: a:1(string!null)
  ├── constraint: /1/2: [/'foo' - /'foo']
- ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  └── fd: ()-->(1)
 
 opt
@@ -29,7 +29,7 @@ SELECT * FROM a WHERE a LIKE '%foo%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=330, distinct(1)=100, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=330, distinct(1)=100, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
  │    ├── stats: [rows=111.1111]
@@ -37,7 +37,7 @@ select
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted constraint: /5/2
  │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
- │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
  │         └── key: (2)
  └── filters
       └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
@@ -77,7 +77,7 @@ SELECT * FROM a WHERE a = 'foo'
 scan a@a_a_idx
  ├── columns: a:1(string!null)
  ├── constraint: /1/2: [/'foo' - /'foo']
- ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0]
  │   histogram(1)=  0    0
  │                <--- 'foo'
  └── fd: ()-->(1)
@@ -90,7 +90,7 @@ SELECT * FROM a WHERE a LIKE '%foo%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.3333, distinct(1)=10, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=333.3333, distinct(1)=10, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
  │    ├── stats: [rows=111.1111]
@@ -98,7 +98,7 @@ select
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted constraint: /5/2
  │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
- │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
  │         └── key: (2)
  └── filters
       └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
@@ -171,7 +171,7 @@ SELECT * FROM a WHERE a LIKE '%foo%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
  │    ├── stats: [rows=5.8e-09]
@@ -179,7 +179,7 @@ select
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted constraint: /5/2
  │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
- │         ├── stats: [rows=5.8e-09, distinct(5)=5.8e-09, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=5.8e-09, distinct(5)=5.8e-09, null(5)=0]
  │         │   histogram(5)=  0         0
  │         │                <--- '\x12666f6f0002'
  │         └── key: (2)
@@ -193,7 +193,7 @@ SELECT * FROM a WHERE a = 'foobarbaz'
 scan a@a_a_idx
  ├── columns: a:1(string!null)
  ├── constraint: /1/2: [/'foobarbaz' - /'foobarbaz']
- ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0]
  │   histogram(1)=  0       0
  │                <--- 'foobarbaz'
  └── fd: ()-->(1)
@@ -243,7 +243,7 @@ SELECT * FROM a WHERE a LIKE '%foo%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
  │    ├── stats: [rows=5.8e-09]
@@ -251,7 +251,7 @@ select
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted constraint: /5/2
  │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
- │         ├── stats: [rows=5.8e-09, distinct(5)=5.8e-09, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=5.8e-09, distinct(5)=5.8e-09, null(5)=0]
  │         │   histogram(5)=  0         0
  │         │                <--- '\x12666f6f0002'
  │         └── key: (2)
@@ -264,7 +264,7 @@ SELECT * FROM a WHERE a = 'foobarbaz'
 scan a@a_a_idx
  ├── columns: a:1(string!null)
  ├── constraint: /1/2: [/'foobarbaz' - /'foobarbaz']
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  └── fd: ()-->(1)
 
 # Simulate truncate on an inverted column to ensure that the optimizer doesn't
@@ -347,5 +347,5 @@ SELECT * FROM a WHERE a = 'foobarbaz'
 scan a@a_a_idx
  ├── columns: a:1(string!null)
  ├── constraint: /1/2: [/'foobarbaz' - /'foobarbaz']
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  └── fd: ()-->(1)

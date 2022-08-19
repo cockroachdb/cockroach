@@ -53,7 +53,7 @@ SELECT * FROM abc WHERE b=10
 ----
 distribute
  ├── columns: a:1(int!null) b:2(int!null) c:3(string)
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 25.2500001
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -64,7 +64,7 @@ distribute
  └── scan t.public.abc@bc1
       ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
-      ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=0]
       ├── cost: 25.2200001
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -78,7 +78,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -93,7 +93,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -108,7 +108,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -121,7 +121,7 @@ SELECT b, c FROM abc WHERE b=10
 ----
 distribute
  ├── columns: b:2(int!null) c:3(string)
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 25.0500001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -132,7 +132,7 @@ distribute
  └── scan t.public.abc@bc1
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
-      ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=0]
       ├── cost: 25.0200001
       ├── lax-key: (3)
       ├── fd: ()-->(2)
@@ -177,7 +177,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.7700001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -192,7 +192,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -208,7 +208,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -236,7 +236,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -252,7 +252,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -278,7 +278,7 @@ SELECT b, c FROM abc WHERE b=10
 ----
 distribute
  ├── columns: b:2(int!null) c:3(string)
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5500001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -289,7 +289,7 @@ distribute
  └── scan t.public.abc@bc1
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
-      ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=0]
       ├── cost: 24.5200001
       ├── lax-key: (3)
       ├── fd: ()-->(2)
@@ -302,7 +302,7 @@ SELECT b, c FROM abc WHERE b=10
 ----
 distribute
  ├── columns: b:2(int!null) c:3(string)
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5500001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -313,7 +313,7 @@ distribute
  └── scan t.public.abc@bc2
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
-      ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=0]
       ├── cost: 24.5200001
       ├── lax-key: (3)
       ├── fd: ()-->(2)
@@ -327,7 +327,7 @@ SELECT b, c FROM abc WHERE b=10
 ----
 distribute
  ├── columns: b:2(int!null) c:3(string)
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5500001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -338,7 +338,7 @@ distribute
  └── scan t.public.abc@bc2
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
-      ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=0]
       ├── cost: 24.5200001
       ├── lax-key: (3)
       ├── fd: ()-->(2)
@@ -352,7 +352,7 @@ SELECT b, c FROM abc WHERE b=10
 ----
 distribute
  ├── columns: b:2(int!null) c:3(string)
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.8000001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -363,7 +363,7 @@ distribute
  └── scan t.public.abc@bc1
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
-      ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=0]
       ├── cost: 24.7700001
       ├── lax-key: (3)
       ├── fd: ()-->(2)
@@ -385,7 +385,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -400,7 +400,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -437,7 +437,7 @@ inner-join (lookup t.public.xy@y2)
  ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:6(int!null) y:7(int!null)
  ├── flags: force lookup join (into right side)
  ├── key columns: [2] = [7]
- ├── stats: [rows=100, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(7)=1, null(7)=0, avgsize(7)=4]
+ ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(7)=1, null(7)=0]
  ├── cost: 427.600004
  ├── key: (1,6)
  ├── fd: ()-->(2,7), (1)-->(3), (2,3)~~>(1), (2)==(7), (7)==(2)
@@ -447,7 +447,7 @@ inner-join (lookup t.public.xy@y2)
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
- │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0]
  │    ├── cost: 24.6200001
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -477,7 +477,7 @@ inner-join (lookup t.public.xy@y1)
  ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:6(int!null) y:7(int!null)
  ├── flags: force lookup join (into right side)
  ├── key columns: [2] = [7]
- ├── stats: [rows=100, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(7)=1, null(7)=0, avgsize(7)=4]
+ ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(7)=1, null(7)=0]
  ├── cost: 427.600004
  ├── key: (1,6)
  ├── fd: ()-->(2,7), (1)-->(3), (2,3)~~>(1), (2)==(7), (7)==(2)
@@ -487,7 +487,7 @@ inner-join (lookup t.public.xy@y1)
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
- │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0]
  │    ├── cost: 24.6200001
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -535,7 +535,7 @@ SELECT b, c FROM abc WHERE b=10
 ----
 distribute
  ├── columns: b:2(int!null) c:3(string)
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 25.0500001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -546,7 +546,7 @@ distribute
  └── scan t.public.abc@bc1
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
-      ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=0]
       ├── cost: 25.0200001
       ├── lax-key: (3)
       ├── fd: ()-->(2)
@@ -560,7 +560,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.8533334
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -575,7 +575,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.8533334
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -620,7 +620,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.9366668
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -635,7 +635,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.8533334
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -650,7 +650,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.8533334
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -698,7 +698,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.7700001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -713,7 +713,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.6866668
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -728,7 +728,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.6866668
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -758,7 +758,7 @@ SELECT b, c FROM abc WHERE b=10
 scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 24.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
@@ -811,7 +811,7 @@ locality-optimized-search
  ├── left columns: t.public.abc_part.r:7(string) t.public.abc_part.a:8(int) t.public.abc_part.b:9(int) t.public.abc_part.c:10(string)
  ├── right columns: t.public.abc_part.r:13(string) t.public.abc_part.a:14(int) t.public.abc_part.b:15(int) t.public.abc_part.c:16(string)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.91, distinct(3)=0.91, null(3)=0, avgsize(3)=4, distinct(4)=0.91, null(4)=0, avgsize(4)=4, distinct(3,4)=0.91, null(3,4)=0, avgsize(3,4)=8]
+ ├── stats: [rows=0.91, distinct(3)=0.91, null(3)=0, distinct(4)=0.91, null(4)=0, distinct(3,4)=0.91, null(3,4)=0]
  ├── cost: 3.468444
  ├── key: ()
  ├── fd: ()-->(1-4)
@@ -821,7 +821,7 @@ locality-optimized-search
  │    ├── columns: t.public.abc_part.r:7(string!null) t.public.abc_part.a:8(int!null) t.public.abc_part.b:9(int!null) t.public.abc_part.c:10(string!null)
  │    ├── constraint: /7/9/10: [/'east'/1/'foo' - /'east'/1/'foo']
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=0.9001, distinct(7)=0.9001, null(7)=0, avgsize(7)=4, distinct(9)=0.9001, null(9)=0, avgsize(9)=4, distinct(10)=0.9001, null(10)=0, avgsize(10)=4, distinct(7,9,10)=0.9001, null(7,9,10)=0, avgsize(7,9,10)=12]
+ │    ├── stats: [rows=0.9001, distinct(7)=0.9001, null(7)=0, distinct(9)=0.9001, null(9)=0, distinct(10)=0.9001, null(10)=0, distinct(7,9,10)=0.9001, null(7,9,10)=0]
  │    ├── cost: 1.724672
  │    ├── key: ()
  │    ├── fd: ()-->(7-10)
@@ -830,7 +830,7 @@ locality-optimized-search
       ├── columns: t.public.abc_part.r:13(string!null) t.public.abc_part.a:14(int!null) t.public.abc_part.b:15(int!null) t.public.abc_part.c:16(string!null)
       ├── constraint: /13/15/16: [/'west'/1/'foo' - /'west'/1/'foo']
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, avgsize(13)=4, distinct(15)=0.9001, null(15)=0, avgsize(15)=4, distinct(16)=0.9001, null(16)=0, avgsize(16)=4, distinct(13,15,16)=0.9001, null(13,15,16)=0, avgsize(13,15,16)=12]
+      ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, distinct(15)=0.9001, null(15)=0, distinct(16)=0.9001, null(16)=0, distinct(13,15,16)=0.9001, null(13,15,16)=0]
       ├── cost: 1.724672
       ├── key: ()
       ├── fd: ()-->(13-16)
@@ -861,7 +861,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── a2.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
  │    │         └── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=0.9009, distinct(1)=0.897389, null(1)=0, avgsize(1)=4, distinct(2)=0.9009, null(2)=0, avgsize(2)=4, distinct(3)=0.9009, null(3)=0, avgsize(3)=4, distinct(4)=0.9009, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=0.9009, distinct(1)=0.897389, null(1)=0, distinct(2)=0.9009, null(2)=0, distinct(3)=0.9009, null(3)=0, distinct(4)=0.9009, null(4)=0]
  │    ├── cost: 10.8432087
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
@@ -871,7 +871,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    ├── left columns: a1.r:13 a1.a:14 a1.b:15 a1.c:16
  │    │    ├── right columns: a1.r:19 a1.a:20 a1.b:21 a1.c:22
  │    │    ├── cardinality: [0 - 1]
- │    │    ├── stats: [rows=0.91, distinct(1)=0.906283, null(1)=0, avgsize(1)=4, distinct(2)=0.91, null(2)=0, avgsize(2)=4, distinct(3)=0.91, null(3)=0, avgsize(3)=4, distinct(4)=0.91, null(4)=0, avgsize(4)=4, distinct(3,4)=0.91, null(3,4)=0, avgsize(3,4)=8]
+ │    │    ├── stats: [rows=0.91, distinct(1)=0.906283, null(1)=0, distinct(2)=0.91, null(2)=0, distinct(3)=0.91, null(3)=0, distinct(4)=0.91, null(4)=0, distinct(3,4)=0.91, null(3,4)=0]
  │    │    ├── cost: 3.468444
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
@@ -880,7 +880,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    │    ├── columns: a1.r:13!null a1.a:14!null a1.b:15!null a1.c:16!null
  │    │    │    ├── constraint: /13/15/16: [/'east'/1/'foo' - /'east'/1/'foo']
  │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, avgsize(13)=4, distinct(15)=0.9001, null(15)=0, avgsize(15)=4, distinct(16)=0.9001, null(16)=0, avgsize(16)=4, distinct(13,15,16)=0.9001, null(13,15,16)=0, avgsize(13,15,16)=12]
+ │    │    │    ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, distinct(15)=0.9001, null(15)=0, distinct(16)=0.9001, null(16)=0, distinct(13,15,16)=0.9001, null(13,15,16)=0]
  │    │    │    ├── cost: 1.724672
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(13-16)
@@ -888,7 +888,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── columns: a1.r:19!null a1.a:20!null a1.b:21!null a1.c:22!null
  │    │         ├── constraint: /19/21/22: [/'west'/1/'foo' - /'west'/1/'foo']
  │    │         ├── cardinality: [0 - 1]
- │    │         ├── stats: [rows=0.9001, distinct(19)=0.9001, null(19)=0, avgsize(19)=4, distinct(21)=0.9001, null(21)=0, avgsize(21)=4, distinct(22)=0.9001, null(22)=0, avgsize(22)=4, distinct(19,21,22)=0.9001, null(19,21,22)=0, avgsize(19,21,22)=12]
+ │    │         ├── stats: [rows=0.9001, distinct(19)=0.9001, null(19)=0, distinct(21)=0.9001, null(21)=0, distinct(22)=0.9001, null(22)=0, distinct(19,21,22)=0.9001, null(19,21,22)=0]
  │    │         ├── cost: 1.724672
  │    │         ├── key: ()
  │    │         └── fd: ()-->(19-22)
