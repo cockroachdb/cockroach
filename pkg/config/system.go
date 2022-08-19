@@ -89,7 +89,7 @@ type SystemConfig struct {
 	mu                struct {
 		syncutil.RWMutex
 		zoneCache        map[ObjectID]zoneEntry
-		shouldSplitCache map[ObjectID]bool
+		shouldSplitCache map[ObjectID]bool //nolint:maptobool
 	}
 }
 
@@ -98,7 +98,7 @@ func NewSystemConfig(defaultZoneConfig *zonepb.ZoneConfig) *SystemConfig {
 	sc := &SystemConfig{}
 	sc.DefaultZoneConfig = defaultZoneConfig
 	sc.mu.zoneCache = map[ObjectID]zoneEntry{}
-	sc.mu.shouldSplitCache = map[ObjectID]bool{}
+	sc.mu.shouldSplitCache = map[ObjectID]bool{} //nolint:maptobool
 	return sc
 }
 

@@ -2090,6 +2090,8 @@ func TestLint(t *testing.T) {
 			"ccl",
 			"cli",
 			"cmd",
+			"config",
+			"gossip",
 			"server",
 			"sql/opt/norm*.go",
 			":!*_test.go",

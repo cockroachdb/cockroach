@@ -272,7 +272,7 @@ type Gossip struct {
 	// Membership sets for bootstrap addresses. bootstrapAddrs also tracks which
 	// address is associated with which node ID to enable faster node lookup by
 	// address.
-	addressExists  map[util.UnresolvedAddr]bool
+	addressExists  map[util.UnresolvedAddr]struct{}
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
 	locality roachpb.Locality
@@ -318,7 +318,7 @@ func New(
 		cullInterval:      defaultCullInterval,
 		addressesTried:    map[int]struct{}{},
 		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
-		addressExists:     map[util.UnresolvedAddr]bool{},
+		addressExists:     map[util.UnresolvedAddr]struct{}{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
 		defaultZoneConfig: defaultZoneConfig,
@@ -695,7 +695,7 @@ func (g *Gossip) SimulationCycle() {
 // exists. Returns true if the address was new. The caller must hold the gossip
 // mutex.
 func (g *Gossip) maybeAddAddressLocked(addr util.UnresolvedAddr) bool {
-	if g.addressExists[addr] {
+	if _, ok := g.addressExists[addr]; ok {
 		return false
 	}
 	ctx := g.AnnotateCtx(context.TODO())
@@ -704,7 +704,7 @@ func (g *Gossip) maybeAddAddressLocked(addr util.UnresolvedAddr) bool {
 		return false
 	}
 	g.addresses = append(g.addresses, addr)
-	g.addressExists[addr] = true
+	g.addressExists[addr] = struct{}{}
 	log.Eventf(ctx, "add address %s", addr)
 	return true
 }
@@ -743,7 +743,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 	g.addressIdx = 0
 	g.bootstrapInfo.Addresses = g.bootstrapInfo.Addresses[:0]
 	g.bootstrapAddrs = map[util.UnresolvedAddr]roachpb.NodeID{}
-	g.addressExists = map[util.UnresolvedAddr]bool{}
+	g.addressExists = map[util.UnresolvedAddr]struct{}{}
 	g.addressesTried = map[int]struct{}{}
 
 	var desc roachpb.NodeDescriptor
