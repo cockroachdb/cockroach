@@ -210,3 +210,19 @@ func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
 func SafeOperational(s interface{}) redact.SafeValue {
 	return redact.Safe(s)
 }
+
+// SafeManaged is a wrapper around `redact.Sprint` and `redact.Safe`
+// that conditionally marks the object as safe/unsafe depending on
+// whether or not we are running as a managed service. Certain types
+// of data is normally considered "sensitive" from a redaction perspective
+// when logged from on-premises deployments, such as CLI arguments and
+// HTTP addresses. However, when running in a managed service, such as
+// CockroachCloud, this information is already known to the operators
+// and does not need to be treated as sensitive. This function marks
+// the provided object as safe/unsafe accordingly.
+func SafeManaged(s interface{}) redact.RedactableString {
+	if !IsManaged() {
+		return redact.Sprint(s)
+	}
+	return redact.Sprint(redact.Safe(s))
+}

@@ -451,6 +451,7 @@ var startCtx struct {
 	serverSSLCertsDir      string
 	serverCertPrincipalMap []string
 	serverListenAddr       string
+	serverManaged          bool
 
 	// The TLS auto-handshake parameters.
 	initToken             string

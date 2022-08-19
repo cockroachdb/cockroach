@@ -27,6 +27,7 @@ import (
 // Base config defaults.
 const (
 	defaultInsecure = false
+	defaultManaged  = false
 	defaultUser     = username.RootUser
 	httpScheme      = "http"
 	httpsScheme     = "https"
@@ -156,6 +157,11 @@ type Config struct {
 	// See: https://github.com/cockroachdb/cockroach/issues/53404
 	Insecure bool
 
+	// Managed specifies whether the server is being run as part
+	// of a managed service (e.g. CockroachCloud). Impacts log
+	// redaction policies.
+	Managed bool
+
 	// AcceptSQLWithoutTLS, when set, makes it possible for SQL
 	// clients to authenticate without TLS on a secure cluster.
 	//
@@ -261,6 +267,7 @@ func (*Config) HistogramWindowInterval() time.Duration {
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
+	cfg.Managed = defaultManaged
 	cfg.User = username.MakeSQLUsernameFromPreNormalizedString(defaultUser)
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr

@@ -473,6 +473,7 @@ func init() {
 		//
 		// NB: Insecure is deprecated. See #53404.
 		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		cliflagcfg.BoolFlag(f, &startCtx.serverManaged, cliflags.ServerManaged)
 
 		// Enable/disable various external storage endpoints.
 		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
@@ -890,6 +891,7 @@ func init() {
 		_ = extraServerFlagInit // guru assignment
 		// NB: Insecure is deprecated. See #53404.
 		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		cliflagcfg.BoolFlag(f, &startCtx.serverManaged, cliflags.ServerManaged)
 
 		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
@@ -989,6 +991,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	}
 	serverCfg.User = username.NodeUserName()
 	serverCfg.Insecure = startCtx.serverInsecure
+	serverCfg.Managed = startCtx.serverManaged
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 
 	// Construct the main RPC listen address.

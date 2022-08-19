@@ -99,6 +99,10 @@ type loggingT struct {
 		// to this logger already.
 		active        bool
 		firstUseStack string
+		// managed indicates whether or not we're running as part of a managed service
+		// (sourced from the `--managed` start flag). Impacts log redaction policies
+		// in log.SafeManaged.
+		managed bool
 	}
 
 	allSinkInfos sinkInfoRegistry
@@ -393,6 +397,27 @@ func setActive() {
 		logging.mu.active = true
 		logging.mu.firstUseStack = string(debug.Stack())
 	}
+}
+
+// SetManaged indicates to the global logging configuration that we are running
+// in a managed service, sourced originally from the `--managed` start cmd flag.
+// This impacts log redaction policies, such as in log.SafeManaged.
+func SetManaged(isManaged bool) {
+	if !isManaged {
+		return
+	}
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	logging.mu.managed = isManaged
+}
+
+// isManaged indicates whether or not we are running in a managed service,
+// sourced originally from the `--managed` start cmd flag. This impacts log
+// redaction policies, such as in log.SafeManaged.
+func IsManaged() bool {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+	return logging.mu.managed
 }
 
 const fatalErrorPostamble = `
