@@ -35,7 +35,7 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>
       name: "executionID",
       title: insightsTableTitles.executionID(execType),
       cell: (item: InsightEvent) => (
-        <Link to={`/insights/${item.transactionID}`}>
+        <Link to={`/insights/transaction/${item.transactionID}`}>
           {String(item.transactionID)}
         </Link>
       ),
@@ -50,8 +50,7 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>
     {
       name: "query",
       title: insightsTableTitles.query(execType),
-      cell: (item: InsightEvent) =>
-        QueriesCell({ transactionQueries: item.queries, textLimit: 50 }),
+      cell: (item: InsightEvent) => QueriesCell(item.queries, 50),
       sort: (item: InsightEvent) => item.queries.length,
     },
     {

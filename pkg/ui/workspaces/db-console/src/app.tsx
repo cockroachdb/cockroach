@@ -81,7 +81,8 @@ import ActiveTransactionDetails from "./views/transactions/activeTransactionDeta
 import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
 import InsightsOverviewPage from "src/views/insights/insightsOverview";
-import WorkloadInsightDetailsPageConnected from "src/views/insights/workloadInsightDetailsPageConnected";
+import TransactionInsightDetailsPageConnected from "src/views/insights/transactionInsightDetailsPageConnected";
+import StatementInsightDetailsPageConnected from "src/views/insights/statementInsightDetailsPageConnected";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -310,8 +311,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     component={InsightsOverviewPage}
                   />
                   <Route
-                    path={"/insights/:id"}
-                    component={WorkloadInsightDetailsPageConnected}
+                    path={"/insights/transaction/:id"}
+                    component={TransactionInsightDetailsPageConnected}
+                  />
+                  <Route
+                    path={"/insights/statement/:id"}
+                    component={StatementInsightDetailsPageConnected}
                   />
 
                   {/* debug pages */}

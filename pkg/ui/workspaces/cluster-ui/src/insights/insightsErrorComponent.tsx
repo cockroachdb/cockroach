@@ -14,28 +14,17 @@ import styles from "./workloadInsights/util/workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);
 
-type SQLInsightsErrorProps = {
-  execType: string;
-};
-
-export const InsightsError = (
-  props: SQLInsightsErrorProps,
-): React.ReactElement => {
-  return (
-    <div className={cx("row")}>
-      <span>
-        This page had an unexpected error while loading
-        {" " + props.execType}.
-      </span>
-      &nbsp;
-      <a
-        className={cx("action")}
-        onClick={() => {
-          window.location.reload();
-        }}
-      >
-        Reload this page
-      </a>
-    </div>
-  );
-};
+export const InsightsError = (): React.ReactElement => (
+  <div className={cx("row")}>
+    <span>This page had an unexpected error while loading insights.</span>
+    &nbsp;
+    <a
+      className={cx("action")}
+      onClick={() => {
+        window.location.reload();
+      }}
+    >
+      Reload this page
+    </a>
+  </div>
+);

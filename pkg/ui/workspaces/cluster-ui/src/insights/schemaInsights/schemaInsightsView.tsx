@@ -205,11 +205,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
           loading={schemaInsights == null}
           page="schema insights"
           error={schemaInsightsError}
-          renderError={() =>
-            InsightsError({
-              execType: "schema insights",
-            })
-          }
+          renderError={() => InsightsError()}
         >
           <div>
             <section className={sortableTableCx("cl-table-container")}>
