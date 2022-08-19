@@ -399,23 +399,27 @@ func checkServerArgsForCluster(
 	return nil
 }
 
-// AddAndStartServer creates a server with the specified arguments and appends it to
+// AddAndStartServer calls through to AddAndStartServerE.
+func (tc *TestCluster) AddAndStartServer(t *testing.T, serverArgs base.TestServerArgs) {
+	t.Helper()
+	require.NoError(t, tc.AddAndStartServerE(serverArgs))
+}
+
+// AddAndStartServerE creates a server with the specified arguments and appends it to
 // the TestCluster. It also starts it.
 //
 // The new Server's copy of serverArgs might be changed according to the
 // cluster's ReplicationMode.
-func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServerArgs) {
+func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
 		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 	}
 	_, err := tc.AddServer(serverArgs)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 
-	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
-		t.Fatal(err)
-	}
+	return tc.startServer(len(tc.Servers)-1, serverArgs)
 }
 
 // AddServer is like AddAndStartServer, except it does not start it.
