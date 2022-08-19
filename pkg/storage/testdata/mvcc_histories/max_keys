@@ -126,9 +126,9 @@ with t=A ts=11,0 max=3
   scan      k=k end=o reverse=true
 ----
 scan: "k" -> /BYTES/b @11.000000000,0
+scan: "k" -> /BYTES/c @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
-scan: "m" -> /BYTES/b @11.000000000,0
-scan: resume span ["n","o") RESUME_KEY_LIMIT nextBytes=0
+scan: resume span ["l","o") RESUME_KEY_LIMIT nextBytes=0
 scan: "n" -> /BYTES/b @11.000000000,0
 scan: "m" -> /BYTES/b @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
@@ -202,9 +202,9 @@ with t=B ts=12,0 max=3
   scan      k=k end=o
 ----
 scan: "k" -> /BYTES/b @12.000000000,0
+scan: "k" -> /BYTES/c @12.000000000,0
 scan: "l" -> /BYTES/b @12.000000000,0
-scan: "m" -> /BYTES/b @12.000000000,0
-scan: resume span ["n","o") RESUME_KEY_LIMIT nextBytes=0
+scan: resume span ["l","o") RESUME_KEY_LIMIT nextBytes=0
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=12.000000000,0 wto=false gul=0,0
 data: "a"/1.000000000,0 -> /BYTES/val-a

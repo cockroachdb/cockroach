@@ -40,6 +40,7 @@ with t=A
   get  k=k
 ----
 scan: "k" -> /BYTES/b @11.000000000,0
+scan: "k" -> /BYTES/c @11.000000000,0
 scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
@@ -88,6 +89,7 @@ with t=A
   get  k=k
 ----
 scan: "k" -> /BYTES/b @11.000000000,0
+scan: "k" -> /BYTES/c @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
@@ -104,6 +106,7 @@ with t=A
   get         k=k
 ----
 scan: "k" -> /BYTES/a @11.000000000,0
+scan: "k" -> /BYTES/c @11.000000000,0
 scan: "k/10" -> /BYTES/10 @11.000000000,0
 get: "k" -> /BYTES/a @11.000000000,0
 >> at end:
@@ -120,6 +123,7 @@ with t=A
   get         k=k
 ----
 scan: "k" -> /BYTES/b @11.000000000,0
+scan: "k" -> /BYTES/c @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
@@ -136,6 +140,7 @@ with t=A
   get         k=k
 ----
 scan: "k" -> /BYTES/b @11.000000000,0
+scan: "k" -> /BYTES/c @11.000000000,0
 scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
