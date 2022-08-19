@@ -57,6 +57,14 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		5000+rand.Intn(10000),
 	))
 
+	t.Run("no-table", func(t *testing.T) {
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 123")
+		checkBundle(
+			t, fmt.Sprint(rows), "",
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
 	t.Run("basic", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
@@ -91,7 +99,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		// The bundle url is inside the error detail.
 		var pqErr *pq.Error
 		_ = errors.As(err, &pqErr)
-		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", base)
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", base, plans, "distsql.html")
 	})
 
 	// Verify that we can issue the statement with prepare (which can happen
@@ -183,7 +191,9 @@ func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) 
 
 	// Make sure the bundle contains the expected list of files.
 	var files []string
+	foundSchema := false
 	for _, f := range unzip.File {
+		t.Logf("found file: %s", f.Name)
 		if f.UncompressedSize64 == 0 {
 			t.Fatalf("file %s is empty", f.Name)
 		}
@@ -208,7 +218,8 @@ func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) 
 		}
 
 		if f.Name == "schema.sql" {
-			if !strings.Contains(string(contents), tableName) {
+			foundSchema = true
+			if tableName != "" && !strings.Contains(string(contents), tableName) {
 				t.Errorf(
 					"expected table name to appear in schema.sql. tableName: %s\nfile contents:\n%s",
 					tableName,
@@ -216,6 +227,9 @@ func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) 
 				)
 			}
 		}
+	}
+	if !foundSchema {
+		t.Errorf("expected schema.sql to be included, was missing")
 	}
 
 	var expList []string
