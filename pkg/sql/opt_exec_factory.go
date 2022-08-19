@@ -2050,7 +2050,7 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
-	reasonDatum, err := eval.Expr(ef.planner.EvalContext(), reason)
+	reasonDatum, err := eval.Expr(ef.planner.EvalContext().Context, ef.planner.EvalContext(), reason)
 	if err != nil {
 		return nil, err
 	}

@@ -121,7 +121,9 @@ type probeRangeGenerator struct {
 	ranges []kv.KeyValue
 }
 
-func makeProbeRangeGenerator(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeProbeRangeGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
 	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
 	if err != nil {

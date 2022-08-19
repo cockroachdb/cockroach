@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
@@ -48,7 +49,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"password", types.String}, {"salt", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				password := tree.MustBeDString(args[0])
 				salt := tree.MustBeDString(args[1])
 				hash, err := crypt(string(password), string(salt))
@@ -67,7 +68,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -86,7 +87,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -111,7 +112,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				typ := tree.MustBeDString(args[0])
 				salt, err := genSalt(string(typ), 0)
 				if err != nil {
@@ -125,7 +126,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"type", types.String}, {"iter_count", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				typ := tree.MustBeDString(args[0])
 				rounds := tree.MustBeDInt(args[1])
 				salt, err := genSalt(string(typ), int(rounds))
@@ -144,7 +145,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDString(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))
@@ -163,7 +164,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"key", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDBytes(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))

@@ -21,8 +21,8 @@ import (
 
 // pp is used to store a printer's state.
 type pp struct {
-	ctx *eval.Context
-	buf *tree.FmtCtx
+	evalCtx *eval.Context
+	buf     *tree.FmtCtx
 
 	// padRight records whether the '-' flag is currently in effect.
 	padRight bool
@@ -51,10 +51,10 @@ func (p *pp) popInt() (v int, ok bool) {
 
 // Format formats according to a format specifier in the style of postgres format()
 // and returns the resulting string.
-func Format(ctx *eval.Context, format string, a ...tree.Datum) (string, error) {
+func Format(evalCtx *eval.Context, format string, a ...tree.Datum) (string, error) {
 	p := pp{
-		ctx: ctx,
-		buf: ctx.FmtCtx(tree.FmtArrayToString),
+		evalCtx: evalCtx,
+		buf:     evalCtx.FmtCtx(tree.FmtArrayToString),
 	}
 	err := p.doPrintf(format, a)
 	if err != nil {
@@ -108,7 +108,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 		case 'I':
 			writeFunc = func(buf *tree.FmtCtx) int {
 				lenBefore := buf.Len()
-				bare := p.ctx.FmtCtx(tree.FmtArrayToString)
+				bare := p.evalCtx.FmtCtx(tree.FmtArrayToString)
 				bare.FormatNode(arg)
 				str := bare.CloseAndGetString()
 				lexbase.EncodeRestrictedSQLIdent(&buf.Buffer, str, lexbase.EncNoFlags)
@@ -118,7 +118,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 			writeFunc = func(buf *tree.FmtCtx) int {
 				lenBefore := buf.Len()
 				var dStr tree.Datum
-				dStr, err = eval.PerformCast(p.ctx, arg, types.String)
+				dStr, err = eval.PerformCast(p.evalCtx, arg, types.String)
 				// This shouldn't be possible--anything can be cast to
 				// a string. err will be returned by printArg().
 				if err != nil {
@@ -148,7 +148,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 		return
 	}
 
-	scratch := p.ctx.FmtCtx(tree.FmtArrayToString)
+	scratch := p.evalCtx.FmtCtx(tree.FmtArrayToString)
 	for n := writeFunc(scratch); n < p.width; n++ {
 		p.buf.WriteRune(' ')
 	}
@@ -159,7 +159,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 
 // intFromArg gets the argNumth element of a. On return, isInt reports whether the argument has integer type.
 func intFromArg(
-	ctx *eval.Context, a []tree.Datum, argNum int,
+	evalCtx *eval.Context, a []tree.Datum, argNum int,
 ) (num int, isInt bool, newArgNum int) {
 	newArgNum = argNum
 	if argNum < len(a) && argNum >= 0 {
@@ -169,7 +169,7 @@ func intFromArg(
 			return 0, true, argNum + 1
 		}
 		if cast.ValidCast(datum.ResolvedType(), types.Int, cast.ContextImplicit) {
-			dInt, err := eval.PerformCast(ctx, datum, types.Int)
+			dInt, err := eval.PerformCast(evalCtx, datum, types.Int)
 			if err == nil {
 				num = int(tree.MustBeDInt(dInt))
 				isInt = true
@@ -260,12 +260,12 @@ formatLoop:
 					if rawArgNum < 1 {
 						return errors.New("positions must be positive and 1-indexed")
 					}
-					p.width, isNum, argNum = intFromArg(p.ctx, a, rawArgNum-1)
+					p.width, isNum, argNum = intFromArg(p.evalCtx, a, rawArgNum-1)
 					if !isNum {
 						return errors.New("non-numeric width")
 					}
 				} else {
-					p.width, isNum, argNum = intFromArg(p.ctx, a, argNum)
+					p.width, isNum, argNum = intFromArg(p.evalCtx, a, argNum)
 					if !isNum {
 						return errors.New("non-numeric width")
 					}

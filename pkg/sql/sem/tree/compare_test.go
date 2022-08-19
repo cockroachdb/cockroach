@@ -62,7 +62,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
-		if _, err := eval.Expr(ctx, typedExpr); err != nil {
+		if _, err := eval.Expr(context.Background(), ctx, typedExpr); err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
 		if typedExpr.(*tree.ComparisonExpr).Op.EvalOp == nil {

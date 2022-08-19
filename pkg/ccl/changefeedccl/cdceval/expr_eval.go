@@ -425,7 +425,7 @@ func (e *exprEval) typeCheck(
 		ctx, expr, targetType, "cdc", e.semaCtx,
 		volatility.Immutable, true)
 	if err == nil {
-		d, err := eval.Expr(e.evalCtx, typedExpr)
+		d, err := eval.Expr(ctx, e.evalCtx, typedExpr)
 		if err != nil {
 			return nil, err
 		}
@@ -476,7 +476,7 @@ func (e *exprEval) evalExpr(
 		if err != nil {
 			return nil, err
 		}
-		d, err := eval.Expr(e.evalCtx, typedExpr)
+		d, err := eval.Expr(ctx, e.evalCtx, typedExpr)
 		if err != nil {
 			return nil, err
 		}

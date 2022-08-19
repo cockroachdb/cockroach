@@ -568,7 +568,7 @@ func isMD5Hash(hashedPassword []byte) bool {
 //   - hashedPassword is a translated version from the input,
 //     suitable for storage in the password database.
 func CheckPasswordHashValidity(
-	ctx context.Context, inputPassword []byte,
+	inputPassword []byte,
 ) (
 	isPreHashed, supportedScheme bool,
 	issueNum int,

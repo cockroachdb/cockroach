@@ -248,7 +248,9 @@ func makeImportRand(c *CellInfoAnnotation) randomSource {
 // TODO(anzoteh96): As per the issue in #51004, having too many columns with
 // default expression unique_rowid() could cause collisions when IMPORTs are run
 // too close to each other. It will therefore be nice to fix this problem.
-func importUniqueRowID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+func importUniqueRowID(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	avoidCollisionsWithSQLsIDs := uint64(1 << 63)
 	shiftedIndex := int64(c.uniqueRowIDTotal)*c.RowID + int64(c.uniqueRowIDInstance)
@@ -258,7 +260,9 @@ func importUniqueRowID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, err
 	return tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | returnIndex)), nil
 }
 
-func importRandom(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+func importRandom(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	if c.randSource == nil {
 		c.randSource = makeImportRand(c)
@@ -266,7 +270,9 @@ func importRandom(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	return tree.NewDFloat(tree.DFloat(c.randSource.Float64(c))), nil
 }
 
-func importGenUUID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+func importGenUUID(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	if c.randSource == nil {
 		c.randSource = makeImportRand(c)
@@ -490,7 +496,9 @@ func reserveChunkOfSeqVals(
 	return nil
 }
 
-func importNextVal(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+func importNextVal(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	seqName := tree.MustBeDString(args[0])
 	seqMetadata, ok := c.seqNameToMetadata[string(seqName)]
@@ -500,7 +508,9 @@ func importNextVal(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) 
 	return importNextValHelper(evalCtx, c, seqMetadata)
 }
 
-func importNextValByID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+func importNextValByID(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	oid := tree.MustBeDOid(args[0])
 	seqMetadata, ok := c.seqIDToMetadata[descpb.ID(oid.Oid)]
@@ -513,7 +523,7 @@ func importNextValByID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, err
 // importDefaultToDatabasePrimaryRegion returns the primary region of the
 // database being imported into.
 func importDefaultToDatabasePrimaryRegion(
-	evalCtx *eval.Context, _ tree.Datums,
+	ctx context.Context, evalCtx *eval.Context, _ tree.Datums,
 ) (tree.Datum, error) {
 	regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
 	if err != nil {
@@ -711,7 +721,7 @@ type unsafeErrExpr struct {
 var _ tree.TypedExpr = &unsafeErrExpr{}
 
 // Eval implements the TypedExpr interface.
-func (e *unsafeErrExpr) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
+func (e *unsafeErrExpr) Eval(_ context.Context, _ tree.ExprEvaluator) (tree.Datum, error) {
 	return nil, e.err
 }
 

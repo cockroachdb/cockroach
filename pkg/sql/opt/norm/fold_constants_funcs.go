@@ -310,7 +310,7 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) (_ opt.Sc
 		return nil, false
 	}
 
-	result, err := eval.UnaryOp(c.f.evalCtx, o.EvalOp, datum)
+	result, err := eval.UnaryOp(c.f.evalCtx.Context, c.f.evalCtx, o.EvalOp, datum)
 	if err != nil {
 		return nil, false
 	}
@@ -368,7 +368,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 	datum := memo.ExtractConstDatum(input)
 	texpr := tree.NewTypedCastExpr(datum, typ)
 
-	result, err := eval.Expr(c.f.evalCtx, texpr)
+	result, err := eval.Expr(c.f.evalCtx.Context, c.f.evalCtx, texpr)
 	if err != nil {
 		// Casts can require KV operations. KV errors are not safe to swallow.
 		// Check if the error is a KV error, and, if so, propagate it rather
@@ -529,7 +529,7 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) (_ opt.Scalar
 		}
 		inputD := memo.ExtractConstDatum(input)
 		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, resolvedType)
-		result, err := eval.Expr(c.f.evalCtx, texpr)
+		result, err := eval.Expr(c.f.evalCtx.Context, c.f.evalCtx, texpr)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType()), true
 		}
@@ -562,7 +562,7 @@ func (c *CustomFuncs) FoldColumnAccess(
 		datum := memo.ExtractConstDatum(input)
 
 		texpr := tree.NewTypedColumnAccessExpr(datum, "" /* by-index access */, int(idx))
-		result, err := eval.Expr(c.f.evalCtx, texpr)
+		result, err := eval.Expr(c.f.evalCtx.Context, c.f.evalCtx, texpr)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType()), true
 		}
@@ -633,7 +633,7 @@ func (c *CustomFuncs) FoldFunction(
 		private.Overload,
 	)
 
-	result, err := eval.Expr(c.f.evalCtx, fn)
+	result, err := eval.Expr(c.f.evalCtx.Context, c.f.evalCtx, fn)
 	if err != nil {
 		return nil, false
 	}

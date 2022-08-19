@@ -80,7 +80,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			if err != nil {
 				return nil, err
 			}
-			fromVals[i], err = eval.Expr(p.EvalContext(), typedExpr)
+			fromVals[i], err = eval.Expr(ctx, p.EvalContext(), typedExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -93,7 +93,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			if err != nil {
 				return nil, err
 			}
-			toVals[i], err = eval.Expr(p.EvalContext(), typedExpr)
+			toVals[i], err = eval.Expr(ctx, p.EvalContext(), typedExpr)
 			if err != nil {
 				return nil, err
 			}

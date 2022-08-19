@@ -81,7 +81,7 @@ func ExprFmtCtxBase(evalCtx *eval.Context) *tree.FmtCtx {
 		tree.FmtCheckEquivalence,
 		tree.FmtPlaceholderFormat(
 			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
-				d, err := eval.Expr(evalCtx, p)
+				d, err := eval.Expr(evalCtx.Context, evalCtx, p)
 				if err != nil {
 					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 				}

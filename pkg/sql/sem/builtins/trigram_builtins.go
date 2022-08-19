@@ -11,6 +11,8 @@
 package builtins
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +36,7 @@ var trigramBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"left", types.String}, {"right", types.String}},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				l, r := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
 				f := trigram.Similarity(l, r)
 				return tree.NewDFloat(tree.DFloat(f)), nil
@@ -51,7 +53,7 @@ var trigramBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.String}},
 			ReturnType: tree.FixedReturnType(types.StringArray),
-			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				arr := trigram.MakeTrigrams(s, true /* pad */)
 				ret := tree.NewDArray(types.String)

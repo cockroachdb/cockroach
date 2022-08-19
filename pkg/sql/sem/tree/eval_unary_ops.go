@@ -10,11 +10,13 @@
 
 package tree
 
+import "context"
+
 // UnaryNoop is a UnaryEvalOp.
 type UnaryNoop struct{}
 
 // Eval of UnaryNoop does nothing and returns the passed Datum.
-func (v *UnaryNoop) Eval(evaluator OpEvaluator, d Datum) (Datum, error) {
+func (v *UnaryNoop) Eval(ctx context.Context, evaluator OpEvaluator, d Datum) (Datum, error) {
 	return d, nil
 }
 

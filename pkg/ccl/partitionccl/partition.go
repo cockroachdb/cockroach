@@ -112,7 +112,7 @@ func valueEncodePartitionTuple(
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"%s: partition values must be constant", typedExpr)
 		}
-		datum, err := eval.Expr(evalCtx, typedExpr)
+		datum, err := eval.Expr(ctx, evalCtx, typedExpr)
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 		}

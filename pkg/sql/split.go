@@ -113,7 +113,7 @@ func parseExpirationTime(evalCtx *eval.Context, expireExpr tree.TypedExpr) (hlc.
 	if !eval.IsConst(evalCtx, expireExpr) {
 		return hlc.Timestamp{}, errors.Errorf("SPLIT AT: only constant expressions are allowed for expiration")
 	}
-	d, err := eval.Expr(evalCtx, expireExpr)
+	d, err := eval.Expr(evalCtx.Context, evalCtx, expireExpr)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}

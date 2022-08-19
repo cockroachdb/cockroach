@@ -462,10 +462,10 @@ func TestGetJoinMultiplicity(t *testing.T) {
 }
 
 type testOpBuilder struct {
-	t   *testing.T
-	ctx *eval.Context
-	mem *Memo
-	cat *testcat.Catalog
+	t       *testing.T
+	evalCtx *eval.Context
+	mem     *Memo
+	cat     *testcat.Catalog
 }
 
 func makeOpBuilder(t *testing.T) testOpBuilder {
@@ -473,10 +473,10 @@ func makeOpBuilder(t *testing.T) testOpBuilder {
 	var mem Memo
 	mem.Init(&ctx)
 	ob := testOpBuilder{
-		t:   t,
-		ctx: &ctx,
-		mem: &mem,
-		cat: testcat.New(),
+		t:       t,
+		evalCtx: &ctx,
+		mem:     &mem,
+		cat:     testcat.New(),
 	}
 	return ob
 }

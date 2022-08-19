@@ -11,6 +11,7 @@
 package execbuilder
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -340,16 +341,18 @@ func (b *Builder) boundedStaleness() bool {
 	return b.evalCtx != nil && b.evalCtx.BoundedStaleness()
 }
 
-// mdVarContainer is an IndexedVarContainer implementation used by BuildScalar -
-// it maps indexed vars to columns in the metadata.
+// mdVarContainer is an eval.IndexedVarContainer implementation used by
+// BuildScalar - it maps indexed vars to columns in the metadata.
 type mdVarContainer struct {
 	md *opt.Metadata
 }
 
-var _ tree.IndexedVarContainer = &mdVarContainer{}
+var _ eval.IndexedVarContainer = &mdVarContainer{}
 
-// IndexedVarEval is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+// IndexedVarEval is part of the eval.IndexedVarContainer interface.
+func (c *mdVarContainer) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("no eval allowed in mdVarContainer")
 }
 

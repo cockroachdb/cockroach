@@ -25,12 +25,10 @@ import (
 
 type testVarContainer struct{}
 
+var _ tree.IndexedVarContainer = testVarContainer{}
+
 func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return types.Int
-}
-
-func (d testVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
-	return nil, nil
 }
 
 func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {

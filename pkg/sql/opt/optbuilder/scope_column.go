@@ -176,7 +176,7 @@ func (c *scopeColumn) String() string {
 	return tree.AsString(c)
 }
 
-func (c *scopeColumn) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
+func (c *scopeColumn) Eval(ctx context.Context, v tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("scopeColumn must be replaced before evaluation"))
 }
 

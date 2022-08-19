@@ -317,7 +317,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	var replaceFn ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
-			d, err := eval.Expr(f.evalCtx, e.(*memo.PlaceholderExpr).Value)
+			d, err := eval.Expr(f.evalCtx.Context, f.evalCtx, e.(*memo.PlaceholderExpr).Value)
 			if err != nil {
 				panic(err)
 			}

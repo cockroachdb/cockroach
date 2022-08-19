@@ -142,7 +142,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		}
 	} else {
 		reportedValue = tree.AsStringWithFlags(n.value, tree.FmtBareStrings)
-		value, err := eval.Expr(params.p.EvalContext(), n.value)
+		value, err := eval.Expr(params.ctx, params.p.EvalContext(), n.value)
 		if err != nil {
 			return err
 		}
@@ -177,7 +177,7 @@ func (n *alterTenantSetClusterSettingNode) Values() tree.Datums            { ret
 func (n *alterTenantSetClusterSettingNode) Close(_ context.Context)        {}
 
 func resolveTenantID(p *planner, expr tree.TypedExpr) (uint64, tree.Datum, error) {
-	tenantIDd, err := eval.Expr(p.EvalContext(), expr)
+	tenantIDd, err := eval.Expr(p.EvalContext().Context, p.EvalContext(), expr)
 	if err != nil {
 		return 0, nil, err
 	}

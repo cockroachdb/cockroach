@@ -10,12 +10,16 @@
 
 package eval
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"context"
 
-// IndexedVarContainer extends tree.IndexedVarContainer with the ability
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
+
+// IndexedVarContainer extends tree.IndexedVarContainer with the ability to
 // evaluate the underlying expression.
 type IndexedVarContainer interface {
 	tree.IndexedVarContainer
 
-	IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error)
+	IndexedVarEval(ctx context.Context, idx int, e tree.ExprEvaluator) (tree.Datum, error)
 }

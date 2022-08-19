@@ -51,14 +51,14 @@ const visitorTemplate = header +
 // ExprEvaluator is used to evaluate TypedExpr expressions.
 type ExprEvaluator interface {
 {{- range . }}{{ if isDatum . }}{{ else }}
-	Eval{{.}}({{ template "name" . }}) (Datum, error)
+	Eval{{.}}(context.Context, {{ template "name" . }}) (Datum, error)
 {{- end}}{{ end }}
 }
 
 {{ range . }}
 // Eval is part of the TypedExpr interface.
-func (node {{ template "name" . }}) Eval(v ExprEvaluator) (Datum, error) {
-	{{ if isDatum . }}return node, nil{{ else }}return v.Eval{{.}}(node){{ end }}
+func (node {{ template "name" . }}) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	{{ if isDatum . }}return node, nil{{ else }}return v.Eval{{.}}(ctx, node){{ end }}
 }
 {{ end }}
 `

@@ -11,6 +11,8 @@
 package tree
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -43,11 +45,11 @@ type CompareAnyTupleOp CompareTupleOp
 
 // Eval suppresses an auto-generated binding and membership in the
 // OpEvaluator interface.
-func (t *CompareAnyTupleOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
+func (t *CompareAnyTupleOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	if a == DNull || b == DNull {
 		return MakeDBool(a == DNull && b == DNull), nil
 	}
-	return e.EvalCompareTupleOp((*CompareTupleOp)(t), a, b)
+	return e.EvalCompareTupleOp(ctx, (*CompareTupleOp)(t), a, b)
 }
 
 // MatchLikeOp is a BinaryEvalOp.

@@ -119,7 +119,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 			if err != nil {
 				return nil, err
 			}
-			datum, err := eval.Expr(evalCtx, typedExpr)
+			datum, err := eval.Expr(ctx, evalCtx, typedExpr)
 			if err != nil {
 				return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 			}

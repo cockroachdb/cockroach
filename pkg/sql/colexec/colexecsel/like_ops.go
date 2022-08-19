@@ -21,7 +21,7 @@ import (
 // pattern, or NOT LIKE if the negate argument is true. The implementation
 // varies depending on the complexity of the pattern.
 func GetLikeOperator(
-	ctx *eval.Context,
+	evalCtx *eval.Context,
 	input colexecop.Operator,
 	colIdx int,
 	pattern string,
@@ -79,7 +79,7 @@ func GetLikeOperator(
 			caseInsensitive: caseInsensitive,
 		}, nil
 	case colexeccmp.LikeRegexp:
-		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), caseInsensitive, '\\')
+		re, err := eval.ConvertLikeToRegexp(evalCtx, string(patterns[0]), caseInsensitive, '\\')
 		if err != nil {
 			return nil, err
 		}

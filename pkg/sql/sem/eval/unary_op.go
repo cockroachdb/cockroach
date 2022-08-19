@@ -11,6 +11,7 @@
 package eval
 
 import (
+	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -18,32 +19,40 @@ import (
 )
 
 // UnaryOp will evaluate a tree.UnaryEvalOp on a Datum into another Datum.
-func UnaryOp(ctx *Context, op tree.UnaryEvalOp, in tree.Datum) (tree.Datum, error) {
-	return op.Eval((*evaluator)(ctx), in)
+func UnaryOp(
+	ctx context.Context, evalCtx *Context, op tree.UnaryEvalOp, in tree.Datum,
+) (tree.Datum, error) {
+	return op.Eval(ctx, (*evaluator)(evalCtx), in)
 }
 
-func (e *evaluator) EvalCbrtDecimalOp(_ *tree.CbrtDecimalOp, d tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalCbrtDecimalOp(
+	ctx context.Context, _ *tree.CbrtDecimalOp, d tree.Datum,
+) (tree.Datum, error) {
 	dec := &d.(*tree.DDecimal).Decimal
 	return DecimalCbrt(dec)
 }
 
-func (e *evaluator) EvalCbrtFloatOp(_ *tree.CbrtFloatOp, d tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalCbrtFloatOp(
+	ctx context.Context, _ *tree.CbrtFloatOp, d tree.Datum,
+) (tree.Datum, error) {
 	return Cbrt(float64(*d.(*tree.DFloat)))
 }
 
 func (e *evaluator) EvalComplementINetOp(
-	_ *tree.ComplementINetOp, d tree.Datum,
+	ctx context.Context, _ *tree.ComplementINetOp, d tree.Datum,
 ) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(d).IPAddr
 	return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr.Complement()}), nil
 }
 
-func (e *evaluator) EvalComplementIntOp(_ *tree.ComplementIntOp, d tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalComplementIntOp(
+	ctx context.Context, _ *tree.ComplementIntOp, d tree.Datum,
+) (tree.Datum, error) {
 	return tree.NewDInt(^tree.MustBeDInt(d)), nil
 }
 
 func (e *evaluator) EvalComplementVarBitOp(
-	_ *tree.ComplementVarBitOp, d tree.Datum,
+	ctx context.Context, _ *tree.ComplementVarBitOp, d tree.Datum,
 ) (tree.Datum, error) {
 	p := tree.MustBeDBitArray(d)
 	return &tree.DBitArray{
@@ -51,17 +60,21 @@ func (e *evaluator) EvalComplementVarBitOp(
 	}, nil
 }
 
-func (e *evaluator) EvalSqrtDecimalOp(_ *tree.SqrtDecimalOp, d tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalSqrtDecimalOp(
+	ctx context.Context, _ *tree.SqrtDecimalOp, d tree.Datum,
+) (tree.Datum, error) {
 	dec := &d.(*tree.DDecimal).Decimal
 	return DecimalSqrt(dec)
 }
 
-func (e *evaluator) EvalSqrtFloatOp(_ *tree.SqrtFloatOp, d tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalSqrtFloatOp(
+	ctx context.Context, _ *tree.SqrtFloatOp, d tree.Datum,
+) (tree.Datum, error) {
 	return Sqrt(float64(*d.(*tree.DFloat)))
 }
 
 func (e *evaluator) EvalUnaryMinusDecimalOp(
-	_ *tree.UnaryMinusDecimalOp, d tree.Datum,
+	ctx context.Context, _ *tree.UnaryMinusDecimalOp, d tree.Datum,
 ) (tree.Datum, error) {
 	dec := &d.(*tree.DDecimal).Decimal
 	dd := &tree.DDecimal{}
@@ -70,12 +83,14 @@ func (e *evaluator) EvalUnaryMinusDecimalOp(
 }
 
 func (e *evaluator) EvalUnaryMinusFloatOp(
-	_ *tree.UnaryMinusFloatOp, d tree.Datum,
+	ctx context.Context, _ *tree.UnaryMinusFloatOp, d tree.Datum,
 ) (tree.Datum, error) {
 	return tree.NewDFloat(-*d.(*tree.DFloat)), nil
 }
 
-func (e *evaluator) EvalUnaryMinusIntOp(_ *tree.UnaryMinusIntOp, d tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalUnaryMinusIntOp(
+	ctx context.Context, _ *tree.UnaryMinusIntOp, d tree.Datum,
+) (tree.Datum, error) {
 	i := tree.MustBeDInt(d)
 	if i == math.MinInt64 {
 		return nil, tree.ErrIntOutOfRange
@@ -84,7 +99,7 @@ func (e *evaluator) EvalUnaryMinusIntOp(_ *tree.UnaryMinusIntOp, d tree.Datum) (
 }
 
 func (e *evaluator) EvalUnaryMinusIntervalOp(
-	_ *tree.UnaryMinusIntervalOp, d tree.Datum,
+	ctx context.Context, _ *tree.UnaryMinusIntervalOp, d tree.Datum,
 ) (tree.Datum, error) {
 	i := d.(*tree.DInterval).Duration
 	i.SetNanos(-i.Nanos())

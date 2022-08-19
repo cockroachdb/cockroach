@@ -68,7 +68,7 @@ func TestCastFromNull(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		castExpr := tree.CastExpr{Expr: tree.DNull, Type: typ}
-		res, err := eval.Expr(nil, &castExpr)
+		res, err := eval.Expr(context.Background(), nil, &castExpr)
 		require.NoError(t, err)
 		require.Equal(t, tree.DNull, res)
 	}
@@ -93,11 +93,11 @@ func TestStringConcat(t *testing.T) {
 		require.NoError(t, err)
 		concatOp := treebin.MakeBinaryOperator(treebin.Concat)
 		concatExprLeft := tree.NewTypedBinaryExpr(concatOp, tree.NewDString(""), d, types.String)
-		resLeft, err := eval.Expr(&evalCtx, concatExprLeft)
+		resLeft, err := eval.Expr(ctx, &evalCtx, concatExprLeft)
 		require.NoError(t, err)
 		require.Equal(t, expected, resLeft)
 		concatExprRight := tree.NewTypedBinaryExpr(concatOp, d, tree.NewDString(""), types.String)
-		resRight, err := eval.Expr(&evalCtx, concatExprRight)
+		resRight, err := eval.Expr(ctx, &evalCtx, concatExprRight)
 		require.NoError(t, err)
 		require.Equal(t, expected, resRight)
 	}

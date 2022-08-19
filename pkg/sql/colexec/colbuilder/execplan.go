@@ -2699,7 +2699,7 @@ func evalTupleIfConst(evalCtx *eval.Context, t *tree.Tuple) (_ tree.Datum, ok bo
 			return nil, false
 		}
 	}
-	tuple, err := eval.Expr(evalCtx, t)
+	tuple, err := eval.Expr(evalCtx.Context, evalCtx, t)
 	if err != nil {
 		return nil, false
 	}

@@ -160,7 +160,7 @@ func Eval(
 				if err != nil {
 					return eval.AsOfSystemTime{}, err
 				}
-				nearestOnlyEval, err := eval.Expr(evalCtx, nearestOnlyExpr)
+				nearestOnlyEval, err := eval.Expr(ctx, evalCtx, nearestOnlyExpr)
 				if err != nil {
 					return eval.AsOfSystemTime{}, err
 				}
@@ -193,7 +193,7 @@ func Eval(
 		}
 	}
 
-	d, err := eval.Expr(evalCtx, te)
+	d, err := eval.Expr(ctx, evalCtx, te)
 	if err != nil {
 		return eval.AsOfSystemTime{}, err
 	}

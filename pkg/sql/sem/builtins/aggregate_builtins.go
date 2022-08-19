@@ -2478,9 +2478,9 @@ type corrAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newCorrAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newCorrAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &corrAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2494,10 +2494,10 @@ type finalCorrAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalCorrAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newFinalCorrAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &finalCorrAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2512,9 +2512,9 @@ type covarPopAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newCovarPopAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newCovarPopAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &covarPopAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2528,10 +2528,12 @@ type finalCovarPopAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalCovarPopAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newFinalCovarPopAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &finalCovarPopAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2560,10 +2562,12 @@ type finalRegrSXXAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalRegrSXXAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newFinalRegrSXXAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &finalRegrSXXAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2579,10 +2583,12 @@ type finalRegrSXYAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalRegrSXYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newFinalRegrSXYAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &finalRegrSXYAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2597,10 +2603,12 @@ type finalRegrSYYAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalRegrSYYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newFinalRegrSYYAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &finalRegrSYYAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2615,9 +2623,9 @@ type covarSampAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newCovarSampAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newCovarSampAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &covarSampAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2631,10 +2639,12 @@ type finalCovarSampAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalCovarSampAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newFinalCovarSampAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &finalCovarSampAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2650,9 +2660,11 @@ type regressionAvgXAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionAvgXAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newRegressionAvgXAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &regressionAvgXAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2668,11 +2680,11 @@ type finalRegressionAvgXAggregate struct {
 }
 
 func newFinalRegressionAvgXAggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionAvgXAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2688,9 +2700,11 @@ type regressionAvgYAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionAvgYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newRegressionAvgYAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &regressionAvgYAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2706,11 +2720,11 @@ type finalRegressionAvgYAggregate struct {
 }
 
 func newFinalRegressionAvgYAggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionAvgYAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2726,10 +2740,10 @@ type regressionInterceptAggregate struct {
 }
 
 func newRegressionInterceptAggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &regressionInterceptAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2744,11 +2758,11 @@ type finalRegressionInterceptAggregate struct {
 }
 
 func newFinalRegressionInterceptAggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionInterceptAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2763,9 +2777,11 @@ type regressionR2Aggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionR2Aggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newRegressionR2Aggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &regressionR2Aggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2780,11 +2796,11 @@ type finalRegressionR2Aggregate struct {
 }
 
 func newFinalRegressionR2Aggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionR2Aggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2801,10 +2817,10 @@ type regressionSlopeAggregate struct {
 }
 
 func newRegressionSlopeAggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &regressionSlopeAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2820,11 +2836,11 @@ type finalRegressionSlopeAggregate struct {
 }
 
 func newFinalRegressionSlopeAggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionSlopeAggregate{
 		finalRegressionAccumulatorDecimalBase{
-			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(evalCtx),
 		},
 	}
 }
@@ -2839,9 +2855,11 @@ type regressionSXXAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSXXAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newRegressionSXXAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &regressionSXXAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2856,9 +2874,11 @@ type regressionSXYAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSXYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newRegressionSXYAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &regressionSXYAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -2872,9 +2892,11 @@ type regressionSYYAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSYYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
+func newRegressionSYYAggregate(
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
 	return &regressionSYYAggregate{
-		makeRegressionAccumulatorDecimalBase(ctx),
+		makeRegressionAccumulatorDecimalBase(evalCtx),
 	}
 }
 
@@ -3668,9 +3690,9 @@ func newFloatFinalSqrdiffAggregate(
 }
 
 func newDecimalFinalSqrdiffAggregate(
-	_ []*types.T, ctx *eval.Context, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
-	return newDecimalSumSqrDiffs(ctx)
+	return newDecimalSumSqrDiffs(evalCtx)
 }
 
 type floatSumSqrDiffsAggregate struct {
