@@ -81,11 +81,11 @@ func TestCleanupLastRampup(t *testing.T) {
 		startFiles []string
 		maxP       int64
 		cleaned    []string
-		preserved  map[int]bool
+		preserved  map[int]struct{}
 	}{
 		// When the directory is empty, nothing happens.
-		{[]string{}, 0, []string{}, map[int]bool{}},
-		{[]string{}, 5, []string{}, map[int]bool{}},
+		{[]string{}, 0, []string{}, map[int]struct{}{}},
+		{[]string{}, 5, []string{}, map[int]struct{}{}},
 		// General case, just one file.
 		{
 			// Starting files.
@@ -97,7 +97,7 @@ func TestCleanupLastRampup(t *testing.T) {
 			// Nothing gets cleaned.
 			[]string{},
 			// The one file gets preserved.
-			map[int]bool{0: true},
+			map[int]struct{}{0: {}},
 		},
 		// General case.
 		{
@@ -125,7 +125,7 @@ func TestCleanupLastRampup(t *testing.T) {
 				"memprof.2020-06-15T13_19_19.005.1",
 			},
 			// The last two files in the 2nd upramp are preserved.
-			map[int]bool{7: true, 8: true},
+			map[int]struct{}{7: {}, 8: {}},
 		},
 		// Odd case: num files to keep = 0 per upramp.  Everything gets
 		// deleted _inside the last upramp_ but previous upramps are
@@ -156,7 +156,7 @@ func TestCleanupLastRampup(t *testing.T) {
 				"memprof.2020-06-15T13_19_19.005.1",
 			},
 			// No file preserved.
-			map[int]bool{},
+			map[int]struct{}{},
 		},
 		// Odd case: bogus filenames "in the middle".
 		{
@@ -190,7 +190,7 @@ func TestCleanupLastRampup(t *testing.T) {
 				"memprof.2020-06-15T13_19_19.007.1",
 			},
 			// The last two _valid_ files in the 2nd upramp are preserved.
-			map[int]bool{8: true, 10: true},
+			map[int]struct{}{8: {}, 10: {}},
 		},
 	}
 

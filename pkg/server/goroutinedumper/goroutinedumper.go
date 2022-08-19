@@ -142,12 +142,12 @@ func (gd *GoroutineDumper) gcDumps(ctx context.Context, now time.Time) {
 // PreFilter is part of the dumpstore.Dumper interface.
 func (gd *GoroutineDumper) PreFilter(
 	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
-) (preserved map[int]bool, _ error) {
-	preserved = make(map[int]bool)
+) (preserved map[int]struct{}, _ error) {
+	preserved = make(map[int]struct{})
 	for i := len(files) - 1; i >= 0; i-- {
 		// Always preserve the last dump in chronological order.
 		if gd.CheckOwnsFile(ctx, files[i]) {
-			preserved[i] = true
+			preserved[i] = struct{}{}
 			break
 		}
 	}

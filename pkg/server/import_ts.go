@@ -149,8 +149,8 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 
 	nodeIDs := map[string]struct{}{}
 	storeIDs := map[string]struct{}{}
-	nodeMetrics := map[string]bool{}
-	storeMetrics := map[string]bool{}
+	nodeMetrics := map[string]struct{}{}
+	storeMetrics := map[string]struct{}{}
 
 	nodeMetricIdentifier := "cr.node."
 	storeMetricIdentifier := "cr.store."
@@ -178,11 +178,11 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 		if strings.HasPrefix(name, nodeMetricIdentifier) {
 			nodeIDs[source] = struct{}{}
 			metricName := strings.Replace(name, nodeMetricIdentifier, "", 1)
-			nodeMetrics[metricName] = true
+			nodeMetrics[metricName] = struct{}{}
 		} else if strings.HasPrefix(name, storeMetricIdentifier) {
 			storeIDs[source] = struct{}{}
 			metricName := strings.Replace(name, storeMetricIdentifier, "", 1)
-			storeMetrics[metricName] = true
+			storeMetrics[metricName] = struct{}{}
 		} else {
 			deferError(errors.Errorf("unknown metric %s", name))
 			continue
@@ -221,8 +221,8 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 
 func makeFakeNodeStatuses(
 	storeToNode map[roachpb.StoreID]roachpb.NodeID,
-	nodeMetrics map[string]bool,
-	storeMetrics map[string]bool,
+	nodeMetrics map[string]struct{},
+	storeMetrics map[string]struct{},
 ) []statuspb.NodeStatus {
 
 	var sl []statuspb.NodeStatus
