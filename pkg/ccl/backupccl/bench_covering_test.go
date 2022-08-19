@@ -58,7 +58,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 								if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
 									b.Fatal(err)
 								}
-								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil)
+								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil, 0)
 								b.ReportMetric(float64(len(cov)), "coverSize")
 							}
 						})
