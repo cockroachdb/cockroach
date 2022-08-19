@@ -374,5 +374,11 @@ WHERE active_queries LIKE 'SELECT user_name%'
 ----
 root
 
+# Verify that SET SESSION AUTHORIZATION *does* reset the role.
 statement ok
-RESET ROLE
+SET SESSION AUTHORIZATION DEFAULT
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+root  root  root  root

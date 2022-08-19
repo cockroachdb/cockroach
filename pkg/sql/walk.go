@@ -449,6 +449,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&sequenceSelectNode{}):                      "sequence select",
 	reflect.TypeOf(&serializeNode{}):                           "run",
 	reflect.TypeOf(&setClusterSettingNode{}):                   "set cluster setting",
+	reflect.TypeOf(&setSessionAuthorizationDefaultNode{}):      "set session authorization",
 	reflect.TypeOf(&setVarNode{}):                              "set",
 	reflect.TypeOf(&setZoneConfigNode{}):                       "configure zone",
 	reflect.TypeOf(&showFingerprintsNode{}):                    "show fingerprints",
