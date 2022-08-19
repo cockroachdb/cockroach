@@ -119,7 +119,7 @@ func NewGoroutineDumper(
 		return nil, errors.New("directory to store dumps could not be determined")
 	}
 
-	log.Infof(ctx, "writing goroutine dumps to %s", dir)
+	log.Infof(ctx, "writing goroutine dumps to %s", log.SafeManaged(dir))
 
 	gd := &GoroutineDumper{
 		heuristics: []heuristic{
