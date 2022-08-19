@@ -30,7 +30,7 @@ func TestRemoveOldAndTooBig(t *testing.T) {
 		startFiles []string
 		sizes      []int64
 		maxS       int64
-		preserved  map[int]bool
+		preserved  map[int]struct{}
 		cleaned    []string
 	}{
 		// Simple case: no files.
@@ -129,10 +129,10 @@ func TestRemoveOldAndTooBig(t *testing.T) {
 			25,
 			// The preserved files. This takes priority over size-based
 			// deletion.
-			map[int]bool{
-				0: true, // June 11
-				2: true, // June 13
-				3: true, // June 14
+			map[int]struct{}{
+				0: {}, // June 11
+				2: {}, // June 13
+				3: {}, // June 14
 			},
 			// Expected files to clean up. The other files
 			// are preserved.
@@ -162,7 +162,7 @@ type myDumper struct{}
 
 func (myDumper) PreFilter(
 	_ context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
-) (preserved map[int]bool, err error) {
+) (preserved map[int]struct{}, err error) {
 	panic("unimplemented")
 }
 

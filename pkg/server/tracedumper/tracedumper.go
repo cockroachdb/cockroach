@@ -53,12 +53,12 @@ type TraceDumper struct {
 // PreFilter is part of the dumpstore.Dumper interface.
 func (t *TraceDumper) PreFilter(
 	ctx context.Context, files []os.FileInfo, _ func(fileName string) error,
-) (preserved map[int]bool, err error) {
-	preserved = make(map[int]bool)
+) (preserved map[int]struct{}, err error) {
+	preserved = make(map[int]struct{})
 	for i := len(files) - 1; i >= 0; i-- {
 		// Always preserve the last dump in chronological order.
 		if t.CheckOwnsFile(ctx, files[i]) {
-			preserved[i] = true
+			preserved[i] = struct{}{}
 			break
 		}
 	}

@@ -2091,6 +2091,8 @@ func TestLint(t *testing.T) {
 			`map\[.*\]bool`,
 			"--",
 			"ccl",
+			"cli",
+			"server",
 			"sql/opt/norm*.go",
 			":!*_test.go",
 		)

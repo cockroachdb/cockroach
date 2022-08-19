@@ -44,12 +44,12 @@ type cpuProfiler struct{}
 // PreFilter is part of the dumpstore.Dumper interface.
 func (s cpuProfiler) PreFilter(
 	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
-) (preserved map[int]bool, _ error) {
-	preserved = make(map[int]bool)
+) (preserved map[int]struct{}, _ error) {
+	preserved = make(map[int]struct{})
 	// Always keep at least the last profile.
 	for i := len(files) - 1; i >= 0; i-- {
 		if s.CheckOwnsFile(ctx, files[i]) {
-			preserved[i] = true
+			preserved[i] = struct{}{}
 			break
 		}
 	}

@@ -64,7 +64,7 @@ type Dumper interface {
 	//
 	// There may be files not owned by this dumper in the files array;
 	// these should be ignored.
-	PreFilter(ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error) (preserved map[int]bool, err error)
+	PreFilter(ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error) (preserved map[int]struct{}, err error)
 
 	// CheckOwnsFile returns true iff the dumper owns the given file.
 	CheckOwnsFile(ctx context.Context, fi os.FileInfo) bool
@@ -128,7 +128,7 @@ func removeOldAndTooBigExcept(
 	files []os.FileInfo,
 	now time.Time,
 	maxS int64,
-	preserved map[int]bool,
+	preserved map[int]struct{},
 	fn func(string) error,
 ) {
 	actualSize := int64(0)
@@ -144,7 +144,7 @@ func removeOldAndTooBigExcept(
 		actualSize += fi.Size()
 
 		// Ignore all the preserved entries, even if they are "too old".
-		if preserved[i] {
+		if _, ok := preserved[i]; ok {
 			continue
 		}
 

@@ -90,7 +90,7 @@ func (s *profileStore) makeNewFileName(timestamp time.Time, curHeap int64) strin
 // PreFilter is part of the dumpstore.Dumper interface.
 func (s *profileStore) PreFilter(
 	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
-) (preserved map[int]bool, _ error) {
+) (preserved map[int]struct{}, _ error) {
 	maxP := maxProfiles.Get(&s.st.SV)
 	preserved = s.cleanupLastRampup(ctx, files, maxP, cleanupFn)
 	return
@@ -114,8 +114,8 @@ func (s *profileStore) CheckOwnsFile(ctx context.Context, fi os.FileInfo) bool {
 // corresponding to the last ramp-up that were not passed to fn.
 func (s *profileStore) cleanupLastRampup(
 	ctx context.Context, files []os.FileInfo, maxP int64, fn func(string) error,
-) (preserved map[int]bool) {
-	preserved = make(map[int]bool)
+) (preserved map[int]struct{}) {
+	preserved = make(map[int]struct{})
 	curMaxHeap := uint64(math.MaxUint64)
 	numFiles := int64(0)
 	for i := len(files) - 1; i >= 0; i-- {
@@ -143,7 +143,7 @@ func (s *profileStore) cleanupLastRampup(
 			}
 		} else {
 			// No: we preserve this file.
-			preserved[i] = true
+			preserved[i] = struct{}{}
 		}
 	}
 
