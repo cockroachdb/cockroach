@@ -50,7 +50,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetStreamIngestManager(evalCtx)
+				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -91,7 +91,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, errors.New("job_id cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetStreamIngestManager(evalCtx)
+				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -131,7 +131,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, errors.New("job_id cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetStreamIngestManager(evalCtx)
+				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -164,7 +164,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
+				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -201,7 +201,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, errors.New("stream_id or frontier_ts cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
+				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -243,7 +243,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]string{"stream_event"},
 			),
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
+				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -269,7 +269,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
+				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -304,7 +304,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
+				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
 				if err != nil {
 					return nil, err
 				}

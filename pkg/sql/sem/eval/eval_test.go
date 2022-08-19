@@ -104,7 +104,7 @@ func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) 
 	}
 
 	bld := execbuilder.New(
-		nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
+		ctx, nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
 		evalCtx, false, /* allowAutoCommit */
 	)
 	expr, err := bld.BuildScalar()

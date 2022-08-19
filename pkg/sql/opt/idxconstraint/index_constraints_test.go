@@ -136,7 +136,7 @@ func TestIndexConstraints(t *testing.T) {
 				remainingFilter := ic.RemainingFilters()
 				if !remainingFilter.IsTrue() {
 					execBld := execbuilder.New(
-						nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
+						context.Background(), nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
 						&remainingFilter, &evalCtx, false, /* allowAutoCommit */
 					)
 					expr, err := execBld.BuildScalar()

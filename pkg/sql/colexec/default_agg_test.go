@@ -148,7 +148,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				)
 				require.NoError(t, err)
 				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return agg.new(&colexecagg.NewAggregatorArgs{
+					return agg.new(context.Background(), &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
 						Input:          input[0],
