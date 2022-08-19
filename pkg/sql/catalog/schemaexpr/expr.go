@@ -309,7 +309,7 @@ func deserializeExprForFormatting(
 		if err == nil {
 			// An empty EvalContext is fine here since the expression has
 			// Immutable.
-			d, err := eval.Expr(&eval.Context{}, sanitizedExpr)
+			d, err := eval.Expr(ctx, &eval.Context{}, sanitizedExpr)
 			if err == nil {
 				return d, nil
 			}
@@ -378,10 +378,12 @@ type nameResolverIVarContainer struct {
 	cols []catalog.Column
 }
 
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-// Evaluation is not support, so this function panics.
+var _ eval.IndexedVarContainer = &nameResolverIVarContainer{}
+
+// IndexedVarEval implements the eval.IndexedVarContainer interface.
+// Evaluation is not supported, so this function panics.
 func (nrc *nameResolverIVarContainer) IndexedVarEval(
-	idx int, e tree.ExprEvaluator,
+	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	panic("unsupported")
 }
@@ -391,7 +393,7 @@ func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return nrc.cols[idx].GetType()
 }
 
-// IndexVarNodeFormatter implements the tree.IndexedVarContainer interface.
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (nrc *nameResolverIVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return nil
 }

@@ -57,6 +57,6 @@ func parseAsTyp(evalCtx *eval.Context, typ *types.T, s string) (tree.Datum, erro
 	if err != nil {
 		return nil, err
 	}
-	datum, err := eval.Expr(evalCtx, typedExpr)
+	datum, err := eval.Expr(evalCtx.Context, evalCtx, typedExpr)
 	return datum, err
 }

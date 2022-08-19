@@ -26,8 +26,12 @@ import (
 
 type testVarContainer []tree.Datum
 
-func (d testVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
-	return d[idx].Eval(e)
+var _ eval.IndexedVarContainer = testVarContainer{}
+
+func (d testVarContainer) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
+	return d[idx].Eval(ctx, e)
 }
 
 func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
@@ -103,7 +107,7 @@ func TestIndexedVars(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	evalCtx.IVarContainer = c
-	d, err := eval.Expr(evalCtx, typedExpr)
+	d, err := eval.Expr(ctx, evalCtx, typedExpr)
 	if err != nil {
 		t.Fatal(err)
 	}

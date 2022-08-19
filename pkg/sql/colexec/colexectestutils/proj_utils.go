@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -29,11 +30,13 @@ type MockTypeContext struct {
 	Typs []*types.T
 }
 
-var _ tree.IndexedVarContainer = &MockTypeContext{}
+var _ eval.IndexedVarContainer = &MockTypeContext{}
 
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (p *MockTypeContext) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
-	return tree.DNull.Eval(e)
+// IndexedVarEval implements the eval.IndexedVarContainer interface.
+func (p *MockTypeContext) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
+	return tree.DNull.Eval(ctx, e)
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.

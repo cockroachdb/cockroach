@@ -62,7 +62,7 @@ func evalLimit(
 
 	for _, datum := range data {
 		if datum.src != nil {
-			dstDatum, err := eval.Expr(evalCtx, datum.src)
+			dstDatum, err := eval.Expr(evalCtx.Context, evalCtx, datum.src)
 			if err != nil {
 				return count, offset, err
 			}
