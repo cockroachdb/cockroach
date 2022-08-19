@@ -40,8 +40,15 @@ expect {
   }
 }
 
+send "\\statement-diag list\r"
+eexpect "Statement diagnostics bundles:"
+eexpect "$id"
+eexpect "EXPLAIN"
+eexpect root@
+
 send "\\statement-diag download $id\r"
 eexpect "Bundle saved to"
+eexpect root@
 
 file_exists "stmt-bundle-$id.zip"
 
@@ -100,8 +107,15 @@ expect {
   }
 }
 
+send "\\statement-diag list\r"
+eexpect "Statement diagnostics bundles:"
+eexpect "$id"
+eexpect "EXPLAIN"
+eexpect root@
+
 send "\\statement-diag download $id\r"
 eexpect "Bundle saved to"
+eexpect root@
 
 file_exists "stmt-bundle-$id.zip"
 
