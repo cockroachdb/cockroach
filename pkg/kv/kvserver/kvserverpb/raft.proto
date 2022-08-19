@@ -214,6 +214,9 @@ message SnapshotResponse {
   Status status = 1;
   string message = 2;
   reserved 3;
+
+  // Traces from snapshot processing, returned on status APPLIED or ERROR.
+  repeated util.tracing.tracingpb.RecordedSpan collected_spans = 4 [(gogoproto.nullable) = false];
 }
 
 // DelegateSnapshotRequest is the request used to delegate send snapshot requests.
