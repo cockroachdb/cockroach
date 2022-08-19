@@ -203,7 +203,9 @@ func (sc *SchemaChanger) fixedTimestampTxnWithExecutor(
 	) error,
 ) error {
 	sd := NewFakeSessionData(sc.execCfg.SV())
-	return sc.txnWithExecutor(ctx, sd, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error {
+	return sc.txnWithExecutor(ctx, sd, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
 		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
 			return err
 		}

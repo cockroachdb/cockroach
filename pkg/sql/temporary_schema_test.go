@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -94,31 +95,31 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		require.NoError(t, err)
 		require.NoError(t, rows.Close())
 	}
-
-	require.NoError(
-		t,
-		s.ExecutorConfig().(ExecutorConfig).CollectionFactory.Txn(
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	cf := execCfg.CollectionFactory
+	require.NoError(t, cf.TxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ie sqlutil.InternalExecutor,
+	) error {
+		// Add a hack to not wait for one version on the descriptors.
+		defer descsCol.ReleaseAll(ctx)
+		defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(
+			ctx, txn, namesToID["defaultdb"],
+		)
+		if err != nil {
+			return err
+		}
+		return cleanupSchemaObjects(
 			ctx,
-			s.InternalExecutor().(*InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				execCfg := s.ExecutorConfig().(ExecutorConfig)
-				defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, namesToID["defaultdb"])
-				require.NoError(t, err)
-				err = cleanupSchemaObjects(
-					ctx,
-					execCfg.Settings,
-					txn,
-					descsCol,
-					execCfg.Codec,
-					s.InternalExecutor().(*InternalExecutor),
-					defaultDB,
-					tempSchemaName,
-				)
-				require.NoError(t, err)
-				return nil
-			}),
-	)
+			execCfg.Settings,
+			txn,
+			descsCol,
+			execCfg.Codec,
+			ie,
+			defaultDB,
+			tempSchemaName,
+		)
+	}))
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
 

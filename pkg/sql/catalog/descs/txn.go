@@ -41,7 +41,6 @@ import (
 // Deprecated: Use cf.TxnWithExecutor().
 func (cf *CollectionFactory) Txn(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
 ) error {
