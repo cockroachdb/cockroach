@@ -21,12 +21,12 @@ export enum InsightExecEnum {
 }
 
 export type InsightEvent = {
-  executionID: string;
+  transactionID: string;
   fingerprintID: string;
   queries: string[];
   insights: Insight[];
   startTime: Moment;
-  elapsedTime: number;
+  elapsedTimeMillis: number;
   contentionThreshold: number;
   application: string;
   execType: InsightExecEnum;
@@ -50,6 +50,29 @@ export type InsightEventDetails = {
   tableName: string;
   indexName: string;
   execType: InsightExecEnum;
+};
+
+export type StatementInsightEvent = {
+  // Some of these can be moved to a common InsightEvent type if txn query is updated.
+  statementID: string;
+  transactionID: string;
+  statementFingerprintID: string;
+  transactionFingerprintID: string;
+  startTime: Moment;
+  elapsedTimeMillis: number;
+  sessionID: string;
+  timeSpentWaiting?: moment.Duration;
+  isFullScan: boolean;
+  endTime: Moment;
+  databaseName: string;
+  rowsRead: number;
+  rowsWritten: number;
+  lastRetryReason?: string;
+  priority: string;
+  retries: number;
+  problems: string[];
+  query: string;
+  application: string;
 };
 
 export type Insight = {
