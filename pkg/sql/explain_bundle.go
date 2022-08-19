@@ -239,6 +239,9 @@ func (b *stmtBundleBuilder) addStatement() {
 func (b *stmtBundleBuilder) addOptPlans() {
 	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
+		b.z.AddFile("opt.txt", "no plan")
+		b.z.AddFile("opt-v.txt", "no plan")
+		b.z.AddFile("opt-vv.txt", "no plan")
 		return
 	}
 
@@ -257,9 +260,10 @@ func (b *stmtBundleBuilder) addOptPlans() {
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan(plan string) {
-	if plan != "" {
-		b.z.AddFile("plan.txt", plan)
+	if plan == "" {
+		plan = "no plan"
 	}
+	b.z.AddFile("plan.txt", plan)
 }
 
 func (b *stmtBundleBuilder) addDistSQLDiagrams() {
@@ -281,6 +285,9 @@ func (b *stmtBundleBuilder) addDistSQLDiagrams() {
 			filename = fmt.Sprintf("distsql-%d-%s.html", i+1, d.typ)
 		}
 		b.z.AddFile(filename, contents)
+	}
+	if len(b.plan.distSQLFlowInfos) == 0 {
+		b.z.AddFile("distsql.html", "<body>no execution</body>")
 	}
 }
 
@@ -363,6 +370,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	mem := b.plan.mem
 	if mem == nil {
 		// No optimizer plans; an error must have occurred during planning.
+		b.z.AddFile("schema.sql", "-- no schema collected\n")
 		return
 	}
 	buf.Reset()
@@ -382,9 +390,8 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		return
 	}
 
-	if len(tables) == 0 && len(sequences) == 0 && len(views) == 0 {
-		return
-	}
+	// Note: we do not shortcut out of this function if there is no table/sequence/view to report:
+	// the bundle analysis tool require schema.sql to always be present, even if it's empty.
 
 	first := true
 	blankLine := func() {
@@ -410,6 +417,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		if err := c.PrintCreateView(&buf, &views[i]); err != nil {
 			fmt.Fprintf(&buf, "-- error getting schema for view %s: %v\n", views[i].String(), err)
 		}
+	}
+	if buf.Len() == 0 {
+		buf.WriteString("-- there were no objects used in this query\n")
 	}
 	b.z.AddFile("schema.sql", buf.String())
 	for i := range tables {
