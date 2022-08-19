@@ -95,9 +95,6 @@ func registerSQLSmith(r registry.Registry) {
 		t.L().Printf("seed: %d", seed)
 
 		c.Put(ctx, t.Cockroach(), "./cockroach")
-		if err := c.PutLibraries(ctx, "./lib"); err != nil {
-			t.Fatalf("could not initialize libraries: %v", err)
-		}
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		setupFunc, ok := setups[setupName]
@@ -317,6 +314,7 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 			Name:            fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Owner:           registry.OwnerSQLQueries,
 			Cluster:         clusterSpec,
+			NativeLibs:      []string{"libgeos.so", "libgeos_c.so"},
 			Timeout:         time.Minute * 20,
 			RequiresLicense: true,
 			// NB: sqlsmith failures should never block a release.

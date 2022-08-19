@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -172,4 +173,75 @@ func TestCmdLogFileName(t *testing.T) {
 		exp,
 		cmdLogFileName(ts, nodes, "./cockroach bla --foo bar"),
 	)
+}
+
+func TestVerifyLibraries(t *testing.T) {
+	testCases := []struct {
+		name             string
+		local            bool
+		verifyLibs       []string
+		libraryFilePaths []string
+		expectedError    bool
+	}{
+		{
+			name:             "valid nil input",
+			local:            true,
+			verifyLibs:       nil,
+			libraryFilePaths: []string{"/some/path/lib.so"},
+			expectedError:    false,
+		},
+		{
+			name:             "no match",
+			local:            true,
+			verifyLibs:       []string{"required_c.so"},
+			libraryFilePaths: []string{"/some/path/lib.so"},
+			expectedError:    true,
+		},
+		{
+			name:             "no match nil libs",
+			local:            true,
+			verifyLibs:       []string{"required_c.so"},
+			libraryFilePaths: nil,
+			expectedError:    true,
+		},
+		{
+			name:             "single match",
+			local:            true,
+			verifyLibs:       []string{"lib.so"},
+			libraryFilePaths: []string{"/some/path/to/lib.so"},
+			expectedError:    false,
+		},
+		{
+			name:             "multiple matches",
+			local:            true,
+			verifyLibs:       []string{"lib.so", "ltwo.so", "geos.so"},
+			libraryFilePaths: []string{"ltwo.so", "a/geos.so", "/some/path/to/lib.so"},
+			expectedError:    false,
+		},
+		{
+			name:             "local no match",
+			local:            true,
+			verifyLibs:       []string{"lib.so", "ltwo.so", "geos.so"},
+			libraryFilePaths: []string{"ltwo.so", "a/geos.so", fmt.Sprintf("/some/path/to/%s/lib.so", remoteLibrarySuffix)},
+			expectedError:    true,
+		},
+		{
+			name:             "remote no match",
+			local:            false,
+			verifyLibs:       []string{"lib.so", "ltwo.so", "geos.so"},
+			libraryFilePaths: []string{"ltwo.so", "a/geos.so", fmt.Sprintf("/some/path/to/%s/lib.so", remoteLibrarySuffix)},
+			expectedError:    true,
+		},
+	}
+	c := &clusterImpl{spec: spec.MakeClusterSpec(spec.GCE, "", 10)}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			local = tc.local
+			libraryFilePaths = tc.libraryFilePaths
+			err := c.VerifyLibraries(tc.verifyLibs)
+			if tc.expectedError != (err != nil) {
+				t.Fatalf("expected %t, but found %t", tc.expectedError, err != nil)
+			}
+		})
+	}
 }

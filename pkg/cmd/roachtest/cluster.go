@@ -97,6 +97,7 @@ var (
 
 const (
 	defaultEncryptionProbability = 1
+	remoteLibrarySuffix          = ".docker_amd64"
 )
 
 type errBinaryOrLibraryNotFound struct {
@@ -164,7 +165,7 @@ func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 
 		var suffix string
 		if !local {
-			suffix = ".docker_amd64"
+			suffix = remoteLibrarySuffix
 		}
 		dirs := []string{
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
@@ -1641,9 +1642,16 @@ func (c *clusterImpl) PutE(
 
 // PutLibraries inserts all available library files into all nodes on the cluster
 // at the specified location.
-func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error {
+func (c *clusterImpl) PutLibraries(
+	ctx context.Context, libraryDir string, libraries []string,
+) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
+	}
+
+	libSet := map[string]bool{}
+	for _, library := range libraries {
+		libSet[library] = true
 	}
 
 	c.status("uploading library files")
@@ -1653,7 +1661,11 @@ func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error
 		return err
 	}
 	for _, libraryFilePath := range libraryFilePaths {
-		putPath := filepath.Join(libraryDir, filepath.Base(libraryFilePath))
+		filename := filepath.Base(libraryFilePath)
+		if !libSet[filename] {
+			continue
+		}
+		putPath := filepath.Join(libraryDir, filename)
 		if err := c.PutE(
 			ctx,
 			c.l,
@@ -1661,6 +1673,29 @@ func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error
 			putPath,
 		); err != nil {
 			return errors.Wrap(err, "cluster.PutLibraries")
+		}
+	}
+	return nil
+}
+
+func (c *clusterImpl) VerifyLibraries(requiredLibs []string) error {
+	if len(requiredLibs) == 0 {
+		return nil
+	}
+
+	libSet := map[string]bool{}
+	for _, libraryFilePath := range libraryFilePaths {
+		hasRemoteSuffix := strings.Contains(libraryFilePath, remoteLibrarySuffix)
+		if !local && !hasRemoteSuffix {
+			continue
+		} else if local && hasRemoteSuffix {
+			continue
+		}
+		libSet[filepath.Base(libraryFilePath)] = true
+	}
+	for _, requiredLib := range requiredLibs {
+		if !libSet[requiredLib] {
+			return errors.Wrap(errors.Errorf("missing required library %s", requiredLib), "cluster.VerifyLibraries")
 		}
 	}
 	return nil
