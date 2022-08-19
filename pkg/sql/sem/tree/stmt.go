@@ -853,7 +853,13 @@ func (*Discard) StatementReturnType() StatementReturnType { return Ack }
 func (*Discard) StatementType() StatementType { return TypeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Discard) StatementTag() string { return "DISCARD" }
+func (d *Discard) StatementTag() string {
+	switch d.Mode {
+	case DiscardModeAll:
+		return "DISCARD ALL"
+	}
+	return "DISCARD"
+}
 
 // StatementReturnType implements the Statement interface.
 func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
