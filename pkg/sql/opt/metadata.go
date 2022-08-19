@@ -618,6 +618,11 @@ func (md *Metadata) UpdateTableMeta(tables map[cat.StableID]cat.Table) {
 			for j, n := oldTable.ColumnCount(), newTable.ColumnCount(); j < n; j++ {
 				md.AddColumn(string(newTable.Column(j).ColName()), types.Bytes)
 			}
+			if newTable.ColumnCount() > oldTable.ColumnCount() {
+				// If we added any new columns, we need to recalculate the not null
+				// column set.
+				md.SetTableAnnotation(md.tables[i].MetaID, NotNullAnnID, nil)
+			}
 			md.tables[i].Table = newTable
 		}
 	}
