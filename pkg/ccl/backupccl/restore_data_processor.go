@@ -503,7 +503,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 }
 
 func makeProgressUpdate(
-	summary roachpb.BulkOpSummary, entry execinfrapb.RestoreSpanEntry, pkIDs map[uint64]bool,
+	summary roachpb.BulkOpSummary,
+	entry execinfrapb.RestoreSpanEntry,
+	pkIDs map[uint64]bool, //nolint:maptobool
 ) (progDetails backuppb.RestoreProgress) {
 	progDetails.Summary = countRows(summary, pkIDs)
 	progDetails.ProgressIdx = entry.ProgressIdx

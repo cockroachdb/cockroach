@@ -35,7 +35,7 @@ type restorationData interface {
 	// included in this bundle.
 	getRekeys() []execinfrapb.TableRekey
 	getTenantRekeys() []execinfrapb.TenantRekey
-	getPKIDs() map[uint64]bool
+	getPKIDs() map[uint64]bool //nolint:maptobool
 
 	// isValidateOnly returns ture iff only validation should occur
 	isValidateOnly() bool
@@ -72,7 +72,7 @@ type restorationDataBase struct {
 	tenantRekeys []execinfrapb.TenantRekey
 	// pkIDs stores the ID of the primary keys for all of the tables that we're
 	// restoring for RowCount calculation.
-	pkIDs map[uint64]bool
+	pkIDs map[uint64]bool //nolint:maptobool
 
 	// systemTables store the system tables that need to be restored for cluster
 	// backups. Should be nil otherwise.
@@ -96,7 +96,7 @@ func (b *restorationDataBase) getTenantRekeys() []execinfrapb.TenantRekey {
 }
 
 // getPKIDs implements restorationData.
-func (b *restorationDataBase) getPKIDs() map[uint64]bool {
+func (b *restorationDataBase) getPKIDs() map[uint64]bool { //nolint:maptobool
 	return b.pkIDs
 }
 

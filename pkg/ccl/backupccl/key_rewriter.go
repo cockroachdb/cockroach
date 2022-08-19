@@ -145,7 +145,7 @@ func makeKeyRewriter(
 	var tenantPrefixes prefixRewriter
 	tenantPrefixes.rewrites = make([]prefixRewrite, 0, len(tenants))
 
-	seenPrefixes := make(map[string]bool)
+	seenPrefixes := make(map[string]struct{})
 	for oldID, desc := range descs {
 		// The PrefixEnd() of index 1 is the same as the prefix of index 2, so use a
 		// map to avoid duplicating entries.
@@ -153,8 +153,8 @@ func makeKeyRewriter(
 		for _, index := range desc.NonDropIndexes() {
 			oldPrefix := roachpb.Key(MakeKeyRewriterPrefixIgnoringInterleaved(oldID, index.GetID()))
 			newPrefix := roachpb.Key(MakeKeyRewriterPrefixIgnoringInterleaved(desc.GetID(), index.GetID()))
-			if !seenPrefixes[string(oldPrefix)] {
-				seenPrefixes[string(oldPrefix)] = true
+			if _, ok := seenPrefixes[string(oldPrefix)]; !ok {
+				seenPrefixes[string(oldPrefix)] = struct{}{}
 				prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,
@@ -166,8 +166,8 @@ func makeKeyRewriter(
 			// (and we do), the prefix end needs to be in the map too.
 			oldPrefix = oldPrefix.PrefixEnd()
 			newPrefix = newPrefix.PrefixEnd()
-			if !seenPrefixes[string(oldPrefix)] {
-				seenPrefixes[string(oldPrefix)] = true
+			if _, ok := seenPrefixes[string(oldPrefix)]; !ok {
+				seenPrefixes[string(oldPrefix)] = struct{}{}
 				prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,

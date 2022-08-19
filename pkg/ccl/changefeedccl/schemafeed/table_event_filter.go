@@ -122,7 +122,7 @@ func classifyTableEvent(e TableEvent) tableEventTypeSet {
 
 // typeFilters indicates whether a table event of a given type should be
 // permitted by the filter.
-type tableEventFilter map[tableEventType]bool
+type tableEventFilter map[tableEventType]bool //nolint:maptobool
 
 func (filter tableEventFilter) shouldFilter(
 	ctx context.Context, e TableEvent, targets changefeedbase.Targets,

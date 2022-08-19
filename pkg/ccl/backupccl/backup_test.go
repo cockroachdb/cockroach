@@ -6247,7 +6247,7 @@ func TestPublicIndexTableSpans(t *testing.T) {
 	execCfg := &sql.ExecutorConfig{
 		Codec: codec,
 	}
-	unusedMap := make(map[tableAndIndex]bool)
+	unusedMap := make(map[tableAndIndex]struct{})
 	testCases := []struct {
 		name                string
 		tableID             descpb.ID

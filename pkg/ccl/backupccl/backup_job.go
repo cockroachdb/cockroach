@@ -68,7 +68,7 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 
 var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
 
-func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
+func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount { //nolint:maptobool
 	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
 		if _, ok := pkIDs[id]; ok {
@@ -153,7 +153,7 @@ func backup(
 	spans := filterSpans(backupManifest.Spans, completedSpans)
 	introducedSpans := filterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
 
-	pkIDs := make(map[uint64]bool)
+	pkIDs := make(map[uint64]bool) //nolint:maptobool
 	for i := range backupManifest.Descriptors {
 		if t, _, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
 			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true

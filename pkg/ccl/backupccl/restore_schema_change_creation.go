@@ -167,15 +167,15 @@ func createSchemaChangeJobsFromMutations(
 	tableDesc *tabledesc.Mutable,
 ) error {
 	mutationJobs := make([]descpb.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
-	seenMutations := make(map[descpb.MutationID]bool)
+	seenMutations := make(map[descpb.MutationID]struct{})
 	for idx, mutation := range tableDesc.Mutations {
-		if seenMutations[mutation.MutationID] {
+		if _, ok := seenMutations[mutation.MutationID]; ok {
 			// We've already seen a mutation with this ID, so a job that handles all
 			// mutations with this ID has already been created.
 			continue
 		}
 		mutationID := mutation.MutationID
-		seenMutations[mutationID] = true
+		seenMutations[mutationID] = struct{}{}
 		jobDesc, mutationCount, err := jobDescriptionFromMutationID(tableDesc.TableDesc(), mutationID)
 		if err != nil {
 			return err

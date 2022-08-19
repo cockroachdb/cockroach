@@ -36,7 +36,7 @@ func distBackupPlanSpecs(
 	jobID int64,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
-	pkIDs map[uint64]bool,
+	pkIDs map[uint64]bool, //nolint:maptobool
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	encryption *jobspb.BackupEncryptionOptions,

@@ -94,7 +94,7 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 // function.
 func forEachPublicIndexTableSpan(
 	table *descpb.TableDescriptor,
-	added map[tableAndIndex]bool,
+	added map[tableAndIndex]struct{},
 	codec keys.SQLCodec,
 	f func(span roachpb.Span),
 ) {
@@ -113,10 +113,10 @@ func forEachPublicIndexTableSpan(
 
 	table.ForEachPublicIndex(func(idx *descpb.IndexDescriptor) {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.ID}
-		if added[key] {
+		if _, ok := added[key]; ok {
 			return
 		}
-		added[key] = true
+		added[key] = struct{}{}
 		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, table.GetID(), idx.ID))
 		f(roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	})
@@ -132,7 +132,7 @@ func spansForAllTableIndexes(
 	revs []backuppb.BackupManifest_DescriptorRevision,
 ) ([]roachpb.Span, error) {
 
-	added := make(map[tableAndIndex]bool, len(tables))
+	added := make(map[tableAndIndex]struct{}, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	insertSpan := func(indexSpan roachpb.Span) {
 		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), true); err != nil {
