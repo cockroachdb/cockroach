@@ -19,6 +19,8 @@ import {
   getLabel,
 } from "../execTableCommon";
 import { ActiveStatement } from "../types";
+import { Tooltip } from "@cockroachlabs/ui-components";
+import { limitText } from "../../util";
 
 export function makeActiveStatementsColumns(
   isCockroachCloud: boolean,
@@ -29,9 +31,11 @@ export function makeActiveStatementsColumns(
       name: "execution",
       title: executionsTableTitles.execution("statement"),
       cell: (item: ActiveStatement) => (
-        <Link to={`/execution/statement/${item.statementID}`}>
-          {item.query}
-        </Link>
+        <Tooltip placement="bottom" content={item.query}>
+          <Link to={`/execution/statement/${item.statementID}`}>
+            {limitText(item.query, 70)}
+          </Link>
+        </Tooltip>
       ),
       sort: (item: ActiveStatement) => item.query,
     },
