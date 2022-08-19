@@ -20,7 +20,7 @@ exit_status=0
 # correct flags in the reproduction command.
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci test \
                                       @com_github_cockroachdb_pebble//internal/metamorphic:metamorphic_test -- \
-                                      --test_timeout=14400 '--test_filter=TestMeta$' \
+                                      --test_timeout=25200 '--test_filter=TestMeta$' \
                                       --define gotags=bazel,invariants \
                                       "--test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE" \
                                       --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'GO_TEST_JSON_OUTPUT_FILE=cat,XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 6h -maxfails 1 -stderr -p 1" \
