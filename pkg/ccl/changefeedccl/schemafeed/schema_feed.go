@@ -29,8 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -92,7 +90,6 @@ func New(
 		settings:          cfg.Settings,
 		targets:           targets,
 		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
-		ie:                cfg.InternalExecutorFactory.NewInternalExecutor(&sessiondata.SessionData{}),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
 		tolerances:        tolerances,
@@ -119,7 +116,6 @@ type schemaFeed struct {
 	clock      *hlc.Clock
 	settings   *cluster.Settings
 	targets    changefeedbase.Targets
-	ie         sqlutil.InternalExecutor
 	metrics    *Metrics
 	tolerances changefeedbase.CanHandle
 
@@ -295,9 +291,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		})
 	}
 
-	if err := tf.collectionFactory.Txn(
-		ctx, tf.ie, tf.db, initialTableDescsFn,
-	); err != nil {
+	if err := tf.collectionFactory.Txn(ctx, tf.db, initialTableDescsFn); err != nil {
 		return err
 	}
 

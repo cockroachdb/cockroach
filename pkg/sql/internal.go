@@ -135,7 +135,6 @@ func newInternalExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	monitor *mon.BytesMonitor,
 	descCol *descs.Collection,
-	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
 ) (*InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
 	schemaChangerState := &SchemaChangerState{
 		mode: sd.NewSchemaChangerMode,
@@ -148,7 +147,7 @@ func newInternalExecutorWithTxn(
 			txn:                    txn,
 			descCollection:         descCol,
 			jobs:                   new(jobsCollection),
-			schemaChangeJobRecords: schemaChangeJobRecords,
+			schemaChangeJobRecords: make(map[descpb.ID]*jobs.Record),
 			schemaChangerState:     schemaChangerState,
 		},
 	}
@@ -835,6 +834,13 @@ func (ie *InternalExecutor) execInternal(
 	if sd.ApplicationName == "" {
 		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
+	// If the caller has injected a mapping to temp schemas, install it, and
+	// leave it installed for the rest of the transaction.
+	if ie.extraTxnState != nil && sd.DatabaseIDToTempSchemaID != nil {
+		ie.extraTxnState.descCollection.SetTemporaryDescriptors(
+			descs.NewTemporarySchemaProvider(sessiondata.NewStack(sd)),
+		)
+	}
 
 	// The returned span is finished by this function in all error paths, but if
 	// an iterator is returned, then we transfer the responsibility of closing
@@ -1257,7 +1263,6 @@ func (ief *InternalExecutorFactory) NewInternalExecutor(
 func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
 	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
 ) (sqlutil.InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
-	schemaChangeJobRecords := make(map[descpb.ID]*jobs.Record)
 	// By default, if not given session data, we initialize a sessionData that
 	// would be the same as what would be created if root logged in.
 	// The sessionData's user can be override when calling the query
@@ -1276,7 +1281,6 @@ func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
 		ief.memMetrics,
 		ief.monitor,
 		descCol,
-		schemaChangeJobRecords,
 	)
 
 	return ie, commitTxnFunc
