@@ -127,20 +127,22 @@ func (eh *ExprHelper) String() string {
 }
 
 // ExprHelper implements tree.IndexedVarContainer.
-var _ tree.IndexedVarContainer = &ExprHelper{}
+var _ eval.IndexedVarContainer = &ExprHelper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
 func (eh *ExprHelper) IndexedVarResolvedType(idx int) *types.T {
 	return eh.Types[idx]
 }
 
-// IndexedVarEval is part of the tree.IndexedVarContainer interface.
-func (eh *ExprHelper) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+// IndexedVarEval is part of the eval.IndexedVarContainer interface.
+func (eh *ExprHelper) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	err := eh.Row[idx].EnsureDecoded(eh.Types[idx], &eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
-	return eh.Row[idx].Datum.Eval(e)
+	return eh.Row[idx].Datum.Eval(ctx, e)
 }
 
 // IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
@@ -224,7 +226,7 @@ func RunFilter(filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
 		return true, nil
 	}
 
-	d, err := eval.Expr(evalCtx, filter)
+	d, err := eval.Expr(evalCtx.Context, evalCtx, filter)
 	if err != nil {
 		return false, err
 	}
@@ -243,7 +245,7 @@ func (eh *ExprHelper) Eval(row rowenc.EncDatumRow) (tree.Datum, error) {
 	eh.Row = row
 
 	eh.evalCtx.PushIVarContainer(eh)
-	d, err := eval.Expr(eh.evalCtx, eh.Expr)
+	d, err := eval.Expr(eh.evalCtx.Context, eh.evalCtx, eh.Expr)
 	eh.evalCtx.PopIVarContainer()
 	return d, err
 }

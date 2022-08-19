@@ -819,7 +819,7 @@ func readPostgresStmt(
 						datums[i] = d
 					}
 					// Now that we have all of the datums, we can execute the overload.
-					fnSQL, err := fn(evalCtx, datums)
+					fnSQL, err := fn(ctx, evalCtx, datums)
 					if err != nil {
 						return err
 					}
@@ -1161,7 +1161,7 @@ func (m *pgDumpReader) readFile(
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					converted, err := eval.Expr(conv.EvalCtx, typed)
+					converted, err := eval.Expr(ctx, conv.EvalCtx, typed)
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)

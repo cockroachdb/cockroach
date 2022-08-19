@@ -221,12 +221,12 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	}, nil
 }
 
-func injectTimeIntoEvalCtx(ctx *eval.Context, walltime int64) {
+func injectTimeIntoEvalCtx(evalCtx *eval.Context, walltime int64) {
 	sec := walltime / int64(time.Second)
 	nsec := walltime % int64(time.Second)
 	unixtime := timeutil.Unix(sec, nsec)
-	ctx.StmtTimestamp = unixtime
-	ctx.TxnTimestamp = unixtime
+	evalCtx.StmtTimestamp = unixtime
+	evalCtx.TxnTimestamp = unixtime
 }
 
 func makeInputConverter(

@@ -157,7 +157,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 	}
 	if b.StartBound.HasOffset() {
 		typedStartOffset := b.StartBound.OffsetExpr.(tree.TypedExpr)
-		dStartOffset, err := eval.Expr(evalCtx, typedStartOffset)
+		dStartOffset, err := eval.Expr(evalCtx.Context, evalCtx, typedStartOffset)
 		if err != nil {
 			return err
 		}
@@ -201,7 +201,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		}
 		if b.EndBound.HasOffset() {
 			typedEndOffset := b.EndBound.OffsetExpr.(tree.TypedExpr)
-			dEndOffset, err := eval.Expr(evalCtx, typedEndOffset)
+			dEndOffset, err := eval.Expr(evalCtx.Context, evalCtx, typedEndOffset)
 			if err != nil {
 				return err
 			}

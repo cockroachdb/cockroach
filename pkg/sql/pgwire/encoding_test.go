@@ -83,7 +83,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 		if err != nil {
 			t.Fatal(err)
 		}
-		d, err := eval.Expr(&evalCtx, te)
+		d, err := eval.Expr(ctx, &evalCtx, te)
 		if err != nil {
 			t.Fatal(err)
 		}

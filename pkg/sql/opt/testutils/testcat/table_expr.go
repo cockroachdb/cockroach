@@ -100,8 +100,8 @@ func (c *tableCol) ResolvedType() *types.T {
 	return c.typ
 }
 
-// EvalExpr is part of the tree.TypedExpr interface.
-func (*tableCol) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
+// Eval is part of the tree.TypedExpr interface.
+func (*tableCol) Eval(_ context.Context, _ tree.ExprEvaluator) (tree.Datum, error) {
 	panic("not implemented")
 }
 
