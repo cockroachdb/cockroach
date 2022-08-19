@@ -30,7 +30,7 @@ type concurrentBufferIngester struct {
 	}
 
 	eventBufferCh chan *eventBuffer
-	delegate      registry
+	registry      *lockingRegistry
 }
 
 var _ Provider = &concurrentBufferIngester{}
@@ -92,15 +92,15 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 			break
 		}
 		if e.statement != nil {
-			i.delegate.ObserveStatement(e.sessionID, e.statement)
+			i.registry.ObserveStatement(e.sessionID, e.statement)
 		} else {
-			i.delegate.ObserveTransaction(e.sessionID, e.transaction)
+			i.registry.ObserveTransaction(e.sessionID, e.transaction)
 		}
 	}
 }
 
 func (i *concurrentBufferIngester) Reader() Reader {
-	return i.delegate
+	return i.registry
 }
 
 func (i *concurrentBufferIngester) Writer() Writer {
@@ -110,7 +110,7 @@ func (i *concurrentBufferIngester) Writer() Writer {
 func (i *concurrentBufferIngester) ObserveStatement(
 	sessionID clusterunique.ID, statement *Statement,
 ) {
-	if !i.delegate.enabled() {
+	if !i.registry.enabled() {
 		return
 	}
 	i.guard.AtomicWrite(func(writerIdx int64) {
@@ -124,7 +124,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 func (i *concurrentBufferIngester) ObserveTransaction(
 	sessionID clusterunique.ID, transaction *Transaction,
 ) {
-	if !i.delegate.enabled() {
+	if !i.registry.enabled() {
 		return
 	}
 	i.guard.AtomicWrite(func(writerIdx int64) {
@@ -135,7 +135,7 @@ func (i *concurrentBufferIngester) ObserveTransaction(
 	})
 }
 
-func newConcurrentBufferIngester(delegate registry) *concurrentBufferIngester {
+func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIngester {
 	i := &concurrentBufferIngester{
 		// A channel size of 1 is sufficient to avoid unnecessarily
 		// synchronizing producer (our clients) and consumer (the underlying
@@ -144,7 +144,7 @@ func newConcurrentBufferIngester(delegate registry) *concurrentBufferIngester {
 		// Otherwise, we rely solely on the size of the eventBuffer for
 		// adjusting our carrying capacity.
 		eventBufferCh: make(chan *eventBuffer, 1),
-		delegate:      delegate,
+		registry:      registry,
 	}
 
 	i.guard.eventBuffer = &eventBuffer{}
