@@ -29,6 +29,7 @@ func TestFastIntMap(t *testing.T) {
 		{keyRange: 100, valRange: 100},
 	}
 	for _, tc := range cases {
+		tc := tc // necessary since the tests below run in parallel
 		t.Run(fmt.Sprintf("%d-%d", tc.keyRange, tc.valRange), func(t *testing.T) {
 			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 			rng, _ := randutil.NewTestRand()
