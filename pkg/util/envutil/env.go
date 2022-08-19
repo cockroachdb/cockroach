@@ -190,6 +190,9 @@ var safeVarRegistry = map[redact.SafeString]struct{}{
 	"GODEBUG":     {},
 	"GOMAXPROCS":  {},
 	"GOTRACEBACK": {},
+	// gRPC.
+	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
+	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
 }
 
 // valueReportableUnsafeVarRegistry is the list of variables where we can
@@ -198,21 +201,19 @@ var safeVarRegistry = map[redact.SafeString]struct{}{
 // that users would be unhappy to see them enclosed within redaction
 // markers in log files.
 var valueReportableUnsafeVarRegistry = map[redact.SafeString]struct{}{
-	"DEBUG_HTTP2_GOROUTINES":      {},
-	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
-	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
-	"HOST_IP":                     {},
-	"LANG":                        {},
-	"LC_ALL":                      {},
-	"LC_COLLATE":                  {},
-	"LC_CTYPE":                    {},
-	"LC_TIME":                     {},
-	"LC_NUMERIC":                  {},
-	"LC_MESSAGES":                 {},
-	"LS_METRICS_ENABLED":          {},
-	"TERM":                        {},
-	"TZ":                          {},
-	"ZONEINFO":                    {},
+	"DEBUG_HTTP2_GOROUTINES": {},
+	"HOST_IP":                {},
+	"LANG":                   {},
+	"LC_ALL":                 {},
+	"LC_COLLATE":             {},
+	"LC_CTYPE":               {},
+	"LC_TIME":                {},
+	"LC_NUMERIC":             {},
+	"LC_MESSAGES":            {},
+	"LS_METRICS_ENABLED":     {},
+	"TERM":                   {},
+	"TZ":                     {},
+	"ZONEINFO":               {},
 	// From the Go runtime.
 	"LOCALDOMAIN":    {},
 	"RES_OPTIONS":    {},
@@ -258,9 +259,6 @@ var nameReportableUnsafeVarRegistry = map[redact.SafeString]struct{}{
 	"GAE_MODULE_NAME":     {},
 	"GAE_PARTITION":       {},
 	"GAE_SERVICE":         {},
-	// gRPC.
-	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
-	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
 	// Kerberos.
 	"KRB5CCNAME": {},
 	// Pprof.
