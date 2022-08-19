@@ -319,15 +319,15 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		return nil, false
 	}
 	var cols tree.IndexElemList
-	seen := map[tree.Name]bool{}
+	seen := map[tree.Name]struct{}{}
 	inverted := false
 	unique := s.coin()
 	for len(cols) < 1 || s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
-		if seen[col.Name] {
+		if _, ok := seen[col.Name]; ok {
 			continue
 		}
-		seen[col.Name] = true
+		seen[col.Name] = struct{}{}
 		// If this is the first column and it's invertible (i.e., JSONB), make an inverted index.
 		if len(cols) == 0 &&
 			colinfo.ColumnTypeIsOnlyInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
@@ -348,10 +348,10 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	var storing tree.NameList
 	for !inverted && s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
-		if seen[col.Name] {
+		if _, ok := seen[col.Name]; ok {
 			continue
 		}
-		seen[col.Name] = true
+		seen[col.Name] = struct{}{}
 		storing = append(storing, col.Name)
 	}
 

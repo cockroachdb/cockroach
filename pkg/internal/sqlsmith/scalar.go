@@ -317,11 +317,11 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	n := s.rnd.Intn(len(ops))
 	op := ops[n]
 	if s.postgres {
-		if ignorePostgresBinOps[binOpTriple{
+		if _, ok := ignorePostgresBinOps[binOpTriple{
 			op.LeftType.Family(),
 			op.Operator.Symbol,
 			op.RightType.Family(),
-		}] {
+		}]; ok {
 			return nil, false
 		}
 	}
@@ -357,22 +357,22 @@ type binOpOperands struct {
 	rightType *types.T
 }
 
-var ignorePostgresBinOps = map[binOpTriple]bool{
+var ignorePostgresBinOps = map[binOpTriple]struct{}{
 	// Integer division in cockroach returns a different type.
-	{types.IntFamily, treebin.Div, types.IntFamily}: true,
+	{types.IntFamily, treebin.Div, types.IntFamily}: {},
 	// Float * date isn't exact.
-	{types.FloatFamily, treebin.Mult, types.DateFamily}: true,
-	{types.DateFamily, treebin.Mult, types.FloatFamily}: true,
-	{types.DateFamily, treebin.Div, types.FloatFamily}:  true,
+	{types.FloatFamily, treebin.Mult, types.DateFamily}: {},
+	{types.DateFamily, treebin.Mult, types.FloatFamily}: {},
+	{types.DateFamily, treebin.Div, types.FloatFamily}:  {},
 
 	// Postgres does not have separate floor division operator.
-	{types.IntFamily, treebin.FloorDiv, types.IntFamily}:         true,
-	{types.FloatFamily, treebin.FloorDiv, types.FloatFamily}:     true,
-	{types.DecimalFamily, treebin.FloorDiv, types.DecimalFamily}: true,
-	{types.DecimalFamily, treebin.FloorDiv, types.IntFamily}:     true,
-	{types.IntFamily, treebin.FloorDiv, types.DecimalFamily}:     true,
+	{types.IntFamily, treebin.FloorDiv, types.IntFamily}:         {},
+	{types.FloatFamily, treebin.FloorDiv, types.FloatFamily}:     {},
+	{types.DecimalFamily, treebin.FloorDiv, types.DecimalFamily}: {},
+	{types.DecimalFamily, treebin.FloorDiv, types.IntFamily}:     {},
+	{types.IntFamily, treebin.FloorDiv, types.DecimalFamily}:     {},
 
-	{types.FloatFamily, treebin.Mod, types.FloatFamily}: true,
+	{types.FloatFamily, treebin.Mod, types.FloatFamily}: {},
 }
 
 // For certain operations, Postgres is picky about the operand types.
