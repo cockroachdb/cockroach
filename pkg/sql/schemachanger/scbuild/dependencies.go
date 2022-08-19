@@ -175,7 +175,7 @@ type AuthorizationAccessor interface {
 
 	// MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct
 	// and indirect) and returns a map of "role" -> "isAdmin".
-	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
+	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error) //nolint:maptobool
 }
 
 // AstFormatter provides interfaces for formatting AST nodes.

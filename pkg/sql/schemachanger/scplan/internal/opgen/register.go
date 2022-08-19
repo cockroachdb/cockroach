@@ -198,29 +198,29 @@ func buildTargets(e scpb.Element, targetSpecs []targetSpec) ([]target, error) {
 }
 
 func validateTargets(targets []target) error {
-	allStatuses := map[scpb.Status]bool{}
-	absentStatuses := map[scpb.Status]bool{}
-	nonAbsentStatuses := map[scpb.Status]bool{}
+	allStatuses := map[scpb.Status]struct{}{}
+	absentStatuses := map[scpb.Status]struct{}{}
+	nonAbsentStatuses := map[scpb.Status]struct{}{}
 	for i, tgt := range targets {
-		var m map[scpb.Status]bool
+		var m map[scpb.Status]struct{}
 		if i == 0 {
 			m = absentStatuses
 		} else {
 			m = nonAbsentStatuses
 		}
 		for _, t := range tgt.transitions {
-			m[t.from] = true
-			allStatuses[t.from] = true
-			m[t.to] = true
-			allStatuses[t.to] = true
+			m[t.from] = struct{}{}
+			allStatuses[t.from] = struct{}{}
+			m[t.to] = struct{}{}
+			allStatuses[t.to] = struct{}{}
 		}
 	}
 
 	for s := range allStatuses {
-		if !absentStatuses[s] {
+		if _, ok := absentStatuses[s]; !ok {
 			return errors.Errorf("status %s is featured in non-ABSENT targets but not in the ABSENT target", s)
 		}
-		if !nonAbsentStatuses[s] {
+		if _, ok := nonAbsentStatuses[s]; !ok {
 			return errors.Errorf("status %s is featured in ABSENT target but not in any non-ABSENT targets", s)
 		}
 	}

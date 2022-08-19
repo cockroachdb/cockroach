@@ -133,18 +133,18 @@ type transitionBuildState struct {
 	currentMinPhase scop.Phase
 	isRevertible    bool
 
-	isEquivMapped map[scpb.Status]bool
-	isTo          map[scpb.Status]bool
-	isFrom        map[scpb.Status]bool
+	isEquivMapped map[scpb.Status]struct{}
+	isTo          map[scpb.Status]struct{}
+	isFrom        map[scpb.Status]struct{}
 }
 
 func makeTransitionBuildState(from scpb.Status) transitionBuildState {
 	return transitionBuildState{
 		from:          from,
 		isRevertible:  true,
-		isEquivMapped: map[scpb.Status]bool{from: true},
-		isTo:          map[scpb.Status]bool{},
-		isFrom:        map[scpb.Status]bool{},
+		isEquivMapped: map[scpb.Status]struct{}{from: {}},
+		isTo:          map[scpb.Status]struct{}{},
+		isFrom:        map[scpb.Status]struct{}{},
 	}
 }
 
@@ -153,9 +153,9 @@ func (tbs *transitionBuildState) withTransition(s transitionSpec, isFirst bool) 
 	if s.to == scpb.Status_UNKNOWN {
 		return errors.Errorf("invalid 'to' status")
 	}
-	if tbs.isTo[s.to] {
+	if _, ok := tbs.isTo[s.to]; ok {
 		return errors.Errorf("%s was featured as 'to' in a previous transition", s.to)
-	} else if tbs.isEquivMapped[s.to] {
+	} else if _, ok := tbs.isEquivMapped[s.to]; ok {
 		return errors.Errorf("%s was featured as 'from' in a previous equivalence mapping", s.to)
 	}
 
@@ -164,9 +164,9 @@ func (tbs *transitionBuildState) withTransition(s transitionSpec, isFirst bool) 
 	if !isFirst && tbs.currentMinPhase < scop.PostCommitPhase {
 		tbs.currentMinPhase = scop.PostCommitPhase
 	}
-	tbs.isEquivMapped[tbs.from] = true
-	tbs.isTo[s.to] = true
-	tbs.isFrom[tbs.from] = true
+	tbs.isEquivMapped[tbs.from] = struct{}{}
+	tbs.isTo[s.to] = struct{}{}
+	tbs.isFrom[tbs.from] = struct{}{}
 	tbs.from = s.to
 	return nil
 }
@@ -178,9 +178,9 @@ func (tbs *transitionBuildState) withEquivTransition(s transitionSpec) error {
 	}
 
 	// Check validity of origin status.
-	if tbs.isTo[s.from] {
+	if _, ok := tbs.isTo[s.from]; ok {
 		return errors.Errorf("%s was featured as 'to' in a previous transition", s.from)
-	} else if tbs.isEquivMapped[s.from] {
+	} else if _, ok := tbs.isEquivMapped[s.from]; ok {
 		return errors.Errorf("%s was featured as 'from' in a previous equivalence mapping", s.from)
 	}
 
@@ -189,6 +189,6 @@ func (tbs *transitionBuildState) withEquivTransition(s transitionSpec) error {
 		return errors.Errorf("must be revertible")
 	}
 
-	tbs.isEquivMapped[s.from] = true
+	tbs.isEquivMapped[s.from] = struct{}{}
 	return nil
 }

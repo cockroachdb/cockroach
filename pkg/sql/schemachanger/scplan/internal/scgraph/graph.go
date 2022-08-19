@@ -330,11 +330,11 @@ func (g *Graph) Order() int {
 // Validate returns an error if there's a cycle in the graph.
 func (g *Graph) Validate() error {
 	order := g.Order()
-	done := make(map[*screl.Node]bool, order)
+	done := make(map[*screl.Node]struct{}, order)
 	pred := make(map[*screl.Node]Edge, order)
 	var visit func(n *screl.Node, in Edge) error
 	visit = func(n *screl.Node, in Edge) error {
-		if done[n] {
+		if _, ok := done[n]; ok {
 			return nil
 		}
 		if _, found := pred[n]; found {
@@ -354,7 +354,7 @@ func (g *Graph) Validate() error {
 		}); err != nil {
 			return err
 		}
-		done[n] = true
+		done[n] = struct{}{}
 		return nil
 	}
 	return g.ForEachNode(func(n *screl.Node) error {

@@ -2099,7 +2099,6 @@ func TestLint(t *testing.T) {
 			"kv",
 			"server",
 			"sql",
-			":!sql/schemachanger*",
 			":!*_test.go",
 			":!*testdata*",
 		)
