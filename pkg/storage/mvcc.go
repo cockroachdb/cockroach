@@ -3262,35 +3262,22 @@ func MVCCDeleteRangeUsingTombstone(
 			break
 		}
 
-		// Check for conflicts with point/range keys and update MVCC stats.
-		hasPoint, hasRange := iter.HasPointAndRange()
-
-		if hasPoint {
-			key := iter.UnsafeKey()
-			if timestamp.LessEq(key.Timestamp) {
-				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
-			}
-			if key.Timestamp.IsEmpty() {
-				return errors.Errorf("can't write range tombstone across inline key %s", key)
-			}
-			if ms != nil {
-				ms.Add(updateStatsOnRangeKeyCover(timestamp, key, iter.UnsafeValue()))
-			}
-		}
-
-		if hasRange {
-			if rangeBounds := iter.RangeBounds(); !rangeBounds.EndKey.Equal(prevRangeEnd) {
+		// Process range keys.
+		if iter.RangeKeyChanged() {
+			hasPoint, hasRange := iter.HasPointAndRange()
+			if hasRange {
 				rangeKeys := iter.RangeKeys()
 				if timestamp.LessEq(rangeKeys.Newest()) {
-					return roachpb.NewWriteTooOldError(timestamp, rangeKeys.Newest().Next(), rangeBounds.Key)
+					return roachpb.NewWriteTooOldError(timestamp, rangeKeys.Newest().Next(),
+						rangeKeys.Bounds.Key)
 				}
 
 				if ms != nil {
 					// If the encountered range key does not abut the previous range key,
 					// we'll write a new range key fragment in the gap between them.
-					if !rangeBounds.Key.Equal(prevRangeEnd) {
+					if !rangeKeys.Bounds.Key.Equal(prevRangeEnd) {
 						ms.Add(updateStatsOnRangeKeyPut(MVCCRangeKeyStack{
-							Bounds:   roachpb.Span{Key: prevRangeEnd, EndKey: rangeBounds.Key},
+							Bounds:   roachpb.Span{Key: prevRangeEnd, EndKey: rangeKeys.Bounds.Key},
 							Versions: MVCCRangeKeyVersions{{Timestamp: timestamp, Value: valueRaw}},
 						}))
 					}
@@ -3298,17 +3285,29 @@ func MVCCDeleteRangeUsingTombstone(
 						MVCCRangeKeyVersion{Timestamp: timestamp, Value: valueRaw}))
 				}
 
-				prevRangeEnd = append(prevRangeEnd[:0], rangeBounds.EndKey...)
+				prevRangeEnd = append(prevRangeEnd[:0], rangeKeys.Bounds.EndKey...)
+			}
+
+			// If we hit a bare range key, it's possible that there's a point key on the
+			// same key as its start key, so take a normal step to look for it.
+			if !hasPoint {
+				iter.Next()
+				continue
 			}
 		}
 
-		// If we hit a bare range key, it's possible that there's a point key on the
-		// same key as its start key, so take a normal step to look for it.
-		if hasRange && !hasPoint {
-			iter.Next()
-		} else {
-			iter.NextKey()
+		// Process point key.
+		key := iter.UnsafeKey()
+		if timestamp.LessEq(key.Timestamp) {
+			return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
 		}
+		if key.Timestamp.IsEmpty() {
+			return errors.Errorf("can't write range tombstone across inline key %s", key)
+		}
+		if ms != nil {
+			ms.Add(updateStatsOnRangeKeyCover(timestamp, key, iter.UnsafeValue()))
+		}
+		iter.NextKey()
 	}
 
 	// Once we've iterated across the range key span, fill in the final gap
