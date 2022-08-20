@@ -180,12 +180,12 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
             <Col>
               <Row>
                 <Heading type="h5">
-                  {WaitTimeInsightsLabels.WAITING_TXNS_TABLE_TITLE(
+                  {WaitTimeInsightsLabels.BLOCKING_TXNS_TABLE_TITLE(
                     insightDetails.executionID,
                     insightDetails.execType,
                   )}
                 </Heading>
-                <div>
+                <div className={tableCx("margin-bottom-large")}>
                   <WaitTimeDetailsTable
                     data={waitingExecutions}
                     execType={insightDetails.execType}
@@ -214,7 +214,9 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
           >
             Insights
           </Button>
-          <h3>{`Transaction Execution ID: ${String(
+          <h3
+            className={commonStyles("base-heading", "no-margin-bottom")}
+          >{`Transaction Execution ID: ${String(
             getMatchParamByName(this.props.match, "id"),
           )}`}</h3>
         </div>
