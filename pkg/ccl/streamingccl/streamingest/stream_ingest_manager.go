@@ -27,16 +27,20 @@ type streamIngestManagerImpl struct{}
 
 // CompleteStreamIngestion implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) CompleteStreamIngestion(
-	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	ingestionJobID jobspb.JobID,
+	cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(evalCtx, txn, ingestionJobID, cutoverTimestamp)
+	return completeStreamIngestion(ctx, evalCtx, txn, ingestionJobID, cutoverTimestamp)
 }
 
 // GetStreamIngestionStats implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) GetStreamIngestionStats(
-	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
-	return getStreamIngestionStats(evalCtx, txn, ingestionJobID)
+	return getStreamIngestionStats(ctx, evalCtx, txn, ingestionJobID)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(

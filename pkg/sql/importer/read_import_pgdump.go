@@ -363,6 +363,7 @@ func getSchemaByNameFromMap(
 }
 
 func createPostgresTables(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	p sql.JobExecContext,
 	createTbl map[schemaAndTableName]*tree.CreateTable,
@@ -377,7 +378,7 @@ func createPostgresTables(
 		if create == nil {
 			continue
 		}
-		schema, err := getSchemaByNameFromMap(evalCtx.Ctx(), schemaAndTableName, schemaNameToDesc, evalCtx.Settings.Version)
+		schema, err := getSchemaByNameFromMap(ctx, schemaAndTableName, schemaNameToDesc, evalCtx.Settings.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -385,11 +386,11 @@ func createPostgresTables(
 		// Bundle imports do not support user defined types, and so we nil out the
 		// type resolver to protect against unexpected behavior on UDT resolution.
 		semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
-		id, err := getNextPlaceholderDescID(evalCtx.Ctx(), p.ExecCfg())
+		id, err := getNextPlaceholderDescID(ctx, p.ExecCfg())
 		if err != nil {
 			return nil, err
 		}
-		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, p.ExecCfg().Settings,
+		desc, err := MakeSimpleTableDescriptor(ctx, semaCtxPtr, p.ExecCfg().Settings,
 			create, parentDB, schema, id, fks, walltime)
 		if err != nil {
 			return nil, err
@@ -403,6 +404,7 @@ func createPostgresTables(
 }
 
 func resolvePostgresFKs(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	parentDB catalog.DatabaseDescriptor,
 	tableFKs map[schemaAndTableName][]*tree.ForeignKeyConstraintTableDef,
@@ -415,7 +417,7 @@ func resolvePostgresFKs(
 		if desc == nil {
 			continue
 		}
-		schema, err := getSchemaByNameFromMap(evalCtx.Ctx(), schemaAndTableName, schemaNameToDesc, evalCtx.Settings.Version)
+		schema, err := getSchemaByNameFromMap(ctx, schemaAndTableName, schemaNameToDesc, evalCtx.Settings.Version)
 		if err != nil {
 			return err
 		}
@@ -431,7 +433,7 @@ func resolvePostgresFKs(
 				constraint.Table.CatalogName = "defaultdb"
 			}
 			if err := sql.ResolveFK(
-				evalCtx.Ctx(), nil /* txn */, &fks.resolver,
+				ctx, nil /* txn */, &fks.resolver,
 				parentDB, schema, desc,
 				constraint, backrefs, sql.NewTable,
 				tree.ValidationDefault, evalCtx,
@@ -553,8 +555,9 @@ func readPostgresCreateTable(
 
 	// Construct table descriptors.
 	backrefs := make(map[descpb.ID]*tabledesc.Mutable)
-	tableDescs, err := createPostgresTables(evalCtx, p, schemaObjects.createTbl, fks, backrefs,
-		parentDB, walltime, schemaNameToDesc)
+	tableDescs, err := createPostgresTables(
+		ctx, evalCtx, p, schemaObjects.createTbl, fks, backrefs, parentDB, walltime, schemaNameToDesc,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -562,7 +565,7 @@ func readPostgresCreateTable(
 
 	// Resolve FKs.
 	err = resolvePostgresFKs(
-		evalCtx, parentDB, schemaObjects.tableFKs, fks, backrefs, schemaNameToDesc,
+		ctx, evalCtx, parentDB, schemaObjects.tableFKs, fks, backrefs, schemaNameToDesc,
 	)
 	if err != nil {
 		return nil, nil, err
