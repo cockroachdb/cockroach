@@ -403,7 +403,7 @@ func (c *CustomFuncs) FoldAssignmentCast(
 	}
 
 	datum := memo.ExtractConstDatum(input)
-	result, err := eval.PerformAssignmentCast(c.f.evalCtx, datum, typ)
+	result, err := eval.PerformAssignmentCast(c.f.ctx, c.f.evalCtx, datum, typ)
 	if err != nil {
 		// Casts can require KV operations. KV errors are not safe to swallow.
 		// Check if the error is a KV error, and, if so, propagate it rather

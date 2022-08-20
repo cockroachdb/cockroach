@@ -1378,7 +1378,7 @@ func writeNonDropDatabaseChange(
 ) ([]jobspb.JobID, error) {
 	var job *jobs.Job
 	var err error
-	if job, err = createNonDropDatabaseChangeJob(p.User(), desc.ID, jobDesc, p, txn); err != nil {
+	if job, err = createNonDropDatabaseChangeJob(ctx, p.User(), desc.ID, jobDesc, p, txn); err != nil {
 		return nil, err
 	}
 
@@ -1397,6 +1397,7 @@ func writeNonDropDatabaseChange(
 }
 
 func createNonDropDatabaseChangeJob(
+	ctx context.Context,
 	user username.SQLUsername,
 	databaseID descpb.ID,
 	jobDesc string,
@@ -1416,7 +1417,7 @@ func createNonDropDatabaseChangeJob(
 
 	jobID := p.ExecCfg().JobRegistry.MakeJobID()
 	return p.ExecCfg().JobRegistry.CreateJobWithTxn(
-		p.ExtendedEvalContext().Ctx(),
+		ctx,
 		jobRecord,
 		jobID,
 		txn,

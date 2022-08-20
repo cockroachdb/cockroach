@@ -11,6 +11,7 @@
 package eval
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
@@ -30,14 +31,14 @@ import (
 var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\."]+)\s*\((?:(?:\s*[\w"]+\s*,)*\s*[\w"]+)?\s*\)\s*$`)
 
 // ParseDOid parses and returns an Oid family datum.
-func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
+func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tree.DOid, error) {
 	// If it is an integer in string form, convert it as an int.
 	if _, err := tree.ParseDInt(strings.TrimSpace(s)); err == nil {
 		tmpOid, err := tree.ParseDOidAsInt(s)
 		if err != nil {
 			return nil, err
 		}
-		oidRes, errSafeToIgnore, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
+		oidRes, errSafeToIgnore, err := evalCtx.Planner.ResolveOIDFromOID(ctx, t, tmpOid)
 		if err != nil {
 			if !errSafeToIgnore {
 				return nil, err
@@ -69,7 +70,7 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		for i := 0; i < len(substrs); i++ {
 			name.Parts[i] = substrs[len(substrs)-1-i]
 		}
-		funcDef, err := ctx.Planner.ResolveFunction(ctx.Ctx(), &name, &ctx.SessionData().SearchPath)
+		funcDef, err := evalCtx.Planner.ResolveFunction(ctx, &name, &evalCtx.SessionData().SearchPath)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +97,7 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		}
 
 		un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
-		fd, err := ctx.Planner.ResolveFunction(ctx.Ctx(), un, &ctx.SessionData().SearchPath)
+		fd, err := evalCtx.Planner.ResolveFunction(ctx, un, &evalCtx.SessionData().SearchPath)
 		if err != nil {
 			return nil, err
 		}
@@ -117,17 +118,17 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 			}
 		}
 
-		argTypes, err := fn.InputArgTypes(ctx.Ctx(), ctx.Planner)
+		argTypes, err := fn.InputArgTypes(ctx, evalCtx.Planner)
 		if err != nil {
 			return nil, err
 		}
-		ol, err := fd.MatchOverload(argTypes, fn.FuncName.Schema(), &ctx.SessionData().SearchPath)
+		ol, err := fd.MatchOverload(argTypes, fn.FuncName.Schema(), &evalCtx.SessionData().SearchPath)
 		if err != nil {
 			return nil, err
 		}
 		return tree.NewDOidWithTypeAndName(ol.Oid, t, fd.Name), nil
 	case oid.T_regtype:
-		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)
+		parsedTyp, err := evalCtx.Planner.GetTypeFromValidSQLSyntax(s)
 		if err == nil {
 			return tree.NewDOidWithTypeAndName(
 				parsedTyp.Oid(), t, parsedTyp.SQLStandardName(),
@@ -148,8 +149,8 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 
-		dOid, errSafeToIgnore, missingTypeErr := ctx.Planner.ResolveOIDFromString(
-			ctx.Ctx(), t, tree.NewDString(tree.Name(s).Normalize()),
+		dOid, errSafeToIgnore, missingTypeErr := evalCtx.Planner.ResolveOIDFromString(
+			ctx, t, tree.NewDString(tree.Name(s).Normalize()),
 		)
 		if missingTypeErr == nil {
 			return dOid, nil
@@ -177,7 +178,7 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		if err != nil {
 			return nil, err
 		}
-		id, err := ctx.Planner.ResolveTableName(ctx.Ctx(), &tn)
+		id, err := evalCtx.Planner.ResolveTableName(ctx, &tn)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +186,7 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		return tree.NewDOidWithTypeAndName(oid.Oid(id), t, tn.ObjectName.String()), nil
 
 	default:
-		d, _ /* errSafeToIgnore */, err := ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, tree.NewDString(s))
+		d, _ /* errSafeToIgnore */, err := evalCtx.Planner.ResolveOIDFromString(ctx, t, tree.NewDString(s))
 		return d, err
 	}
 }

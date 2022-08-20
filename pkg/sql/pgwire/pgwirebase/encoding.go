@@ -13,6 +13,7 @@ package pgwirebase
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -313,7 +314,7 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 // a datum. If res is nil, then user defined types are not attempted
 // to be resolved.
 func DecodeDatum(
-	evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
+	ctx context.Context, evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
 ) (tree.Datum, error) {
 	id := typ.Oid()
 	switch code {
@@ -354,7 +355,7 @@ func DecodeDatum(
 			oid.T_regnamespace,
 			oid.T_regprocedure,
 			oid.T_regdictionary:
-			return eval.ParseDOid(evalCtx, string(b), typ)
+			return eval.ParseDOid(ctx, evalCtx, string(b), typ)
 		case oid.T_float4, oid.T_float8:
 			f, err := strconv.ParseFloat(string(b), 64)
 			if err != nil {
@@ -512,7 +513,7 @@ func DecodeDatum(
 	case FormatBinary:
 		switch id {
 		case oid.T_record:
-			return decodeBinaryTuple(evalCtx, b)
+			return decodeBinaryTuple(ctx, evalCtx, b)
 		case oid.T_bool:
 			if len(b) > 0 {
 				switch b[0] {
@@ -789,7 +790,7 @@ func DecodeDatum(
 			return &tree.DBitArray{BitArray: ba}, err
 		default:
 			if typ.Family() == types.ArrayFamily {
-				return decodeBinaryArray(evalCtx, typ.ArrayContents(), b, code)
+				return decodeBinaryArray(ctx, evalCtx, typ.ArrayContents(), b, code)
 			}
 		}
 	default:
@@ -938,7 +939,7 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 }
 
 func decodeBinaryArray(
-	evalCtx *eval.Context, t *types.T, b []byte, code FormatCode,
+	ctx context.Context, evalCtx *eval.Context, t *types.T, b []byte, code FormatCode,
 ) (tree.Datum, error) {
 	var hdr struct {
 		Ndims int32
@@ -983,7 +984,7 @@ func decodeBinaryArray(
 			continue
 		}
 		buf := r.Next(int(vlen))
-		elem, err := DecodeDatum(evalCtx, t, code, buf)
+		elem, err := DecodeDatum(ctx, evalCtx, t, code, buf)
 		if err != nil {
 			return nil, err
 		}
@@ -996,7 +997,7 @@ func decodeBinaryArray(
 
 const tupleHeaderSize, oidSize, elementSize = 4, 4, 4
 
-func decodeBinaryTuple(evalCtx *eval.Context, b []byte) (tree.Datum, error) {
+func decodeBinaryTuple(ctx context.Context, evalCtx *eval.Context, b []byte) (tree.Datum, error) {
 
 	bufferLength := len(b)
 	if bufferLength < tupleHeaderSize {
@@ -1070,7 +1071,7 @@ func decodeBinaryTuple(evalCtx *eval.Context, b []byte) (tree.Datum, error) {
 				return nil, getSyntaxError("insufficient bytes reading element for binary format. ")
 			}
 
-			colDatum, err := DecodeDatum(evalCtx, elementType, FormatBinary, b[bufferStartIdx:bufferEndIdx])
+			colDatum, err := DecodeDatum(ctx, evalCtx, elementType, FormatBinary, b[bufferStartIdx:bufferEndIdx])
 
 			if err != nil {
 				return nil, err

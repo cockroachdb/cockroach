@@ -1051,7 +1051,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.String}},
 			ReturnType: tree.FixedReturnType(types.INet),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				inet, err := eval.PerformCast(evalCtx, args[0], types.INet)
+				inet, err := eval.PerformCast(ctx, evalCtx, args[0], types.INet)
 				if err != nil {
 					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
 				}
@@ -1967,7 +1967,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := eval.UnwrapDatum(evalCtx, args[0])
-				strD, err := eval.PerformCast(evalCtx, d, types.String)
+				strD, err := eval.PerformCast(ctx, evalCtx, d, types.String)
 				if err != nil {
 					return nil, err
 				}
@@ -2008,7 +2008,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := eval.UnwrapDatum(evalCtx, args[0])
-				strD, err := eval.PerformCast(evalCtx, d, types.String)
+				strD, err := eval.PerformCast(ctx, evalCtx, d, types.String)
 				if err != nil {
 					return nil, err
 				}
@@ -2167,11 +2167,11 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(dOid.Oid))
+				res, err := evalCtx.Sequence.IncrementSequenceByID(ctx, int64(dOid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2185,7 +2185,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
-				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(oid.Oid))
+				res, err := evalCtx.Sequence.IncrementSequenceByID(ctx, int64(oid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2207,11 +2207,11 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(dOid.Oid))
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(ctx, int64(dOid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2225,7 +2225,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
-				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(oid.Oid))
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(ctx, int64(oid.Oid))
 				if err != nil {
 					return nil, err
 				}
@@ -2268,14 +2268,14 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(dOid.Oid), int64(newVal), true /* isCalled */); err != nil {
+					ctx, uint32(dOid.Oid), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2291,7 +2291,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				oid := tree.MustBeDOid(args[0])
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(oid.Oid), int64(newVal), true /* isCalled */); err != nil {
+					ctx, uint32(oid.Oid), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2307,7 +2307,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2315,7 +2315,7 @@ var regularBuiltins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(dOid.Oid), int64(newVal), isCalled); err != nil {
+					ctx, uint32(dOid.Oid), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2335,7 +2335,7 @@ var regularBuiltins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(oid.Oid), int64(newVal), isCalled); err != nil {
+					ctx, uint32(oid.Oid), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -4041,7 +4041,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				uri := string(tree.MustBeDString(args[0]))
-				content, err := evalCtx.Planner.ExternalReadFile(evalCtx.Ctx(), uri)
+				content, err := evalCtx.Planner.ExternalReadFile(ctx, uri)
 				return tree.NewDBytes(tree.DBytes(content)), err
 			},
 			Info:       "Read the content of the file at the supplied external storage URI",
@@ -4059,7 +4059,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				data := tree.MustBeDBytes(args[0])
 				uri := string(tree.MustBeDString(args[1]))
-				if err := evalCtx.Planner.ExternalWriteFile(evalCtx.Ctx(), uri, []byte(data)); err != nil {
+				if err := evalCtx.Planner.ExternalWriteFile(ctx, uri, []byte(data)); err != nil {
 					return nil, err
 				}
 				return tree.NewDInt(tree.DInt(len(data))), nil
@@ -4938,11 +4938,11 @@ value if you rely on the HLC for accuracy.`,
 					)
 				}
 				res, err := evalCtx.CatalogBuiltins.EncodeTableIndexKey(
-					evalCtx.Ctx(), tableID, indexID, rowDatums,
+					ctx, tableID, indexID, rowDatums,
 					func(
-						_ context.Context, d tree.Datum, t *types.T,
+						ctx context.Context, d tree.Datum, t *types.T,
 					) (tree.Datum, error) {
-						return eval.PerformCast(evalCtx, d, t)
+						return eval.PerformCast(ctx, evalCtx, d, t)
 					},
 				)
 				if err != nil {
@@ -5115,7 +5115,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				log.Fatalf(evalCtx.Ctx(), "force_log_fatal(): %s", msg)
+				log.Fatalf(ctx, "force_log_fatal(): %s", msg)
 				return nil, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -5140,7 +5140,7 @@ value if you rely on the HLC for accuracy.`,
 				elapsed := duration.MakeDuration(int64(evalCtx.StmtTimestamp.Sub(evalCtx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
 					return nil, evalCtx.Txn.GenerateForcedRetryableError(
-						evalCtx.Ctx(), "forced by crdb_internal.force_retry()")
+						ctx, "forced by crdb_internal.force_retry()")
 				}
 				return tree.DZero, nil
 			},
@@ -5404,7 +5404,7 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
-				resps, err := evalCtx.RangeStatsFetcher.RangeStats(evalCtx.Ctx(),
+				resps, err := evalCtx.RangeStatsFetcher.RangeStats(ctx,
 					roachpb.Key(tree.MustBeDBytes(args[0])))
 				if err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching range stats")
@@ -5612,7 +5612,7 @@ value if you rely on the HLC for accuracy.`,
 				tableID := catid.DescID(tree.MustBeDInt(args[0]))
 				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeography(args[2])
-				n, err := evalCtx.CatalogBuiltins.NumGeographyInvertedIndexEntries(evalCtx.Ctx(), tableID, indexID, g)
+				n, err := evalCtx.CatalogBuiltins.NumGeographyInvertedIndexEntries(ctx, tableID, indexID, g)
 				if err != nil {
 					return nil, err
 				}
@@ -5636,7 +5636,7 @@ value if you rely on the HLC for accuracy.`,
 				tableID := catid.DescID(tree.MustBeDInt(args[0]))
 				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeometry(args[2])
-				n, err := evalCtx.CatalogBuiltins.NumGeometryInvertedIndexEntries(evalCtx.Ctx(), tableID, indexID, g)
+				n, err := evalCtx.CatalogBuiltins.NumGeometryInvertedIndexEntries(ctx, tableID, indexID, g)
 				if err != nil {
 					return nil, err
 				}
@@ -5801,7 +5801,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				return eval.PerformAssignmentCast(evalCtx, val, targetType)
+				return eval.PerformAssignmentCast(ctx, evalCtx, val, targetType)
 			}),
 			Info: "This function is used internally to perform assignment casts during mutations.",
 			// The volatility of an assignment cast depends on the argument
@@ -6522,7 +6522,7 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6550,7 +6550,7 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6618,7 +6618,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				state := tree.MustBeDBytes(args[0])
-				return evalCtx.Planner.DeserializeSessionState(evalCtx.Ctx(), tree.NewDBytes(state))
+				return evalCtx.Planner.DeserializeSessionState(ctx, tree.NewDBytes(state))
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
 			Volatility: volatility.Volatile,
@@ -6693,7 +6693,7 @@ table's zone configuration this will return NULL.`,
 					return nil, errInsufficientPriv
 				}
 				oid := tree.MustBeDOid(args[0])
-				if err := evalCtx.Planner.RepairTTLScheduledJobForTable(evalCtx.Ctx(), int64(oid.Oid)); err != nil {
+				if err := evalCtx.Planner.RepairTTLScheduledJobForTable(ctx, int64(oid.Oid)); err != nil {
 					return nil, err
 				}
 				return tree.DVoidDatum, nil
@@ -6790,7 +6790,7 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.Planner.RevalidateUniqueConstraintsInCurrentDB(evalCtx.Ctx()); err != nil {
+				if err := evalCtx.Planner.RevalidateUniqueConstraintsInCurrentDB(ctx); err != nil {
 					return nil, err
 				}
 				return tree.DVoidDatum, nil
@@ -6810,11 +6810,11 @@ in the current database. Returns an error if validation fails.`,
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Planner.RevalidateUniqueConstraintsInTable(evalCtx.Ctx(), int(dOid.Oid)); err != nil {
+				if err := evalCtx.Planner.RevalidateUniqueConstraintsInTable(ctx, int(dOid.Oid)); err != nil {
 					return nil, err
 				}
 				return tree.DVoidDatum, nil
@@ -6835,12 +6835,12 @@ table. Returns an error if validation fails.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				constraintName := tree.MustBeDString(args[1])
-				dOid, err := eval.ParseDOid(evalCtx, string(tableName), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
 				if err = evalCtx.Planner.RevalidateUniqueConstraint(
-					evalCtx.Ctx(), int(dOid.Oid), string(constraintName),
+					ctx, int(dOid.Oid), string(constraintName),
 				); err != nil {
 					return nil, err
 				}
@@ -6861,12 +6861,12 @@ table. Returns an error if validation fails.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				constraintName := tree.MustBeDString(args[1])
-				dOid, err := eval.ParseDOid(evalCtx, string(tableName), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
 				active, err := evalCtx.Planner.IsConstraintActive(
-					evalCtx.Ctx(), int(dOid.Oid), string(constraintName),
+					ctx, int(dOid.Oid), string(constraintName),
 				)
 				if err != nil {
 					return nil, err
@@ -7135,7 +7135,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
-					evalCtx.Ctx(), roleoption.VIEWACTIVITY)
+					ctx, roleoption.VIEWACTIVITY)
 				if err != nil {
 					return nil, err
 				}
@@ -7145,13 +7145,13 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 						"VIEWACTIVITY or ADMIN role option")
 				}
 
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
 
 				hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
-					evalCtx.Ctx(), roleoption.VIEWACTIVITYREDACTED)
+					ctx, roleoption.VIEWACTIVITYREDACTED)
 				if err != nil {
 					return nil, err
 				}
@@ -7167,7 +7167,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				expiresAfter := time.Duration(tree.MustBeDInterval(args[3]).Nanos())
 
 				if err := evalCtx.StmtDiagnosticsRequestInserter(
-					evalCtx.Ctx(),
+					ctx,
 					stmtFingerprint,
 					samplingProbability,
 					minExecutionLatency,
@@ -7420,7 +7420,7 @@ var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants
 			}
 			formatStr := tree.MustBeDString(args[0])
 			formatArgs := args[1:]
-			str, err := pgformat.Format(evalCtx, string(formatStr), formatArgs...)
+			str, err := pgformat.Format(ctx, evalCtx, string(formatStr), formatArgs...)
 			if err != nil {
 				return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error parsing format string")
 			}

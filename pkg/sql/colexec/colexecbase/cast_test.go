@@ -68,7 +68,7 @@ func TestRandomizedCast(t *testing.T) {
 			// We don't allow any NULL datums to be generated, so disable this
 			// ability in the RandDatum function.
 			fromDatum := randgen.RandDatum(rng, from, false)
-			toDatum, err := eval.PerformCast(&evalCtx, fromDatum, to)
+			toDatum, err := eval.PerformCast(ctx, &evalCtx, fromDatum, to)
 			var toPhys interface{}
 			if err != nil {
 				errorExpected = true

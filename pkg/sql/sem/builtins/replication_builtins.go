@@ -58,7 +58,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				ingestionJobID := jobspb.JobID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, ingestionJobID, cutoverTimestamp)
+				err = mgr.CompleteStreamIngestion(ctx, evalCtx, evalCtx.Txn, ingestionJobID, cutoverTimestamp)
 				if err != nil {
 					return nil, err
 				}
@@ -96,7 +96,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				stats, err := mgr.GetStreamIngestionStats(ctx, evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
 				if err != nil {
 					return nil, err
 				}
@@ -136,7 +136,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				stats, err := mgr.GetStreamIngestionStats(ctx, evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
 				if err != nil {
 					return nil, err
 				}
@@ -172,7 +172,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				jobID, err := mgr.StartReplicationStream(evalCtx, evalCtx.Txn, uint64(tenantID))
+				jobID, err := mgr.StartReplicationStream(ctx, evalCtx, evalCtx.Txn, uint64(tenantID))
 				if err != nil {
 					return nil, err
 				}
@@ -210,7 +210,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
-				sps, err := mgr.HeartbeatReplicationStream(evalCtx, streamID, frontier, evalCtx.Txn)
+				sps, err := mgr.HeartbeatReplicationStream(ctx, evalCtx, streamID, frontier, evalCtx.Txn)
 				if err != nil {
 					return nil, err
 				}
@@ -275,7 +275,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				spec, err := mgr.GetReplicationStreamSpec(evalCtx, evalCtx.Txn, streaming.StreamID(streamID))
+				spec, err := mgr.GetReplicationStreamSpec(ctx, evalCtx, evalCtx.Txn, streaming.StreamID(streamID))
 				if err != nil {
 					return nil, err
 				}
@@ -311,8 +311,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 				streamID := int64(tree.MustBeDInt(args[0]))
 				successfulIngestion := bool(tree.MustBeDBool(args[1]))
-				if err := mgr.CompleteReplicationStream(evalCtx, evalCtx.Txn,
-					streaming.StreamID(streamID), successfulIngestion); err != nil {
+				if err := mgr.CompleteReplicationStream(
+					ctx, evalCtx, evalCtx.Txn, streaming.StreamID(streamID), successfulIngestion,
+				); err != nil {
 					return nil, err
 				}
 				return tree.NewDInt(tree.DInt(streamID)), err

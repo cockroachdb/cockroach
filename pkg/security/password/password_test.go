@@ -57,7 +57,7 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 
 			// Check conversion succeeds.
 			autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&s.SV)
-			method := security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
+			method := security.GetConfiguredPasswordHashMethod(&s.SV)
 			converted, prevHash, newHashBytes, hashMethod, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, bh, nil, log.Infof)
 			require.NoError(t, err)
 			require.True(t, converted)
@@ -72,7 +72,7 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 
 			// Check that converted hash can't be converted further.
 			autoUpgradePasswordHashesBool = security.AutoUpgradePasswordHashes.Get(&s.SV)
-			method = security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
+			method = security.GetConfiguredPasswordHashMethod(&s.SV)
 
 			ec, _, _, _, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, newHash, nil, log.Infof)
 			require.NoError(t, err)

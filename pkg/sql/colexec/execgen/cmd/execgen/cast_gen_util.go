@@ -619,7 +619,7 @@ func getDatumToNativeCastFunc(nonDatumPhysicalRepresentation string) castFunc {
 	return func(to, from, evalCtx, toType, _ string) string {
 		convStr := `
 		{
-			_castedDatum, err := eval.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
+			_castedDatum, err := eval.PerformCast(c.Ctx, %[3]s, %[2]s.(tree.Datum), %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
@@ -633,7 +633,7 @@ func getDatumToNativeCastFunc(nonDatumPhysicalRepresentation string) castFunc {
 func datumToDatum(to, from, evalCtx, toType, _ string) string {
 	convStr := `
 		{
-			_castedDatum, err := eval.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
+			_castedDatum, err := eval.PerformCast(c.Ctx, %[3]s, %[2]s.(tree.Datum), %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

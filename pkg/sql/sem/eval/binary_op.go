@@ -223,7 +223,7 @@ func (e *evaluator) EvalConcatOp(
 	ctx context.Context, op *tree.ConcatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	if op.Left == types.String {
-		casted, err := PerformCast(e.ctx(), right, types.String)
+		casted, err := PerformCast(ctx, e.ctx(), right, types.String)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,7 @@ func (e *evaluator) EvalConcatOp(
 		), nil
 	}
 	if op.Right == types.String {
-		casted, err := PerformCast(e.ctx(), left, types.String)
+		casted, err := PerformCast(ctx, e.ctx(), left, types.String)
 		if err != nil {
 			return nil, err
 		}

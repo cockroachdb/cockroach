@@ -11,6 +11,7 @@
 package memo
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -469,12 +470,12 @@ type testOpBuilder struct {
 }
 
 func makeOpBuilder(t *testing.T) testOpBuilder {
-	ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var mem Memo
-	mem.Init(&ctx)
+	mem.Init(context.Background(), &evalCtx)
 	ob := testOpBuilder{
 		t:       t,
-		evalCtx: &ctx,
+		evalCtx: &evalCtx,
 		mem:     &mem,
 		cat:     testcat.New(),
 	}

@@ -187,7 +187,7 @@ func (e *evaluator) EvalCastExpr(ctx context.Context, expr *tree.CastExpr) (tree
 		return d, nil
 	}
 	d = UnwrapDatum(e.ctx(), d)
-	return PerformCast(e.ctx(), d, expr.ResolvedType())
+	return PerformCast(ctx, e.ctx(), d, expr.ResolvedType())
 }
 
 func (e *evaluator) EvalCoalesceExpr(

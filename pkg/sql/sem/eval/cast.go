@@ -59,8 +59,10 @@ func ReType(expr tree.TypedExpr, wantedType *types.T) (_ tree.TypedExpr, ok bool
 // PerformCast performs a cast from the provided Datum to the specified
 // types.T. The original datum is returned if its type is identical
 // to the specified type.
-func PerformCast(ctx *Context, d tree.Datum, t *types.T) (tree.Datum, error) {
-	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t, true /* truncateWidth */)
+func PerformCast(
+	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T,
+) (tree.Datum, error) {
+	ret, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, true /* truncateWidth */)
 	if err != nil {
 		return nil, err
 	}
@@ -75,14 +77,16 @@ func PerformCast(ctx *Context, d tree.Datum, t *types.T) (tree.Datum, error) {
 // or string values are too wide for the given type, rather than truncating the
 // value. The one exception to this is casts to the special "char" type which
 // are truncated.
-func PerformAssignmentCast(ctx *Context, d tree.Datum, t *types.T) (tree.Datum, error) {
+func PerformAssignmentCast(
+	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T,
+) (tree.Datum, error) {
 	if !cast.ValidCast(d.ResolvedType(), t, cast.ContextAssignment) {
 		return nil, pgerror.Newf(
 			pgcode.CannotCoerce,
 			"invalid assignment cast: %s -> %s", d.ResolvedType(), t,
 		)
 	}
-	d, err := performCastWithoutPrecisionTruncation(ctx, d, t, false /* truncateWidth */)
+	d, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, false /* truncateWidth */)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +110,7 @@ var (
 // and casting logic before this can happen.
 // See also: #55094.
 func performCastWithoutPrecisionTruncation(
-	ctx *Context, d tree.Datum, t *types.T, truncateWidth bool,
+	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T, truncateWidth bool,
 ) (tree.Datum, error) {
 	// No conversion is needed if d is NULL.
 	if d == tree.DNull {
@@ -395,7 +399,7 @@ func performCastWithoutPrecisionTruncation(
 			// the resolved type for a DFloat is always FLOAT8, meaning
 			// floatTyp.Width() will always return 64.
 			floatTyp := t.ResolvedType()
-			b := tree.PgwireFormatFloat(nil /* buf */, float64(*t), ctx.SessionData().DataConversionConfig, floatTyp)
+			b := tree.PgwireFormatFloat(nil /* buf */, float64(*t), evalCtx.SessionData().DataConversionConfig, floatTyp)
 			s = string(b)
 		case *tree.DInt:
 			if typ.Oid() == oid.T_char {
@@ -416,7 +420,7 @@ func performCastWithoutPrecisionTruncation(
 			s = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 		case *tree.DTimestampTZ:
 			// Convert to context timezone for correct display.
-			ts, err := tree.MakeDTimestampTZ(t.In(ctx.GetLocation()), time.Microsecond)
+			ts, err := tree.MakeDTimestampTZ(t.In(evalCtx.GetLocation()), time.Microsecond)
 			if err != nil {
 				return nil, err
 			}
@@ -428,13 +432,13 @@ func performCastWithoutPrecisionTruncation(
 			s = tree.AsStringWithFlags(
 				d,
 				tree.FmtPgwireText,
-				tree.FmtDataConversionConfig(ctx.SessionData().DataConversionConfig),
+				tree.FmtDataConversionConfig(evalCtx.SessionData().DataConversionConfig),
 			)
 		case *tree.DArray:
 			s = tree.AsStringWithFlags(
 				d,
 				tree.FmtPgwireText,
-				tree.FmtDataConversionConfig(ctx.SessionData().DataConversionConfig),
+				tree.FmtDataConversionConfig(evalCtx.SessionData().DataConversionConfig),
 			)
 		case *tree.DInterval:
 			// When converting an interval to string, we need a string representation
@@ -443,7 +447,7 @@ func performCastWithoutPrecisionTruncation(
 			s = tree.AsStringWithFlags(
 				d,
 				tree.FmtPgwireText,
-				tree.FmtDataConversionConfig(ctx.SessionData().DataConversionConfig),
+				tree.FmtDataConversionConfig(evalCtx.SessionData().DataConversionConfig),
 			)
 		case *tree.DUuid:
 			s = t.UUID.String()
@@ -456,7 +460,7 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DBytes:
 			s = lex.EncodeByteArrayToRawBytes(
 				string(*t),
-				ctx.SessionData().DataConversionConfig.BytesEncodeFormat,
+				evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat,
 				false, /* skipHexPrefix */
 			)
 		case *tree.DOid:
@@ -495,7 +499,7 @@ func performCastWithoutPrecisionTruncation(
 			if truncateWidth && t.Width() > 0 {
 				s = util.TruncateString(s, int(t.Width()))
 			}
-			return tree.NewDCollatedString(s, t.Locale(), &ctx.CollationEnv)
+			return tree.NewDCollatedString(s, t.Locale(), &evalCtx.CollationEnv)
 		}
 
 	case types.BytesFamily:
@@ -658,10 +662,10 @@ func performCastWithoutPrecisionTruncation(
 	case types.DateFamily:
 		switch d := d.(type) {
 		case *tree.DString:
-			res, _, err := tree.ParseDDate(ctx, string(*d))
+			res, _, err := tree.ParseDDate(evalCtx, string(*d))
 			return res, err
 		case *tree.DCollatedString:
-			res, _, err := tree.ParseDDate(ctx, d.Contents)
+			res, _, err := tree.ParseDDate(evalCtx, d.Contents)
 			return res, err
 		case *tree.DDate:
 			return d, nil
@@ -670,7 +674,7 @@ func performCastWithoutPrecisionTruncation(
 			t, err := pgdate.MakeDateFromUnixEpoch(int64(*d))
 			return tree.NewDDate(t), err
 		case *tree.DTimestampTZ:
-			return tree.NewDDateFromTime(d.Time.In(ctx.GetLocation()))
+			return tree.NewDDateFromTime(d.Time.In(evalCtx.GetLocation()))
 		case *tree.DTimestamp:
 			return tree.NewDDateFromTime(d.Time)
 		}
@@ -679,10 +683,10 @@ func performCastWithoutPrecisionTruncation(
 		roundTo := tree.TimeFamilyPrecisionToRoundDuration(t.Precision())
 		switch d := d.(type) {
 		case *tree.DString:
-			res, _, err := tree.ParseDTime(ctx, string(*d), roundTo)
+			res, _, err := tree.ParseDTime(evalCtx, string(*d), roundTo)
 			return res, err
 		case *tree.DCollatedString:
-			res, _, err := tree.ParseDTime(ctx, d.Contents, roundTo)
+			res, _, err := tree.ParseDTime(evalCtx, d.Contents, roundTo)
 			return res, err
 		case *tree.DTime:
 			return d.Round(roundTo), nil
@@ -692,7 +696,7 @@ func performCastWithoutPrecisionTruncation(
 			return tree.MakeDTime(timeofday.FromTime(d.Time).Round(roundTo)), nil
 		case *tree.DTimestampTZ:
 			// Strip time zone. Times don't carry their location.
-			stripped, err := d.EvalAtTimeZone(ctx.GetLocation())
+			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
 			if err != nil {
 				return nil, err
 			}
@@ -705,17 +709,17 @@ func performCastWithoutPrecisionTruncation(
 		roundTo := tree.TimeFamilyPrecisionToRoundDuration(t.Precision())
 		switch d := d.(type) {
 		case *tree.DString:
-			res, _, err := tree.ParseDTimeTZ(ctx, string(*d), roundTo)
+			res, _, err := tree.ParseDTimeTZ(evalCtx, string(*d), roundTo)
 			return res, err
 		case *tree.DCollatedString:
-			res, _, err := tree.ParseDTimeTZ(ctx, d.Contents, roundTo)
+			res, _, err := tree.ParseDTimeTZ(evalCtx, d.Contents, roundTo)
 			return res, err
 		case *tree.DTime:
-			return tree.NewDTimeTZFromLocation(timeofday.TimeOfDay(*d).Round(roundTo), ctx.GetLocation()), nil
+			return tree.NewDTimeTZFromLocation(timeofday.TimeOfDay(*d).Round(roundTo), evalCtx.GetLocation()), nil
 		case *tree.DTimeTZ:
 			return d.Round(roundTo), nil
 		case *tree.DTimestampTZ:
-			return tree.NewDTimeTZFromTime(d.Time.In(ctx.GetLocation()).Round(roundTo)), nil
+			return tree.NewDTimeTZFromTime(d.Time.In(evalCtx.GetLocation()).Round(roundTo)), nil
 		}
 
 	case types.TimestampFamily:
@@ -723,10 +727,10 @@ func performCastWithoutPrecisionTruncation(
 		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *tree.DString:
-			res, _, err := tree.ParseDTimestamp(ctx, string(*d), roundTo)
+			res, _, err := tree.ParseDTimestamp(evalCtx, string(*d), roundTo)
 			return res, err
 		case *tree.DCollatedString:
-			res, _, err := tree.ParseDTimestamp(ctx, d.Contents, roundTo)
+			res, _, err := tree.ParseDTimestamp(evalCtx, d.Contents, roundTo)
 			return res, err
 		case *tree.DDate:
 			t, err := d.ToTime()
@@ -740,7 +744,7 @@ func performCastWithoutPrecisionTruncation(
 			return d.Round(roundTo)
 		case *tree.DTimestampTZ:
 			// Strip time zone. Timestamps don't carry their location.
-			stripped, err := d.EvalAtTimeZone(ctx.GetLocation())
+			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
 			if err != nil {
 				return nil, err
 			}
@@ -752,10 +756,10 @@ func performCastWithoutPrecisionTruncation(
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *tree.DString:
-			res, _, err := tree.ParseDTimestampTZ(ctx, string(*d), roundTo)
+			res, _, err := tree.ParseDTimestampTZ(evalCtx, string(*d), roundTo)
 			return res, err
 		case *tree.DCollatedString:
-			res, _, err := tree.ParseDTimestampTZ(ctx, d.Contents, roundTo)
+			res, _, err := tree.ParseDTimestampTZ(evalCtx, d.Contents, roundTo)
 			return res, err
 		case *tree.DDate:
 			t, err := d.ToTime()
@@ -763,11 +767,11 @@ func performCastWithoutPrecisionTruncation(
 				return nil, err
 			}
 			_, before := t.Zone()
-			_, after := t.In(ctx.GetLocation()).Zone()
+			_, after := t.In(evalCtx.GetLocation()).Zone()
 			return tree.MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), roundTo)
 		case *tree.DTimestamp:
 			_, before := d.Time.Zone()
-			_, after := d.Time.In(ctx.GetLocation()).Zone()
+			_, after := d.Time.In(evalCtx.GetLocation()).Zone()
 			return tree.MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), roundTo)
 		case *tree.DInt:
 			return tree.MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo)
@@ -782,9 +786,9 @@ func performCastWithoutPrecisionTruncation(
 		}
 		switch v := d.(type) {
 		case *tree.DString:
-			return tree.ParseDIntervalWithTypeMetadata(ctx.GetIntervalStyle(), string(*v), itm)
+			return tree.ParseDIntervalWithTypeMetadata(evalCtx.GetIntervalStyle(), string(*v), itm)
 		case *tree.DCollatedString:
-			return tree.ParseDIntervalWithTypeMetadata(ctx.GetIntervalStyle(), v.Contents, itm)
+			return tree.ParseDIntervalWithTypeMetadata(evalCtx.GetIntervalStyle(), v.Contents, itm)
 		case *tree.DInt:
 			return tree.NewDInterval(duration.FromInt64(int64(*v)), itm), nil
 		case *tree.DFloat:
@@ -834,7 +838,7 @@ func performCastWithoutPrecisionTruncation(
 	case types.ArrayFamily:
 		switch v := d.(type) {
 		case *tree.DString:
-			res, _, err := tree.ParseDArrayFromString(ctx, string(*v), t.ArrayContents())
+			res, _, err := tree.ParseDArrayFromString(evalCtx, string(*v), t.ArrayContents())
 			return res, err
 		case *tree.DArray:
 			dcast := tree.NewDArray(t.ArrayContents())
@@ -845,7 +849,7 @@ func performCastWithoutPrecisionTruncation(
 				ecast := tree.DNull
 				if e != tree.DNull {
 					var err error
-					ecast, err = PerformCast(ctx, e, t.ArrayContents())
+					ecast, err = PerformCast(ctx, evalCtx, e, t.ArrayContents())
 					if err != nil {
 						return nil, err
 					}
@@ -860,14 +864,14 @@ func performCastWithoutPrecisionTruncation(
 	case types.OidFamily:
 		switch v := d.(type) {
 		case *tree.DOid:
-			return performIntToOidCast(ctx.Ctx(), ctx.Planner, t, tree.DInt(v.Oid))
+			return performIntToOidCast(ctx, evalCtx.Planner, t, tree.DInt(v.Oid))
 		case *tree.DInt:
-			return performIntToOidCast(ctx.Ctx(), ctx.Planner, t, *v)
+			return performIntToOidCast(ctx, evalCtx.Planner, t, *v)
 		case *tree.DString:
 			if t.Oid() != oid.T_oid && string(*v) == tree.ZeroOidValue {
 				return tree.WrapAsZeroOid(t), nil
 			}
-			return ParseDOid(ctx, string(*v), t)
+			return ParseDOid(ctx, evalCtx, string(*v), t)
 		}
 	case types.TupleFamily:
 		switch v := d.(type) {
@@ -886,14 +890,14 @@ func performCastWithoutPrecisionTruncation(
 			ret := tree.NewDTupleWithLen(t, len(v.D))
 			for i := range v.D {
 				var err error
-				ret.D[i], err = PerformCast(ctx, v.D[i], t.TupleContents()[i])
+				ret.D[i], err = PerformCast(ctx, evalCtx, v.D[i], t.TupleContents()[i])
 				if err != nil {
 					return nil, err
 				}
 			}
 			return ret, nil
 		case *tree.DString:
-			res, _, err := tree.ParseDTupleFromString(ctx, string(*v), t)
+			res, _, err := tree.ParseDTupleFromString(evalCtx, string(*v), t)
 			return res, err
 		}
 	case types.VoidFamily:

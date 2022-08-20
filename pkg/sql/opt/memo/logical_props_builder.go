@@ -11,6 +11,7 @@
 package memo
 
 import (
+	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -55,14 +56,14 @@ type logicalPropsBuilder struct {
 	disableStats bool
 }
 
-func (b *logicalPropsBuilder) init(evalCtx *eval.Context, mem *Memo) {
+func (b *logicalPropsBuilder) init(ctx context.Context, evalCtx *eval.Context, mem *Memo) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*b = logicalPropsBuilder{
 		evalCtx: evalCtx,
 		mem:     mem,
 	}
-	b.sb.init(evalCtx, mem.Metadata())
+	b.sb.init(ctx, evalCtx, mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) clear() {
