@@ -33,7 +33,7 @@ const cx = classnames.bind(styles);
 const customizeRenderEmpty = (node: React.ReactNode) => () =>
   <div className={cx("empty-table__message")}>{node}</div>;
 
-export function Table<T>(props: TableProps<T>) {
+export function Table<T>(props: TableProps<T>): React.ReactElement {
   const {
     columns,
     dataSource,

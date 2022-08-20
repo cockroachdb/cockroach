@@ -122,10 +122,10 @@ export default class ColumnsSelector extends React.Component<
   }
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
 
-  componentDidMount() {
+  componentDidMount(): void {
     window.addEventListener("click", this.outsideClick, false);
   }
-  componentWillUnmount() {
+  componentWillUnmount(): void {
     window.removeEventListener("click", this.outsideClick, false);
   }
 
@@ -147,7 +147,7 @@ export default class ColumnsSelector extends React.Component<
     actionMeta:
       | SelectOptionActionMeta<SelectOption>
       | DeselectOptionActionMeta<SelectOption>,
-  ) => {
+  ): void => {
     const { option, action } = actionMeta;
     const selectionState = new Map(this.state.selectionState);
     // true - if option was selected, false - otherwise
@@ -176,7 +176,7 @@ export default class ColumnsSelector extends React.Component<
     });
   };
 
-  handleSubmit = () => {
+  handleSubmit = (): void => {
     const { selectionState } = this.state;
     const selectedValues = this.props.options
       .filter(o => selectionState.get(o.value))
@@ -216,7 +216,7 @@ export default class ColumnsSelector extends React.Component<
     });
   };
 
-  render() {
+  render(): React.ReactElement {
     const { hide } = this.state;
     const dropdownArea = hide ? hidden : dropdown;
     const options = this.getOptions();

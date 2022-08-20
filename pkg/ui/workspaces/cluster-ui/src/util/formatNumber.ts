@@ -17,7 +17,7 @@ function numberToString(n: number) {
 export function formatNumberForDisplay(
   value: number,
   format: (n: number) => string = numberToString,
-) {
+): string {
   if (!isNumber(value)) {
     return "-";
   }

@@ -25,7 +25,9 @@ export type FilterCheckboxOptionProps = {
   triggerClear?: (fn: () => void) => void;
 } & Props;
 
-export const FilterCheckboxOption = (props: FilterCheckboxOptionProps) => {
+export const FilterCheckboxOption = (
+  props: FilterCheckboxOptionProps,
+): React.ReactElement => {
   const {
     label,
     onSelectionChanged = noop,

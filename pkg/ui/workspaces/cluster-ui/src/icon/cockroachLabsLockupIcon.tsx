@@ -16,7 +16,7 @@ export interface IconProps {
   height?: number;
 }
 
-export function CockroachLabsLockupIcon(props: IconProps) {
+export function CockroachLabsLockupIcon(props: IconProps): React.ReactElement {
   const { fill, color, height } = props;
   const widthViewBox = 306;
   const heightViewBox = 49;

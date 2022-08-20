@@ -14,7 +14,7 @@ export interface IconProps {
   fill?: string;
 }
 
-export function CaretDown(props: IconProps) {
+export function CaretDown(props: IconProps): React.ReactElement {
   const { fill } = props;
 
   return (

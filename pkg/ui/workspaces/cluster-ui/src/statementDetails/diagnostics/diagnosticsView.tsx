@@ -82,7 +82,7 @@ export const EmptyDiagnosticsView = ({
   statementFingerprint,
   showDiagnosticsViewLink,
   activateDiagnosticsRef,
-}: DiagnosticsViewProps) => {
+}: DiagnosticsViewProps): React.ReactElement => {
   return (
     <EmptyTable
       icon={emptyListResultsImg}
@@ -206,17 +206,17 @@ export class DiagnosticsView extends React.Component<
     },
   ];
 
-  componentWillUnmount() {
+  componentWillUnmount(): void {
     this.props.dismissAlertMessage();
   }
 
-  onSortingChange = (columnName: string, ascending: boolean) => {
+  onSortingChange = (columnName: string, ascending: boolean): void => {
     if (this.props.onSortingChange) {
       this.props.onSortingChange("Diagnostics", columnName, ascending);
     }
   };
 
-  render() {
+  render(): React.ReactElement {
     const {
       hasData,
       diagnosticsReports,

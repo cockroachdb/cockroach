@@ -22,7 +22,7 @@ const cx = classNames.bind(styles);
 type Job = cockroach.server.serverpb.IJobResponse;
 
 export class JobStatusBadge extends React.PureComponent<{ jobStatus: string }> {
-  render() {
+  render(): React.ReactElement {
     const jobStatus = this.props.jobStatus;
     const badgeStatus = jobStatusToBadgeStatus(jobStatus);
     const badgeText = jobStatusToBadgeText(jobStatus);
@@ -31,7 +31,7 @@ export class JobStatusBadge extends React.PureComponent<{ jobStatus: string }> {
 }
 
 export class RetryingStatusBadge extends React.PureComponent {
-  render() {
+  render(): React.ReactElement {
     return <Badge status="warning" text="retrying" />;
   }
 }
@@ -41,7 +41,7 @@ export class ProgressBar extends React.PureComponent<{
   lineWidth: number;
   showPercentage: boolean;
 }> {
-  render() {
+  render(): React.ReactElement {
     const percent = this.props.job.fraction_completed * 100;
     return (
       <div className={cx("jobs-table__progress")}>
