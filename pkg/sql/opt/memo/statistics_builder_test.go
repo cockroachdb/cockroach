@@ -11,6 +11,7 @@
 package memo
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -88,7 +89,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	}
 
 	var mem Memo
-	mem.Init(&evalCtx)
+	mem.Init(context.Background(), &evalCtx)
 	tn := tree.NewUnqualifiedTableName("sel")
 	tab := catalog.Table(tn)
 	tabID := mem.Metadata().AddTable(tab, tn)
@@ -104,7 +105,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		}
 
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, mem.Metadata())
+		sb.init(context.Background(), &evalCtx, mem.Metadata())
 
 		// Make the scan.
 		scan := mem.MemoizeScan(&ScanPrivate{Table: tabID, Cols: cols})

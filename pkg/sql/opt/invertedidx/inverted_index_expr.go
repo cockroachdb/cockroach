@@ -31,10 +31,14 @@ import (
 
 // NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr.
 func NewDatumsToInvertedExpr(
-	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr, geoConfig geoindex.Config,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	colTypes []*types.T,
+	expr tree.TypedExpr,
+	geoConfig geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if !geoConfig.IsEmpty() {
-		return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, geoConfig)
+		return NewGeoDatumsToInvertedExpr(ctx, evalCtx, colTypes, expr, geoConfig)
 	}
 
 	return NewJSONOrArrayDatumsToInvertedExpr(evalCtx, colTypes, expr)

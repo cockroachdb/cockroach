@@ -122,7 +122,7 @@ var generators = map[string]builtinDefinition{
 			},
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -145,7 +145,7 @@ var generators = map[string]builtinDefinition{
 			},
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -2375,7 +2375,7 @@ func makePayloadsForTraceGenerator(
 										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
 
 	it, err := evalCtx.Planner.QueryIteratorEx(
-		evalCtx.Ctx(),
+		ctx,
 		"crdb_internal.payloads_for_trace",
 		sessiondata.NoSessionDataOverride,
 		query,

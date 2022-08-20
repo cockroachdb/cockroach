@@ -214,7 +214,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 				colNumber = *args[1].(*tree.DInt)
 			}
 			r, err := evalCtx.Planner.QueryRowEx(
-				evalCtx.Ctx(), "pg_get_indexdef",
+				ctx, "pg_get_indexdef",
 				sessiondata.NoSessionDataOverride,
 				"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1", args[0])
 			if err != nil {
@@ -230,7 +230,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 			}
 			// The 3 argument variant for column number other than 0 returns the column name.
 			r, err = evalCtx.Planner.QueryRowEx(
-				evalCtx.Ctx(), "pg_get_indexdef",
+				ctx, "pg_get_indexdef",
 				sessiondata.NoSessionDataOverride,
 				`SELECT ischema.column_name as pg_get_indexdef 
 		               FROM information_schema.statistics AS ischema 
@@ -264,7 +264,7 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			r, err := evalCtx.Planner.QueryRowEx(
-				evalCtx.Ctx(), "pg_get_viewdef",
+				ctx, "pg_get_viewdef",
 				sessiondata.NoSessionDataOverride,
 				`SELECT definition
  FROM pg_catalog.pg_views v
@@ -295,7 +295,7 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Overload {
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			r, err := evalCtx.Planner.QueryRowEx(
-				evalCtx.Ctx(), "pg_get_constraintdef",
+				ctx, "pg_get_constraintdef",
 				sessiondata.NoSessionDataOverride,
 				"SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1", args[0])
 			if err != nil {
@@ -380,7 +380,7 @@ func makePGPrivilegeInquiryDef(
 				var user username.SQLUsername
 				if withUser {
 					arg := eval.UnwrapDatum(evalCtx, args[0])
-					userS, err := getNameForArg(evalCtx, arg, "pg_roles", "rolname")
+					userS, err := getNameForArg(ctx, evalCtx, arg, "pg_roles", "rolname")
 					if err != nil {
 						return nil, err
 					}
@@ -437,7 +437,9 @@ func makePGPrivilegeInquiryDef(
 // getNameForArg determines the object name for the specified argument, which
 // should be either an unwrapped STRING or an OID. If the object is not found,
 // the returned string will be empty.
-func getNameForArg(evalCtx *eval.Context, arg tree.Datum, pgTable, pgCol string) (string, error) {
+func getNameForArg(
+	ctx context.Context, evalCtx *eval.Context, arg tree.Datum, pgTable, pgCol string,
+) (string, error) {
 	var query string
 	switch t := arg.(type) {
 	case *tree.DString:
@@ -447,7 +449,7 @@ func getNameForArg(evalCtx *eval.Context, arg tree.Datum, pgTable, pgCol string)
 	default:
 		return "", errors.AssertionFailedf("unexpected arg type %T", t)
 	}
-	r, err := evalCtx.Planner.QueryRowEx(evalCtx.Ctx(), "get-name-for-arg",
+	r, err := evalCtx.Planner.QueryRowEx(ctx, "get-name-for-arg",
 		sessiondata.NoSessionDataOverride, query, arg)
 	if err != nil || r == nil {
 		return "", err
@@ -697,7 +699,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				funcOid := tree.MustBeDOid(args[0])
 				t, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_get_function_result",
+					ctx, "pg_get_function_result",
 					sessiondata.NoSessionDataOverride,
 					`SELECT prorettype::REGTYPE::TEXT FROM pg_proc WHERE oid=$1`, funcOid.Oid)
 				if err != nil {
@@ -725,7 +727,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				funcOid := tree.MustBeDOid(args[0])
 				t, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_get_function_identity_arguments",
+					ctx, "pg_get_function_identity_arguments",
 					sessiondata.NoSessionDataOverride,
 					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, funcOid.Oid)
 				if err != nil {
@@ -791,7 +793,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Sequence.GetSerialSequenceNameFromColumn(evalCtx.Ctx(), qualifiedName, tree.Name(columnName))
+				res, err := evalCtx.Sequence.GetSerialSequenceNameFromColumn(ctx, qualifiedName, tree.Name(columnName))
 				if err != nil {
 					return nil, err
 				}
@@ -821,7 +823,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.NewDOid(0), nil
 				}
 				oid, errSafeToIgnore, err := evalCtx.Planner.ResolveOIDFromString(
-					evalCtx.Ctx(), types.RegNamespace, tree.NewDString(schema))
+					ctx, types.RegNamespace, tree.NewDString(schema))
 				if err != nil {
 					// If the OID lookup returns an UndefinedObject error, return 0
 					// instead. We can hit this path if the session created a temporary
@@ -849,7 +851,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				schemaArg := eval.UnwrapDatum(evalCtx, args[0])
-				schema, err := getNameForArg(evalCtx, schemaArg, "pg_namespace", "nspname")
+				schema, err := getNameForArg(ctx, evalCtx, schemaArg, "pg_namespace", "nspname")
 				if err != nil {
 					return nil, err
 				}
@@ -921,7 +923,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := args[0]
 				t, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_get_userbyid",
+					ctx, "pg_get_userbyid",
 					sessiondata.NoSessionDataOverride,
 					"SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
 				if err != nil {
@@ -949,7 +951,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				r, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_sequence_parameters",
+					ctx, "pg_sequence_parameters",
 					sessiondata.NoSessionDataOverride,
 					`SELECT seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid `+
 						`FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
@@ -1036,7 +1038,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				// TODO(jordanlewis): Really we'd like to query this directly
 				// on pg_description and let predicate push-down do its job.
 				r, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_get_coldesc",
+					ctx, "pg_get_coldesc",
 					sessiondata.NoSessionDataOverride,
 					`
 SELECT COALESCE(c.comment, pc.comment) FROM system.comments c
@@ -1062,7 +1064,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return getPgObjDesc(evalCtx, "", args[0].(*tree.DOid).Oid)
+				return getPgObjDesc(ctx, evalCtx, "", args[0].(*tree.DOid).Oid)
 			},
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
@@ -1071,7 +1073,9 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return getPgObjDesc(evalCtx,
+				return getPgObjDesc(
+					ctx,
+					evalCtx,
 					string(tree.MustBeDString(args[1])),
 					args[0].(*tree.DOid).Oid,
 				)
@@ -1108,7 +1112,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 				}
 
 				r, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_get_shobjdesc",
+					ctx, "pg_get_shobjdesc",
 					sessiondata.NoSessionDataOverride,
 					fmt.Sprintf(`
 SELECT description
@@ -1182,7 +1186,7 @@ SELECT description
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
 				t, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_function_is_visible",
+					ctx, "pg_function_is_visible",
 					sessiondata.NoSessionDataOverride,
 					"SELECT * from pg_proc WHERE oid=$1 LIMIT 1", oid.Oid)
 				if err != nil {
@@ -1256,7 +1260,7 @@ SELECT description
 			Types:      tree.ArgTypes{{"reloid", types.Oid}, {"include_triggers", types.Bool}},
 			ReturnType: tree.FixedReturnType(types.Int4),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ret, err := evalCtx.CatalogBuiltins.PGRelationIsUpdatable(evalCtx.Ctx(), tree.MustBeDOid(args[0]))
+				ret, err := evalCtx.CatalogBuiltins.PGRelationIsUpdatable(ctx, tree.MustBeDOid(args[0]))
 				if err != nil {
 					return nil, err
 				}
@@ -1277,7 +1281,7 @@ SELECT description
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ret, err := evalCtx.CatalogBuiltins.PGColumnIsUpdatable(evalCtx.Ctx(), tree.MustBeDOid(args[0]), tree.MustBeDInt(args[1]))
+				ret, err := evalCtx.CatalogBuiltins.PGColumnIsUpdatable(ctx, tree.MustBeDOid(args[0]), tree.MustBeDInt(args[1]))
 				if err != nil {
 					return nil, err
 				}
@@ -1297,8 +1301,8 @@ SELECT description
 				durationNanos := int64(float64(*args[0].(*tree.DFloat)) * float64(1000000000))
 				dur := time.Duration(durationNanos)
 				select {
-				case <-evalCtx.Ctx().Done():
-					return nil, evalCtx.Ctx().Err()
+				case <-ctx.Done():
+					return nil, ctx.Err()
 				case <-time.After(dur):
 					return tree.DBoolTrue, nil
 				}
@@ -1425,7 +1429,7 @@ SELECT description
 		argTypeOpts{{"fdw", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			fdwArg := eval.UnwrapDatum(evalCtx, args[0])
-			fdw, err := getNameForArg(evalCtx, fdwArg, "pg_foreign_data_wrapper", "fdwname")
+			fdw, err := getNameForArg(ctx, evalCtx, fdwArg, "pg_foreign_data_wrapper", "fdwname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
@@ -1516,7 +1520,7 @@ SELECT description
 		argTypeOpts{{"language", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			langArg := eval.UnwrapDatum(evalCtx, args[0])
-			lang, err := getNameForArg(evalCtx, langArg, "pg_language", "lanname")
+			lang, err := getNameForArg(ctx, evalCtx, langArg, "pg_language", "lanname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
@@ -1555,7 +1559,7 @@ SELECT description
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			schemaArg := eval.UnwrapDatum(evalCtx, args[0])
 			databaseName := evalCtx.SessionData().Database
-			specifier, err := schemaHasPrivilegeSpecifier(evalCtx, schemaArg, databaseName)
+			specifier, err := schemaHasPrivilegeSpecifier(ctx, evalCtx, schemaArg, databaseName)
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
@@ -1609,7 +1613,7 @@ SELECT description
 		argTypeOpts{{"server", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			serverArg := eval.UnwrapDatum(evalCtx, args[0])
-			server, err := getNameForArg(evalCtx, serverArg, "pg_foreign_server", "srvname")
+			server, err := getNameForArg(ctx, evalCtx, serverArg, "pg_foreign_server", "srvname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
@@ -1682,7 +1686,7 @@ SELECT description
 		argTypeOpts{{"tablespace", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			tablespaceArg := eval.UnwrapDatum(evalCtx, args[0])
-			tablespace, err := getNameForArg(evalCtx, tablespaceArg, "pg_tablespace", "spcname")
+			tablespace, err := getNameForArg(ctx, evalCtx, tablespaceArg, "pg_tablespace", "spcname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
@@ -1734,7 +1738,7 @@ SELECT description
 				oid = t
 			}
 
-			typ, err := getNameForArg(evalCtx, oid, "pg_type", "typname")
+			typ, err := getNameForArg(ctx, evalCtx, oid, "pg_type", "typname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
@@ -1766,7 +1770,7 @@ SELECT description
 		argTypeOpts{{"role", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			roleArg := eval.UnwrapDatum(evalCtx, args[0])
-			roleS, err := getNameForArg(evalCtx, roleArg, "pg_roles", "rolname")
+			roleS, err := getNameForArg(ctx, evalCtx, roleArg, "pg_roles", "rolname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
@@ -2039,7 +2043,7 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				r, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "information_schema._pg_index_position",
+					ctx, "information_schema._pg_index_position",
 					sessiondata.NoSessionDataOverride,
 					`SELECT (ss.a).n FROM
 					  (SELECT information_schema._pg_expandarray(indkey) AS a
@@ -2199,7 +2203,9 @@ func getCatalogOidForComments(catalogName string) (id int, ok bool) {
 // getPgObjDesc queries pg_description for object comments. catalog_name, if not
 // empty, provides a constraint on which "system catalog" the comment is in.
 // System catalogs are things like pg_class, pg_type, pg_database, and so on.
-func getPgObjDesc(evalCtx *eval.Context, catalogName string, oidVal oid.Oid) (tree.Datum, error) {
+func getPgObjDesc(
+	ctx context.Context, evalCtx *eval.Context, catalogName string, oidVal oid.Oid,
+) (tree.Datum, error) {
 	classOidFilter := ""
 	if catalogName != "" {
 		classOid, ok := getCatalogOidForComments(catalogName)
@@ -2210,7 +2216,7 @@ func getPgObjDesc(evalCtx *eval.Context, catalogName string, oidVal oid.Oid) (tr
 		classOidFilter = fmt.Sprintf("AND classoid = %d", classOid)
 	}
 	r, err := evalCtx.Planner.QueryRowEx(
-		evalCtx.Ctx(), "pg_get_objdesc",
+		ctx, "pg_get_objdesc",
 		sessiondata.NoSessionDataOverride,
 		fmt.Sprintf(`
 SELECT description
@@ -2289,7 +2295,7 @@ func columnHasPrivilegeSpecifier(
 }
 
 func schemaHasPrivilegeSpecifier(
-	evalCtx *eval.Context, schemaArg tree.Datum, databaseName string,
+	ctx context.Context, evalCtx *eval.Context, schemaArg tree.Datum, databaseName string,
 ) (eval.HasPrivilegeSpecifier, error) {
 	specifier := eval.HasPrivilegeSpecifier{
 		SchemaDatabaseName: &databaseName,
@@ -2301,7 +2307,7 @@ func schemaHasPrivilegeSpecifier(
 		specifier.SchemaName = &s
 		schemaIsRequired = true
 	case *tree.DOid:
-		schemaName, err := getNameForArg(evalCtx, schemaArg, "pg_namespace", "nspname")
+		schemaName, err := getNameForArg(ctx, evalCtx, schemaArg, "pg_namespace", "nspname")
 		if err != nil {
 			return specifier, err
 		}

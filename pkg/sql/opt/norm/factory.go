@@ -132,7 +132,7 @@ func (f *Factory) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.C
 	if mem == nil {
 		mem = &memo.Memo{}
 	}
-	mem.Init(evalCtx)
+	mem.Init(ctx, evalCtx)
 
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -358,7 +358,7 @@ func (f *Factory) onMaxConstructorStackDepthExceeded() {
 	if buildutil.CrdbTestBuild {
 		panic(err)
 	}
-	errorutil.SendReport(f.evalCtx.Ctx(), &f.evalCtx.Settings.SV, err)
+	errorutil.SendReport(f.ctx, &f.evalCtx.Settings.SV, err)
 }
 
 // onConstructRelational is called as a final step by each factory method that

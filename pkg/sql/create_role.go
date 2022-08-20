@@ -332,7 +332,7 @@ func (p *planner) checkPasswordAndGetHash(
 			"Passwords must be %d characters or longer.", minLength)
 	}
 
-	method := security.GetConfiguredPasswordHashMethod(ctx, &st.SV)
+	method := security.GetConfiguredPasswordHashMethod(&st.SV)
 	cost, err := security.GetConfiguredPasswordCost(ctx, &st.SV, method)
 	if err != nil {
 		return hashedPassword, errors.HandleAsAssertionFailure(err)
