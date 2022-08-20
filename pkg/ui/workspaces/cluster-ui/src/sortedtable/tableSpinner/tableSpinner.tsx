@@ -19,7 +19,9 @@ interface TableSpinnerProps {
   loadingLabel: string;
 }
 
-export const TableSpinner = ({ loadingLabel }: TableSpinnerProps) => {
+export const TableSpinner = ({
+  loadingLabel,
+}: TableSpinnerProps): React.ReactElement => {
   const tableSpinnerClass = cx("table__loading");
   const spinClass = cx("table__loading--spin");
   const loadingLabelClass = cx("table__loading--label");

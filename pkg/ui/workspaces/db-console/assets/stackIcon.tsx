@@ -14,7 +14,10 @@ interface IconProps {
   className?: string;
 }
 
-export const StackIcon = ({ className, ...props }: IconProps) => (
+export const StackIcon = ({
+  className,
+  ...props
+}: IconProps): React.ReactElement => (
   <svg viewBox="0 0 16 16" className={className} {...props}>
     <path
       fillRule="evenodd"

@@ -86,7 +86,7 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
   }
 }
 
-export function DiagnosticStatusBadge(props: OwnProps) {
+export function DiagnosticStatusBadge(props: OwnProps): React.ReactElement {
   const { status, enableTooltip } = props;
   const tooltipContent = mapStatusToDescription(status);
 

@@ -24,7 +24,7 @@ type statementsType = Array<statementType>;
  * @param statements array of statements (AggregateStatistics or Statement)
  * @returns the total workload of all statements
  */
-export function calculateTotalWorkload(statements: statementsType) {
+export function calculateTotalWorkload(statements: statementsType): number {
   return statements.reduce((totalWorkload: number, stmt: statementType) => {
     return (totalWorkload +=
       longToInt(stmt.stats.count) * stmt.stats.service_lat.mean);

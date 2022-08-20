@@ -21,7 +21,7 @@ interface HighwaterProps {
 }
 
 export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
-  render() {
+  render(): React.ReactElement {
     if (!this.props.timestamp) {
       return null;
     }

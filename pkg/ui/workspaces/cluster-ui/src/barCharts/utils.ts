@@ -34,7 +34,7 @@ export const SCALE_FACTORS: { factor: number; key: string }[] = [
   { factor: 1000, key: "k" },
 ];
 
-export function approximify(value: number) {
+export function approximify(value: number): string {
   for (let i = 0; i < SCALE_FACTORS.length; i++) {
     const scale = SCALE_FACTORS[i];
     if (value > scale.factor) {

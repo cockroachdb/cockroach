@@ -14,7 +14,10 @@ interface IconProps {
   className?: string;
 }
 
-export const CaretRight = ({ className, ...props }: IconProps) => (
+export const CaretRight = ({
+  className,
+  ...props
+}: IconProps): React.ReactElement => (
   <svg viewBox="0 0 11 17" className={className} {...props}>
     <path
       fillRule="evenodd"

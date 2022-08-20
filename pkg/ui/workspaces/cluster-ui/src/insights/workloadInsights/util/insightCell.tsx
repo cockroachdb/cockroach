@@ -25,7 +25,7 @@ function mapInsightTypesToStatus(insight: Insight): string {
   }
 }
 
-export function InsightCell(insight: Insight) {
+export function InsightCell(insight: Insight): React.ReactElement {
   const status = mapInsightTypesToStatus(insight);
   return (
     <Tooltip

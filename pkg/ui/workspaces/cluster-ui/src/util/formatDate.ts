@@ -12,6 +12,6 @@ import { Moment } from "moment";
 
 export const dateFormat = "Y-MM-DD HH:mm:ss";
 
-export function formatDate(time: Moment) {
+export function formatDate(time: Moment): string {
   return time.format(dateFormat);
 }

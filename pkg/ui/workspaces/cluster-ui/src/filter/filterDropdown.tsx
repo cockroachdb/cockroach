@@ -29,7 +29,7 @@ export const FilterDropdown = ({
   label,
   onSubmit,
   children,
-}: FilterDropdownProps) => {
+}: FilterDropdownProps): React.ReactElement => {
   const [isOpen, setIsOpen] = React.useState<boolean>(false);
   const toggleMenuState = React.useCallback(() => {
     setIsOpen(!isOpen);
