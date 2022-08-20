@@ -72,6 +72,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	fallBackIfSecondaryIndexExists(b, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, tbl.TableID)
 	fallBackIfDescColInRowLevelTTLTables(b, tbl.TableID, t)
+	fallBackIfZoneConfigExists(b, t.n, tbl.TableID)
 
 	// Retrieve old primary index and its name elements.
 	oldPrimaryIndexElem, newPrimaryIndexElem := getPrimaryIndexes(b, tbl.TableID)
@@ -203,12 +204,13 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 
 // checkForEarlyExit asserts several precondition for a
 // `ALTER PRIMARY KEY`, including
-//   1. no expression columns allowed;
-//   2. no columns that are in `DROPPED` state;
-//   3. no inaccessible columns;
-//   4. no nullable columns;
-//   5. no virtual columns (starting from v22.1);
-//   6. add more here
+//  1. no expression columns allowed;
+//  2. no columns that are in `DROPPED` state;
+//  3. no inaccessible columns;
+//  4. no nullable columns;
+//  5. no virtual columns (starting from v22.1);
+//  6. add more here
+//
 // Panic if any precondition is found unmet.
 func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 	if err := paramparse.ValidateUniqueConstraintParams(
@@ -530,11 +532,12 @@ func makeShardedDescriptor(b BuildCtx, t alterPrimaryKeySpec) *catpb.ShardedDesc
 // for a unique index on the old primary key columns, if certain conditions are
 // met (see comments of shouldCreateUniqueIndexOnOldPrimaryKeyColumns for details).
 // Namely, it includes
-//     1. a SecondaryIndex element;
-//     2. a set of IndexColumn elements for the secondary index;
-//     3. a TemporaryIndex elements;
-//     4. a set of IndexColumn elements for the temporary index;
-//     5. a IndexName element;
+//  1. a SecondaryIndex element;
+//  2. a set of IndexColumn elements for the secondary index;
+//  3. a TemporaryIndex elements;
+//  4. a set of IndexColumn elements for the temporary index;
+//  5. a IndexName element;
+//
 // This is a CRDB unique feature that helps optimize the performance of
 // queries that still filter on old primary key columns.
 func maybeAddUniqueIndexForOldPrimaryKey(
@@ -675,13 +678,13 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 
 // We only recreate the old primary key of the table as a unique secondary
 // index if:
-// * The table has a primary key (no DROP PRIMARY KEY statements have
-//   been executed).
-// * The primary key is not the default rowid primary key.
-// * The new primary key isn't the same set of columns and directions
-//   other than hash sharding.
-// * There is no partitioning change.
-// * There is no existing secondary index on the old primary key columns.
+//   - The table has a primary key (no DROP PRIMARY KEY statements have
+//     been executed).
+//   - The primary key is not the default rowid primary key.
+//   - The new primary key isn't the same set of columns and directions
+//     other than hash sharding.
+//   - There is no partitioning change.
+//   - There is no existing secondary index on the old primary key columns.
 func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	b BuildCtx,
 	tbl *scpb.Table,

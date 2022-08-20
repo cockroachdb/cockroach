@@ -39,6 +39,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		IsExistenceOptional: false,
 		RequiredPrivilege:   privilege.CREATE,
 	})
+	// We don't support handling zone config related properties for tables, so
+	// throw an unsupported error.
+	if _, _, tbl := scpb.FindTable(relationElements); tbl != nil {
+		fallBackIfZoneConfigExists(b, n, tbl.TableID)
+	}
 	index := scpb.Index{
 		IsUnique:       n.Unique,
 		IsInverted:     n.Inverted,
@@ -102,11 +107,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 		}
 	})
-
 	if n.Unique {
 		index.ConstraintID = b.NextTableConstraintID(index.TableID)
 	}
-
 	if index.TableID == catid.InvalidDescID || source == nil {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not an indexable table or a materialized view", n.Table.ObjectName))

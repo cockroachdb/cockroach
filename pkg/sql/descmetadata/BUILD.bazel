@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "comment_cache.go",
         "metadata_updater.go",
+        "zone_config_getter.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/descmetadata",
     visibility = ["//visibility:public"],
@@ -29,6 +30,7 @@ go_library(
         "//pkg/sql/sessioninit",
         "//pkg/sql/sqlutil",
         "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
