@@ -214,3 +214,31 @@ export function Count(count: number): string {
 export const limitText = (text: string, limit: number): string => {
   return text.length > limit ? text.slice(0, limit - 3).concat("...") : text;
 };
+
+function add(a: string, b: string): string {
+  let c = 0;
+  const r = [];
+  const x = a.split("").map(Number);
+  const y = b.split("").map(Number);
+  while (x.length || y.length) {
+    const s = (x.pop() || 0) + (y.pop() || 0) + c;
+    r.unshift(s < 10 ? s : s - 10);
+    c = s < 10 ? 0 : 1;
+  }
+  if (c) r.unshift(c);
+  return r.join("");
+}
+
+// HexStringToInt64String converts a hex value (in string form)
+// to an int64 (in string form).
+export function HexStringToInt64String(s: string): string {
+  let dec = "0";
+  s.split("").forEach(function (chr: string) {
+    const n = parseInt(chr, 16);
+    for (let t = 8; t; t >>= 1) {
+      dec = add(dec, dec);
+      if (n & t) dec = add(dec, "1");
+    }
+  });
+  return dec;
+}
