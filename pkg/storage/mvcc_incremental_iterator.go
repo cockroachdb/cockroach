@@ -106,6 +106,10 @@ type MVCCIncrementalIterator struct {
 	// positioning operation.
 	rangeKeyChanged bool
 
+	// rangeKeyChangedIgnoringTime is true if i.rangeKeysIgnoringTime changed
+	// during the previous positioning operation.
+	rangeKeyChangedIgnoringTime bool
+
 	// ignoringTime is true if the iterator is currently ignoring time bounds,
 	// i.e. following a call to NextIgnoringTime().
 	ignoringTime bool
@@ -251,6 +255,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 	i.iter.SeekGE(startKey)
 	i.advance(true /* seeked */)
 	i.rangeKeyChanged = !prevRangeKey.Equal(i.rangeKeys.Bounds.Key) // Is there a better way?
+	i.rangeKeyChangedIgnoringTime = i.rangeKeyChanged
 }
 
 // Close implements SimpleMVCCIterator.
@@ -476,8 +481,8 @@ func (i *MVCCIncrementalIterator) updateRangeKeys() (bool, bool) {
 // intent policy is MVCCIncrementalIterIntentPolicyError.
 func (i *MVCCIncrementalIterator) advance(seeked bool) {
 	i.ignoringTime = false
-	i.rangeKeyChanged = false
-	hadRange := !i.rangeKeys.IsEmpty()
+	i.rangeKeyChanged, i.rangeKeyChangedIgnoringTime = false, false
+	hadRange, hadRangeIgnoringTime := !i.rangeKeys.IsEmpty(), !i.rangeKeysIgnoringTime.IsEmpty()
 	for {
 		if !i.updateValid() {
 			return
@@ -499,8 +504,11 @@ func (i *MVCCIncrementalIterator) advance(seeked bool) {
 		var newRangeKey bool
 		if rangeKeyChanged {
 			i.hasPoint, i.hasRange = i.updateRangeKeys()
-			i.rangeKeyChanged = hadRange || i.hasRange // !hasRange → !hasRange is no change
 			newRangeKey = i.hasRange
+
+			// NB: !hasRange → !hasRange is not a change.
+			i.rangeKeyChanged = hadRange || i.hasRange
+			i.rangeKeyChangedIgnoringTime = hadRangeIgnoringTime || !i.rangeKeysIgnoringTime.IsEmpty()
 
 			// If we're on a visible, bare range key then we're done. If the range key
 			// was filtered out by the time bounds (the !hasPoint && !hasRange case),
@@ -581,36 +589,52 @@ func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 }
 
 // HasPointAndRange implements SimpleMVCCIterator.
+//
+// This only returns hasRange=true if there are filtered range keys present.
+// Thus, it is possible for this to return hasPoint=false,hasRange=false
+// following a NextIgnoringTime() call if positioned on a bare, filtered
+// range key. In this case, the range keys are available via
+// RangeKeysIgnoringTime().
 func (i *MVCCIncrementalIterator) HasPointAndRange() (bool, bool) {
-	if i.ignoringTime {
-		return i.iter.HasPointAndRange()
-	}
 	return i.hasPoint, i.hasRange
 }
 
 // RangeBounds implements SimpleMVCCIterator.
+//
+// This only returns the filtered range key bounds. Thus, if a
+// NextIgnoringTime() call moves onto an otherwise hidden range key, this will
+// still return an empty span. These hidden range keys are available via
+// RangeKeysIgnoringTime().
 func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
-	if i.ignoringTime {
-		return i.rangeKeysIgnoringTime.Bounds
-	}
 	return i.rangeKeys.Bounds
 }
 
 // RangeKeys implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) RangeKeys() MVCCRangeKeyStack {
-	if i.ignoringTime {
-		return i.rangeKeysIgnoringTime
-	}
 	return i.rangeKeys
+}
+
+// RangeKeysIgnoringTime returns the range keys at the current position,
+// ignoring time bounds. This call is cheap, so callers do not need to perform
+// their own caching.
+func (i *MVCCIncrementalIterator) RangeKeysIgnoringTime() MVCCRangeKeyStack {
+	return i.rangeKeysIgnoringTime
 }
 
 // RangeKeyChanged implements SimpleMVCCIterator.
 //
 // RangeKeyChanged only applies to the filtered set of range keys. If an
-// IgnoringTime() operation reveals addition range keys or versions, these do
-// not trigger RangeKeyChanged().
+// IgnoringTime() operation reveals additional range keys or versions, these do
+// not trigger RangeKeyChanged(). See also RangeKeyChangedIgnoringTime().
 func (i *MVCCIncrementalIterator) RangeKeyChanged() bool {
 	return i.rangeKeyChanged
+}
+
+// RangeKeyChangedIgnoringTime is like RangeKeyChanged, but returns true if the
+// range keys returned by RangeKeysIgnoringTime() changed since the previous
+// positioning operation -- in particular, after a Next(Key)IgnoringTime() call.
+func (i *MVCCIncrementalIterator) RangeKeyChangedIgnoringTime() bool {
+	return i.rangeKeyChangedIgnoringTime
 }
 
 // UnsafeValue implements SimpleMVCCIterator.
@@ -625,7 +649,7 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 // intent policy.
 func (i *MVCCIncrementalIterator) updateIgnoreTime() {
 	i.ignoringTime = true
-	i.rangeKeyChanged = false
+	i.rangeKeyChanged, i.rangeKeyChangedIgnoringTime = false, false
 	hadRange := !i.rangeKeys.IsEmpty()
 	for {
 		if !i.updateValid() {
@@ -635,6 +659,7 @@ func (i *MVCCIncrementalIterator) updateIgnoreTime() {
 		if i.iter.RangeKeyChanged() {
 			i.hasPoint, i.hasRange = i.updateRangeKeys()
 			i.rangeKeyChanged = hadRange || i.hasRange // !hasRange → !hasRange is no change
+			i.rangeKeyChangedIgnoringTime = true
 			if !i.hasPoint {
 				i.meta.Reset()
 				return
@@ -672,7 +697,16 @@ func (i *MVCCIncrementalIterator) updateIgnoreTime() {
 // Intents within and outside the (StartTime, EndTime] time range are handled
 // according to the iterator policy.
 //
-// RangeKeyChanged() will only fire if the time bound range keys change.
+// NB: Range key methods only respect the filtered set of range keys. To access
+// unfiltered range keys, use RangeKeysIgnoringTime(). This implies that if this
+// call steps onto a range key that's entirely outside of the time bounds:
+//
+// * HasPointAndRange() will return false,false if on a bare range key.
+//
+// * RangeKeyChanged() will not fire, unless stepping off of a range key
+//   within the time bounds.
+//
+// * RangeBounds() and RangeKeys() will return empty results.
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	i.iter.Next()
 	i.updateIgnoreTime()
@@ -683,7 +717,7 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 // forward. Intents within and outside the (StartTime, EndTime] time range are
 // handled according to the iterator policy.
 //
-// RangeKeyChanged() will only fire if the time bound range keys change.
+// NB: See NextIgnoringTime comment for important details about range keys.
 func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
 	i.iter.NextKey()
 	i.updateIgnoreTime()
