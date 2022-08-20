@@ -92,7 +92,7 @@ func MakeExpression(
 	fmtCtx := execinfrapb.ExprFmtCtxBase(ctx, evalCtx)
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
-		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
+		log.Infof(ctx, "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
 	}
 	expression.Expr = fmtCtx.CloseAndGetString()
 	return expression, nil

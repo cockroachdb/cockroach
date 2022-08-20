@@ -749,7 +749,11 @@ func (g *geoDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeForm
 
 // NewGeoDatumsToInvertedExpr returns a new geoDatumsToInvertedExpr.
 func NewGeoDatumsToInvertedExpr(
-	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr, config geoindex.Config,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	colTypes []*types.T,
+	expr tree.TypedExpr,
+	config geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if config.IsEmpty() {
 		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
@@ -813,7 +817,7 @@ func NewGeoDatumsToInvertedExpr(
 			// it for every row.
 			var invertedExpr inverted.Expression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
-				invertedExpr = g.getSpanExpr(evalCtx.Ctx(), d, additionalParams, relationship, g.indexConfig)
+				invertedExpr = g.getSpanExpr(ctx, d, additionalParams, relationship, g.indexConfig)
 			} else if funcExprCount == 1 {
 				// Currently pre-filtering is limited to a single FuncExpr.
 				preFilterRelationship = relationship
