@@ -842,7 +842,7 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
-			memo.RequestColStat(&ot.evalCtx, rel, cols)
+			memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, cols)
 		}
 	}
 	ot.checkExpectedRules(tb, d)
@@ -2015,7 +2015,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)
-		memo.RequestColStat(&ot.evalCtx, rel, colSet)
+		memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, colSet)
 		stat, ok := relProps.Statistics().ColStats.Lookup(colSet)
 		if !ok {
 			return nil, fmt.Errorf("could not find statistic for column %s", colName)
@@ -2239,7 +2239,7 @@ func (ot *OptTester) optimizeExpr(
 		return nil, err
 	}
 	if ot.Flags.PerturbCost != 0 {
-		o.Memo().ResetLogProps(&ot.evalCtx)
+		o.Memo().ResetLogProps(ot.ctx, &ot.evalCtx)
 		o.RecomputeCost()
 	}
 	return root, nil

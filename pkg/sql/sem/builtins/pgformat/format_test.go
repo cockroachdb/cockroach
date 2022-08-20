@@ -179,7 +179,7 @@ func TestFormatWithWeirdFormatStrings(t *testing.T) {
 		}
 		str := string(b)
 		// Mostly just making sure no panics
-		_, err := pgformat.Format(evalContext, str, datums...)
+		_, err := pgformat.Format(context.Background(), evalContext, str, datums...)
 		if err != nil {
 			require.Regexp(t, `position|width|not enough arguments|unrecognized verb|unterminated format`, err.Error(),
 				"input string was %s", str)

@@ -43,6 +43,7 @@ var GetStreamIngestManagerHook func(ctx context.Context, evalCtx *eval.Context) 
 type ReplicationStreamManager interface {
 	// StartReplicationStream starts a stream replication job for the specified tenant on the producer side.
 	StartReplicationStream(
+		ctx context.Context,
 		evalCtx *eval.Context,
 		txn *kv.Txn,
 		tenantID uint64,
@@ -53,6 +54,7 @@ type ReplicationStreamManager interface {
 	// progress and extends its life, and the new producer progress will be returned.
 	// If 'frontier' is hlc.MaxTimestamp, returns the producer progress without updating it.
 	HeartbeatReplicationStream(
+		ctx context.Context,
 		evalCtx *eval.Context,
 		streamID StreamID,
 		frontier hlc.Timestamp,
@@ -69,6 +71,7 @@ type ReplicationStreamManager interface {
 
 	// GetReplicationStreamSpec gets a stream replication spec on the producer side.
 	GetReplicationStreamSpec(
+		ctx context.Context,
 		evalCtx *eval.Context,
 		txn *kv.Txn,
 		streamID StreamID,
@@ -78,7 +81,11 @@ type ReplicationStreamManager interface {
 	// 'successfulIngestion' indicates whether the stream ingestion finished successfully and
 	// determines the fate of the producer job, succeeded or canceled.
 	CompleteReplicationStream(
-		evalCtx *eval.Context, txn *kv.Txn, streamID StreamID, successfulIngestion bool,
+		ctx context.Context,
+		evalCtx *eval.Context,
+		txn *kv.Txn,
+		streamID StreamID,
+		successfulIngestion bool,
 	) error
 }
 
@@ -87,6 +94,7 @@ type ReplicationStreamManager interface {
 type StreamIngestManager interface {
 	// CompleteStreamIngestion signals a running stream ingestion job to complete on the consumer side.
 	CompleteStreamIngestion(
+		ctx context.Context,
 		evalCtx *eval.Context,
 		txn *kv.Txn,
 		ingestionJobID jobspb.JobID,
@@ -95,6 +103,7 @@ type StreamIngestManager interface {
 
 	// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
 	GetStreamIngestionStats(
+		ctx context.Context,
 		evalCtx *eval.Context,
 		txn *kv.Txn,
 		ingestionJobID jobspb.JobID,

@@ -11,6 +11,7 @@
 package memo
 
 import (
+	"context"
 	"math"
 	"reflect"
 
@@ -228,14 +229,16 @@ const (
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
+	ctx     context.Context
 	evalCtx *eval.Context
 	md      *opt.Metadata
 }
 
-func (sb *statisticsBuilder) init(evalCtx *eval.Context, md *opt.Metadata) {
+func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md *opt.Metadata) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*sb = statisticsBuilder{
+		ctx:     ctx,
 		evalCtx: evalCtx,
 		md:      md,
 	}
@@ -4594,9 +4597,9 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 
 // RequestColStat causes a column statistic to be calculated on the relational
 // expression. This is used for testing.
-func RequestColStat(evalCtx *eval.Context, e RelExpr, cols opt.ColSet) {
+func RequestColStat(ctx context.Context, evalCtx *eval.Context, e RelExpr, cols opt.ColSet) {
 	var sb statisticsBuilder
-	sb.init(evalCtx, e.Memo().Metadata())
+	sb.init(ctx, evalCtx, e.Memo().Metadata())
 	sb.colStat(cols, e)
 }
 
@@ -4688,7 +4691,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 					values, hasNullValue, _ = filterConstraint.CollectFirstColumnValues(sb.evalCtx)
 					if hasNullValue {
 						log.Infof(
-							sb.evalCtx.Ctx(), "null value seen in histogram built from check constraint: %s", filterConstraint.String(),
+							sb.ctx, "null value seen in histogram built from check constraint: %s", filterConstraint.String(),
 						)
 					}
 				}
@@ -4738,7 +4741,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 				} else {
 					useHistogram = false
 					log.Infof(
-						sb.evalCtx.Ctx(), "histogram could not be generated from check constraint due to error: %v", err,
+						sb.ctx, "histogram could not be generated from check constraint due to error: %v", err,
 					)
 				}
 			}

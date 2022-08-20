@@ -34,10 +34,14 @@ import (
 
 // completeStreamIngestion terminates the stream as of specified time.
 func completeStreamIngestion(
-	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	ingestionJobID jobspb.JobID,
+	cutoverTimestamp hlc.Timestamp,
 ) error {
 	jobRegistry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	return jobRegistry.UpdateJobWithTxn(evalCtx.Ctx(), ingestionJobID, txn, false, /* useReadLock */
+	return jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false, /* useReadLock */
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// TODO(adityamaru): This should change in the future, a user should be
 			// allowed to correct their cutover time if the process of reverting the job
@@ -56,10 +60,10 @@ func completeStreamIngestion(
 }
 
 func getStreamIngestionStats(
-	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	j, err := registry.LoadJobWithTxn(evalCtx.Ctx(), ingestionJobID, txn)
+	j, err := registry.LoadJobWithTxn(ctx, ingestionJobID, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -95,17 +99,17 @@ func getStreamIngestionStats(
 		stats.ReplicationLagInfo = lagInfo
 	}
 
-	client, err := streamclient.GetFirstActiveClient(evalCtx.Ctx(), progress.GetStreamIngest().StreamAddresses)
+	client, err := streamclient.GetFirstActiveClient(ctx, progress.GetStreamIngest().StreamAddresses)
 	if err != nil {
 		return nil, err
 	}
-	streamStatus, err := client.Heartbeat(evalCtx.Ctx(), streaming.StreamID(details.StreamID), hlc.MaxTimestamp)
+	streamStatus, err := client.Heartbeat(ctx, streaming.StreamID(details.StreamID), hlc.MaxTimestamp)
 	if err != nil {
 		stats.ProducerError = err.Error()
 	} else {
 		stats.ProducerStatus = &streamStatus
 	}
-	return stats, client.Close(evalCtx.Ctx())
+	return stats, client.Close(ctx)
 }
 
 type streamIngestionResumer struct {

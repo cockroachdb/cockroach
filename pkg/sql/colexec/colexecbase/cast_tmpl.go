@@ -411,22 +411,22 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 		if sel != nil {
 			if inputVec.Nulls().MaybeHasNulls() {
 				for scratchIdx, outputIdx := range sel[:n] {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, c.evalCtx, true, false)
+					setNativeToDatumCast(c.Ctx, outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, c.evalCtx, true, false)
 				}
 			} else {
 				for scratchIdx, outputIdx := range sel[:n] {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, c.evalCtx, false, false)
+					setNativeToDatumCast(c.Ctx, outputCol, outputNulls, scratch, scratchIdx, outputIdx, toType, c.evalCtx, false, false)
 				}
 			}
 		} else {
 			_ = scratch[n-1]
 			if inputVec.Nulls().MaybeHasNulls() {
 				for idx := 0; idx < n; idx++ {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, idx, toType, c.evalCtx, true, true)
+					setNativeToDatumCast(c.Ctx, outputCol, outputNulls, scratch, idx, idx, toType, c.evalCtx, true, true)
 				}
 			} else {
 				for idx := 0; idx < n; idx++ {
-					setNativeToDatumCast(outputCol, outputNulls, scratch, idx, idx, toType, c.evalCtx, false, true)
+					setNativeToDatumCast(c.Ctx, outputCol, outputNulls, scratch, idx, idx, toType, c.evalCtx, false, true)
 				}
 			}
 		}
@@ -440,6 +440,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 // execgen:inline
 // execgen:template<hasNulls,scratchBCE>
 func setNativeToDatumCast(
+	ctx context.Context,
 	outputCol coldata.DatumVec,
 	outputNulls *coldata.Nulls,
 	scratch []tree.Datum,
@@ -458,7 +459,7 @@ func setNativeToDatumCast(
 		outputNulls.SetNull(outputIdx)
 		continue
 	}
-	res, err := eval.PerformCast(evalCtx, converted, toType)
+	res, err := eval.PerformCast(ctx, evalCtx, converted, toType)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}

@@ -1309,10 +1309,10 @@ var varGen = map[string]sessionVar{
 	// their own password hash algorithm.
 	`password_encryption`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return security.GetConfiguredPasswordHashMethod(evalCtx.Ctx(), &evalCtx.Settings.SV).String(), nil
+			return security.GetConfiguredPasswordHashMethod(&evalCtx.Settings.SV).String(), nil
 		},
 		SetWithPlanner: func(ctx context.Context, p *planner, local bool, val string) error {
-			method := security.GetConfiguredPasswordHashMethod(ctx, &p.ExecCfg().Settings.SV)
+			method := security.GetConfiguredPasswordHashMethod(&p.ExecCfg().Settings.SV)
 			if val != method.String() {
 				return newCannotChangeParameterError("password_encryption")
 			}

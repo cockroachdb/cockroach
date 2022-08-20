@@ -14,6 +14,8 @@
 package pgformat
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -21,13 +23,13 @@ import (
 // FuzzFormat passes the input to pgformat.Format()
 // as both the format string and format arguments.
 func FuzzFormat(input []byte) int {
-	ctx := eval.MakeTestingEvalContext(nil)
+	evalCtx := eval.MakeTestingEvalContext(nil)
 	str := string(input)
 	args := make(tree.Datums, 16)
 	for i := range args {
 		args[i] = tree.NewDString(string(input))
 	}
-	_, err := Format(&ctx, str, args...)
+	_, err := Format(context.Background(), &evalCtx, str, args...)
 
 	if err == nil {
 		return 0

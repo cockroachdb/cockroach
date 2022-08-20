@@ -557,7 +557,7 @@ func TestingGetFamilyIDFromKey(
 // MakeRowFromTuple converts a SQL datum produced by, for example, SELECT ROW(foo.*),
 // into the same kind of cdcevent.Row you'd get as a result of an insert, but without
 // the primary key.
-func MakeRowFromTuple(evalCtx *eval.Context, t *tree.DTuple) Row {
+func MakeRowFromTuple(ctx context.Context, evalCtx *eval.Context, t *tree.DTuple) Row {
 	r := Projection{EventDescriptor: &EventDescriptor{}}
 	names := t.ResolvedType().TupleLabels()
 	for i, d := range t.D {
@@ -568,10 +568,10 @@ func MakeRowFromTuple(evalCtx *eval.Context, t *tree.DTuple) Row {
 			name = names[i]
 		}
 		r.AddValueColumn(name, d.ResolvedType())
-		if err := r.SetValueDatumAt(evalCtx, i, d); err != nil {
+		if err := r.SetValueDatumAt(ctx, evalCtx, i, d); err != nil {
 			if build.IsRelease() {
-				log.Warningf(context.Background(), "failed to set row value from tuple due to error %v", err)
-				_ = r.SetValueDatumAt(evalCtx, i, tree.DNull)
+				log.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
+				_ = r.SetValueDatumAt(ctx, evalCtx, i, tree.DNull)
 			} else {
 				panic(err)
 			}

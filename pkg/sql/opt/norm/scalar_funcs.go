@@ -139,12 +139,12 @@ func (c *CustomFuncs) UnifyComparison(
 	// means we don't lose any information needed to generate spans, and combined
 	// with monotonicity means that it's safe to convert the RHS to the type of
 	// the LHS.
-	convertedDatum, err := eval.PerformCast(c.f.evalCtx, cnst.Value, desiredType)
+	convertedDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, cnst.Value, desiredType)
 	if err != nil {
 		return nil, false
 	}
 
-	convertedBack, err := eval.PerformCast(c.f.evalCtx, convertedDatum, originalType)
+	convertedBack, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, convertedDatum, originalType)
 	if err != nil {
 		return nil, false
 	}
