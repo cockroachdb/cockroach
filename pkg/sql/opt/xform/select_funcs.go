@@ -173,7 +173,7 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 	tabMeta *opt.TableMeta,
 	index cat.Index,
 	scanPrivate *memo.ScanPrivate,
-	ps *partition.PrefixSorter,
+	ps partition.PrefixSorter,
 	explicitFilters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
 	filterColumns opt.ColSet,
@@ -432,7 +432,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Create a prefix sorter that describes which index partitions are
 		// local to the gateway region.
-		prefixSorter, _ := tabMeta.IndexPartitionLocality(index.Ordinal(), index, c.e.evalCtx)
+		prefixSorter := tabMeta.IndexPartitionLocality(index.Ordinal())
 
 		// Build Constraints to scan a subset of the table Spans.
 		if partitionFilters, remainingFilters, combinedConstraint, ok =

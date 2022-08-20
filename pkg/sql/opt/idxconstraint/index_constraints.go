@@ -1054,7 +1054,7 @@ func (ic *Instance) Init(
 	consolidate bool,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
-	ps *partition.PrefixSorter,
+	ps partition.PrefixSorter,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
