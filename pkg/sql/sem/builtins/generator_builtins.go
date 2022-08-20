@@ -1631,6 +1631,7 @@ type jsonPopulateRecordGenerator struct {
 	target json.JSON
 
 	wasCalled bool
+	ctx       context.Context
 	evalCtx   *eval.Context
 }
 
@@ -1640,13 +1641,17 @@ func (j jsonPopulateRecordGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the tree.ValueGenerator interface.
-func (j *jsonPopulateRecordGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (j *jsonPopulateRecordGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	j.ctx = ctx
+	return nil
+}
 
 // Close is part of the tree.ValueGenerator interface.
 func (j *jsonPopulateRecordGenerator) Close(_ context.Context) {}
 
 // Next is part of the tree.ValueGenerator interface.
-func (j *jsonPopulateRecordGenerator) Next(_ context.Context) (bool, error) {
+func (j *jsonPopulateRecordGenerator) Next(ctx context.Context) (bool, error) {
+	j.ctx = ctx
 	if !j.wasCalled {
 		j.wasCalled = true
 		return true, nil
@@ -1656,7 +1661,7 @@ func (j *jsonPopulateRecordGenerator) Next(_ context.Context) (bool, error) {
 
 // Values is part of the tree.ValueGenerator interface.
 func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
-	if err := eval.PopulateRecordWithJSON(j.evalCtx, j.target, j.input.ResolvedType(), j.input); err != nil {
+	if err := eval.PopulateRecordWithJSON(j.ctx, j.evalCtx, j.target, j.input.ResolvedType(), j.input); err != nil {
 		return nil, err
 	}
 	return j.input.D, nil
@@ -1697,13 +1702,17 @@ type jsonPopulateRecordSetGenerator struct {
 func (j jsonPopulateRecordSetGenerator) ResolvedType() *types.T { return j.input.ResolvedType() }
 
 // Start is part of the tree.ValueGenerator interface.
-func (j jsonPopulateRecordSetGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+func (j jsonPopulateRecordSetGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	j.ctx = ctx
+	return nil
+}
 
 // Close is part of the tree.ValueGenerator interface.
 func (j jsonPopulateRecordSetGenerator) Close(_ context.Context) {}
 
 // Next is part of the tree.ValueGenerator interface.
-func (j *jsonPopulateRecordSetGenerator) Next(_ context.Context) (bool, error) {
+func (j *jsonPopulateRecordSetGenerator) Next(ctx context.Context) (bool, error) {
+	j.ctx = ctx
 	if j.nextIdx >= j.target.Len() {
 		return false, nil
 	}
@@ -1722,7 +1731,7 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 	}
 	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
 	copy(output.D, j.input.D)
-	if err := eval.PopulateRecordWithJSON(j.evalCtx, obj, j.input.ResolvedType(), output); err != nil {
+	if err := eval.PopulateRecordWithJSON(j.ctx, j.evalCtx, obj, j.input.ResolvedType(), output); err != nil {
 		return nil, err
 	}
 	return output.D, nil
@@ -1793,7 +1802,7 @@ func (j *jsonRecordGenerator) Next(ctx context.Context) (bool, error) {
 			continue
 		}
 		v := iter.Value()
-		datum, err := eval.PopulateDatumWithJSON(j.evalCtx, v, j.types[idx])
+		datum, err := eval.PopulateDatumWithJSON(ctx, j.evalCtx, v, j.types[idx])
 		if err != nil {
 			return false, err
 		}

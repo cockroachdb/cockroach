@@ -89,7 +89,7 @@ func TestStringConcat(t *testing.T) {
 			continue
 		}
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
-		expected, err := eval.PerformCast(&evalCtx, d, types.String)
+		expected, err := eval.PerformCast(ctx, &evalCtx, d, types.String)
 		require.NoError(t, err)
 		concatOp := treebin.MakeBinaryOperator(treebin.Concat)
 		concatExprLeft := tree.NewTypedBinaryExpr(concatOp, tree.NewDString(""), d, types.String)

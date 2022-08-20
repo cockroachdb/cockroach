@@ -591,11 +591,6 @@ func (ec *Context) GetDateStyle() pgdate.DateStyle {
 	return ec.SessionData().GetDateStyle()
 }
 
-// Ctx returns the session's context.
-func (ec *Context) Ctx() context.Context {
-	return ec.Context
-}
-
 // BoundedStaleness returns true if this query uses bounded staleness.
 func (ec *Context) BoundedStaleness() bool {
 	return ec.AsOfSystemTime != nil &&

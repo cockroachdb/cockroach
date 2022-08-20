@@ -413,7 +413,7 @@ func TestMakeRowFromTuple(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 
-	rowFromUnlabeledTuple := MakeRowFromTuple(&evalCtx, unlabeledTuple)
+	rowFromUnlabeledTuple := MakeRowFromTuple(context.Background(), &evalCtx, unlabeledTuple)
 	expectedCols := []struct {
 		name        string
 		typ         *types.T
@@ -446,7 +446,7 @@ func TestMakeRowFromTuple(t *testing.T) {
 
 	remainingCols = expectedCols
 
-	rowFromLabeledTuple := MakeRowFromTuple(&evalCtx, labeledTuple)
+	rowFromLabeledTuple := MakeRowFromTuple(context.Background(), &evalCtx, labeledTuple)
 
 	require.NoError(t, rowFromLabeledTuple.ForEachColumn().Datum(func(d tree.Datum, col ResultColumn) error {
 		current := remainingCols[0]

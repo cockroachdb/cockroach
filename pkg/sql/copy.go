@@ -705,6 +705,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 			return readSoFar, err
 		}
 		d, err := pgwirebase.DecodeDatum(
+			ctx,
 			c.parsingEvalCtx,
 			c.resultColumns[i].Typ,
 			pgwirebase.FormatBinary,

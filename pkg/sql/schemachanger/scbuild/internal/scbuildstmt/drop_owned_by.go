@@ -41,7 +41,8 @@ func DropOwnedBy(b BuildCtx, n *tree.DropOwnedBy) {
 		if role != b.SessionData().User() && !b.CurrentUserHasAdminOrIsMemberOf(role) {
 			panic(pgerror.New(pgcode.InsufficientPrivilege, "permission denied to drop objects"))
 		}
-		ok, err := b.CanPerformDropOwnedBy(b.EvalCtx().Ctx(), role)
+		// TODO: confirm the usage of b as context.Context.
+		ok, err := b.CanPerformDropOwnedBy(b, role)
 		if err != nil {
 			panic(err)
 		}
