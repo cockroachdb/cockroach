@@ -107,6 +107,9 @@ export const fullScan = docsURL(
   "sql-tuning-with-explain.html#issue-full-table-scans",
 );
 export const secondaryIndex = docsURL("schema-design-indexes.html");
+export const onlineSchemaChanges = docsURL("online-schema-changes.html");
+export const createIndex = docsURL("create-index.html");
+export const dropIndex = docsURL("drop-index.html");
 export const lockingStrength = docsURL(
   "explain.html#find-out-if-a-statement-is-using-select-for-update-locking",
 );

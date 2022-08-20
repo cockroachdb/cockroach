@@ -41,3 +41,11 @@
   white-space: nowrap;
   overflow: hidden;
 }
+
+.code-area {
+  background-color: $colors--neutral-1;
+  display: block;
+  margin-top: 20px;
+  margin-left: -5px;
+  padding: 5px;
+}
