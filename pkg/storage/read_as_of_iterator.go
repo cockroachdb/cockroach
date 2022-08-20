@@ -31,6 +31,10 @@ type ReadAsOfIterator struct {
 
 	// err tracks if iterating to the current key returned an error
 	err error
+
+	// newestRangeTombstone contains the timestamp of the latest range
+	// tombstone below asOf at the current position, if any.
+	newestRangeTombstone hlc.Timestamp
 }
 
 var _ SimpleMVCCIterator = &ReadAsOfIterator{}
@@ -51,7 +55,7 @@ func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 	synthetic := MVCCKey{Key: originalKey.Key, Timestamp: f.asOf}
 	f.iter.SeekGE(synthetic)
 
-	if f.advance(); f.valid && f.UnsafeKey().Less(originalKey) {
+	if f.advance(true /* seeked */); f.valid && f.UnsafeKey().Less(originalKey) {
 		// The following is true:
 		// originalKey.Key == f.UnsafeKey &&
 		// f.asOf timestamp (if set) >= current timestamp > originalKey timestamp.
@@ -83,7 +87,7 @@ func (f *ReadAsOfIterator) Next() {
 // call before any calls to NextKey().
 func (f *ReadAsOfIterator) NextKey() {
 	f.iter.NextKey()
-	f.advance()
+	f.advance(false /* seeked */)
 }
 
 // UnsafeKey returns the current key, but the memory is invalidated on the next
@@ -129,43 +133,40 @@ func (f *ReadAsOfIterator) updateValid() bool {
 // advance moves past keys with timestamps later than f.asOf and skips MVCC keys
 // whose latest value (subject to f.asOF) has been deleted by a point or range
 // tombstone.
-func (f *ReadAsOfIterator) advance() {
+func (f *ReadAsOfIterator) advance(seeked bool) {
 	for {
 		if ok := f.updateValid(); !ok {
 			return
 		}
 
-		key := f.iter.UnsafeKey()
+		// Detect range tombstones, and step forward to the next key if on a bare
+		// range key.
+		if seeked || f.iter.RangeKeyChanged() {
+			seeked = false
+			hasPoint, hasRange := f.iter.HasPointAndRange()
+			f.newestRangeTombstone = hlc.Timestamp{}
+			if hasRange {
+				if v, ok := f.iter.RangeKeys().FirstBelow(f.asOf); ok {
+					f.newestRangeTombstone = v.Timestamp
+				}
+			}
+			if !hasPoint {
+				f.iter.Next()
+				continue
+			}
+		}
 
-		if f.asOf.Less(key.Timestamp) {
-			// Skip keys above the asOf timestamp, regardless of type of key (e.g. point or range)
+		// Process point keys.
+		if key := f.iter.UnsafeKey(); f.asOf.Less(key.Timestamp) {
+			// Skip keys above the asOf timestamp.
 			f.iter.Next()
-		} else if hasPoint, hasRange := f.iter.HasPointAndRange(); !hasPoint && hasRange {
-			// Bare range keys get surfaced before the point key, even though the
-			// point key shadows it; thus, because we can infer range key information
-			// when the point key surfaces, skip over the bare range key, and reason
-			// about shadowed keys at the surfaced point key.
-			//
-			// E.g. Scanning the keys below:
-			//  2  a2
-			//  1  o---o
-			//     a   b
-			//
-			//  would result in two surfaced keys:
-			//   {a-b}@1;
-			//   a2, {a-b}@1
-
-			f.iter.Next()
-		} else if len(f.iter.UnsafeValue()) == 0 {
+		} else if value, err := DecodeMVCCValue(f.iter.UnsafeValue()); err != nil {
+			f.valid, f.err = false, err
+			return
+		} else if value.IsTombstone() {
 			// Skip to the next MVCC key if we find a point tombstone.
 			f.iter.NextKey()
-		} else if !hasRange {
-			// On a valid key without a range key
-			return
-			// TODO (msbutler): ensure this caches range key values (#84379) before
-			// the 22.2 branch cut, else we face a steep perf cliff for RESTORE with
-			// range keys.
-		} else if f.iter.RangeKeys().HasBetween(key.Timestamp, f.asOf) {
+		} else if key.Timestamp.LessEq(f.newestRangeTombstone) {
 			// The latest range key, as of system time, shadows the latest point key.
 			// This key is therefore deleted as of system time.
 			f.iter.NextKey()
