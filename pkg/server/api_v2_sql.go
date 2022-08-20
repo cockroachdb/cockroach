@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -360,13 +361,27 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	// runner is the function that will execute all the statements as a group.
 	// If there's just one statement, we execute them with an implicit,
 	// auto-commit transaction.
-	runner := func(ctx context.Context, fn func(context.Context, *kv.Txn) error) error { return fn(ctx, nil) }
+
+	type (
+		txnFunc    = func(context.Context, *kv.Txn, sqlutil.InternalExecutor) error
+		runnerFunc = func(ctx context.Context, fn txnFunc) error
+	)
+	var runner runnerFunc
 	if len(requestPayload.Statements) > 1 {
 		// We need a transaction to group the statements together.
 		// We use TxnWithSteppingEnabled here even though we don't
 		// use stepping below, because that buys us admission control.
-		runner = func(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
-			return a.admin.server.db.TxnWithSteppingEnabled(ctx, sessiondatapb.Normal, fn)
+		cf := a.admin.server.sqlServer.execCfg.CollectionFactory
+		runner = func(ctx context.Context, fn txnFunc) error {
+			return cf.TxnWithExecutor(ctx, a.admin.server.db, nil, func(
+				ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor,
+			) error {
+				return fn(ctx, txn, ie)
+			}, descs.SteppingEnabled())
+		}
+	} else {
+		runner = func(ctx context.Context, fn func(context.Context, *kv.Txn, sqlutil.InternalExecutor) error) error {
+			return fn(ctx, nil, a.admin.ie)
 		}
 	}
 
@@ -376,7 +391,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	err = contextutil.RunWithTimeout(ctx, "run-sql-via-api", timeout, func(ctx context.Context) error {
 		retryNum := 0
 
-		return runner(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return runner(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			result.Execution.TxnResults = result.Execution.TxnResults[:0]
 			result.Execution.Retries = retryNum
 			retryNum++
@@ -413,7 +428,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 						}
 					}()
 
-					it, err := a.admin.ie.QueryIteratorEx(ctx, "run-query-via-api", txn,
+					it, err := ie.QueryIteratorEx(ctx, "run-query-via-api", txn,
 						sessiondata.InternalExecutorOverride{
 							User:            username,
 							Database:        requestPayload.Database,

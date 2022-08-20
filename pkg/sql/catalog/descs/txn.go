@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -43,13 +44,50 @@ func (cf *CollectionFactory) Txn(
 	ctx context.Context,
 	db *kv.DB,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
+	opts ...TxnOption,
 ) error {
 	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *Collection, _ sqlutil.InternalExecutor,
 	) error {
 		return f(ctx, txn, descriptors)
-	})
+	}, opts...)
 }
+
+// TxnOption is used to configure a Txn or TxnWithExecutor.
+type TxnOption interface {
+	apply(*txnConfig)
+}
+
+type txnConfig struct {
+	steppingEnabled bool
+}
+
+type txnOptionFn func(options *txnConfig)
+
+func (f txnOptionFn) apply(options *txnConfig) { f(options) }
+
+var steppingEnabled = txnOptionFn(func(o *txnConfig) {
+	o.steppingEnabled = true
+})
+
+// SteppingEnabled creates a TxnOption to determine whether the underlying
+// transaction should have stepping enabled. If stepping is enabled, the
+// transaction will implicitly use lower admission priority. However, the
+// user will need to remember to Step the Txn to make writes visible. The
+// InternalExecutor will automatically (for better or for worse) step the
+// transaction when executing each statement.
+func SteppingEnabled() TxnOption {
+	return steppingEnabled
+}
+
+// TxnWithExecutorFunc is used to run a transaction in the context of a
+// Collection and an InternalExecutor.
+type TxnWithExecutorFunc = func(
+	ctx context.Context,
+	txn *kv.Txn,
+	descriptors *Collection,
+	ie sqlutil.InternalExecutor,
+) error
 
 // TxnWithExecutor enables callers to run transactions with a *Collection such that all
 // retrieved immutable descriptors are properly leased and all mutable
@@ -66,8 +104,21 @@ func (cf *CollectionFactory) TxnWithExecutor(
 	ctx context.Context,
 	db *kv.DB,
 	sd *sessiondata.SessionData,
-	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection, ie sqlutil.InternalExecutor) error,
+	f TxnWithExecutorFunc,
+	opts ...TxnOption,
 ) error {
+	var config txnConfig
+	for _, opt := range opts {
+		opt.apply(&config)
+	}
+	run := db.Txn
+	if config.steppingEnabled {
+		type kvTxnFunc = func(context.Context, *kv.Txn) error
+		run = func(ctx context.Context, f kvTxnFunc) error {
+			return db.TxnWithSteppingEnabled(ctx, sessiondatapb.Normal, f)
+		}
+	}
+
 	// Waits for descriptors that were modified, skipping
 	// over ones that had their descriptor wiped.
 	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
@@ -97,7 +148,7 @@ func (cf *CollectionFactory) TxnWithExecutor(
 	for {
 		var modifiedDescriptors []lease.IDVersion
 		var deletedDescs catalog.DescriptorIDSet
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors, deletedDescs = nil, catalog.DescriptorIDSet{}
 			descsCol := cf.NewCollection(
 				ctx, nil, /* temporarySchemaProvider */
