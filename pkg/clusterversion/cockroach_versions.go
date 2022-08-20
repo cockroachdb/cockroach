@@ -190,16 +190,9 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-	// ChangefeedIdleness is the version where changefeed aggregators forward
-	// idleness-related information alnog with resolved spans to the frontier
-	ChangefeedIdleness
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
-	// EnableNewChangefeedOptions enables the usage of new changefeed options
-	// such as end_time, initial_scan_only, and setting the value of initial_scan
-	// to 'yes|no|only'
-	EnableNewChangefeedOptions
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
@@ -378,16 +371,8 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 	{
-		Key:     ChangefeedIdleness,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
-	},
-	{
 		Key:     EnableNewStoreRebalancer,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
-	},
-	{
-		Key:     EnableNewChangefeedOptions,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
 	},
 	{
 		Key:     V22_1,
