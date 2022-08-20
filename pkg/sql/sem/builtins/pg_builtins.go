@@ -526,7 +526,7 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 				if int > 0 {
 					return tree.DNull, nil
 				}
-				typOid, err := eval.ParseDOid(evalCtx, string(typName), typ)
+				typOid, err := eval.ParseDOid(ctx, evalCtx, string(typName), typ)
 				if err != nil {
 					//nolint:returnerrcheck
 					return tree.DNull, nil
@@ -668,7 +668,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					}
 				}
 				results, err := evalCtx.Planner.QueryRowEx(
-					evalCtx.Ctx(), "pg_get_functiondef",
+					ctx, "pg_get_functiondef",
 					sessiondata.NoSessionDataOverride,
 					getFuncQuery,
 					idToQuery,
@@ -1090,7 +1090,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Oid),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return eval.PerformCast(evalCtx, args[0], types.Oid)
+				return eval.PerformCast(ctx, evalCtx, args[0], types.Oid)
 			},
 			Info:       "Converts an integer to an OID.",
 			Volatility: volatility.Immutable,
@@ -1473,7 +1473,7 @@ SELECT description
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = eval.ParseDOid(evalCtx, string(*t), types.RegProcedure)
+				oid, err = eval.ParseDOid(ctx, evalCtx, string(*t), types.RegProcedure)
 				if err != nil {
 					return eval.HasNoPrivilege, err
 				}
@@ -1730,7 +1730,7 @@ SELECT description
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = eval.ParseDOid(evalCtx, string(*t), types.RegType)
+				oid, err = eval.ParseDOid(ctx, evalCtx, string(*t), types.RegType)
 				if err != nil {
 					return eval.HasNoPrivilege, err
 				}

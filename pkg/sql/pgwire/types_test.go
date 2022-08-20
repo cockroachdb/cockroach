@@ -143,7 +143,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	got, err := pgwirebase.DecodeDatum(evalCtx, types.IntArray, pgwirebase.FormatText, b[4:])
+	got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.IntArray, pgwirebase.FormatText, b[4:])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 
 					evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 					defer evalCtx.Stop(context.Background())
-					got, err := pgwirebase.DecodeDatum(evalCtx, types.Bytes, pgwirebase.FormatText, b[4:])
+					got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.Bytes, pgwirebase.FormatText, b[4:])
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -675,7 +675,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		b.StartTimer()
-		got, err := pgwirebase.DecodeDatum(evalCtx, types.Decimal, pgwirebase.FormatBinary, bytes)
+		got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.Decimal, pgwirebase.FormatBinary, bytes)
 		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)
