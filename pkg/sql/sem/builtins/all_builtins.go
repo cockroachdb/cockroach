@@ -57,6 +57,10 @@ func init() {
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
 	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+		for i, fn := range overloads {
+			signature := name + fn.Signature(true)
+			overloads[i].Oid = signatureMustHaveHardcodedOID(signature)
+		}
 		fDef := tree.NewFunctionDefinition(name, props, overloads)
 		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, fDef)
 		tree.FunDefs[name] = fDef
