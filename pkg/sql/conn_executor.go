@@ -986,6 +986,7 @@ func (s *Server) newConnExecutor(
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	ex.extraTxnState.jobs = new(jobsCollection)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
@@ -1095,17 +1096,12 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType})
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
-		ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, ex.server.cfg.Settings)
-		ieMon.StartNoReserved(ctx, ex.server.GetBytesMonitor())
-		defer ieMon.Stop(ctx)
-		ie := MakeInternalExecutor(ex.server, MemoryMetrics{}, ieMon)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
 			ex.server.cfg.CollectionFactory,
 			ex.server.cfg.DB,
 			ex.server.cfg.Codec,
-			&ie,
 			ex.sessionID,
 		)
 		if err != nil {
@@ -1243,7 +1239,7 @@ type connExecutor struct {
 		// job. The jobs are staged via the function QueueJob in
 		// pkg/sql/planner.go. The staged jobs are executed once the transaction
 		// that staged them commits.
-		jobs jobsCollection
+		jobs *jobsCollection
 
 		// schemaChangeJobRecords is a map of descriptor IDs to job Records.
 		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
@@ -1656,7 +1652,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 		for k := range ex.extraTxnState.schemaChangeJobRecords {
 			delete(ex.extraTxnState.schemaChangeJobRecords, k)
 		}
-		ex.extraTxnState.jobs = nil
+		ex.extraTxnState.jobs.reset()
 		ex.extraTxnState.schemaChangerState = &SchemaChangerState{
 			mode: ex.sessionData().NewSchemaChangerMode,
 		}
@@ -2513,7 +2509,8 @@ var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
 func errIsRetriable(err error) bool {
 	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
 		scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID ||
-		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError)
+		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
+		descs.IsTwoVersionInvariantViolationError(err)
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
@@ -2707,7 +2704,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		MemMetrics:             &ex.memMetrics,
 		Descs:                  ex.extraTxnState.descCollection,
 		TxnModesSetter:         ex,
-		Jobs:                   &ex.extraTxnState.jobs,
+		Jobs:                   ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
 		statsProvider:          ex.server.sqlStats,
 		indexUsageStats:        ex.indexUsageStats,
@@ -2977,7 +2974,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
-			ex.extraTxnState.jobs,
+			*ex.extraTxnState.jobs,
 		); err != nil {
 			handleErr(err)
 		}

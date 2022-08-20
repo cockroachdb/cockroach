@@ -177,11 +177,13 @@ func cleanupSessionTempObjects(
 	cf *descs.CollectionFactory,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	ie sqlutil.InternalExecutor,
 	sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return cf.Txn(ctx, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ie sqlutil.InternalExecutor,
+	) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
@@ -401,10 +403,9 @@ type isMeta1LeaseholderFunc func(context.Context, hlc.ClockTimestamp) (bool, err
 // cleans up orphaned temporary objects by sessions which did not close
 // down cleanly.
 type TemporaryObjectCleaner struct {
-	settings                         *cluster.Settings
-	db                               *kv.DB
-	codec                            keys.SQLCodec
-	makeSessionBoundInternalExecutor sqlutil.InternalExecutorFactory
+	settings *cluster.Settings
+	db       *kv.DB
+	codec    keys.SQLCodec
 	// statusServer gives access to the SQLStatus service.
 	statusServer           serverpb.SQLStatusServer
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
@@ -433,7 +434,6 @@ func NewTemporaryObjectCleaner(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	registry *metric.Registry,
-	makeSessionBoundInternalExecutor sqlutil.InternalExecutorFactory,
 	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
@@ -442,15 +442,14 @@ func NewTemporaryObjectCleaner(
 	metrics := makeTemporaryObjectCleanerMetrics()
 	registry.AddMetricStruct(metrics)
 	return &TemporaryObjectCleaner{
-		settings:                         settings,
-		db:                               db,
-		codec:                            codec,
-		makeSessionBoundInternalExecutor: makeSessionBoundInternalExecutor,
-		statusServer:                     statusServer,
-		isMeta1LeaseholderFunc:           isMeta1LeaseholderFunc,
-		testingKnobs:                     testingKnobs,
-		metrics:                          metrics,
-		collectionFactory:                cf,
+		settings:               settings,
+		db:                     db,
+		codec:                  codec,
+		statusServer:           statusServer,
+		isMeta1LeaseholderFunc: isMeta1LeaseholderFunc,
+		testingKnobs:           testingKnobs,
+		metrics:                metrics,
+		collectionFactory:      cf,
 	}
 }
 
@@ -587,7 +586,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	}
 
 	// Clean up temporary data for inactive sessions.
-	ie := c.makeSessionBoundInternalExecutor.NewInternalExecutor(&sessiondata.SessionData{})
 	for sessionID := range sessionIDs {
 		if _, ok := activeSessions[sessionID.Uint128]; !ok {
 			log.Eventf(ctx, "cleaning up temporary object for session %q", sessionID)
@@ -602,7 +600,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 					c.collectionFactory,
 					c.db,
 					c.codec,
-					ie,
 					sessionID,
 				)
 			}); err != nil {

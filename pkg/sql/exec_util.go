@@ -2148,6 +2148,10 @@ func (jc *jobsCollection) add(ids ...jobspb.JobID) {
 	*jc = append(*jc, ids...)
 }
 
+func (jc *jobsCollection) reset() {
+	*jc = nil
+}
+
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not
 // create unduly large logging and error payloads.
@@ -3442,7 +3446,7 @@ func DescsTxn(
 	execCfg *ExecutorConfig,
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
-	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+	return execCfg.CollectionFactory.Txn(ctx, execCfg.DB, f)
 }
 
 // TestingDescsTxn is a convenience function for running a transaction on

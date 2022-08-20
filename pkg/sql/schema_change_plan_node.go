@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"time"
 
@@ -116,10 +115,10 @@ func (p *planner) waitForDescriptorSchemaChanges(
 
 	// Drop all leases and locks due to the current transaction, and, in the
 	// process, abort the transaction.
-	retryErr := p.txn.PrepareRetryableError(ctx,
-		fmt.Sprintf("schema change waiting for concurrent schema changes on descriptor %d", descID))
-	p.txn.CleanupOnError(ctx, retryErr)
 	p.Descriptors().ReleaseAll(ctx)
+	if err := p.txn.Rollback(ctx); err != nil {
+		return err
+	}
 
 	// Wait for the descriptor to no longer be claimed by a schema change.
 	start := timeutil.Now()
@@ -133,23 +132,23 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			)
 		}
 		blocked := false
-		if err := p.ExecCfg().CollectionFactory.Txn(
-			ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
-			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
-					return err
-				}
-				desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
-					tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					})
-				if err != nil {
-					return err
-				}
-				blocked = desc.HasConcurrentSchemaChanges()
-				return nil
-			}); err != nil {
+		if err := p.ExecCfg().CollectionFactory.Txn(ctx, p.ExecCfg().DB, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+				return err
+			}
+			desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
+				tree.CommonLookupFlags{
+					Required:    true,
+					AvoidLeased: true,
+				})
+			if err != nil {
+				return err
+			}
+			blocked = desc.HasConcurrentSchemaChanges()
+			return nil
+		}); err != nil {
 			return err
 		}
 		if !blocked {

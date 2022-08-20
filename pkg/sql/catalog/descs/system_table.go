@@ -17,13 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 // systemTableIDResolver is the implementation for catalog.SystemTableIDResolver.
 type systemTableIDResolver struct {
 	collectionFactory *CollectionFactory
-	ie                sqlutil.InternalExecutor
 	db                *kv.DB
 }
 
@@ -31,11 +29,10 @@ var _ catalog.SystemTableIDResolver = (*systemTableIDResolver)(nil)
 
 // MakeSystemTableIDResolver creates an object that implements catalog.SystemTableIDResolver.
 func MakeSystemTableIDResolver(
-	collectionFactory *CollectionFactory, ie sqlutil.InternalExecutor, db *kv.DB,
+	collectionFactory *CollectionFactory, db *kv.DB,
 ) catalog.SystemTableIDResolver {
 	return &systemTableIDResolver{
 		collectionFactory: collectionFactory,
-		ie:                ie,
 		db:                db,
 	}
 }
@@ -46,11 +43,12 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 ) (descpb.ID, error) {
 
 	var id descpb.ID
-	if err := r.collectionFactory.Txn(ctx, r.ie, r.db, func(
+	if err := r.collectionFactory.Txn(ctx, r.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *Collection,
 	) (err error) {
 		id, err = descriptors.stored.lookupName(
-			ctx, txn, nil /* maybeDatabase */, keys.SystemDatabaseID, keys.PublicSchemaID, tableName,
+			ctx, txn, nil, /* maybeDatabase */
+			keys.SystemDatabaseID, keys.PublicSchemaID, tableName,
 		)
 		return err
 	}); err != nil {
