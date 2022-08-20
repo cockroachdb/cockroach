@@ -9,6 +9,8 @@
 package cdcevent
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -66,7 +68,9 @@ func (p *Projection) AddValueColumn(name string, typ *types.T) {
 }
 
 // SetValueDatumAt sets value datum at specified position.
-func (p *Projection) SetValueDatumAt(evalCtx *eval.Context, pos int, d tree.Datum) error {
+func (p *Projection) SetValueDatumAt(
+	ctx context.Context, evalCtx *eval.Context, pos int, d tree.Datum,
+) error {
 	pos += len(p.keyCols)
 	if pos >= len(p.datums) {
 		return errors.AssertionFailedf("%d out of bounds", pos)
@@ -78,7 +82,7 @@ func (p *Projection) SetValueDatumAt(evalCtx *eval.Context, pos int, d tree.Datu
 			return pgerror.Newf(pgcode.DatatypeMismatch,
 				"expected type %s for column %s@%d, found %s", col.Typ, col.Name, pos, d.ResolvedType())
 		}
-		cd, err := eval.PerformCast(evalCtx, d, col.Typ)
+		cd, err := eval.PerformCast(ctx, evalCtx, d, col.Typ)
 		if err != nil {
 			return errors.Wrapf(err, "expected type %s for column %s@%d, found %s",
 				col.Typ, col.Name, pos, d.ResolvedType())

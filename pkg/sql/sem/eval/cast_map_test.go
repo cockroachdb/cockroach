@@ -11,6 +11,7 @@
 package eval_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,7 +55,7 @@ func TestCastMap(t *testing.T) {
 			}
 		}
 
-		_, err := eval.PerformCast(&evalCtx, srcDatum, tgtType)
+		_, err := eval.PerformCast(context.Background(), &evalCtx, srcDatum, tgtType)
 		// If the error is a CannotCoerce error, then PerformCast does not
 		// support casting from src to tgt. The one exception is negative
 		// integers to bit types which return the same error code (see the TODO

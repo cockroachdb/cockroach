@@ -44,7 +44,7 @@ func FuzzDecodeDatum(data []byte) int {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
-	_, err := DecodeDatum(evalCtx, typ, code, b)
+	_, err := DecodeDatum(context.Background(), evalCtx, typ, code, b)
 	if err != nil {
 		return 0
 	}

@@ -704,7 +704,7 @@ func MaybeUpgradeStoredPasswordHash(
 	// configuration.
 
 	autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&execCfg.Settings.SV)
-	hashMethod := security.GetConfiguredPasswordHashMethod(ctx, &execCfg.Settings.SV)
+	hashMethod := security.GetConfiguredPasswordHashMethod(&execCfg.Settings.SV)
 
 	converted, prevHash, newHash, newMethod, err := password.MaybeUpgradePasswordHash(ctx,
 		autoUpgradePasswordHashesBool, hashMethod, cleartext, currentHash,
