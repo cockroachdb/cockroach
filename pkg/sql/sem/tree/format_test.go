@@ -420,7 +420,7 @@ func TestFormatPgwireText(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			typeChecked, err = normalize.Expr(evalCtx, typeChecked)
+			typeChecked, err = normalize.Expr(ctx, evalCtx, typeChecked)
 			if err != nil {
 				t.Fatal(err)
 			}

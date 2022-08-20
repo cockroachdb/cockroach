@@ -170,7 +170,7 @@ func (m *mysqldumpReader) readFile(
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, inputRow)
 				}
 				for i, raw := range inputRow {
-					converted, err := mysqlValueToDatum(raw, conv.VisibleColTypes[i], conv.EvalCtx)
+					converted, err := mysqlValueToDatum(ctx, raw, conv.VisibleColTypes[i], conv.EvalCtx)
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
@@ -212,7 +212,7 @@ const (
 // wrapper types are: StrVal, IntVal, FloatVal, HexNum, HexVal, ValArg, BitVal
 // as well as NullVal.
 func mysqlValueToDatum(
-	raw mysql.Expr, desired *types.T, evalContext *eval.Context,
+	ctx context.Context, raw mysql.Expr, desired *types.T, evalContext *eval.Context,
 ) (tree.Datum, error) {
 	switch v := raw.(type) {
 	case mysql.BoolVal:
@@ -242,11 +242,11 @@ func mysqlValueToDatum(
 			// raw byte strings that do not use the same escaping as our ParseBytes
 			// function expects, and the difference between ParseStringAs and
 			// ParseDatumStringAs is whether or not it attempts to parse bytes.
-			return rowenc.ParseDatumStringAsWithRawBytes(desired, s, evalContext)
+			return rowenc.ParseDatumStringAsWithRawBytes(ctx, desired, s, evalContext)
 		case mysql.IntVal:
-			return rowenc.ParseDatumStringAs(desired, string(v.Val), evalContext)
+			return rowenc.ParseDatumStringAs(ctx, desired, string(v.Val), evalContext)
 		case mysql.FloatVal:
-			return rowenc.ParseDatumStringAs(desired, string(v.Val), evalContext)
+			return rowenc.ParseDatumStringAs(ctx, desired, string(v.Val), evalContext)
 		case mysql.HexVal:
 			v, err := v.HexDecode()
 			return tree.NewDBytes(tree.DBytes(v)), err
@@ -259,7 +259,7 @@ func mysqlValueToDatum(
 	case *mysql.UnaryExpr:
 		switch v.Operator {
 		case mysql.UMinusOp:
-			parsed, err := mysqlValueToDatum(v.Expr, desired, evalContext)
+			parsed, err := mysqlValueToDatum(ctx, v.Expr, desired, evalContext)
 			if err != nil {
 				return nil, err
 			}
@@ -278,7 +278,7 @@ func mysqlValueToDatum(
 			}
 		case mysql.UBinaryOp:
 			// TODO(dt): do we want to use this hint to change our decoding logic?
-			return mysqlValueToDatum(v.Expr, desired, evalContext)
+			return mysqlValueToDatum(ctx, v.Expr, desired, evalContext)
 		default:
 			return nil, errors.Errorf("unexpected operator: %q", v.Operator)
 		}

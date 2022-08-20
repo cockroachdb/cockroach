@@ -2357,7 +2357,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.HomogeneousType{},
 			ReturnType: tree.FirstNonNullReturnType(),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return eval.PickFromTuple(evalCtx, true /* greatest */, args)
+				return eval.PickFromTuple(ctx, evalCtx, true /* greatest */, args)
 			},
 			Info:              "Returns the element with the greatest value.",
 			Volatility:        volatility.Immutable,
@@ -2373,7 +2373,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.HomogeneousType{},
 			ReturnType: tree.FirstNonNullReturnType(),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return eval.PickFromTuple(evalCtx, false /* greatest */, args)
+				return eval.PickFromTuple(ctx, evalCtx, false /* greatest */, args)
 			},
 			Info:              "Returns the element with the lowest value.",
 			Volatility:        volatility.Immutable,
@@ -4505,7 +4505,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// The user must be an admin to use this builtin.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -4513,7 +4513,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, errInsufficientPriv
 				}
 
-				sp := tracing.SpanFromContext(evalCtx.Context)
+				sp := tracing.SpanFromContext(ctx)
 				if sp == nil {
 					return tree.DNull, nil
 				}
@@ -4541,7 +4541,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// The user must be an admin to use this builtin.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -4699,7 +4699,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				activeVersion := evalCtx.Settings.Version.ActiveVersionOrEmpty(evalCtx.Context)
+				activeVersion := evalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
 				jsonStr, err := gojson.Marshal(&activeVersion.Version)
 				if err != nil {
 					return nil, err
@@ -4729,7 +4729,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				activeVersion := evalCtx.Settings.Version.ActiveVersionOrEmpty(evalCtx.Context)
+				activeVersion := evalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
 				if activeVersion == (clusterversion.ClusterVersion{}) {
 					return nil, errors.AssertionFailedf("invalid uninitialized version")
 				}
@@ -4817,7 +4817,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Tenant.CreateTenant(evalCtx.Context, uint64(sTenID)); err != nil {
+				if err := evalCtx.Tenant.CreateTenant(ctx, uint64(sTenID)); err != nil {
 					return nil, err
 				}
 				return args[0], nil
@@ -4834,7 +4834,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				token, err := evalCtx.JoinTokenCreator.CreateJoinToken(evalCtx.Context)
+				token, err := evalCtx.JoinTokenCreator.CreateJoinToken(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -4861,7 +4861,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				if err := evalCtx.Tenant.DestroyTenant(
-					evalCtx.Context, uint64(sTenID), false, /* synchronous */
+					ctx, uint64(sTenID), false, /* synchronous */
 				); err != nil {
 					return nil, err
 				}
@@ -4883,7 +4883,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				synchronous := tree.MustBeDBool(args[1])
 				if err := evalCtx.Tenant.DestroyTenant(
-					evalCtx.Context, uint64(sTenID), bool(synchronous),
+					ctx, uint64(sTenID), bool(synchronous),
 				); err != nil {
 					return nil, err
 				}
@@ -4905,7 +4905,7 @@ value if you rely on the HLC for accuracy.`,
 				if !ok {
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
-				ok, err := evalCtx.Gossip.TryClearGossipInfo(evalCtx.Context, string(key))
+				ok, err := evalCtx.Gossip.TryClearGossipInfo(ctx, string(key))
 				if err != nil {
 					return nil, err
 				}
@@ -4997,7 +4997,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				return crdbInternalSendNotice(evalCtx, "NOTICE", msg)
+				return crdbInternalSendNotice(ctx, evalCtx, "NOTICE", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
@@ -5019,7 +5019,7 @@ value if you rely on the HLC for accuracy.`,
 				if _, ok := pgnotice.ParseDisplaySeverity(severityString); !ok {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "severity %s is invalid", severityString)
 				}
-				return crdbInternalSendNotice(evalCtx, severityString, msg)
+				return crdbInternalSendNotice(ctx, evalCtx, severityString, msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
@@ -5069,7 +5069,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -5102,7 +5102,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -5164,7 +5164,7 @@ value if you rely on the HLC for accuracy.`,
 						Key: key,
 					},
 				})
-				if err := evalCtx.Txn.Run(evalCtx.Context, b); err != nil {
+				if err := evalCtx.Txn.Run(ctx, b); err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
@@ -5433,7 +5433,7 @@ value if you rely on the HLC for accuracy.`,
 				parentID := tree.MustBeDInt(args[0])
 				name := tree.MustBeDString(args[1])
 				id, found, err := evalCtx.PrivilegedAccessor.LookupNamespaceID(
-					evalCtx.Context,
+					ctx,
 					int64(parentID),
 					0,
 					string(name),
@@ -5459,7 +5459,7 @@ value if you rely on the HLC for accuracy.`,
 				parentSchemaID := tree.MustBeDInt(args[1])
 				name := tree.MustBeDString(args[2])
 				id, found, err := evalCtx.PrivilegedAccessor.LookupNamespaceID(
-					evalCtx.Context,
+					ctx,
 					int64(parentID),
 					int64(parentSchemaID),
 					string(name),
@@ -5489,7 +5489,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
 				id, found, err := evalCtx.PrivilegedAccessor.LookupNamespaceID(
-					evalCtx.Context,
+					ctx,
 					int64(0),
 					int64(0),
 					string(name),
@@ -5517,7 +5517,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := tree.MustBeDInt(args[0])
 				bytes, found, err := evalCtx.PrivilegedAccessor.LookupZoneConfigByNamespaceID(
-					evalCtx.Context,
+					ctx,
 					int64(id),
 				)
 				if err != nil {
@@ -5540,7 +5540,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{{"vmodule_string", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -5573,7 +5573,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				// The user must be an admin to use this builtin.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -5878,7 +5878,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				prefix := evalCtx.Codec.StartupMigrationKeyPrefix()
-				keyvals, err := evalCtx.Txn.Scan(evalCtx.Context, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+				keyvals, err := evalCtx.Txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 				if err != nil {
 					return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 				}
@@ -5909,7 +5909,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.Planner.UnsafeUpsertDescriptor(evalCtx.Context,
+				if err := evalCtx.Planner.UnsafeUpsertDescriptor(ctx,
 					int64(*args[0].(*tree.DInt)),
 					[]byte(*args[1].(*tree.DBytes)),
 					false /* force */); err != nil {
@@ -5928,7 +5928,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.Planner.UnsafeUpsertDescriptor(evalCtx.Context,
+				if err := evalCtx.Planner.UnsafeUpsertDescriptor(ctx,
 					int64(*args[0].(*tree.DInt)),
 					[]byte(*args[1].(*tree.DBytes)),
 					bool(*args[2].(*tree.DBool))); err != nil {
@@ -5952,7 +5952,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.Planner.UnsafeDeleteDescriptor(evalCtx.Context,
+				if err := evalCtx.Planner.UnsafeDeleteDescriptor(ctx,
 					int64(*args[0].(*tree.DInt)),
 					false, /* force */
 				); err != nil {
@@ -5970,7 +5970,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.Planner.UnsafeDeleteDescriptor(evalCtx.Context,
+				if err := evalCtx.Planner.UnsafeDeleteDescriptor(ctx,
 					int64(*args[0].(*tree.DInt)),
 					bool(*args[1].(*tree.DBool)),
 				); err != nil {
@@ -5999,7 +5999,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.Planner.UnsafeUpsertNamespaceEntry(
-					evalCtx.Context,
+					ctx,
 					int64(*args[0].(*tree.DInt)),     // parentID
 					int64(*args[1].(*tree.DInt)),     // parentSchemaID
 					string(*args[2].(*tree.DString)), // name
@@ -6023,7 +6023,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.Planner.UnsafeUpsertNamespaceEntry(
-					evalCtx.Context,
+					ctx,
 					int64(*args[0].(*tree.DInt)),     // parentID
 					int64(*args[1].(*tree.DInt)),     // parentSchemaID
 					string(*args[2].(*tree.DString)), // name
@@ -6054,7 +6054,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.Planner.UnsafeDeleteNamespaceEntry(
-					evalCtx.Context,
+					ctx,
 					int64(*args[0].(*tree.DInt)),     // parentID
 					int64(*args[1].(*tree.DInt)),     // parentSchemaID
 					string(*args[2].(*tree.DString)), // name
@@ -6079,7 +6079,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.Planner.UnsafeDeleteNamespaceEntry(
-					evalCtx.Context,
+					ctx,
 					int64(*args[0].(*tree.DInt)),     // parentID
 					int64(*args[1].(*tree.DInt)),     // parentSchemaID
 					string(*args[2].(*tree.DString)), // name
@@ -6106,7 +6106,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				sid := sqlliveness.SessionID(*(args[0].(*tree.DBytes)))
-				live, err := evalCtx.SQLLivenessReader.IsAlive(evalCtx.Context, sid)
+				live, err := evalCtx.SQLLivenessReader.IsAlive(ctx, sid)
 				if err != nil {
 					return tree.MakeDBool(true), err
 				}
@@ -6134,7 +6134,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Tenant.GCTenant(evalCtx.Context, uint64(sTenID)); err != nil {
+				if err := evalCtx.Tenant.GCTenant(ctx, uint64(sTenID)); err != nil {
 					return nil, err
 				}
 				return args[0], nil
@@ -6172,7 +6172,7 @@ value if you rely on the HLC for accuracy.`,
 				asOfConsumed := float64(tree.MustBeDFloat(args[5]))
 
 				if err := evalCtx.Tenant.UpdateTenantResourceLimits(
-					evalCtx.Context,
+					ctx,
 					uint64(sTenID),
 					availableRU,
 					refillRate,
@@ -6204,7 +6204,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6216,7 +6216,7 @@ value if you rely on the HLC for accuracy.`,
 				startKey := []byte(tree.MustBeDBytes(args[2]))
 				endKey := []byte(tree.MustBeDBytes(args[3]))
 				if err := evalCtx.CompactEngineSpan(
-					evalCtx.Context, nodeID, storeID, startKey, endKey); err != nil {
+					ctx, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err
 				}
 				return tree.DBoolTrue, nil
@@ -6334,7 +6334,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
+				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6367,7 +6367,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, arg tree.Datums) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
+				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6407,7 +6407,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.Regions.ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
-					evalCtx.Context,
+					ctx,
 				); err != nil {
 					return nil, err
 				}
@@ -6432,7 +6432,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 				id := int64(*args[0].(*tree.DInt))
 
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForTable(
-					evalCtx.Context,
+					ctx,
 					id,
 				); err != nil {
 					return nil, err
@@ -6457,7 +6457,7 @@ table.`,
 				id := int64(*args[0].(*tree.DInt))
 
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForDatabase(
-					evalCtx.Context,
+					ctx,
 					id,
 				); err != nil {
 					return nil, err
@@ -6578,7 +6578,7 @@ table's zone configuration this will return NULL.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
-				err := evalCtx.Planner.ForceDeleteTableData(evalCtx.Context, id)
+				err := evalCtx.Planner.ForceDeleteTableData(ctx, id)
 				if err != nil {
 					return tree.DBoolFalse, err
 				}
@@ -6658,14 +6658,14 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
 				if !isAdmin {
 					return nil, errInsufficientPriv
 				}
-				return tree.DVoidDatum, evalCtx.Planner.ValidateTTLScheduledJobsInCurrentDB(evalCtx.Context)
+				return tree.DVoidDatum, evalCtx.Planner.ValidateTTLScheduledJobsInCurrentDB(ctx)
 			},
 			Info:       `Validate all TTL tables have a valid scheduled job attached.`,
 			Volatility: volatility.Volatile,
@@ -6680,7 +6680,7 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6890,7 +6890,7 @@ active for the current transaction.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6922,7 +6922,7 @@ One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC', 'raftlog',
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6971,7 +6971,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -6986,7 +6986,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 				var foundRepl bool
 				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					var err error
-					_, err = store.Enqueue(evalCtx.Context, queue, rangeID, skipShouldQueue)
+					_, err = store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
 					if err == nil {
 						foundRepl = true
 						return nil
@@ -7021,7 +7021,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -7038,7 +7038,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 				var rec tracingpb.Recording
 				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					var err error
-					rec, err = store.Enqueue(evalCtx.Context, queue, rangeID, skipShouldQueue)
+					rec, err = store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
 					if err == nil {
 						foundRepl = true
 						return nil
@@ -7077,7 +7077,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -7094,7 +7094,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					if storeID == store.StoreID() {
 						foundStore = true
-						_, err := store.Enqueue(evalCtx.Context, queue, rangeID, skipShouldQueue)
+						_, err := store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
 						return err
 					}
 					return nil
@@ -7195,7 +7195,7 @@ expires until the statement bundle is collected`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -7209,7 +7209,7 @@ expires until the statement bundle is collected`,
 					return nil, errors.AssertionFailedf("compaction_concurrency must be > 0")
 				}
 				if err = evalCtx.SetCompactionConcurrency(
-					evalCtx.Context, nodeID, storeID, uint64(compactionConcurrency)); err != nil {
+					ctx, nodeID, storeID, uint64(compactionConcurrency)); err != nil {
 					return nil, err
 				}
 				return tree.DBoolTrue, nil
@@ -9760,11 +9760,11 @@ var errInsufficientPriv = pgerror.New(
 // if an enterprise license is not installed.
 var EvalFollowerReadOffset func(logicalClusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
 
-func recentTimestamp(evalCtx *eval.Context) (time.Time, error) {
+func recentTimestamp(ctx context.Context, evalCtx *eval.Context) (time.Time, error) {
 	if EvalFollowerReadOffset == nil {
 		telemetry.Inc(sqltelemetry.FollowerReadDisabledCCLCounter)
 		evalCtx.ClientNoticeSender.BufferClientNotice(
-			evalCtx.Context,
+			ctx,
 			pgnotice.Newf("follower reads disabled because you are running a non-CCL distribution"),
 		)
 		return evalCtx.StmtTimestamp.Add(builtinconstants.DefaultFollowerReadDuration), nil
@@ -9774,7 +9774,7 @@ func recentTimestamp(evalCtx *eval.Context) (time.Time, error) {
 		if code := pgerror.GetPGCode(err); code == pgcode.CCLValidLicenseRequired {
 			telemetry.Inc(sqltelemetry.FollowerReadDisabledNoEnterpriseLicense)
 			evalCtx.ClientNoticeSender.BufferClientNotice(
-				evalCtx.Context, pgnotice.Newf("follower reads disabled: %s", err.Error()),
+				ctx, pgnotice.Newf("follower reads disabled: %s", err.Error()),
 			)
 			return evalCtx.StmtTimestamp.Add(builtinconstants.DefaultFollowerReadDuration), nil
 		}
@@ -9793,7 +9793,7 @@ func requireNonNull(d tree.Datum) error {
 func followerReadTimestamp(
 	ctx context.Context, evalCtx *eval.Context, _ tree.Datums,
 ) (tree.Datum, error) {
-	ts, err := recentTimestamp(evalCtx)
+	ts, err := recentTimestamp(ctx, evalCtx)
 	if err != nil {
 		return nil, err
 	}

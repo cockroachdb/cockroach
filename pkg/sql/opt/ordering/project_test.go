@@ -11,6 +11,7 @@
 package ordering
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestProject(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	var f norm.Factory
-	f.Init(evalCtx, testcat.New())
+	f.Init(context.Background(), evalCtx, testcat.New())
 	md := f.Metadata()
 	for i := 1; i <= 4; i++ {
 		md.AddColumn(fmt.Sprintf("col%d", i), types.Int)

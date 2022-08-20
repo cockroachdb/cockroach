@@ -1234,7 +1234,7 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 
 	for i := offset; i < len(histogram); i++ {
 		bucket := &ts.js.HistogramBuckets[i-offset]
-		datum, err := rowenc.ParseDatumStringAs(colType, bucket.UpperBound, &evalCtx)
+		datum, err := rowenc.ParseDatumStringAs(context.Background(), colType, bucket.UpperBound, &evalCtx)
 		if err != nil {
 			panic(err)
 		}

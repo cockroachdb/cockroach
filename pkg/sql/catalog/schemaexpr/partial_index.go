@@ -150,7 +150,7 @@ func MakePartialIndexExprs(
 				return nil, refColIDs, err
 			}
 
-			if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
+			if typedExpr, err = txCtx.NormalizeExpr(ctx, evalCtx, typedExpr); err != nil {
 				return nil, refColIDs, err
 			}
 
