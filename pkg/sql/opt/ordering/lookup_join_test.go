@@ -11,6 +11,7 @@
 package ordering
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -41,7 +42,7 @@ func TestLookupJoinProvided(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	var f norm.Factory
-	f.Init(evalCtx, tc)
+	f.Init(context.Background(), evalCtx, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)
@@ -197,7 +198,7 @@ func TestLookupJoinCanProvide(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	var f norm.Factory
-	f.Init(evalCtx, tc)
+	f.Init(context.Background(), evalCtx, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)

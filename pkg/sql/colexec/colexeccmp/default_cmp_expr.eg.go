@@ -12,6 +12,8 @@
 package colexeccmp
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -28,11 +30,11 @@ type cmpExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpExprAdapter{}
 
-func (c *cmpExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
+func (c *cmpExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -50,11 +52,11 @@ type cmpNegateExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpNegateExprAdapter{}
 
-func (c *cmpNegateExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
+func (c *cmpNegateExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -72,12 +74,12 @@ type cmpFlippedExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpFlippedExprAdapter{}
 
-func (c *cmpFlippedExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
+func (c *cmpFlippedExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
 	left, right = right, left
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -95,12 +97,12 @@ type cmpFlippedNegateExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpFlippedNegateExprAdapter{}
 
-func (c *cmpFlippedNegateExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
+func (c *cmpFlippedNegateExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
 	left, right = right, left
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -118,8 +120,8 @@ type cmpNullableExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpNullableExprAdapter{}
 
-func (c *cmpNullableExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+func (c *cmpNullableExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -137,8 +139,8 @@ type cmpNullableNegateExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpNullableNegateExprAdapter{}
 
-func (c *cmpNullableNegateExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+func (c *cmpNullableNegateExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -156,9 +158,9 @@ type cmpNullableFlippedExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpNullableFlippedExprAdapter{}
 
-func (c *cmpNullableFlippedExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
+func (c *cmpNullableFlippedExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
 	left, right = right, left
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -176,9 +178,9 @@ type cmpNullableFlippedNegateExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpNullableFlippedNegateExprAdapter{}
 
-func (c *cmpNullableFlippedNegateExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
+func (c *cmpNullableFlippedNegateExprAdapter) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
 	left, right = right, left
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -197,6 +199,8 @@ type cmpWithSubOperatorExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpWithSubOperatorExprAdapter{}
 
-func (c *cmpWithSubOperatorExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
-	return eval.ComparisonExprWithSubOperator(c.evalCtx, c.expr, left, right)
+func (c *cmpWithSubOperatorExprAdapter) Eval(
+	ctx context.Context, left, right tree.Datum,
+) (tree.Datum, error) {
+	return eval.ComparisonExprWithSubOperator(ctx, c.evalCtx, c.expr, left, right)
 }

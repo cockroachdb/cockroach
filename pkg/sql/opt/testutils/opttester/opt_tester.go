@@ -1257,7 +1257,7 @@ func (ot *OptTester) Memo() (string, error) {
 // Expr parses the input directly into an expression; see exprgen.Build.
 func (ot *OptTester) Expr() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx, ot.catalog)
+	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	f.DisableOptimizations()
 
 	return exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
@@ -1267,7 +1267,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 // normalization; see exprgen.Build.
 func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx, ot.catalog)
+	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	f.SetDisabledRules(ot.Flags.DisableRules)
 
 	if !ot.Flags.NoStableFolds {

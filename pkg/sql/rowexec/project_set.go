@@ -169,7 +169,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			ps.exprHelpers[i].Row = row
 
 			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
-			gen, err := eval.GetGenerator(ps.EvalCtx, fn)
+			gen, err := eval.GetGenerator(ps.Ctx, ps.EvalCtx, fn)
 			if err != nil {
 				return nil, nil, err
 			}

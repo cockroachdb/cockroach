@@ -83,7 +83,7 @@ func (p *planner) ConstrainPrimaryIndexSpanByExpr(
 	}
 
 	var nf norm.Factory
-	nf.Init(evalCtx, &oc)
+	nf.Init(ctx, evalCtx, &oc)
 	nf.Metadata().AddTable(tbl, tn)
 
 	b := optbuilder.NewScalar(ctx, semaCtx, evalCtx, &nf)

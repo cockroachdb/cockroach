@@ -321,7 +321,7 @@ var _ importRowConsumer = &pgCopyConsumer{}
 
 // FillDatums implements importRowConsumer
 func (p *pgCopyConsumer) FillDatums(
-	row interface{}, rowNum int64, conv *row.DatumRowConverter,
+	ctx context.Context, row interface{}, rowNum int64, conv *row.DatumRowConverter,
 ) error {
 	data := row.(copyData)
 	var err error
@@ -336,7 +336,7 @@ func (p *pgCopyConsumer) FillDatums(
 		if s == nil {
 			conv.Datums[i] = tree.DNull
 		} else {
-			conv.Datums[i], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
+			conv.Datums[i], err = rowenc.ParseDatumStringAs(ctx, conv.VisibleColTypes[i], *s, conv.EvalCtx)
 			if err != nil {
 				col := conv.VisibleCols[i]
 				return newImportRowError(errors.Wrapf(

@@ -71,7 +71,7 @@ func MakeDefaultExprs(
 		if err != nil {
 			return nil, err
 		}
-		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
+		if typedExpr, err = txCtx.NormalizeExpr(ctx, evalCtx, typedExpr); err != nil {
 			return nil, err
 		}
 		defaultExprs = append(defaultExprs, typedExpr)

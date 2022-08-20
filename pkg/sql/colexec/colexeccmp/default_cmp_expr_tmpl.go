@@ -22,6 +22,8 @@
 package colexeccmp
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -40,7 +42,7 @@ type _EXPR_NAME struct {
 
 var _ ComparisonExprAdapter = &_EXPR_NAME{}
 
-func (c *_EXPR_NAME) Eval(left, right tree.Datum) (tree.Datum, error) {
+func (c *_EXPR_NAME) Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error) {
 	// {{if not .CalledOnNullInput}}
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
@@ -49,7 +51,7 @@ func (c *_EXPR_NAME) Eval(left, right tree.Datum) (tree.Datum, error) {
 	// {{if .FlippedArgs}}
 	left, right = right, left
 	// {{end}}
-	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
+	d, err := eval.BinaryOp(ctx, c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -74,6 +76,8 @@ type cmpWithSubOperatorExprAdapter struct {
 
 var _ ComparisonExprAdapter = &cmpWithSubOperatorExprAdapter{}
 
-func (c *cmpWithSubOperatorExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
-	return eval.ComparisonExprWithSubOperator(c.evalCtx, c.expr, left, right)
+func (c *cmpWithSubOperatorExprAdapter) Eval(
+	ctx context.Context, left, right tree.Datum,
+) (tree.Datum, error) {
+	return eval.ComparisonExprWithSubOperator(ctx, c.evalCtx, c.expr, left, right)
 }

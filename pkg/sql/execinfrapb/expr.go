@@ -93,7 +93,7 @@ func processExpression(
 	//
 	// TODO(solon): It would be preferable to enhance our expression serialization
 	// format so this wouldn't be necessary.
-	c := normalize.MakeConstantEvalVisitor(evalCtx)
+	c := normalize.MakeConstantEvalVisitor(ctx, evalCtx)
 	expr, _ = tree.WalkExpr(&c, typedExpr)
 	if err := c.Err(); err != nil {
 		return nil, err

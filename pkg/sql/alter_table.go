@@ -760,6 +760,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableResetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc)
 			if err := storageparam.Reset(
+				params.ctx,
 				params.EvalContext(),
 				t.Params,
 				setter,

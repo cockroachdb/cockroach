@@ -55,14 +55,14 @@ type relocateRequest struct {
 }
 
 func (n *relocateRange) startExec(params runParams) error {
-	toStoreID, err := paramparse.DatumAsInt(params.EvalContext(), "TO", n.toStoreID)
+	toStoreID, err := paramparse.DatumAsInt(params.ctx, params.EvalContext(), "TO", n.toStoreID)
 	if err != nil {
 		return err
 	}
 	var fromStoreID int64
 	if n.subjectReplicas != tree.RelocateLease {
 		// The from expression is NULL if the target is LEASE.
-		fromStoreID, err = paramparse.DatumAsInt(params.EvalContext(), "FROM", n.fromStoreID)
+		fromStoreID, err = paramparse.DatumAsInt(params.ctx, params.EvalContext(), "FROM", n.fromStoreID)
 		if err != nil {
 			return err
 		}

@@ -88,6 +88,7 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 //     maps the indexes of the comptuedCols/computeExpr slices
 //     back into indexes in the result row tuple.
 func GenerateInsertRow(
+	ctx context.Context,
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
 	insertCols []catalog.Column,
@@ -113,7 +114,7 @@ func GenerateInsertRow(
 				rowVals[i] = tree.DNull
 				continue
 			}
-			d, err := eval.Expr(evalCtx.Context, evalCtx, defaultExprs[i])
+			d, err := eval.Expr(ctx, evalCtx, defaultExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -135,7 +136,7 @@ func GenerateInsertRow(
 			if !col.IsComputed() {
 				continue
 			}
-			d, err := eval.Expr(evalCtx.Context, evalCtx, computeExprs[computeIdx])
+			d, err := eval.Expr(ctx, evalCtx, computeExprs[computeIdx])
 			if err != nil {
 				name := col.GetName()
 				return nil, errors.Wrapf(err,
@@ -505,7 +506,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	}
 
 	insertRow, err := GenerateInsertRow(
-		c.defaultCache, c.computedExprs, c.cols, computedColsLookup, c.EvalCtx,
+		ctx, c.defaultCache, c.computedExprs, c.cols, computedColsLookup, c.EvalCtx,
 		c.tableDesc, c.Datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")

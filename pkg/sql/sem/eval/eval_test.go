@@ -88,7 +88,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return normalize.Expr(evalCtx, typedExpr)
+			return normalize.Expr(ctx, evalCtx, typedExpr)
 		})
 	})
 }
@@ -193,7 +193,7 @@ func TestTimeConversion(t *testing.T) {
 
 	for _, test := range tests {
 		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.TestingMon.Stop(context.Background())
+		defer ctx.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
 		if err != nil {
