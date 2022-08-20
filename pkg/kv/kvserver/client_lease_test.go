@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1231,7 +1232,6 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
-	srv := tc.Server(0)
 
 	// Split off a range, upreplicate it to both servers, and move the lease
 	// from n1 to n2.
@@ -1242,18 +1242,22 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 	require.NoError(t, err)
 
-	// Stop n2 and increment its epoch to invalidate the lease.
-	lv, ok := tc.Server(1).NodeLiveness().(*liveness.NodeLiveness)
-	require.True(t, ok)
-	lvNode2, ok := lv.Self()
-	require.True(t, ok)
-	tc.StopServer(1)
+	tc.IncrClockForLeaseUpgrade(t, manualClock)
+	tc.WaitForLeaseUpgrade(ctx, t, desc)
 
-	manualClock.Forward(lvNode2.Expiration.WallTime)
-	lv, ok = srv.NodeLiveness().(*liveness.NodeLiveness)
+	// Stop n2 and increment its epoch to invalidate the lease.
+	tc.StopServer(1)
+	n2ID := tc.Server(1).NodeID()
+	lv, ok := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
 	require.True(t, ok)
+	lvNode2, ok := lv.GetLiveness(n2ID)
+	require.True(t, ok)
+	manualClock.Forward(lvNode2.Expiration.WallTime)
+
 	testutils.SucceedsSoon(t, func() error {
-		err := lv.IncrementEpoch(context.Background(), lvNode2)
+		lvNode2, ok = lv.GetLiveness(n2ID)
+		require.True(t, ok)
+		err := lv.IncrementEpoch(context.Background(), lvNode2.Liveness)
 		if errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
 			return nil
 		}
@@ -1297,4 +1301,51 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 		require.ErrorAs(t, err, &nlhe)
 		require.Empty(t, nlhe.Lease)
 	}
+}
+
+func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	manualClock := hlc.NewHybridManualClock()
+	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					LeaseRenewalDurationOverride: 10 * time.Millisecond, // speed up the test
+				},
+			},
+		},
+	})
+	tc := tci.(*testcluster.TestCluster)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	// Add a replica; we're going to move the lease to it below.
+	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+
+	n2 := tc.Server(1)
+	n2Target := tc.Target(1)
+
+	// Transfer the lease from n1 to n2. Expect it to be transferred as an
+	// expiration based lease.
+	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
+	testutils.SucceedsSoon(t, func() error {
+		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+		require.NoError(t, err)
+		if !li.Current().OwnedBy(n2.GetFirstStoreID()) {
+			return errors.New("lease still owned by n1")
+		}
+		require.Equal(t, roachpb.LeaseExpiration, li.Current().Type())
+		return nil
+	})
+
+	tc.IncrClockForLeaseUpgrade(t, manualClock)
+	tc.WaitForLeaseUpgrade(ctx, t, desc)
 }

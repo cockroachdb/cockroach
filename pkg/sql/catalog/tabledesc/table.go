@@ -699,6 +699,17 @@ func RenameColumnInTable(
 		}
 	}
 
+	// Rename the column in the TTL expiration expression.
+	if tableDesc.HasRowLevelTTL() {
+		if expirationExpr := tableDesc.GetRowLevelTTL().ExpirationExpr; expirationExpr != "" {
+			expirationExprStr := string(expirationExpr)
+			if err := renameInExpr(&expirationExprStr); err != nil {
+				return err
+			}
+			tableDesc.GetRowLevelTTL().ExpirationExpr = catpb.Expression(expirationExprStr)
+		}
+	}
+
 	// Do all of the above renames inside check constraints, computed expressions,
 	// and idx predicates that are in mutations.
 	for i := range tableDesc.Mutations {

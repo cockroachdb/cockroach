@@ -1875,8 +1875,8 @@ func shouldCampaignOnWake(
 	if raftStatus.Lead == raft.None {
 		return true
 	}
-	// Avoid a circular dependency on liveness and skip the is leader alive check for
-	// expiration based leases.
+	// Avoid a circular dependency on liveness and skip the is leader alive
+	// check for ranges that always use expiration based leases.
 	if requiresExpiringLease {
 		return false
 	}

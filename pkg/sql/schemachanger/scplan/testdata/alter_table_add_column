@@ -820,6 +820,8 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         ColumnID: 2
         ComputeExpr:
           expr: i + 1:::INT8
+          referencedColumnIds:
+          - 1
         IsNullable: true
         TableID: 104
         TypeT:

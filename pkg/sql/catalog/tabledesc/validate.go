@@ -213,51 +213,8 @@ func (desc *wrapper) ValidateCrossReferences(
 		}
 	}
 
-	// For row-level TTL, only ascending PKs are permitted.
+	// For row-level TTL, no FKs are allowed.
 	if desc.HasRowLevelTTL() {
-		rowLevelTTL := desc.RowLevelTTL
-		if rowLevelTTL.HasDurationExpr() {
-			if col, err := desc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err != nil {
-				vea.Report(errors.Wrapf(err, "expected column %s", colinfo.TTLDefaultExpirationColumnName))
-			} else {
-				intervalExpr := desc.GetRowLevelTTL().DurationExpr
-				expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
-				if col.GetDefaultExpr() != expectedStr {
-					vea.Report(pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						"expected DEFAULT expression of %s to be %s",
-						colinfo.TTLDefaultExpirationColumnName,
-						expectedStr,
-					))
-				}
-				if col.GetOnUpdateExpr() != expectedStr {
-					vea.Report(pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						"expected ON UPDATE expression of %s to be %s",
-						colinfo.TTLDefaultExpirationColumnName,
-						expectedStr,
-					))
-				}
-			}
-		}
-
-		if rowLevelTTL.HasExpirationExpr() {
-			_, err := parser.ParseExpr(string(rowLevelTTL.ExpirationExpr))
-			if err != nil {
-				vea.Report(errors.Wrapf(err, "value of 'ttl_expiration_expression' must be a valid expression"))
-			}
-		}
-
-		pk := desc.GetPrimaryIndex()
-		for i := 0; i < pk.NumKeyColumns(); i++ {
-			dir := pk.GetKeyColumnDirection(i)
-			if dir != catpb.IndexColumn_ASC {
-				vea.Report(unimplemented.NewWithIssuef(
-					76912,
-					`non-ascending ordering on PRIMARY KEYs are not supported`,
-				))
-			}
-		}
 		if len(desc.OutboundFKs) > 0 || len(desc.InboundFKs) > 0 {
 			vea.Report(unimplemented.NewWithIssuef(
 				76407,
@@ -784,6 +741,18 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	})
 
 	vea.Report(ValidateRowLevelTTL(desc.GetRowLevelTTL()))
+	// The remaining validation is called separately from ValidateRowLevelTTL
+	// because it can only be called on an initialized table descriptor.
+	// ValidateRowLevelTTL is also used before the table descriptor is fully
+	// initialized to validate the storage parameters.
+	if err := ValidateTTLExpirationExpr(desc); err != nil {
+		vea.Report(err)
+		return
+	}
+	if err := ValidateTTLExpirationColumn(desc); err != nil {
+		vea.Report(err)
+		return
+	}
 
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON

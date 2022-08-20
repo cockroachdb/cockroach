@@ -2728,6 +2728,9 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		return nil
 	})
 
+	tc.IncrClockForLeaseUpgrade(t, manualClock)
+	tc.WaitForLeaseUpgrade(ctx, t, desc)
+
 	cap, err := s.Capacity(ctx, false /* useCached */)
 	if err != nil {
 		t.Fatal(err)
