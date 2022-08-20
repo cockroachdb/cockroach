@@ -1051,7 +1051,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.String}},
 			ReturnType: tree.FixedReturnType(types.INet),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				inet, err := eval.PerformCast(evalCtx, args[0], types.INet)
+				inet, err := eval.PerformCast(ctx, evalCtx, args[0], types.INet)
 				if err != nil {
 					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
 				}
@@ -1967,7 +1967,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := eval.UnwrapDatum(evalCtx, args[0])
-				strD, err := eval.PerformCast(evalCtx, d, types.String)
+				strD, err := eval.PerformCast(ctx, evalCtx, d, types.String)
 				if err != nil {
 					return nil, err
 				}
@@ -2008,7 +2008,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := eval.UnwrapDatum(evalCtx, args[0])
-				strD, err := eval.PerformCast(evalCtx, d, types.String)
+				strD, err := eval.PerformCast(ctx, evalCtx, d, types.String)
 				if err != nil {
 					return nil, err
 				}
@@ -2167,7 +2167,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2207,7 +2207,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2268,7 +2268,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2307,7 +2307,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -4950,9 +4950,9 @@ value if you rely on the HLC for accuracy.`,
 				res, err := evalCtx.CatalogBuiltins.EncodeTableIndexKey(
 					ctx, tableID, indexID, rowDatums,
 					func(
-						_ context.Context, d tree.Datum, t *types.T,
+						ctx context.Context, d tree.Datum, t *types.T,
 					) (tree.Datum, error) {
-						return eval.PerformCast(evalCtx, d, t)
+						return eval.PerformCast(ctx, evalCtx, d, t)
 					},
 				)
 				if err != nil {
@@ -5807,7 +5807,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				return eval.PerformAssignmentCast(evalCtx, val, targetType)
+				return eval.PerformAssignmentCast(ctx, evalCtx, val, targetType)
 			}),
 			Info: "This function is used internally to perform assignment casts during mutations.",
 			// The volatility of an assignment cast depends on the argument
@@ -6816,7 +6816,7 @@ in the current database. Returns an error if validation fails.`,
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -6841,7 +6841,7 @@ table. Returns an error if validation fails.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				constraintName := tree.MustBeDString(args[1])
-				dOid, err := eval.ParseDOid(evalCtx, string(tableName), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -6867,7 +6867,7 @@ table. Returns an error if validation fails.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				constraintName := tree.MustBeDString(args[1])
-				dOid, err := eval.ParseDOid(evalCtx, string(tableName), types.RegClass)
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -7426,7 +7426,7 @@ var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants
 			}
 			formatStr := tree.MustBeDString(args[0])
 			formatArgs := args[1:]
-			str, err := pgformat.Format(evalCtx, string(formatStr), formatArgs...)
+			str, err := pgformat.Format(ctx, evalCtx, string(formatStr), formatArgs...)
 			if err != nil {
 				return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error parsing format string")
 			}
