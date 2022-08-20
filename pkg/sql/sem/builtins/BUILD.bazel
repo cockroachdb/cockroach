@@ -8,6 +8,7 @@ go_library(
         "aggregate_builtins.go",
         "all_builtins.go",
         "builtins.go",
+        "fixed_oids.go",
         "generator_builtins.go",
         "generator_probe_ranges.go",
         "geo_builtins.go",
