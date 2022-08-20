@@ -5547,8 +5547,10 @@ func computeStatsForIterWithVisitors(
 		// key.
 		var nextRangeTombstone hlc.Timestamp
 		if isValue {
-			if v, ok := rangeTombstones.FirstAbove(unsafeKey.Timestamp); ok {
-				nextRangeTombstone = v.Timestamp
+			if !rangeTombstones.IsEmpty() && unsafeKey.Timestamp.LessEq(rangeTombstones.Newest()) {
+				if v, ok := rangeTombstones.FirstAbove(unsafeKey.Timestamp); ok {
+					nextRangeTombstone = v.Timestamp
+				}
 			}
 		}
 
