@@ -34,6 +34,7 @@ import (
 type simpleCatchupIter interface {
 	storage.SimpleMVCCIterator
 	NextIgnoringTime()
+	RangeKeysIgnoringTime() storage.MVCCRangeKeyStack
 }
 
 type simpleCatchupIterAdapter struct {
@@ -42,6 +43,10 @@ type simpleCatchupIterAdapter struct {
 
 func (i simpleCatchupIterAdapter) NextIgnoringTime() {
 	i.SimpleMVCCIterator.Next()
+}
+
+func (i simpleCatchupIterAdapter) RangeKeysIgnoringTime() storage.MVCCRangeKeyStack {
+	return i.SimpleMVCCIterator.RangeKeys()
 }
 
 var _ simpleCatchupIter = simpleCatchupIterAdapter{}
@@ -145,8 +150,6 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 
 		// Emit any new MVCC range tombstones when their start key is encountered.
 		// Range keys can currently only be MVCC range tombstones.
-		// We need to verify that the range tombstone is visible at the catch-up
-		// timestamp, since we might have come here after a call to NextIgnoringTime.
 		//
 		// TODO(erikgrinaker): Find a faster/better way to detect range key changes
 		// that doesn't involve constant comparisons. Pebble probably already knows,
@@ -161,11 +164,6 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 				// Emit events for these MVCC range tombstones, in chronological order.
 				versions := i.RangeKeys().Versions
 				for j := len(versions) - 1; j >= 0; j-- {
-					if !i.startTime.LessEq(versions[j].Timestamp) {
-						// This range tombstone isn't visible by this catch-up scan.
-						continue
-					}
-
 					var span roachpb.Span
 					a, span.Key = a.Copy(rangeBounds.Key, 0)
 					a, span.EndKey = a.Copy(rangeBounds.EndKey, 0)
@@ -285,12 +283,8 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 					}
 					// If an MVCC range tombstone exists between this value and the next
 					// one, we don't emit the value after all -- it should be a tombstone.
-					//
-					// TODO(erikgrinaker): We can't save range keys when we detect changes
-					// to rangeKeysStart above, because NextIgnoringTime() could reveal
-					// additional MVCC range tombstones below StartTime that cover this
-					// point. We need to find a more performant way to handle this.
-					if !hasRange || !i.RangeKeys().HasBetween(ts, reorderBuf[l].Val.Value.Timestamp) {
+					// The RangeKeysIgnoringTime() call is cheap, no need for caching.
+					if !i.RangeKeysIgnoringTime().HasBetween(ts, reorderBuf[l].Val.Value.Timestamp) {
 						// TODO(sumeer): find out if it is deliberate that we are not populating
 						// PrevValue.Timestamp.
 						reorderBuf[l].Val.PrevValue.RawBytes = val
