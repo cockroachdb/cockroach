@@ -2367,16 +2367,16 @@ func (s *statusServer) HotRangesV2(
 	rangeReportMetas := make(map[uint32]hotRangeReportMeta)
 	var descrs []catalog.Descriptor
 	var err error
-	if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(
-		ctx, s.sqlServer.internalExecutor, s.db,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			all, err := descriptors.GetAllDescriptors(ctx, txn)
-			if err != nil {
-				return err
-			}
-			descrs = all.OrderedDescriptors()
-			return nil
-		}); err != nil {
+	if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(ctx, s.db, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		all, err := descriptors.GetAllDescriptors(ctx, txn)
+		if err != nil {
+			return err
+		}
+		descrs = all.OrderedDescriptors()
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 

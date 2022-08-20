@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,24 +68,22 @@ func InjectLegacyTable(
 	table catalog.TableDescriptor,
 	getDeprecatedDescriptor func() *descpb.TableDescriptor,
 ) {
-	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(
-		ctx,
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			id := table.GetID()
-			tab, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				return err
-			}
-			builder := tabledesc.NewBuilder(getDeprecatedDescriptor())
-			if err := builder.RunPostDeserializationChanges(); err != nil {
-				return err
-			}
-			tab.TableDescriptor = builder.BuildCreatedMutableTable().TableDescriptor
-			tab.Version = tab.ClusterVersion().Version + 1
-			return descriptors.WriteDesc(ctx, false /* kvTrace */, tab, txn)
-		})
+	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(ctx, s.DB(), func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		id := table.GetID()
+		tab, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		builder := tabledesc.NewBuilder(getDeprecatedDescriptor())
+		if err := builder.RunPostDeserializationChanges(); err != nil {
+			return err
+		}
+		tab.TableDescriptor = builder.BuildCreatedMutableTable().TableDescriptor
+		tab.Version = tab.ClusterVersion().Version + 1
+		return descriptors.WriteDesc(ctx, false /* kvTrace */, tab, txn)
+	})
 	require.NoError(t, err)
 }
 
@@ -136,19 +133,17 @@ func GetTable(
 ) catalog.TableDescriptor {
 	var table catalog.TableDescriptor
 	// Retrieve the table.
-	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(
-		ctx,
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
-			table, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidLeased: true,
-					Required:    true,
-				},
-			})
-			return err
+	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(ctx, s.DB(), func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) (err error) {
+		table, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased: true,
+				Required:    true,
+			},
 		})
+		return err
+	})
 	require.NoError(t, err)
 	return table
 }

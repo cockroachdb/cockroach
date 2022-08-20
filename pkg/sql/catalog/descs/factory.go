@@ -44,13 +44,19 @@ type CollectionFactory struct {
 // with associated extra txn state information.
 // It should only be used as a field hanging off CollectionFactory.
 type InternalExecutorFactoryWithTxn interface {
+	MemoryMonitor() *mon.BytesMonitor
+
 	NewInternalExecutorWithTxn(
 		sd *sessiondata.SessionData,
 		sv *settings.Values,
 		txn *kv.Txn,
 		descCol *Collection,
-	) (sqlutil.InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc)
+	) (sqlutil.InternalExecutor, InternalExecutorCommitTxnFunc)
 }
+
+// InternalExecutorCommitTxnFunc is to commit the txn associated with an
+// internal executor.
+type InternalExecutorCommitTxnFunc func(ctx context.Context) error
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto
 // the node-level dependencies needed to construct a Collection.

@@ -145,47 +145,6 @@ SELECT nextval(105:::REGCLASS);`,
 	require.NoError(t, err)
 }
 
-func TestCreateFunctionWithTableImplicitType(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	tDB := sqlutils.MakeSQLRunner(sqlDB)
-
-	tDB.Exec(t, `
-CREATE TABLE t_implicit_type(
-  a INT PRIMARY KEY,
-  b STRING
-);
-CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$
-	SELECT 1, 'hello';
-$$`,
-	)
-
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 105, tree.ObjectLookupFlagsWithRequired())
-		require.NoError(t, err)
-		require.Equal(t, funcDesc.GetName(), "f")
-		require.Equal(t, []descpb.ID{104}, funcDesc.GetDependsOn())
-		require.Equal(t, []catid.DescID(nil), funcDesc.GetDependsOnTypes())
-
-		// Make sure columns and indexes has correct back references.
-		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t_implicit_type")
-		_, tbl, err := col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
-		require.NoError(t, err)
-		require.Equal(t, "t_implicit_type", tbl.GetName())
-		require.Equal(t,
-			[]descpb.TableDescriptor_Reference{{ID: 105}},
-			tbl.GetDependedOnBy(),
-		)
-
-		return nil
-	})
-	require.NoError(t, err)
-}
-
 func TestCreateFunctionGating(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -12,7 +12,6 @@ package descs
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,8 +28,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violated")
-
 // Txn enables callers to run transactions with a *Collection such that all
 // retrieved immutable descriptors are properly leased and all mutable
 // descriptors are handled. The function deals with verifying the two version
@@ -44,75 +41,14 @@ var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violat
 // Deprecated: Use cf.TxnWithExecutor().
 func (cf *CollectionFactory) Txn(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
 ) error {
-	// Waits for descriptors that were modified, skipping
-	// over ones that had their descriptor wiped.
-	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
-		// Wait for a single version on leased descriptors.
-		for _, ld := range modifiedDescriptors {
-			waitForNoVersion := deletedDescs.Contains(ld.ID)
-			retryOpts := retry.Options{
-				InitialBackoff: time.Millisecond,
-				Multiplier:     1.5,
-				MaxBackoff:     time.Second,
-			}
-			// Detect unpublished ones.
-			if waitForNoVersion {
-				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
-				if err != nil {
-					return err
-				}
-			} else {
-				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	for {
-		var modifiedDescriptors []lease.IDVersion
-		var deletedDescs catalog.DescriptorIDSet
-		var descsCol *Collection
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			modifiedDescriptors = nil
-			deletedDescs = catalog.DescriptorIDSet{}
-			descsCol = cf.NewCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
-			defer descsCol.ReleaseAll(ctx)
-			if err := f(ctx, txn, descsCol); err != nil {
-				return err
-			}
-
-			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
-				return err
-			}
-			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
-
-			if err := CheckSpanCountLimit(
-				ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
-			); err != nil {
-				return err
-			}
-			retryErr, err := CheckTwoVersionInvariant(
-				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
-			if retryErr {
-				return errTwoVersionInvariantViolated
-			}
-			deletedDescs = descsCol.deletedDescs
-			return err
-		}); errors.Is(err, errTwoVersionInvariantViolated) {
-			continue
-		} else {
-			if err == nil {
-				err = waitForDescriptors(modifiedDescriptors, deletedDescs)
-			}
-			return err
-		}
-	}
+	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descriptors *Collection, _ sqlutil.InternalExecutor,
+	) error {
+		return f(ctx, txn, descriptors)
+	})
 }
 
 // TxnWithExecutor enables callers to run transactions with a *Collection such that all
@@ -161,42 +97,21 @@ func (cf *CollectionFactory) TxnWithExecutor(
 	for {
 		var modifiedDescriptors []lease.IDVersion
 		var deletedDescs catalog.DescriptorIDSet
-		var descsCol *Collection
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			modifiedDescriptors = nil
-			deletedDescs = catalog.DescriptorIDSet{}
-			descsCol = cf.NewCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
-			defer func() {
-				descsCol.ReleaseAll(ctx)
-			}()
-
+			modifiedDescriptors, deletedDescs = nil, catalog.DescriptorIDSet{}
+			descsCol := cf.NewCollection(
+				ctx, nil, /* temporarySchemaProvider */
+				cf.ieFactoryWithTxn.MemoryMonitor(),
+			)
+			defer descsCol.ReleaseAll(ctx)
 			ie, commitTxnFn := cf.ieFactoryWithTxn.NewInternalExecutorWithTxn(sd, &cf.settings.SV, txn, descsCol)
 			if err := f(ctx, txn, descsCol, ie); err != nil {
 				return err
 			}
-
-			if err := commitTxnFn(ctx); err != nil {
-				return err
-			}
-
-			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
-				return err
-			}
-			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
-
-			if err := CheckSpanCountLimit(
-				ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
-			); err != nil {
-				return err
-			}
-			retryErr, err := CheckTwoVersionInvariant(
-				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
-			if retryErr {
-				return errTwoVersionInvariantViolated
-			}
 			deletedDescs = descsCol.deletedDescs
-			return err
-		}); errors.Is(err, errTwoVersionInvariantViolated) {
+			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+			return commitTxnFn(ctx)
+		}); IsTwoVersionInvariantViolationError(err) {
 			continue
 		} else {
 			if err == nil {
@@ -239,10 +154,10 @@ func CheckTwoVersionInvariant(
 	descsCol *Collection,
 	txn *kv.Txn,
 	onRetryBackoff func(),
-) (retryDueToViolation bool, _ error) {
-	descs := descsCol.GetDescriptorsWithNewVersion()
-	if descs == nil {
-		return false, nil
+) error {
+	withNewVersion := descsCol.GetDescriptorsWithNewVersion()
+	if withNewVersion == nil {
+		return nil
 	}
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
@@ -263,40 +178,32 @@ func CheckTwoVersionInvariant(
 	// All this being said, we must retain our leases on descriptors which we have
 	// not modified to ensure that our writes to those other descriptors in this
 	// transaction remain valid.
-	descsCol.ReleaseSpecifiedLeases(ctx, descs)
+	descsCol.ReleaseSpecifiedLeases(ctx, withNewVersion)
 
 	// We know that so long as there are no leases on the updated descriptors as of
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
-
-	count, err := lease.CountLeases(ctx, ie, descs, txn.ProvisionalCommitTimestamp())
+	count, err := lease.CountLeases(
+		ctx, ie, withNewVersion, txn.ProvisionalCommitTimestamp(),
+	)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if count == 0 {
 		// This is the last step before committing a transaction which modifies
 		// descriptors. This is a perfect time to refresh the deadline prior to
 		// committing.
-		return false, descsCol.MaybeUpdateDeadline(ctx, txn)
+		return descsCol.MaybeUpdateDeadline(ctx, txn)
 	}
 
-	// Restart the transaction so that it is able to replay itself at a newer timestamp
-	// with the hope that the next time around there will be leases only at the current
-	// version.
-	retryErr := txn.PrepareRetryableError(ctx,
-		fmt.Sprintf(
-			`cannot publish new versions for descriptors: %v, old versions still in use`,
-			descs))
-	// We cleanup the transaction and create a new transaction after
-	// waiting for the invariant to be satisfied because the wait time
-	// might be extensive and intents can block out leases being created
-	// on a descriptor.
-	//
-	// TODO(vivek): Change this to restart a txn while fixing #20526 . All the
-	// descriptor intents can be laid down here after the invariant
-	// has been checked.
-	txn.CleanupOnError(ctx, retryErr)
+	// We abort the transaction to not hold on to locks while we wait
+	// for the excess version leases to be dropped. We'll return a
+	// sentinel error to the client to indicate that it should restart.
+	if err := txn.Rollback(ctx); err != nil {
+		return errors.Wrap(err, "rolling back due to two-version invariant violation")
+	}
+
 	// Release the rest of our leases on unmodified descriptors so we don't hold
 	// up schema changes there and potentially create a deadlock.
 	descsCol.ReleaseLeases(ctx)
@@ -305,9 +212,9 @@ func CheckTwoVersionInvariant(
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.
 		now := clock.Now()
-		count, err := lease.CountLeases(ctx, ie, descs, now)
+		count, err := lease.CountLeases(ctx, ie, withNewVersion, now)
 		if err != nil {
-			return false, err
+			return err
 		}
 		if count == 0 {
 			break
@@ -316,7 +223,9 @@ func CheckTwoVersionInvariant(
 			onRetryBackoff()
 		}
 	}
-	return true, retryErr
+	return &twoVersionInvariantViolationError{
+		ids: withNewVersion,
+	}
 }
 
 // CheckSpanCountLimit checks whether committing the set of uncommitted tables

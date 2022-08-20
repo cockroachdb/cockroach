@@ -88,7 +88,7 @@ func runPostDeserializationChangesOnAllDescriptors(
 	maybeUpgradeDescriptors := func(
 		ctx context.Context, d upgrade.TenantDeps, toUpgrade []descpb.ID,
 	) error {
-		return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
+		return d.CollectionFactory.Txn(ctx, d.DB, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			descs, err := descriptors.GetMutableDescriptorsByID(ctx, txn, toUpgrade...)

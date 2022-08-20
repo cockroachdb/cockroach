@@ -135,8 +135,7 @@ func newInternalExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	monitor *mon.BytesMonitor,
 	descCol *descs.Collection,
-	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
-) (*InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc) {
+) (*InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
 	schemaChangerState := &SchemaChangerState{
 		mode: sd.NewSchemaChangerMode,
 	}
@@ -147,7 +146,8 @@ func newInternalExecutorWithTxn(
 		extraTxnState: &extraTxnState{
 			txn:                    txn,
 			descCollection:         descCol,
-			schemaChangeJobRecords: schemaChangeJobRecords,
+			jobs:                   new(jobsCollection),
+			schemaChangeJobRecords: make(map[descpb.ID]*jobs.Record),
 			schemaChangerState:     schemaChangerState,
 		},
 	}
@@ -156,12 +156,15 @@ func newInternalExecutorWithTxn(
 
 	commitTxnFunc := func(ctx context.Context) error {
 		defer func() {
+			ie.extraTxnState.jobs.reset()
 			ie.releaseSchemaChangeJobRecords()
 		}()
 		if err := ie.commitTxn(ctx); err != nil {
 			return err
 		}
-		return nil
+		return ie.s.cfg.JobRegistry.Run(
+			ctx, ie.s.cfg.InternalExecutor, *ie.extraTxnState.jobs,
+		)
 	}
 
 	return &ie, commitTxnFunc
@@ -333,9 +336,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 				ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
 				ex.extraTxnState.fromOuterTxn = true
 				ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
-				if ie.extraTxnState.jobs != nil {
-					ex.extraTxnState.jobs = *ie.extraTxnState.jobs
-				}
+				ex.extraTxnState.jobs = ie.extraTxnState.jobs
 				ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			}
 		}
@@ -833,6 +834,13 @@ func (ie *InternalExecutor) execInternal(
 	if sd.ApplicationName == "" {
 		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
+	// If the caller has injected a mapping to temp schemas, install it, and
+	// leave it installed for the rest of the transaction.
+	if ie.extraTxnState != nil && sd.DatabaseIDToTempSchemaID != nil {
+		ie.extraTxnState.descCollection.SetTemporaryDescriptors(
+			descs.NewTemporarySchemaProvider(sessiondata.NewStack(sd)),
+		)
+	}
 
 	// The returned span is finished by this function in all error paths, but if
 	// an iterator is returned, then we transfer the responsibility of closing
@@ -1042,11 +1050,7 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 		return errors.Wrap(err, "cannot create conn executor to commit txn")
 	}
 	defer ex.close(ctx, externalTxnClose)
-
-	if err := ex.commitSQLTransactionInternal(ctx); err != nil {
-		return err
-	}
-	return nil
+	return ex.commitSQLTransactionInternal(ctx)
 }
 
 // internalClientComm is an implementation of ClientComm used by the
@@ -1221,6 +1225,12 @@ type InternalExecutorFactory struct {
 	monitor    *mon.BytesMonitor
 }
 
+// MemoryMonitor returns the monitor which should be used when constructing
+// things in the context of an internal executor created by this factory.
+func (ief *InternalExecutorFactory) MemoryMonitor() *mon.BytesMonitor {
+	return ief.monitor
+}
+
 // NewInternalExecutorFactory returns a new internal executor factory.
 func NewInternalExecutorFactory(
 	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
@@ -1252,8 +1262,7 @@ func (ief *InternalExecutorFactory) NewInternalExecutor(
 // This function should only be used under CollectionFactory.TxnWithExecutor().
 func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
 	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
-) (sqlutil.InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc) {
-	schemaChangeJobRecords := make(map[descpb.ID]*jobs.Record)
+) (sqlutil.InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
 	// By default, if not given session data, we initialize a sessionData that
 	// would be the same as what would be created if root logged in.
 	// The sessionData's user can be override when calling the query
@@ -1272,7 +1281,6 @@ func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
 		ief.memMetrics,
 		ief.monitor,
 		descCol,
-		schemaChangeJobRecords,
 	)
 
 	return ie, commitTxnFunc

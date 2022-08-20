@@ -438,6 +438,13 @@ func (tc *Collection) SetSession(session sqlliveness.Session) {
 	tc.sqlLivenessSession = session
 }
 
+// SetTemporaryDescriptors is used in the context of the internal executor
+// to override the temporary descriptors during temporary object
+// cleanup.
+func (tc *Collection) SetTemporaryDescriptors(provider TemporarySchemaProvider) {
+	tc.temporary = makeTemporaryDescriptors(tc.settings, tc.codec(), provider)
+}
+
 // MakeTestCollection makes a Collection that can be used for tests.
 func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collection {
 	settings := cluster.MakeTestingClusterSettings()

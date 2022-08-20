@@ -98,7 +98,7 @@ func findNextTableOrViewToUpgrade(
 func maybeUpgradeSeqReferencesInTableOrView(
 	ctx context.Context, idToUpgrade descpb.ID, d upgrade.TenantDeps,
 ) error {
-	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
+	return d.CollectionFactory.Txn(ctx, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		// Set up: retrieve table desc for `idToUpgrade` and a schema resolver
