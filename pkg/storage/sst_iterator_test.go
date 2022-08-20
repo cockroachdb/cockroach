@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 )
 
 func runTestSSTIterator(t *testing.T, iter SimpleMVCCIterator, allKVs []MVCCKeyValue) {
@@ -85,12 +86,17 @@ func TestSSTIterator(t *testing.T) {
 	var allKVs []MVCCKeyValue
 	maxWallTime := 10
 	for i := 0; i < maxWallTime; i++ {
+		var v MVCCValue
+		v.Value.SetBytes([]byte{'a', byte(i)})
+		vRaw, err := EncodeMVCCValue(v)
+		require.NoError(t, err)
+
 		kv := MVCCKeyValue{
 			Key: MVCCKey{
 				Key:       []byte{'A' + byte(i)},
 				Timestamp: hlc.Timestamp{WallTime: int64(i)},
 			},
-			Value: []byte{'a' + byte(i)},
+			Value: vRaw,
 		}
 		if err := sst.Put(kv.Key, kv.Value); err != nil {
 			t.Fatalf("%+v", err)
