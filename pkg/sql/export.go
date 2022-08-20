@@ -151,8 +151,9 @@ func (ef *execFactory) ConstructExport(
 	// `cloudprivilege.CheckDestinationPrivileges privileges here, but because of
 	// a ciruclar dependancy with `pkg/sql` this is not possible. Consider moving
 	// this file into `pkg/sql/importer` to get around this.
-	hasExternalIOImplicitAccess := ef.planner.CheckPrivilege(ef.planner.EvalContext().Context,
-		syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS) == nil
+	hasExternalIOImplicitAccess := ef.planner.CheckPrivilege(
+		ef.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS,
+	) == nil
 	if !admin &&
 		!ef.planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound &&
 		!hasExternalIOImplicitAccess {

@@ -88,7 +88,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return normalize.Expr(evalCtx, typedExpr)
+			return normalize.Expr(ctx, evalCtx, typedExpr)
 		})
 	})
 }

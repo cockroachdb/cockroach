@@ -713,7 +713,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 	) {
 		f := opc.optimizer.Factory()
 		evalCtx := opc.p.EvalContext()
-		f.Init(evalCtx, &opc.catalog)
+		f.Init(ctx, evalCtx, &opc.catalog)
 		f.FoldingControl().AllowStableFolds()
 		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, &opc.catalog, f, opc.p.stmt.AST)
 		err := bld.Build()

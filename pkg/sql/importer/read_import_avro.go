@@ -73,7 +73,7 @@ func nativeTimeToDatum(t time.Time, targetT *types.T) (tree.Datum, error) {
 // the key is a primitive or logical Avro type name ("string",
 // "long.time-millis", etc).
 func nativeToDatum(
-	x interface{}, targetT *types.T, avroT []string, evalCtx *eval.Context,
+	ctx context.Context, x interface{}, targetT *types.T, avroT []string, evalCtx *eval.Context,
 ) (tree.Datum, error) {
 	var d tree.Datum
 
@@ -111,19 +111,19 @@ func nativeToDatum(
 			// []byte arrays are hard.  Sometimes we want []bytes, sometimes
 			// we want StringFamily.  So, instead of creating DBytes datum,
 			// parse this data to "cast" it to our expected type.
-			return rowenc.ParseDatumStringAs(targetT, string(v), evalCtx)
+			return rowenc.ParseDatumStringAs(ctx, targetT, string(v), evalCtx)
 		}
 	case string:
 		// We allow strings to be specified for any column, as
 		// long as we can convert the string value to the target type.
-		return rowenc.ParseDatumStringAs(targetT, v, evalCtx)
+		return rowenc.ParseDatumStringAs(ctx, targetT, v, evalCtx)
 	case map[string]interface{}:
 		for _, aT := range avroT {
 			// The value passed in is an avro schema.  Extract
 			// possible primitive types from the dictionary and
 			// attempt to convert those values to our target type.
 			if val, ok := v[aT]; ok {
-				return nativeToDatum(val, targetT, avroT, evalCtx)
+				return nativeToDatum(ctx, val, targetT, avroT, evalCtx)
 			}
 		}
 	case []interface{}:
@@ -139,7 +139,7 @@ func nativeToDatum(
 		// Convert each element.
 		arr := tree.NewDArray(targetT.ArrayContents())
 		for _, elt := range v {
-			eltDatum, err := nativeToDatum(elt, targetT.ArrayContents(), eltAvroT, evalCtx)
+			eltDatum, err := nativeToDatum(ctx, elt, targetT.ArrayContents(), eltAvroT, evalCtx)
 			if err == nil {
 				err = arr.Append(eltDatum)
 			}
@@ -207,7 +207,9 @@ type avroConsumer struct {
 }
 
 // Converts avro record to datums as expected by DatumRowConverter.
-func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter) error {
+func (a *avroConsumer) convertNative(
+	ctx context.Context, x interface{}, conv *row.DatumRowConverter,
+) error {
 	record, ok := x.(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("unexpected native type; expected map[string]interface{} found %T instead", x)
@@ -228,7 +230,7 @@ func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter)
 		if !ok {
 			return fmt.Errorf("cannot convert avro value %v to col %s", v, conv.VisibleCols[idx].GetType().Name())
 		}
-		datum, err := nativeToDatum(v, typ, avroT, conv.EvalCtx)
+		datum, err := nativeToDatum(ctx, v, typ, avroT, conv.EvalCtx)
 		if err != nil {
 			return err
 		}
@@ -239,9 +241,9 @@ func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter)
 
 // FillDatums implements importRowStream interface.
 func (a *avroConsumer) FillDatums(
-	native interface{}, rowIndex int64, conv *row.DatumRowConverter,
+	ctx context.Context, native interface{}, rowIndex int64, conv *row.DatumRowConverter,
 ) error {
-	if err := a.convertNative(native, conv); err != nil {
+	if err := a.convertNative(ctx, native, conv); err != nil {
 		return err
 	}
 

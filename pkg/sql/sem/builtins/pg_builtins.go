@@ -988,7 +988,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					// If the type wasn't statically known, try looking it up as a user
 					// defined type.
 					var err error
-					typ, err = evalCtx.Planner.ResolveTypeByOID(evalCtx.Context, oid)
+					typ, err = evalCtx.Planner.ResolveTypeByOID(ctx, oid)
 					if err != nil {
 						// If the error is a descriptor does not exist error, then swallow it.
 						unknown := tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg))
@@ -1207,7 +1207,7 @@ SELECT description
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := evalCtx.Planner.IsTableVisible(
-					evalCtx.Context, evalCtx.SessionData().Database, evalCtx.SessionData().SearchPath, oidArg.Oid,
+					ctx, evalCtx.SessionData().Database, evalCtx.SessionData().SearchPath, oidArg.Oid,
 				)
 				if err != nil {
 					return nil, err
@@ -1235,7 +1235,7 @@ SELECT description
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := evalCtx.Planner.IsTypeVisible(
-					evalCtx.Context, evalCtx.SessionData().Database, evalCtx.SessionData().SearchPath, oidArg.Oid,
+					ctx, evalCtx.SessionData().Database, evalCtx.SessionData().SearchPath, oidArg.Oid,
 				)
 				if err != nil {
 					return nil, err
@@ -1359,7 +1359,7 @@ SELECT description
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(evalCtx.Context, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1387,7 +1387,7 @@ SELECT description
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(evalCtx.Context, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1416,7 +1416,7 @@ SELECT description
 				return eval.HasNoPrivilege, err
 			}
 
-			return evalCtx.Planner.HasAnyPrivilege(evalCtx.Context, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1574,7 +1574,7 @@ SELECT description
 				return eval.ObjectNotFound, nil
 			}
 
-			return evalCtx.Planner.HasAnyPrivilege(evalCtx.Context, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1600,7 +1600,7 @@ SELECT description
 			if err != nil {
 				return eval.HasPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(evalCtx.Context, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1673,7 +1673,7 @@ SELECT description
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(evalCtx.Context, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1791,15 +1791,15 @@ SELECT description
 				var err error
 				switch privStr {
 				case "USAGE":
-					hasAnyPrivilegeResult, err = hasPrivsOfRole(evalCtx, user, role)
+					hasAnyPrivilegeResult, err = hasPrivsOfRole(ctx, evalCtx, user, role)
 				case "MEMBER":
-					hasAnyPrivilegeResult, err = isMemberOfRole(evalCtx, user, role)
+					hasAnyPrivilegeResult, err = isMemberOfRole(ctx, evalCtx, user, role)
 				case
 					"USAGE WITH GRANT OPTION",
 					"USAGE WITH ADMIN OPTION",
 					"MEMBER WITH GRANT OPTION",
 					"MEMBER WITH ADMIN OPTION":
-					hasAnyPrivilegeResult, err = isAdminOfRole(evalCtx, user, role)
+					hasAnyPrivilegeResult, err = isAdminOfRole(ctx, evalCtx, user, role)
 				default:
 					return eval.HasNoPrivilege, pgerror.Newf(pgcode.InvalidParameterValue,
 						"unrecognized privilege type: %q", privStr)
@@ -1825,7 +1825,7 @@ SELECT description
 			Types:      tree.ArgTypes{{"setting_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return getSessionVar(evalCtx, string(tree.MustBeDString(args[0])), false /* missingOk */)
+				return getSessionVar(ctx, evalCtx, string(tree.MustBeDString(args[0])), false /* missingOk */)
 			},
 			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Stable,
@@ -1834,7 +1834,7 @@ SELECT description
 			Types:      tree.ArgTypes{{"setting_name", types.String}, {"missing_ok", types.Bool}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return getSessionVar(evalCtx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
+				return getSessionVar(ctx, evalCtx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
 			},
 			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Stable,
@@ -1853,11 +1853,11 @@ SELECT description
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				varName := string(tree.MustBeDString(args[0]))
 				newValue := string(tree.MustBeDString(args[1]))
-				err := setSessionVar(evalCtx, varName, newValue, bool(tree.MustBeDBool(args[2])))
+				err := setSessionVar(ctx, evalCtx, varName, newValue, bool(tree.MustBeDBool(args[2])))
 				if err != nil {
 					return nil, err
 				}
-				return getSessionVar(evalCtx, varName, false /* missingOk */)
+				return getSessionVar(ctx, evalCtx, varName, false /* missingOk */)
 			},
 			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Volatile,
@@ -2147,11 +2147,13 @@ SELECT description
 	),
 }
 
-func getSessionVar(evalCtx *eval.Context, settingName string, missingOk bool) (tree.Datum, error) {
+func getSessionVar(
+	ctx context.Context, evalCtx *eval.Context, settingName string, missingOk bool,
+) (tree.Datum, error) {
 	if evalCtx.SessionAccessor == nil {
 		return nil, errors.AssertionFailedf("session accessor not set")
 	}
-	ok, s, err := evalCtx.SessionAccessor.GetSessionVar(evalCtx.Context, settingName, missingOk)
+	ok, s, err := evalCtx.SessionAccessor.GetSessionVar(ctx, settingName, missingOk)
 	if err != nil {
 		return nil, err
 	}
@@ -2161,11 +2163,13 @@ func getSessionVar(evalCtx *eval.Context, settingName string, missingOk bool) (t
 	return tree.NewDString(s), nil
 }
 
-func setSessionVar(evalCtx *eval.Context, settingName, newVal string, isLocal bool) error {
+func setSessionVar(
+	ctx context.Context, evalCtx *eval.Context, settingName, newVal string, isLocal bool,
+) error {
 	if evalCtx.SessionAccessor == nil {
 		return errors.AssertionFailedf("session accessor not set")
 	}
-	return evalCtx.SessionAccessor.SetSessionVar(evalCtx.Context, settingName, newVal, isLocal)
+	return evalCtx.SessionAccessor.SetSessionVar(ctx, settingName, newVal, isLocal)
 }
 
 // getCatalogOidForComments returns the "catalog table oid" (the oid of a
@@ -2370,9 +2374,9 @@ func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefiniti
 // role, so this is currently equivalent to isMemberOfRole.
 // See https://github.com/cockroachdb/cockroach/issues/69583.
 func hasPrivsOfRole(
-	evalCtx *eval.Context, user, role username.SQLUsername,
+	ctx context.Context, evalCtx *eval.Context, user, role username.SQLUsername,
 ) (eval.HasAnyPrivilegeResult, error) {
-	return isMemberOfRole(evalCtx, user, role)
+	return isMemberOfRole(ctx, evalCtx, user, role)
 }
 
 // isMemberOfRole returns whether the user is a member of the specified role
@@ -2380,7 +2384,7 @@ func hasPrivsOfRole(
 //
 // This is defined to recurse through roles regardless of rolinherit.
 func isMemberOfRole(
-	evalCtx *eval.Context, user, role username.SQLUsername,
+	ctx context.Context, evalCtx *eval.Context, user, role username.SQLUsername,
 ) (eval.HasAnyPrivilegeResult, error) {
 	// Fast path for simple case.
 	if user == role {
@@ -2388,13 +2392,13 @@ func isMemberOfRole(
 	}
 
 	// Superusers have every privilege and are part of every role.
-	if isSuper, err := evalCtx.Planner.UserHasAdminRole(evalCtx.Context, user); err != nil {
+	if isSuper, err := evalCtx.Planner.UserHasAdminRole(ctx, user); err != nil {
 		return eval.HasNoPrivilege, err
 	} else if isSuper {
 		return eval.HasPrivilege, nil
 	}
 
-	allRoleMemberships, err := evalCtx.Planner.MemberOfWithAdminOption(evalCtx.Context, user)
+	allRoleMemberships, err := evalCtx.Planner.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
 		return eval.HasNoPrivilege, err
 	}
@@ -2410,12 +2414,12 @@ func isMemberOfRole(
 // That is, is member the role itself (subject to restrictions below), a
 // member (directly or indirectly) WITH ADMIN OPTION, or a superuser?
 func isAdminOfRole(
-	evalCtx *eval.Context, user, role username.SQLUsername,
+	ctx context.Context, evalCtx *eval.Context, user, role username.SQLUsername,
 ) (eval.HasAnyPrivilegeResult, error) {
 	// Superusers are an admin of every role.
 	//
 	// NB: this is intentionally before the user == role check here.
-	if isSuper, err := evalCtx.Planner.UserHasAdminRole(evalCtx.Context, user); err != nil {
+	if isSuper, err := evalCtx.Planner.UserHasAdminRole(ctx, user); err != nil {
 		return eval.HasNoPrivilege, err
 	} else if isSuper {
 		return eval.HasPrivilege, nil
@@ -2461,7 +2465,7 @@ func isAdminOfRole(
 		return eval.HasNoPrivilege, nil
 	}
 
-	allRoleMemberships, err := evalCtx.Planner.MemberOfWithAdminOption(evalCtx.Context, user)
+	allRoleMemberships, err := evalCtx.Planner.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
 		return eval.HasNoPrivilege, err
 	}

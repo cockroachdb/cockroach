@@ -76,7 +76,7 @@ func (c *CustomFuncs) FoldBinaryCheckOverflow(
 	}
 
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
 	if err != nil {
 		return nil, false
 	}

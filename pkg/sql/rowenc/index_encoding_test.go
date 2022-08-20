@@ -987,7 +987,7 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 
 		// Since the spans are never tight, apply an additional filter to determine
 		// if the result is contained.
-		datum, err := eval.Expr(evalCtx.Context, &evalCtx, typedExpr)
+		datum, err := eval.Expr(context.Background(), &evalCtx, typedExpr)
 		require.NoError(t, err)
 		actual := bool(*datum.(*tree.DBool))
 		require.Equal(t, expected, actual, "%s, %s: expected evaluation result to match", indexedValue, value)
@@ -1036,7 +1036,7 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 				expectedContainsKeys = all
 			}
 
-			d, err := eval.Expr(evalCtx.Context, &evalCtx, expr)
+			d, err := eval.Expr(context.Background(), &evalCtx, expr)
 			require.NoError(t, err)
 			expected := bool(*d.(*tree.DBool))
 			trigrams := trigram.MakeTrigrams(right, false /* pad */)

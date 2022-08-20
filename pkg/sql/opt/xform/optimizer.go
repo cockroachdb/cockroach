@@ -132,7 +132,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 		stateMap: make(map[groupStateKey]*groupState),
 	}
 	o.cancelChecker.Reset(ctx)
-	o.f.Init(evalCtx, catalog)
+	o.f.Init(ctx, evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 
@@ -1065,7 +1065,7 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if disabledRules.Contains(int(ruleName)) {
-			log.Infof(o.evalCtx.Context, "disabled rule matched: %s", ruleName.String())
+			log.Infof(o.ctx, "disabled rule matched: %s", ruleName.String())
 			return false
 		}
 		return true
