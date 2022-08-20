@@ -455,3 +455,81 @@ func SanitizeVarFreeExpr(
 	}
 	return typedExpr, nil
 }
+
+// ValidateTTLExpressionDoesNotDependOnColumn verifies that the
+// ttl_expiration_expression, if any, does not reference the given column.
+func ValidateTTLExpressionDoesNotDependOnColumn(
+	tableDesc catalog.TableDescriptor, col catalog.Column,
+) error {
+	if !tableDesc.HasRowLevelTTL() {
+		return nil
+	}
+	expirationExpr := tableDesc.GetRowLevelTTL().ExpirationExpr
+	if expirationExpr == "" {
+		return nil
+	}
+	expr, err := parser.ParseExpr(string(expirationExpr))
+	if err != nil {
+		// At this point, we should be able to parse the expiration expression.
+		return errors.WithAssertionFailure(err)
+	}
+	referencedCols, err := ExtractColumnIDs(tableDesc, expr)
+	if err != nil {
+		return err
+	}
+	if referencedCols.Contains(col.GetID()) {
+		return pgerror.Newf(
+			pgcode.InvalidColumnReference,
+			"column %q is referenced by row-level TTL expiration expression %q",
+			col.ColName(), expirationExpr,
+		)
+	}
+	return nil
+}
+
+// ValidateTTLExpirationExpression verifies that the ttl_expiration_expression,
+// if any, is valid according to the following rules:
+// * type-checks as a TIMESTAMPTZ.
+// * is an immutable expression.
+// * references valid columns in the table.
+func ValidateTTLExpirationExpression(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	semaCtx *tree.SemaContext,
+	tableName *tree.TableName,
+) error {
+	if !tableDesc.HasRowLevelTTL() {
+		return nil
+	}
+
+	ttl := tableDesc.GetRowLevelTTL()
+	if !ttl.HasExpirationExpr() {
+		return nil
+	}
+
+	expr, err := parser.ParseExpr(string(ttl.ExpirationExpr))
+	if err != nil {
+		return pgerror.Wrapf(
+			err,
+			pgcode.InvalidParameterValue,
+			`ttl_expiration_expression %q must be a valid expression`,
+			ttl.ExpirationExpr,
+		)
+	}
+
+	if _, _, _, err := DequalifyAndValidateExpr(
+		ctx,
+		tableDesc,
+		expr,
+		types.TimestampTZ,
+		"ttl_expiration_expression",
+		semaCtx,
+		volatility.Immutable,
+		tableName,
+	); err != nil {
+		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+	}
+
+	// todo: check dropped column here?
+	return nil
+}
