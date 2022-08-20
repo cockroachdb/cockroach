@@ -12,13 +12,12 @@ package insights
 
 import (
 	"context"
-	"sort"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -26,25 +25,35 @@ import (
 
 func TestIngester(t *testing.T) {
 	testCases := []struct {
-		name   string
-		events []testEvent
+		name         string
+		observations []testEvent
+		insights     []testEvent
 	}{
 		{
 			name: "One Session",
-			events: []testEvent{
+			observations: []testEvent{
 				{sessionID: 1, statementID: 10},
 				{sessionID: 1, transactionID: 100},
+			},
+			insights: []testEvent{
+				{sessionID: 1, transactionID: 100, statementID: 10},
 			},
 		},
 		{
 			name: "Interleaved Sessions",
-			events: []testEvent{
+			observations: []testEvent{
 				{sessionID: 1, statementID: 10},
 				{sessionID: 2, statementID: 20},
 				{sessionID: 1, statementID: 11},
 				{sessionID: 2, statementID: 21},
 				{sessionID: 1, transactionID: 100},
 				{sessionID: 2, transactionID: 200},
+			},
+			insights: []testEvent{
+				{sessionID: 1, transactionID: 100, statementID: 10},
+				{sessionID: 1, transactionID: 100, statementID: 11},
+				{sessionID: 2, transactionID: 200, statementID: 20},
+				{sessionID: 2, transactionID: 200, statementID: 21},
 			},
 		},
 	}
@@ -55,41 +64,52 @@ func TestIngester(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 
-			r := &fakeRegistry{enable: true}
-			ingester := newConcurrentBufferIngester(r)
-			ingester.Start(ctx, stopper)
+			// We use a fakeDetector claiming *every* statement is slow, so
+			// that we can assert on the generated insights to make sure all
+			// the events came through properly.
+			provider := newConcurrentBufferIngester(
+				newRegistry(
+					cluster.MakeTestingClusterSettings(), &fakeDetector{
+						stubEnabled: true,
+						stubIsSlow:  true,
+					}),
+			)
 
-			for _, e := range tc.events {
+			provider.Start(ctx, stopper)
+			writer := provider.Writer()
+			reader := provider.Reader()
+
+			for _, e := range tc.observations {
 				if e.statementID != 0 {
-					ingester.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
+					writer.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
 				} else {
-					ingester.ObserveTransaction(e.SessionID(), &Transaction{ID: e.TransactionID()})
+					writer.ObserveTransaction(e.SessionID(), &Transaction{ID: e.TransactionID()})
 				}
 			}
 
-			// Wait for the events to come through.
+			// Wait for the insights to come through.
 			require.Eventually(t, func() bool {
-				r.mu.RLock()
-				defer r.mu.RUnlock()
-				return len(r.mu.events) == len(tc.events)
+				var numInsights int
+				reader.IterateInsights(ctx, func(context.Context, *Insight) {
+					numInsights++
+				})
+				return numInsights == len(tc.insights)
 			}, 1*time.Second, 50*time.Millisecond)
 
-			// See that the events we were expecting are the ones that arrived.
-			// We allow the ingester to do whatever it needs to, so long as the ordering of statements
-			// and transactions for a given session is preserved.
-			sort.SliceStable(tc.events, func(i, j int) bool {
-				return tc.events[i].sessionID < tc.events[j].sessionID
+			// See that the insights we were expecting are the ones that
+			// arrived. We allow the provider to do whatever it needs to, so
+			// long as it can properly match statements with their
+			// transactions.
+			var actual []testEvent
+			reader.IterateInsights(ctx, func(ctx context.Context, insight *Insight) {
+				actual = append(actual, testEvent{
+					sessionID:     insight.Session.ID.Lo,
+					transactionID: insight.Transaction.ID.ToUint128().Lo,
+					statementID:   insight.Statement.ID.Lo,
+				})
 			})
 
-			sort.SliceStable(r.mu.events, func(i, j int) bool {
-				r.mu.Lock()
-				defer r.mu.Unlock()
-				return r.mu.events[i].sessionID < r.mu.events[j].sessionID
-			})
-
-			r.mu.RLock()
-			defer r.mu.RUnlock()
-			require.EqualValues(t, tc.events, r.mu.events)
+			require.ElementsMatch(t, tc.insights, actual)
 		})
 	}
 }
@@ -99,55 +119,14 @@ func TestIngester_Disabled(t *testing.T) {
 	// should something go wrong. Here we peek at the internals of the ingester
 	// to make sure it doesn't hold onto any statement or transaction info if
 	// the underlying registry is currently disabled.
-	ingester := newConcurrentBufferIngester(&fakeRegistry{enable: false})
+	ingester := newConcurrentBufferIngester(newRegistry(cluster.MakeTestingClusterSettings(), &fakeDetector{}))
 	ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
 	ingester.ObserveTransaction(clusterunique.ID{}, &Transaction{})
-	require.Nil(t, ingester.(*concurrentBufferIngester).guard.eventBuffer[0])
-}
-
-type fakeRegistry struct {
-	enable bool
-
-	mu struct {
-		syncutil.RWMutex
-		events []testEvent
-	}
-}
-
-func (r *fakeRegistry) Start(context.Context, *stop.Stopper) {
-	// No-op.
-}
-
-func (r *fakeRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
-	// Rebuild the testEvent, so that we can assert on what we saw.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.events = append(r.mu.events, testEvent{
-		sessionID:   sessionID.Lo,
-		statementID: statement.ID.Lo,
-	})
-}
-
-func (r *fakeRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
-	// Rebuild the testEvent, so that we can assert on what we saw.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.events = append(r.mu.events, testEvent{
-		sessionID:     sessionID.Lo,
-		transactionID: transaction.ID.ToUint128().Lo,
-	})
-}
-
-func (r *fakeRegistry) IterateInsights(context.Context, func(context.Context, *Insight)) {
-	// No-op.
-}
-
-func (r *fakeRegistry) enabled() bool {
-	return r.enable
+	require.Nil(t, ingester.guard.eventBuffer[0])
 }
 
 type testEvent struct {
-	sessionID, statementID, transactionID uint64
+	sessionID, transactionID, statementID uint64
 }
 
 func (s testEvent) SessionID() clusterunique.ID {

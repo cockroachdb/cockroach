@@ -16,7 +16,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/stretchr/testify/require"
 )
 
 // WaitForNoRunningSchemaChanges schema changes waits for no schema changes
@@ -134,6 +137,32 @@ ORDER BY id`)
 		cb.UpsertNamespaceEntry(key, descpb.ID(id))
 	}
 	return cb
+}
+
+// ReadZoneConfigsFromDB reads the zone configs from tdb.
+func ReadZoneConfigsFromDB(
+	t *testing.T, tdb *sqlutils.SQLRunner, descCatalog nstree.Catalog,
+) map[catid.DescID]*zonepb.ZoneConfig {
+	zoneCfgMap := make(map[catid.DescID]*zonepb.ZoneConfig)
+	require.NoError(t, descCatalog.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		zoneCfgRow := tdb.Query(t, `
+SELECT config FROM system.zones WHERE id=$1
+`,
+			desc.GetID())
+		defer zoneCfgRow.Close()
+		once := false
+		for zoneCfgRow.Next() {
+			require.Falsef(t, once, "multiple zone config entries for descriptor")
+			var bytes []byte
+			require.NoError(t, zoneCfgRow.Scan(&bytes))
+			var zone zonepb.ZoneConfig
+			require.NoError(t, protoutil.Unmarshal(bytes, &zone))
+			zoneCfgMap[desc.GetID()] = &zone
+			once = true
+		}
+		return nil
+	}))
+	return zoneCfgMap
 }
 
 // ReadCurrentDatabaseFromDB reads the current database from tdb.

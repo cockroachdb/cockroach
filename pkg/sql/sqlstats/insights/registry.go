@@ -16,55 +16,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// registry is the central object in the outliers subsystem. It observes
+// This registry is the central object in the insights subsystem. It observes
 // statement execution to determine which statements are outliers and
-// exposes the set of currently retained outliers.
-type registry struct {
+// exposes the set of currently retained insights.
+type lockingRegistry struct {
 	detector detector
 	problems *problems
 
 	// Note that this single mutex places unnecessary constraints on outlier
 	// detection and reporting. We will develop a higher-throughput system
-	// before enabling the outliers subsystem by default.
+	// before enabling the insights subsystem by default.
 	mu struct {
 		syncutil.RWMutex
 		statements map[clusterunique.ID][]*Statement
-		outliers   *cache.UnorderedCache
+		insights   *cache.UnorderedCache
 	}
 }
 
-var _ Registry = &registry{}
+var _ Writer = &lockingRegistry{}
+var _ Reader = &lockingRegistry{}
 
-func newRegistry(st *cluster.Settings, metrics Metrics) Registry {
-	config := cache.Config{
-		Policy: cache.CacheFIFO,
-		ShouldEvict: func(size int, key, value interface{}) bool {
-			return int64(size) > ExecutionInsightsCapacity.Get(&st.SV)
-		},
-	}
-	r := &registry{
-		detector: compositeDetector{detectors: []detector{
-			latencyThresholdDetector{st: st},
-			newAnomalyDetector(st, metrics),
-		}},
-		problems: &problems{
-			st: st,
-		},
-	}
-	r.mu.statements = make(map[clusterunique.ID][]*Statement)
-	r.mu.outliers = cache.NewUnorderedCache(config)
-	return r
-}
-
-func (r *registry) Start(_ context.Context, _ *stop.Stopper) {
-	// No-op.
-}
-
-func (r *registry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
+func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
 		return
 	}
@@ -73,7 +48,7 @@ func (r *registry) ObserveStatement(sessionID clusterunique.ID, statement *State
 	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], statement)
 }
 
-func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
+func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
 	if !r.enabled() {
 		return
 	}
@@ -95,7 +70,7 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 			if _, ok := slowStatements[s.ID]; ok {
 				p = r.problems.examine(s)
 			}
-			r.mu.outliers.Add(s.ID, &Insight{
+			r.mu.insights.Add(s.ID, &Insight{
 				Session:     &Session{ID: sessionID},
 				Transaction: transaction,
 				Statement:   s,
@@ -105,10 +80,12 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 	}
 }
 
-func (r *registry) IterateInsights(ctx context.Context, visitor func(context.Context, *Insight)) {
+func (r *lockingRegistry) IterateInsights(
+	ctx context.Context, visitor func(context.Context, *Insight),
+) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.mu.outliers.Do(func(e *cache.Entry) {
+	r.mu.insights.Do(func(e *cache.Entry) {
 		visitor(ctx, e.Value.(*Insight))
 	})
 }
@@ -118,6 +95,22 @@ func (r *registry) IterateInsights(ctx context.Context, visitor func(context.Con
 //   execution path in #81021, we can probably get rid of this external
 //   concept of "enabled" and let the detectors just decide for themselves
 //   internally.
-func (r *registry) enabled() bool {
+func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
+}
+
+func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
+	config := cache.Config{
+		Policy: cache.CacheFIFO,
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			return int64(size) > ExecutionInsightsCapacity.Get(&st.SV)
+		},
+	}
+	r := &lockingRegistry{
+		detector: detector,
+		problems: &problems{st: st},
+	}
+	r.mu.statements = make(map[clusterunique.ID][]*Statement)
+	r.mu.insights = cache.NewUnorderedCache(config)
+	return r
 }

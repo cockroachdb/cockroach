@@ -292,6 +292,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
+	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
 }
 
 // Schema is the schema exported by this package covering the elements of scpb.

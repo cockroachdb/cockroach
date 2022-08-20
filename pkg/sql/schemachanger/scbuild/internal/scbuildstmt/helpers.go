@@ -551,3 +551,15 @@ func makeSwapPrimaryIndexSpec(
 	}
 	return in, temp
 }
+
+// fallBackIfZoneConfigExists determines if the table has regional by row
+// properties and throws an unimplemented error.
+func fallBackIfZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.DescID) {
+	{
+		tableElts := b.QueryByID(id)
+		if _, _, elem := scpb.FindTableZoneConfig(tableElts); elem != nil {
+			panic(scerrors.NotImplementedErrorf(n,
+				"regional by row partitioning is not supported"))
+		}
+	}
+}

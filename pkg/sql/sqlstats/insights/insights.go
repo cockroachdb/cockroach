@@ -88,13 +88,13 @@ var HighRetryCountThreshold = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 ).WithPublic()
 
-// Metrics holds running measurements of various outliers-related runtime stats.
+// Metrics holds running measurements of various insights-related runtime stats.
 type Metrics struct {
 	// Fingerprints measures the number of statement fingerprints being monitored for
-	// outlier detection.
+	// anomaly detection.
 	Fingerprints *metric.Gauge
 
-	// Memory measures the memory used in support of outlier detection.
+	// Memory measures the memory used in support of anomaly detection.
 	Memory *metric.Gauge
 
 	// Evictions counts fingerprint latency summaries discarded due to memory
@@ -134,29 +134,39 @@ func NewMetrics() Metrics {
 	}
 }
 
-// Reader offers read-only access to the currently retained set of insights.
-type Reader interface {
-	// IterateInsights calls visitor with each of the currently retained set of insights.
-	IterateInsights(context.Context, func(context.Context, *Insight))
-}
-
-// Registry is the central object in the insights subsystem. It observes
-// statement execution, looking for suggestions we may expose to the user.
-type Registry interface {
-	Start(ctx context.Context, stopper *stop.Stopper)
-
+// Writer observes statement and transaction executions.
+type Writer interface {
 	// ObserveStatement notifies the registry of a statement execution.
 	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
 
 	// ObserveTransaction notifies the registry of the end of a transaction.
 	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
-
-	Reader
-
-	enabled() bool
 }
 
-// New builds a new Registry.
-func New(st *cluster.Settings, metrics Metrics) Registry {
-	return newConcurrentBufferIngester(newRegistry(st, metrics))
+// Reader offers access to the currently retained set of insights.
+type Reader interface {
+	// IterateInsights calls visitor with each of the currently retained set of insights.
+	IterateInsights(context.Context, func(context.Context, *Insight))
+}
+
+// Provider offers access to the insights subsystem.
+type Provider interface {
+	// Start launches the background tasks necessary for processing insights.
+	Start(ctx context.Context, stopper *stop.Stopper)
+
+	// Writer returns an object that observes statement and transaction executions.
+	Writer() Writer
+
+	// Reader returns an object that offers read access to any detected insights.
+	Reader() Reader
+}
+
+// New builds a new Provider.
+func New(st *cluster.Settings, metrics Metrics) Provider {
+	return newConcurrentBufferIngester(
+		newRegistry(st, &compositeDetector{detectors: []detector{
+			&latencyThresholdDetector{st: st},
+			newAnomalyDetector(st, metrics),
+		}}),
+	)
 }

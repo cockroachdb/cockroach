@@ -67,7 +67,7 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	insights insights.Registry
+	insights insights.Writer
 }
 
 func newSQLStats(
@@ -76,7 +76,7 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist *metric.Histogram,
-	outliersRegistry insights.Registry,
+	insightsWriter insights.Writer,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
@@ -96,7 +96,7 @@ func newSQLStats(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
-		insights:                   outliersRegistry,
+		insights:                   insightsWriter,
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
@@ -189,11 +189,4 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 	s.mu.lastReset = timeutil.Now()
 
 	return err
-}
-
-// IterateInsights calls visitor with each of the currently retained set of insights.
-func (s *SQLStats) IterateInsights(
-	ctx context.Context, visitor func(context.Context, *insights.Insight),
-) {
-	s.insights.IterateInsights(ctx, visitor)
 }

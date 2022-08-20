@@ -18,7 +18,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessionphase",
-        "//pkg/sql/sqlstats/insights",
         "//pkg/util/stop",
         "//pkg/util/uuid",
     ],

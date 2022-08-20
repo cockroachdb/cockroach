@@ -401,6 +401,10 @@ func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
 }
 
+func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
+	return descmetadata.NewZoneConfigGetter(d.txn, d.internalExecutor)
+}
+
 // ClientNoticeSender implements the scbuild.Dependencies interface.
 func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender

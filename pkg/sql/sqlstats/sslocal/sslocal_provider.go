@@ -38,13 +38,13 @@ func New(
 	maxTxnFingerprints *settings.IntSetting,
 	curMemoryBytesCount *metric.Gauge,
 	maxMemoryBytesHist *metric.Histogram,
-	outliersRegistry insights.Registry,
+	insightsWriter insights.Writer,
 	pool *mon.BytesMonitor,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
 	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, outliersRegistry, pool,
+		curMemoryBytesCount, maxMemoryBytesHist, insightsWriter, pool,
 		reportingSink, knobs)
 }
 

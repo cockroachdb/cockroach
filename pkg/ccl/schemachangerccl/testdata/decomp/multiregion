@@ -128,6 +128,9 @@ ElementState:
     tableId: 110
     temporaryIndexId: 0
   Status: PUBLIC
+- TableZoneConfig:
+    tableId: 110
+  Status: PUBLIC
 - TableLocalityGlobal:
     tableId: 110
   Status: PUBLIC
@@ -375,6 +378,9 @@ ElementState:
     sourceIndexId: 0
     tableId: 109
     temporaryIndexId: 0
+  Status: PUBLIC
+- TableZoneConfig:
+    tableId: 109
   Status: PUBLIC
 - TableLocalitySecondaryRegion:
     regionEnumTypeId: 105
@@ -638,6 +644,9 @@ ElementState:
   Status: PUBLIC
 - TableComment:
     comment: regional by row is good
+    tableId: 108
+  Status: PUBLIC
+- TableZoneConfig:
     tableId: 108
   Status: PUBLIC
 - TableLocalityRegionalByRow:
