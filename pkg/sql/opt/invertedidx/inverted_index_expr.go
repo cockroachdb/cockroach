@@ -379,7 +379,7 @@ func constrainPrefixColumns(
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	tabMeta := factory.Metadata().TableMeta(tabID)
 	prefixColumnCount := index.NonInvertedPrefixColumnCount()
-	ps, _ := tabMeta.IndexPartitionLocality(index.Ordinal(), index, evalCtx)
+	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
 
 	// If this is a single-column inverted index, there are no prefix columns to
 	// constrain.

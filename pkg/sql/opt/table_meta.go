@@ -13,7 +13,6 @@ package opt
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -166,16 +165,20 @@ type TableMeta struct {
 	// the map.
 	partialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
 
-	// indexPartitionLocalities is a map from an index ordinal on the table to a
-	// *PrefixSorter representing the PARTITION BY LIST values of the index and
-	// whether each of those partitions is region-local with respect to the query
-	// being run. If an index is partitioned BY LIST, and has both local and
-	// remote partitions, it will have an entry in the map. Local partitions are
-	// those where all row ranges they own have a preferred region for leaseholder
-	// nodes the same as the gateway region of the current connection that is
-	// running the query. Remote partitions have at least one row range with a
-	// leaseholder preferred region which is different from the gateway region.
-	indexPartitionLocalities map[cat.IndexOrdinal]*partition.PrefixSorter
+	// indexPartitionLocalities is a slice containing PrefixSorters for each
+	// index that has local and remote partitions. The i-th PrefixSorter in the
+	// slice corresponds to the i-th index in the table.
+	//
+	// The PrefixSorters represent the PARTITION BY LIST values of the index and
+	// whether each of those partitions is region-local with respect to the
+	// query being run. If an index is partitioned BY LIST, and has both local
+	// and remote partitions, it will have an entry in the map. Local partitions
+	// are those where all row ranges they own have a preferred region for
+	// leaseholder nodes the same as the gateway region of the current
+	// connection that is running the query. Remote partitions have at least one
+	// row range with a leaseholder preferred region which is different from the
+	// gateway region.
+	indexPartitionLocalities []partition.PrefixSorter
 
 	// checkConstraintsStats is a map from the current ColumnID statistics based
 	// on CHECK constraint values is based on back to the original ColumnStatistic
@@ -318,15 +321,6 @@ func (tm *TableMeta) ComputedColExpr(id ColumnID) (_ ScalarExpr, ok bool) {
 	return e, ok
 }
 
-// AddPartialIndexPredicate adds a partial index predicate to the table's
-// metadata.
-func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
-	if tm.partialIndexPredicates == nil {
-		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
-	}
-	tm.partialIndexPredicates[ord] = pred
-}
-
 // AddCheckConstraintsStats adds a column, ColumnStatistic pair to the
 // checkConstraintsStats map. When the table is duplicated, the mapping from the
 // new check constraint ColumnID back to the original ColumnStatistic is
@@ -354,30 +348,31 @@ func (tm *TableMeta) OrigCheckConstraintsStats(
 
 // AddIndexPartitionLocality adds a PrefixSorter to the table's metadata for the
 // index with IndexOrdinal ord.
-func (tm *TableMeta) AddIndexPartitionLocality(ord cat.IndexOrdinal, ps *partition.PrefixSorter) {
+func (tm *TableMeta) AddIndexPartitionLocality(ord cat.IndexOrdinal, ps partition.PrefixSorter) {
 	if tm.indexPartitionLocalities == nil {
-		tm.indexPartitionLocalities = make(map[cat.IndexOrdinal]*partition.PrefixSorter)
+		tm.indexPartitionLocalities = make([]partition.PrefixSorter, tm.Table.IndexCount())
 	}
 	tm.indexPartitionLocalities[ord] = ps
 }
 
-// IndexPartitionLocality returns the given index's PrefixSorter.
-func (tm *TableMeta) IndexPartitionLocality(
-	ord cat.IndexOrdinal, index cat.Index, evalCtx *eval.Context,
-) (ps *partition.PrefixSorter, ok bool) {
-	ps, ok = tm.indexPartitionLocalities[ord]
-	if !ok {
-		if localPartitions, ok :=
-			partition.HasMixOfLocalAndRemotePartitions(evalCtx, index); ok {
-			ps = partition.GetSortedPrefixes(index, *localPartitions, evalCtx)
-		}
-		tm.AddIndexPartitionLocality(ord, ps)
+// IndexPartitionLocality returns the given index's PrefixSorter. An empty
+// PrefixSorter is returned if the index does not have a mix of local and remote
+// partitions.
+func (tm *TableMeta) IndexPartitionLocality(ord cat.IndexOrdinal) (ps partition.PrefixSorter) {
+	if tm.indexPartitionLocalities != nil {
+		ps := tm.indexPartitionLocalities[ord]
+		return ps
 	}
-	// A nil ps means that the entry in the map for this index indicates that the
-	// index was not partitioned, or the index did not have a mix of local and
-	// remote partitions, so no PrefixSorter is built for it. We return ok=false
-	// to the caller to indicate no PrefixSorter is available for this index.
-	return ps, ps != nil
+	return partition.PrefixSorter{}
+}
+
+// AddPartialIndexPredicate adds a partial index predicate to the table's
+// metadata.
+func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
+	if tm.partialIndexPredicates == nil {
+		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
+	}
+	tm.partialIndexPredicates[ord] = pred
 }
 
 // PartialIndexPredicate returns the given index's predicate scalar expression,

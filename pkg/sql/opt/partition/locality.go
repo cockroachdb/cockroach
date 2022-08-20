@@ -105,6 +105,11 @@ func (ps PrefixSorter) Swap(i, j int) {
 	ps.Entry[i], ps.Entry[j] = ps.Entry[j], ps.Entry[i]
 }
 
+// Empty returns true if the PrefixSorter contains no prefixes.
+func (ps PrefixSorter) Empty() bool {
+	return len(ps.Entry) == 0
+}
+
 // Slice returns the ith slice of Prefix entries, all having the same
 // partition prefix length, along with the start index of that slice in the
 // main PrefixSorter Entry slice. Slices are sorted by prefix length with those
@@ -145,16 +150,15 @@ func PrefixesToString(prefixes []Prefix) string {
 // determined.
 func HasMixOfLocalAndRemotePartitions(
 	evalCtx *eval.Context, index cat.Index,
-) (localPartitions *util.FastIntSet, ok bool) {
+) (localPartitions util.FastIntSet, ok bool) {
 	if index.PartitionCount() < 2 {
-		return nil, false
+		return util.FastIntSet{}, false
 	}
 	var localRegion string
 	if localRegion, ok = evalCtx.GetLocalRegion(); !ok {
-		return nil, false
+		return util.FastIntSet{}, false
 	}
 	var foundLocal, foundRemote bool
-	localPartitions = &util.FastIntSet{}
 	for i, n := 0, index.PartitionCount(); i < n; i++ {
 		part := index.Partition(i)
 		if IsZoneLocal(part.Zone(), localRegion) {
@@ -174,9 +178,9 @@ func HasMixOfLocalAndRemotePartitions(
 // This is the main function for building a PrefixSorter.
 func GetSortedPrefixes(
 	index cat.Index, localPartitions util.FastIntSet, evalCtx *eval.Context,
-) *PrefixSorter {
+) PrefixSorter {
 	if index == nil || index.PartitionCount() < 2 {
-		return nil
+		return PrefixSorter{}
 	}
 	allPrefixes := make([]Prefix, 0, index.PartitionCount())
 
@@ -215,7 +219,7 @@ func GetSortedPrefixes(
 
 	// The end of the last slice is always the last element.
 	ps.idx = append(ps.idx, len(allPrefixes)-1)
-	return &ps
+	return ps
 }
 
 // isConstraintLocal returns isLocal=true and ok=true if the given constraint is
