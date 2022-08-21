@@ -727,10 +727,12 @@ func (v MVCCRangeKeyVersions) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion,
 	// This is kind of odd due to sort.Search() semantics: we do a binary search
 	// for the first range key that's below the timestamp, then return the
 	// previous range key if any.
-	if i := sort.Search(len(v), func(i int) bool {
-		return v[i].Timestamp.Less(ts)
-	}); i > 0 {
-		return v[i-1], true
+	if length := len(v); length > 0 {
+		if i := sort.Search(length, func(i int) bool {
+			return v[i].Timestamp.Less(ts)
+		}); i > 0 {
+			return v[i-1], true
+		}
 	}
 	return MVCCRangeKeyVersion{}, false
 }
@@ -738,10 +740,12 @@ func (v MVCCRangeKeyVersions) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion,
 // FirstBelow does a binary search for the first range key version at or below
 // the given timestamp. Returns false if no matching range key was found.
 func (v MVCCRangeKeyVersions) FirstBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
-	if i := sort.Search(len(v), func(i int) bool {
-		return v[i].Timestamp.LessEq(ts)
-	}); i < len(v) {
-		return v[i], true
+	if length := len(v); length > 0 {
+		if i := sort.Search(length, func(i int) bool {
+			return v[i].Timestamp.LessEq(ts)
+		}); i < length {
+			return v[i], true
+		}
 	}
 	return MVCCRangeKeyVersion{}, false
 }
