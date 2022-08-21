@@ -486,14 +486,12 @@ type noopEventLogger struct{}
 var _ scexec.EventLogger = noopEventLogger{}
 
 func (noopEventLogger) LogEvent(
-	_ context.Context, _ descpb.ID, _ eventpb.CommonSQLEventDetails, _ logpb.EventPayload,
+	_ context.Context, _ eventpb.CommonSQLEventDetails, _ logpb.EventPayload,
 ) error {
 	return nil
 }
 
-func (noopEventLogger) LogEventForSchemaChange(
-	_ context.Context, _ descpb.ID, _ logpb.EventPayload,
-) error {
+func (noopEventLogger) LogEventForSchemaChange(_ context.Context, _ logpb.EventPayload) error {
 	return nil
 }
 

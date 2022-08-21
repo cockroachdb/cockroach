@@ -1230,6 +1230,7 @@ type ExecutorConfig struct {
 	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
 	UnusedIndexRecommendationsKnobs      *idxusage.UnusedIndexRecommendationTestingKnobs
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
+	EventLogTestingKnobs                 *EventLogTestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration

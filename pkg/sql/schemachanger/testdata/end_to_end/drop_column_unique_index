@@ -134,7 +134,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "11"
   +  version: "12"
-write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
+write *eventpb.AlterTable to event log: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -549,7 +549,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "18"
   +  version: "19"
-write *eventpb.FinishSchemaChange to event log for descriptor 106
+write *eventpb.FinishSchemaChange to event log
 create job #3 (non-cancelable: true): "GC for ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"

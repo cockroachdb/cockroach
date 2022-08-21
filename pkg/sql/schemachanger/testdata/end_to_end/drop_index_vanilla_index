@@ -190,8 +190,8 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "9"
   +  version: "10"
-write *eventpb.FinishSchemaChange to event log for descriptor 104
-write *eventpb.DropIndex to event log for descriptor #104: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+write *eventpb.FinishSchemaChange to event log
+write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"

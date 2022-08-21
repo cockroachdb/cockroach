@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -61,18 +60,13 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 		return err
 	}
 
-	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return sql.InsertEventRecords(
-			ctx,
-			p.ExecCfg().InternalExecutor,
-			p.ExecCfg().EventsExporter,
-			txn,
-			int32(p.ExecCfg().NodeInfo.NodeID.SQLInstanceID()), /* reportingID */
-			sql.LogExternally,
-			0, /* targetID */
-			events...,
-		)
-	})
+	sql.InsertEventRecords(
+		ctx,
+		p.ExecCfg(),
+		sql.LogExternally,
+		events...,
+	)
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

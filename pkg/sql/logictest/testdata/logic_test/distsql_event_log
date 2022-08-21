@@ -1,3 +1,5 @@
+# knob-opt: sync-event-log
+
 ###################
 # CREATE STATISTICS
 ###################
@@ -23,13 +25,13 @@ CREATE STATISTICS s1 ON id FROM a
 
 # Check explicitly for table id 106. System tables could trigger autostats
 # collections at any time.
-query IIT
-SELECT "targetID", "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+query IT
+SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
-WHERE "eventType" = 'create_statistics' AND "targetID" = 106
+WHERE "eventType" = 'create_statistics' AND ("info"::JSONB ->> 'DescriptorID')::INT = 106
 ORDER BY "timestamp", info
 ----
-106  1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "Tag": "CREATE STATISTICS", "User": "root"}
+1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "Tag": "CREATE STATISTICS", "User": "root"}
 
 statement ok
 DROP TABLE a

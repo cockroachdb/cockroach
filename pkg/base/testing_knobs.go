@@ -53,4 +53,5 @@ type TestingKnobs struct {
 	UnusedIndexRecommendKnobs    ModuleTestingKnobs
 	ExternalConnection           ModuleTestingKnobs
 	EventExporter                ModuleTestingKnobs
+	EventLog                     ModuleTestingKnobs
 }

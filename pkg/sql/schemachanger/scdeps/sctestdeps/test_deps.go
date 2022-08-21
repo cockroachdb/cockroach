@@ -1000,22 +1000,15 @@ func (s *TestState) IndexValidator() scexec.IndexValidator {
 
 // LogEvent implements scexec.EventLogger.
 func (s *TestState) LogEvent(
-	_ context.Context,
-	descID descpb.ID,
-	details eventpb.CommonSQLEventDetails,
-	event logpb.EventPayload,
+	_ context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 ) error {
-	s.LogSideEffectf("write %T to event log for descriptor #%d: %s",
-		event, descID, details.Statement)
+	s.LogSideEffectf("write %T to event log: %s", event, details.Statement)
 	return nil
 }
 
 // LogEventForSchemaChange implements scexec.EventLogger
-func (s *TestState) LogEventForSchemaChange(
-	ctx context.Context, descID descpb.ID, event logpb.EventPayload,
-) error {
-	s.LogSideEffectf("write %T to event log for descriptor %d",
-		event, descID)
+func (s *TestState) LogEventForSchemaChange(ctx context.Context, event logpb.EventPayload) error {
+	s.LogSideEffectf("write %T to event log", event)
 	return nil
 }
 

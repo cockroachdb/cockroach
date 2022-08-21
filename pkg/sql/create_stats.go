@@ -681,12 +681,10 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 				User:              evalCtx.SessionData().User().Normalized(),
 				ApplicationName:   evalCtx.SessionData().ApplicationName,
 				PlaceholderValues: []string{}, /* no placeholders known at this point */
+				DescriptorID:      uint32(details.Table.ID),
 			},
-			eventLogEntry{
-				targetID: int32(details.Table.ID),
-				event: &eventpb.CreateStatistics{
-					TableName: details.FQTableName,
-				},
+			&eventpb.CreateStatistics{
+				TableName: details.FQTableName,
 			},
 		)
 	})

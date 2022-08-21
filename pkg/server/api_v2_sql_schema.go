@@ -12,7 +12,6 @@ package server
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -125,12 +124,6 @@ type eventsResponse struct {
 //   description: Type of events to filter for (e.g. "create_table"). Only one
 //     event type can be specified at a time.
 //   required: false
-// - name: targetID
-//   type: integer
-//   in: query
-//   description: Filter for events with this targetID. Only one targetID can
-//    be specified at a time.
-//   required: false
 // - name: limit
 //   type: integer
 //   in: query
@@ -158,11 +151,6 @@ func (a *apiV2Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	req := &serverpb.EventsRequest{}
 	if typ := queryValues.Get("type"); len(typ) > 0 {
 		req.Type = typ
-	}
-	if targetID := queryValues.Get("targetID"); len(targetID) > 0 {
-		if targetIDInt, err := strconv.ParseInt(targetID, 10, 64); err == nil {
-			req.TargetId = targetIDInt
-		}
 	}
 
 	var resp eventsResponse
@@ -239,8 +227,6 @@ func (a *apiV2Server) listDatabases(w http.ResponseWriter, r *http.Request) {
 // swagger:model databaseDetailsResponse
 type databaseDetailsResponse struct {
 	// DescriptorID is an identifier used to uniquely identify this database.
-	// It can be used to find events pertaining to this database by filtering on
-	// the 'target_id' field of events.
 	DescriptorID int64 `json:"descriptor_id,omitempty"`
 }
 

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -189,19 +188,12 @@ func (s *Server) Decommission(
 			// update, this would force a 2PC and potentially leave write intents in
 			// the node liveness range. Better to make the event logging best effort
 			// than to slow down future node liveness transactions.
-			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return sql.InsertEventRecords(
-					ctx,
-					s.sqlServer.execCfg.InternalExecutor, s.sqlServer.execCfg.EventsExporter,
-					txn,
-					int32(s.NodeID()), /* reporting ID: the node where the event is logged */
-					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* we already call log.StructuredEvent above */
-					int32(nodeID), /* target ID: the node that we wee a membership change for */
-					event,
-				)
-			}); err != nil {
-				log.Ops.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
-			}
+			sql.InsertEventRecords(
+				ctx,
+				s.sqlServer.execCfg,
+				sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
+				event,
+			)
 		}
 
 		// Similarly to the log event above, we may not be able to clean up the

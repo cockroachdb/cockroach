@@ -1,6 +1,7 @@
 # Legacy schema changer is also skipped because mutation IDs throughout log
 # entries will differ.
 # LogicTest: !local-legacy-schema-changer
+# knob-opt: sync-event-log
 
 # For some reason, some of the queries produce non-deterministic results if
 # distsql_workmem value is randomized, so we'll override it to the production
@@ -465,8 +466,8 @@ EXECUTE set_setting('some string')
 # verify setting changes are logged
 ##################
 onlyif config local
-query IIT
-SELECT "targetID", "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+query IT
+SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'set_cluster_setting'
 AND info NOT LIKE '%version%'
@@ -477,16 +478,16 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
 ORDER BY "timestamp", info
 ----
-0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
-0  1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
+1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
+1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
+1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
+1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
+1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 onlyif config 3node-tenant-default-configs
-query IIT
-SELECT "targetID", "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+query IT
+SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'set_cluster_setting'
 AND info NOT LIKE '%version%'
@@ -497,9 +498,9 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
 ORDER BY "timestamp", info
 ----
-0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
-0  1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
+1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
+1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.organization", "Statement": "SET CLUSTER SETTING \"cluster.organization\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 # Set and unset zone configs
 ##################

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -54,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -216,19 +214,18 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // IDs for bootstrapping the node itself or initializing new stores as
 // they're added on subsequent instantiations.
 type Node struct {
-	stopper        *stop.Stopper
-	clusterID      *base.ClusterIDContainer // UUID for Cockroach cluster
-	Descriptor     roachpb.NodeDescriptor   // Node ID, network/physical topology
-	storeCfg       kvserver.StoreConfig     // Config to use and pass to stores
-	sqlExec        *sql.InternalExecutor    // For event logging
-	eventsExporter obs.EventsExporter
-	stores         *kvserver.Stores // Access to node-local stores
-	metrics        nodeMetrics
-	recorder       *status.MetricsRecorder
-	startedAt      int64
-	lastUp         int64
-	initialStart   bool // true if this is the first time this node has started
-	txnMetrics     kvcoord.TxnMetrics
+	stopper      *stop.Stopper
+	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
+	execCfg      *sql.ExecutorConfig      // For event logging
+	stores       *kvserver.Stores         // Access to node-local stores
+	metrics      nodeMetrics
+	recorder     *status.MetricsRecorder
+	startedAt    int64
+	lastUp       int64
+	initialStart bool // true if this is the first time this node has started
+	txnMetrics   kvcoord.TxnMetrics
 
 	// Used to signal when additional stores, if any, have been initialized.
 	additionalStoreInitCh chan struct{}
@@ -377,7 +374,7 @@ func NewNode(
 		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores:     stores,
 		txnMetrics: txnMetrics,
-		sqlExec:    nil, // filled in later by InitLogger()
+		execCfg:    nil, // filled in later by InitLogger()
 		clusterID:  clusterID,
 		admissionController: kvserver.MakeKVAdmissionController(
 			kvAdmissionQ, storeGrantCoords, cfg.Settings),
@@ -394,8 +391,7 @@ func NewNode(
 // InitLogger connects the Node to the InternalExecutor to be used for event
 // logging.
 func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
-	n.sqlExec = execCfg.InternalExecutor
-	n.eventsExporter = execCfg.EventsExporter
+	n.execCfg = execCfg
 }
 
 // String implements fmt.Stringer.
@@ -953,27 +949,11 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 		return
 	}
 
-	_ = n.stopper.RunAsyncTask(ctx, "record-join", func(bgCtx context.Context) {
-		ctx, span := n.AnnotateCtxWithSpan(bgCtx, "record-join-event")
-		defer span.Finish()
-		retryOpts := base.DefaultRetryOptions()
-		retryOpts.Closer = n.stopper.ShouldQuiesce()
-		for r := retry.Start(retryOpts); r.Next(); {
-			if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return sql.InsertEventRecords(ctx, n.sqlExec, n.eventsExporter,
-					txn,
-					int32(n.Descriptor.NodeID), /* reporting ID: the node where the event is logged */
-					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* LogEventDestination: we already call log.StructuredEvent above */
-					int32(n.Descriptor.NodeID),                        /* target ID: the node that is joining (ourselves) */
-					event,
-				)
-			}); err != nil {
-				log.Warningf(ctx, "%s: unable to log event %v: %v", n, event, err)
-			} else {
-				return
-			}
-		}
-	})
+	// InsertEventRecord processes the event asynchronously.
+	sql.InsertEventRecords(ctx, n.execCfg,
+		sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
+		event,
+	)
 }
 
 // If we receive a (proto-marshaled) roachpb.BatchRequest whose Requests contain
