@@ -1,4 +1,10 @@
-# Test schema_only restore
+# Test verify_backup_table_data restore
+# Part 1: test that verify_backup_table_data leaves the cluster in the same state as a schema_only
+# Part 2: check that it can catch data corruption errors
+
+##########
+# Part 1
+##########
 
 new-server name=s1 allow-implicit-access
 ----
@@ -58,7 +64,7 @@ new-server name=s2 share-io-dir=s1 allow-implicit-access
 #
 # Fail fast if the user passes new_db_name.
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only, new_db_name='d2';
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only, verify_backup_table_data, new_db_name='d2';
 ----
 pq: new_db_name can only be used for RESTORE DATABASE with a single target database
 
@@ -69,24 +75,25 @@ CREATE USER testuser
 
 # Non admins cannot run schema_only cluster restore
 exec-sql user=testuser
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only, verify_backup_table_data
 ----
 pq: only users with the admin role are allowed to restore full cluster backups
 
 # Fail fast using a database backup
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only;
+RESTORE FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, verify_backup_table_data;
 ----
 pq: full cluster RESTORE can only be used on full cluster BACKUP files
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only;
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/' with schema_only, verify_backup_table_data;
 ----
 
 # there should be no data in the restored tables
 query-sql
 SELECT * FROM d.t1;
 ----
+
 
 query-sql
 SELECT * FROM d.t2;
@@ -114,10 +121,7 @@ SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > 100
 ----
 1
 
-############################################################
 # Ensure Database Level schema_only restore logic is sound
-############################################################
-
 exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
 ----
@@ -131,6 +135,7 @@ query-sql
 SELECT * FROM d2.t2;
 ----
 
+
 # Each of the restored types should have namespace entries. Test this by
 # trying to create types that would cause namespace conflicts.
 exec-sql
@@ -143,3 +148,31 @@ pq: type "d2.public.greeting" already exists
 exec-sql
 INSERT INTO d2.t2 VALUES ('hi');
 ----
+
+
+########
+# Part 2: test this checks corrupt data
+########
+
+# A new cluster that recovers from checksum error.
+# A pebble bug causes the readAsOfIterator.Close() to panic. This should not occur.
+# TODO(msbutler): refactor test once this is addressed.
+new-server name=s3 share-io-dir=s1 allow-implicit-access testingKnobCfg=RecoverFromIterPanic
+----
+
+corrupt-backup uri='nodelocal://0/full_database_backup/'
+----
+
+# Schema only restore misses the data corruption
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d3';
+----
+
+# But verify-backup-table-data catches it
+# A pebble bug is preventing the proper surfacing of the
+# corruption error.
+# TODO(msbutler): refactor the test once this is addressed
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, verify_backup_table_data, new_db_name='d4';
+----
+

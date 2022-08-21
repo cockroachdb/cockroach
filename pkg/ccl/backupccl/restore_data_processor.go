@@ -279,12 +279,25 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 	}()
 
+	var recoverFromIterPanic bool
+	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		recoverFromIterPanic = restoreKnobs.RecoverFromIterPanic
+	}
+
 	// sendIter sends a multiplexed iterator covering the currently accumulated files over the
 	// channel.
 	sendIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
+			if recoverFromIterPanic {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Errorf(ctx, "recovered from Iter panic %v", r)
+					}
+				}()
+			}
+
 			readAsOfIter.Close()
 
 			for _, dir := range dirsToSend {
@@ -389,37 +402,44 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
-	// If the system tenant is restoring a guest tenant span, we don't want to
-	// forward all the restored data to now, as there may be importing tables in
-	// that span, that depend on the difference in timestamps on restored existing
-	// vs importing keys to rollback.
-	writeAtBatchTS := true
-	if writeAtBatchTS && kr.fromSystemTenant &&
-		(bytes.HasPrefix(entry.Span.Key, keys.TenantPrefix) || bytes.HasPrefix(entry.Span.EndKey, keys.TenantPrefix)) {
-		log.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", entry.Span)
-		writeAtBatchTS = false
-	}
+	var batcher SSTBatcherExecutor
+	if rd.spec.ValidateOnly {
+		batcher = &sstBatcherNoop{}
+	} else {
+		// If the system tenant is restoring a guest tenant span, we don't want to
+		// forward all the restored data to now, as there may be importing tables in
+		// that span, that depend on the difference in timestamps on restored existing
+		// vs importing keys to rollback.
+		writeAtBatchTS := true
+		if writeAtBatchTS && kr.fromSystemTenant &&
+			(bytes.HasPrefix(entry.Span.Key, keys.TenantPrefix) || bytes.HasPrefix(entry.Span.EndKey, keys.TenantPrefix)) {
+			log.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", entry.Span)
+			writeAtBatchTS = false
+		}
 
-	// "disallowing" shadowing of anything older than logical=1 is i.e. allow all
-	// shadowing. We must allow shadowing in case the RESTORE has to retry any
-	// ingestions, but setting a (permissive) disallow like this serves to force
-	// evaluation of AddSSTable to check for overlapping keys. That in turn will
-	// result in it maintaining exact MVCC stats rather than estimates. Of course
-	// this comes at the cost of said overlap check, but in the common case of
-	// non-overlapping ingestion into empty spans, that is just one seek.
-	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
-	batcher, err := bulk.MakeSSTBatcher(ctx,
-		"restore",
-		db,
-		evalCtx.Settings,
-		disallowShadowingBelow,
-		writeAtBatchTS,
-		false, /* splitFilledRanges */
-		rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
-		rd.flowCtx.Cfg.BulkSenderLimiter,
-	)
-	if err != nil {
-		return summary, err
+		// "disallowing" shadowing of anything older than logical=1 is i.e. allow all
+		// shadowing. We must allow shadowing in case the RESTORE has to retry any
+		// ingestions, but setting a (permissive) disallow like this serves to force
+		// evaluation of AddSSTable to check for overlapping keys. That in turn will
+		// result in it maintaining exact MVCC stats rather than estimates. Of course
+		// this comes at the cost of said overlap check, but in the common case of
+		// non-overlapping ingestion into empty spans, that is just one seek.
+		disallowShadowingBelow := hlc.Timestamp{Logical: 1}
+
+		var err error
+		batcher, err = bulk.MakeSSTBatcher(ctx,
+			"restore",
+			db,
+			evalCtx.Settings,
+			disallowShadowingBelow,
+			writeAtBatchTS,
+			false, /* splitFilledRanges */
+			rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
+			rd.flowCtx.Cfg.BulkSenderLimiter,
+		)
+		if err != nil {
+			return summary, err
+		}
 	}
 	defer batcher.Close(ctx)
 
@@ -537,6 +557,47 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 		}
 	}
 	rd.InternalClose()
+}
+
+// SSTBatcherExecutor wraps the SSTBatcher methods, allowing a validation only restore to
+// implement a mock SSTBatcher used purely for job progress tracking.
+type SSTBatcherExecutor interface {
+	AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error
+	Reset(ctx context.Context) error
+	Flush(ctx context.Context) error
+	Close(ctx context.Context)
+	GetSummary() roachpb.BulkOpSummary
+}
+
+type sstBatcherNoop struct {
+	// totalRows written by the batcher
+	totalRows storage.RowCounter
+}
+
+var _ SSTBatcherExecutor = &sstBatcherNoop{}
+
+// AddMVCCKey merely increments the totalRow Counter. No key gets buffered or written.
+func (b *sstBatcherNoop) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
+	return b.totalRows.Count(key.Key)
+}
+
+// Reset resets the counter
+func (b *sstBatcherNoop) Reset(ctx context.Context) error {
+	return nil
+}
+
+// Flush noops.
+func (b *sstBatcherNoop) Flush(ctx context.Context) error {
+	return nil
+}
+
+// Close noops.
+func (b *sstBatcherNoop) Close(ctx context.Context) {
+}
+
+// GetSummary returns this batcher's total added rows/bytes/etc.
+func (b *sstBatcherNoop) GetSummary() roachpb.BulkOpSummary {
+	return b.totalRows.BulkOpSummary
 }
 
 func init() {

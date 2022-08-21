@@ -67,6 +67,7 @@ func distRestore(
 	tableRekeys []execinfrapb.TableRekey,
 	tenantRekeys []execinfrapb.TenantRekey,
 	restoreTime hlc.Timestamp,
+	validateOnly bool,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	defer close(progCh)
@@ -106,7 +107,8 @@ func distRestore(
 
 		p := planCtx.NewPhysicalPlan()
 
-		splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys, tenantRekeys)
+		splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys,
+			tenantRekeys, validateOnly)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -118,6 +120,7 @@ func distRestore(
 			TableRekeys:  tableRekeys,
 			TenantRekeys: tenantRekeys,
 			PKIDs:        pkIDs,
+			ValidateOnly: validateOnly,
 		}
 
 		if len(splitAndScatterSpecs) == 0 {
@@ -292,6 +295,7 @@ func makeSplitAndScatterSpecs(
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	tableRekeys []execinfrapb.TableRekey,
 	tenantRekeys []execinfrapb.TenantRekey,
+	validateOnly bool,
 ) (map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec, error) {
 	specsBySQLInstanceID := make(map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {
@@ -307,6 +311,7 @@ func makeSplitAndScatterSpecs(
 				}},
 				TableRekeys:  tableRekeys,
 				TenantRekeys: tenantRekeys,
+				ValidateOnly: validateOnly,
 			}
 		}
 	}
