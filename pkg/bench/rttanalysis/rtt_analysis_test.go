@@ -26,5 +26,9 @@ var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 		UseDatabase: "bench",
 		Knobs:       knobs,
 	})
+	// Eventlog is async, and introduces jitter in the benchmark.
+	if _, err := sql.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
 	return sql, func() { s.Stopper().Stop(context.Background()) }
 }))

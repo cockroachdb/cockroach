@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 )
@@ -313,7 +314,7 @@ func (p *planner) maybeLogStatementInternal(
 
 	if auditEventsDetected {
 		// TODO(knz): re-add the placeholders and age into the logging event.
-		entries := make([]eventLogEntry, len(p.curPlan.auditEvents))
+		entries := make([]logpb.EventPayload, len(p.curPlan.auditEvents))
 		for i, ev := range p.curPlan.auditEvents {
 			mode := "r"
 			if ev.writing {
@@ -334,13 +335,13 @@ func (p *planner) maybeLogStatementInternal(
 					tableName = tn.FQString()
 				}
 			}
-			entries[i] = eventLogEntry{
-				targetID: int32(ev.desc.GetID()),
-				event: &eventpb.SensitiveTableAccess{
-					CommonSQLExecDetails: execDetails,
-					TableName:            tableName,
-					AccessMode:           mode,
+			entries[i] = &eventpb.SensitiveTableAccess{
+				CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+					DescriptorID: uint32(ev.desc.GetID()),
 				},
+				CommonSQLExecDetails: execDetails,
+				TableName:            tableName,
+				AccessMode:           mode,
 			}
 		}
 		p.logEventsOnlyExternally(ctx, entries...)
@@ -355,12 +356,12 @@ func (p *planner) maybeLogStatementInternal(
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQuery{CommonSQLExecDetails: execDetails}})
+			p.logEventsOnlyExternally(ctx, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
 
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails}})
+			p.logEventsOnlyExternally(ctx, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
 		}
 	}
 
@@ -376,11 +377,11 @@ func (p *planner) maybeLogStatementInternal(
 				dst:               LogExternally | LogToDevChannelIfVerbose,
 				verboseTraceLevel: execType.vLevel(),
 			},
-			eventLogEntry{event: &eventpb.QueryExecute{CommonSQLExecDetails: execDetails}})
+			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
 	}
 
 	if shouldLogToAdminAuditLog {
-		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+		p.logEventsOnlyExternally(ctx, &eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
 	}
 
 	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {
@@ -438,14 +439,14 @@ func (p *planner) maybeLogStatementInternal(
 				ZigZagJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 				ContentionNanos:          contentionNanos,
 			}
-			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
+			p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
 		}
 	}
 }
 
-func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventLogEntry) {
+func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.EventPayload) {
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
 	_ = p.logEventsWithOptions(ctx,
@@ -458,7 +459,7 @@ func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventL
 // options to omit SQL Name redaction. This is used when logging to
 // the telemetry channel when we want additional metadata available.
 func (p *planner) logOperationalEventsOnlyExternally(
-	ctx context.Context, entries ...eventLogEntry,
+	ctx context.Context, entries ...logpb.EventPayload,
 ) {
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.

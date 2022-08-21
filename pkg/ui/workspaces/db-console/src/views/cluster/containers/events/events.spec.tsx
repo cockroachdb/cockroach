@@ -11,7 +11,6 @@
 import React from "react";
 import { mount, shallow } from "enzyme";
 import _ from "lodash";
-import Long from "long";
 
 import * as protos from "src/js/protos";
 import {
@@ -51,46 +50,12 @@ describe("<EventBox>", function () {
       expect(spy).toHaveBeenCalled();
     });
   });
-
-  describe("attach", function () {
-    it("attaches event data to contained component", function () {
-      const eventsResponse =
-        new protos.cockroach.server.serverpb.EventsResponse({
-          events: [
-            {
-              target_id: Long.fromNumber(1),
-              event_type: "test1",
-            },
-            {
-              target_id: Long.fromNumber(2),
-              event_type: "test2",
-            },
-          ],
-        });
-
-      const provider = makeEventBox(eventsResponse.events, spy);
-      const eventRows = provider
-        .children()
-        .first()
-        .children()
-        .first()
-        .children();
-      const event1Props: any = eventRows.first().props();
-      const event2Props: any = eventRows.at(1).props();
-      expect(eventRows.length).toBe(3); // 3rd row is "more events" link
-      expect(event1Props.event).toBeDefined();
-      expect(event1Props.event).toEqual(eventsResponse.events[0]);
-      expect(event2Props.event).toBeDefined();
-      expect(event2Props.event).toEqual(eventsResponse.events[1]);
-    });
-  });
 });
 
 describe("<EventRow>", function () {
   describe("attach", function () {
     it("correctly renders a known event", function () {
       const e = new protos.cockroach.server.serverpb.EventsResponse.Event({
-        target_id: Long.fromNumber(1),
         event_type: "create_database",
       });
 
@@ -106,7 +71,6 @@ describe("<EventRow>", function () {
 
     it("correctly renders an unknown event", function () {
       const e = new protos.cockroach.server.serverpb.EventsResponse.Event({
-        target_id: Long.fromNumber(1),
         event_type: "unknown",
       });
       const provider = makeEvent(e);

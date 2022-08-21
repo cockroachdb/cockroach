@@ -15,12 +15,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
 	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
@@ -29,12 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -49,9 +52,7 @@ import (
 //  for "special" statements that
 //  have structured logging, e.g. CREATE, DROP etc
 //    |
-//  (produces pair(s) of descID (optional) and eventpb.EventPayload)
-//    |
-//  (pair(s) optionally packaged as an eventLogEntry{})
+//  (produces pair(s) of descID (optional) and logpb.EventPayload)
 //    |
 //    v
 //  logEvent(descID, payload) / logEvents(eventEntries...)
@@ -99,12 +100,10 @@ import (
 //    |  |     ,-------------'
 //    |  |    /
 //    |  |   /
-//  (TargetID argument = ID of descriptor affected if DDL,
-//   otherwise zero)
 //    |  |   |
 //    |  |   |      ,-------- node-level events outside of SQL
 //    |  |   |     /          (e.g. cluster membership)
-//    |  |   |    /           TargetID = ID of node affected
+//    |  |   |    /
 //    v  v   v   v
 //  (expectation: per-type event structs
 //   fully populated at this point.
@@ -126,32 +125,23 @@ import (
 //
 //
 
-// eventLogEntry represents a SQL-level event to be sent to logging
-// outputs(s).
-type eventLogEntry struct {
-	// targetID is the main object affected by this event.
-	// For DDL statements, this is typically the ID of
-	// the affected descriptor.
-	targetID int32
-
-	// event is the main event payload.
-	event logpb.EventPayload
-}
-
 // logEvent emits a cluster event in the context of a regular SQL
 // statement.
 func (p *planner) logEvent(ctx context.Context, descID descpb.ID, event logpb.EventPayload) error {
+	if sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload); ok {
+		sqlCommon.CommonSQLDetails().DescriptorID = uint32(descID)
+	}
 	return p.logEventsWithOptions(ctx,
 		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{targetID: int32(descID), event: event})
+		event)
 }
 
 // logEvents is like logEvent, except that it can write multiple
 // events simultaneously. This is advantageous for SQL statements
 // that produce multiple events, e.g. GRANT, as they will
 // processed using only one write batch (and thus lower latency).
-func (p *planner) logEvents(ctx context.Context, entries ...eventLogEntry) error {
+func (p *planner) logEvents(ctx context.Context, entries ...logpb.EventPayload) error {
 	return p.logEventsWithOptions(ctx,
 		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
@@ -219,7 +209,7 @@ func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonS
 // If opts.dst does not include LogToSystemTable, this function is
 // guaranteed to not return an error.
 func (p *planner) logEventsWithOptions(
-	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
+	ctx context.Context, depth int, opts eventLogOptions, entries ...logpb.EventPayload,
 ) error {
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
@@ -256,21 +246,20 @@ func logEventInternalForSchemaChanges(
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
-		ctx, execCfg.InternalExecutor, execCfg.EventsExporter,
+		ctx, execCfg,
 		txn,
-		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{
-			targetID: int32(descID),
-			event:    event,
-		},
+		event,
 	)
 }
 
 // logEventInternalForSQLStatements emits a cluster event on behalf of
 // a SQL statement, when the point where the event is emitted does not
 // have access to a (*planner) and the current statement metadata.
+//
+// In each event, if the DescriptorID field (in the
+// CommonSQLEventDetails) is already populated, it is preserved.
 //
 // Note: usage of this interface should be minimized.
 //
@@ -283,19 +272,41 @@ func logEventInternalForSQLStatements(
 	depth int,
 	opts eventLogOptions,
 	commonSQLEventDetails eventpb.CommonSQLEventDetails,
-	entries ...eventLogEntry,
+	entries ...logpb.EventPayload,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
-	injectCommonFields := func(entry eventLogEntry) error {
-		event := entry.event
+	injectCommonFields := func(event logpb.EventPayload) error {
 		event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
 			return errors.AssertionFailedf("unknown event type: %T", event)
 		}
 		m := sqlCommon.CommonSQLDetails()
+
+		// We are going to inject the shared CommonSQLEventDetails into the event.
+		// However, before we do this, we must take notice that the caller
+		// may have populated the DescriptorID already. Here we have two cases:
+		// - either the caller has provided a value in *both*
+		//      commonSQLEventDetails.DescriptorID,
+		//   and also
+		//      the event .DescriptorID field
+		//   in which case, we will keep the former.
+		//
+		// - or, only the event .DescriptorID is set, and
+		//   commonSQLEventDetails.DescriptorID is zero.
+		//   In this case, we keep the event's value.
+
+		// First, save whatever value was there in the event first.
+		prevDescID := m.DescriptorID
+
+		// Overwrite with the common details.
 		*m = commonSQLEventDetails
-		m.DescriptorID = uint32(entry.targetID)
+
+		// If the common details didn't have a descriptor ID, keep the
+		// one that was in the event already.
+		if m.DescriptorID == 0 {
+			m.DescriptorID = prevDescID
+		}
 		return nil
 	}
 
@@ -307,12 +318,11 @@ func logEventInternalForSQLStatements(
 
 	return insertEventRecords(
 		ctx,
-		execCfg.InternalExecutor, execCfg.EventsExporter,
+		execCfg,
 		txn,
-		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
-		1+depth,    /* depth */
-		opts,       /* eventLogOptions */
-		entries..., /* ...eventLogEntry */
+		1+depth, /* depth */
+		opts,    /* eventLogOptions */
+		entries...,
 	)
 }
 
@@ -337,23 +347,19 @@ func NewSchemaChangerEventLogger(
 
 // LogEvent implements the scexec.EventLogger interface.
 func (l schemaChangerEventLogger) LogEvent(
-	ctx context.Context,
-	descID descpb.ID,
-	details eventpb.CommonSQLEventDetails,
-	event logpb.EventPayload,
+	ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 ) error {
-	entry := eventLogEntry{targetID: int32(descID), event: event}
 	return logEventInternalForSQLStatements(ctx,
 		l.execCfg,
 		l.txn,
 		l.depth,
 		eventLogOptions{dst: LogEverywhere},
 		details,
-		entry)
+		event)
 }
 
 func (l schemaChangerEventLogger) LogEventForSchemaChange(
-	ctx context.Context, descID descpb.ID, event logpb.EventPayload,
+	ctx context.Context, event logpb.EventPayload,
 ) error {
 	event.CommonDetails().Timestamp = l.txn.ReadTimestamp().WallTime
 	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
@@ -362,15 +368,11 @@ func (l schemaChangerEventLogger) LogEventForSchemaChange(
 	}
 	scCommon.CommonSchemaChangeDetails().InstanceID = int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID())
 	return insertEventRecords(
-		ctx, l.execCfg.InternalExecutor, l.execCfg.EventsExporter,
+		ctx, l.execCfg,
 		l.txn,
-		int32(l.execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{
-			targetID: int32(descID),
-			event:    event,
-		},
+		event,
 	)
 }
 
@@ -406,12 +408,11 @@ func LogEventForJobs(
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
-		ctx, execCfg.InternalExecutor, execCfg.EventsExporter,
+		ctx, execCfg,
 		txn,
-		int32(execCfg.NodeInfo.NodeID.SQLInstanceID()), /* reporter ID */
 		1, /* depth: use this function for vmodule filtering */
 		eventLogOptions{dst: LogEverywhere},
-		eventLogEntry{event: event},
+		event,
 	)
 }
 
@@ -421,6 +422,16 @@ var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	"if set, logged notable events are also stored in the table system.eventlog",
 	true,
 ).WithPublic()
+
+// EventLogTestingKnobs provides hooks and knobs for event logging.
+type EventLogTestingKnobs struct {
+	// SyncWrites causes events to be written on the same txn as
+	// the SQL statement that causes them.
+	SyncWrites bool
+}
+
+// ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
+func (*EventLogTestingKnobs) ModuleTestingKnobs() {}
 
 // LogEventDestination indicates for InsertEventRecords where the
 // event should be directed to.
@@ -452,30 +463,22 @@ const (
 //
 // This converts to a call to insertEventRecords() with just 1 entry.
 func InsertEventRecords(
-	ctx context.Context,
-	ex *InternalExecutor,
-	eventsExporter obs.EventsExporter,
-	txn *kv.Txn,
-	reportingID int32,
-	dst LogEventDestination,
-	targetID int32,
-	info ...logpb.EventPayload,
-) error {
+	ctx context.Context, execCfg *ExecutorConfig, dst LogEventDestination, info ...logpb.EventPayload,
+) {
 	if len(info) == 0 {
-		return nil
-	}
-	entries := make([]eventLogEntry, len(info))
-	for i, ev := range info {
-		entries[i].targetID = targetID
-		entries[i].event = ev
+		return
 	}
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
-	return insertEventRecords(ctx, ex, eventsExporter, txn, reportingID,
+	err := insertEventRecords(ctx, execCfg, nil, /* txn */
 		1, /* depth: use this function */
 		eventLogOptions{dst: dst},
-		entries...)
+		info...)
+	if err != nil {
+		// By spec, it should not return an error when passed a nil txn.
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "insertEventRecords returned unexpected error"))
+	}
 }
 
 // insertEventRecords inserts one or more event into the event log as
@@ -486,22 +489,26 @@ func InsertEventRecords(
 // function only takes care of populating the EventType field based on
 // the run-time type of the event payload.
 //
-// Note: the targetID and reportingID columns are deprecated and
-// should be removed after v21.1 is released.
+// If the txn field is non-nil and EventLogTestingKnobs.SyncWrites is
+// set, the write is performed on the given txn object. We need this
+// for tests.
+//
+// Otherwise, an asynchronous task is spawned to do the write:
+// - if there's at txn, after the txn commit time (i.e. we don't log
+//   if the txn ends up aborting), using a txn commit trigger.
+// - otherwise (no txn), immediately.
 func insertEventRecords(
 	ctx context.Context,
-	ex *InternalExecutor,
-	eventsExporter obs.EventsExporter,
+	execCfg *ExecutorConfig,
 	txn *kv.Txn,
-	reportingID int32,
 	depth int,
 	opts eventLogOptions,
-	entries ...eventLogEntry,
+	entries ...logpb.EventPayload,
 ) error {
 	// Finish populating the entries.
 	for i := range entries {
 		// Ensure the type field is populated.
-		event := entries[i].event
+		event := entries[i]
 		eventType := logpb.GetEventTypeName(event)
 		event.CommonDetails().EventType = eventType
 
@@ -524,45 +531,162 @@ func insertEventRecords(
 			// The VDepth() call ensures that we are matching the vmodule
 			// setting to where the depth is equal to 1 in the caller stack.
 			for i := range entries {
-				log.InfofDepth(ctx, depth, "SQL event: target %d, payload %+v", entries[i].targetID, entries[i].event)
+				log.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
 			}
 		}
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&ex.s.cfg.Settings.SV)
+	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&execCfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {
 			for i := range entries {
-				log.StructuredEvent(ctx, entries[i].event)
+				log.StructuredEvent(ctx, entries[i])
 			}
 		}
 		// Not writing to system table: shortcut.
 		return nil
 	}
 
-	// Write to the system.eventlog table, to the event log, and to the Obs
-	// Service.
+	// When logging to the system table and there is a txn open already,
+	// ensure that the external logging only sees the event when the
+	// transaction commits.
+	if txn != nil && opts.dst.hasFlag(LogExternally) {
+		txn.AddCommitTrigger(func(ctx context.Context) {
+			for i := range entries {
+				log.StructuredEvent(ctx, entries[i])
+			}
+		})
+	}
 
-	const colsPerEvent = 5
+	// Are we doing synchronous writes?
+	syncWrites := execCfg.EventLogTestingKnobs != nil && execCfg.EventLogTestingKnobs.SyncWrites
+	if txn != nil && syncWrites {
+		// Yes, do it now.
+		query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
+		txn.AddCommitTrigger(func(ctx context.Context) { sendOtelEvents(ctx, execCfg, otelEvents) })
+		return writeToSystemEventsTable(ctx, execCfg.InternalExecutor, txn, len(entries), query, args)
+	}
+	// No: do them async.
+	// With txn: trigger async write at end of txn (no event logged if txn aborts).
+	// Without txn: schedule it now.
+	if txn == nil {
+		asyncWriteToOtelAndSystemEventsTable(ctx, execCfg, entries)
+	} else {
+		txn.AddCommitTrigger(func(ctx context.Context) {
+			asyncWriteToOtelAndSystemEventsTable(ctx, execCfg, entries)
+		})
+	}
+	return nil
+}
+
+func asyncWriteToOtelAndSystemEventsTable(
+	ctx context.Context, execCfg *ExecutorConfig, entries []logpb.EventPayload,
+) {
+	// perAttemptTimeout is the maximum amount of time to wait on each
+	// eventlog write attempt.
+	const perAttemptTimeout time.Duration = 5 * time.Second
+	// maxAttempts is the maximum number of attempts to write an
+	// eventlog entry.
+	const maxAttempts = 10
+
+	stopper := execCfg.RPCContext.Stopper
+	origCtx := ctx
+	if err := stopper.RunAsyncTask(
+		// Note: we don't want to inherit the cancellation of the parent
+		// context. The SQL statement that causes the eventlog entry may
+		// terminate (and its context cancelled) before the eventlog entry
+		// gets written.
+		context.Background(), "record-events", func(ctx context.Context) {
+			ctx, span := execCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, "record-events")
+			defer span.Finish()
+
+			// Copy the tags from the original query (which will contain
+			// things like username, current internal executor context, etc).
+			ctx = logtags.AddTags(ctx, logtags.FromContext(origCtx))
+
+			// Stop writing the event when the server shuts down.
+			stopCtx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
+			defer stopCancel()
+			ctx = stopCtx
+
+			// Prepare the data to send.
+			query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
+
+			// Export to OpenTelemetry.
+			sendOtelEvents(ctx, execCfg, otelEvents)
+
+			// We use a retry loop in case there are transient
+			// non-retriable errors on the cluster during the table write.
+			// (retriable errors are already processed automatically
+			// by db.Txn)
+			retryOpts := base.DefaultRetryOptions()
+			retryOpts.Closer = ctx.Done()
+			retryOpts.MaxRetries = int(maxAttempts)
+			for r := retry.Start(retryOpts); r.Next(); {
+				// Don't try too long to write if the system table is unavailable.
+				if err := contextutil.RunWithTimeout(ctx, "record-events", perAttemptTimeout, func(ctx context.Context) error {
+					return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						return writeToSystemEventsTable(ctx, execCfg.InternalExecutor, txn, len(entries), query, args)
+					})
+				}); err != nil {
+					log.Ops.Warningf(ctx, "unable to save %d entries to system.eventlog: %v", len(entries), err)
+				} else {
+					break
+				}
+			}
+		}); err != nil {
+		// This should never happen: RunAsyncTask can only fail if its context was canceled,
+		// and we're using the background context here.
+		err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
+		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
+	}
+}
+
+func sendOtelEvents(ctx context.Context, execCfg *ExecutorConfig, events []otel_logs_pb.LogRecord) {
+	// Export to OpenTelemetry.
+	// We use another async task here so that a clogged Otel output pipe
+	// cannot hinder the system table write below.
+	if err := execCfg.RPCContext.Stopper.RunAsyncTask(ctx, "send-otel", func(ctx context.Context) {
+		for i := range events {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			execCfg.EventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
+		}
+	}); err != nil {
+		log.Warningf(ctx, "error spawning task to send otel events: %v", err)
+	}
+}
+
+func prepareEventWrite(
+	ctx context.Context, execCfg *ExecutorConfig, entries []logpb.EventPayload,
+) (query string, args []interface{}, events []otel_logs_pb.LogRecord) {
+	reportingID := execCfg.NodeInfo.NodeID.SQLInstanceID()
+	const colsPerEvent = 4
+	// Note: we insert the value zero as targetID because sadly this
+	// now-deprecated column has a NOT NULL constraint.
+	// TODO(knz): Add a migration to remove the column altogether.
 	const baseQuery = `
 INSERT INTO system.eventlog (
-  timestamp, "eventType", "targetID", "reportingID", info
+  timestamp, "eventType", "reportingID", info, "targetID"
 )
-VALUES($1, $2, $3, $4, $5)`
-	args := make([]interface{}, 0, len(entries)*colsPerEvent)
+VALUES($1, $2, $3, $4, 0)`
+	args = make([]interface{}, 0, len(entries)*colsPerEvent)
 
-	events := make([]otel_logs_pb.LogRecord, len(entries))
+	events = make([]otel_logs_pb.LogRecord, len(entries))
 	sp := tracing.SpanFromContext(ctx)
 	var traceID, spanID [8]byte
 	if sp != nil {
 		binary.LittleEndian.PutUint64(traceID[:], uint64(sp.TraceID()))
 		binary.LittleEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
 	}
+	nowNanos := timeutil.Now().UnixNano()
 	for i := 0; i < len(entries); i++ {
-		entry := entries[i]
-		event := entry.event
+		event := entries[i]
 
 		infoBytes := redact.RedactableBytes("{")
 		_, infoBytes = event.AppendJSONFields(false /* printComma */, infoBytes)
@@ -570,18 +694,17 @@ VALUES($1, $2, $3, $4, $5)`
 		// In the system.eventlog table, we do not use redaction markers.
 		// (compatibility with previous versions of CockroachDB.)
 		infoBytes = infoBytes.StripMarkers()
-		eventType := logpb.GetEventTypeName(event)
+		eventType := event.CommonDetails().EventType
 		args = append(
 			args,
 			timeutil.Unix(0, event.CommonDetails().Timestamp),
 			eventType,
-			entry.targetID,
 			reportingID,
 			string(infoBytes),
 		)
 
 		events[i] = otel_logs_pb.LogRecord{
-			TimeUnixNano: uint64(timeutil.Now().UnixNano()),
+			TimeUnixNano: uint64(nowNanos),
 			Body:         &v1.AnyValue{Value: &v1.AnyValue_StringValue{StringValue: args[len(args)-1].(string)}},
 			Attributes: []*v1.KeyValue{{
 				Key:   obspb.EventlogEventTypeAttribute,
@@ -592,47 +715,41 @@ VALUES($1, $2, $3, $4, $5)`
 		}
 	}
 
-	// When logging to the system table, ensure that the external logging and the
-	// Obs Service only sees the event when the transaction commits.
-	if opts.dst.hasFlag(LogExternally) {
-		txn.AddCommitTrigger(func(ctx context.Context) {
-			for i := range entries {
-				log.StructuredEvent(ctx, entries[i].event)
-			}
-		})
-	}
-	txn.AddCommitTrigger(func(ctx context.Context) {
-		for i := range events {
-			eventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
-		}
-	})
-
 	// In the common case where we have just 1 event, we want to skeep
 	// the extra heap allocation and buffer operations of the loop
 	// below. This is an optimization.
-	query := baseQuery
+	query = baseQuery
 	if len(entries) > 1 {
 		// Extend the query with additional VALUES clauses for all the
 		// events after the first one.
 		var completeQuery strings.Builder
 		completeQuery.WriteString(baseQuery)
 
-		placeholderNum := 6
-		for range entries[1:] {
-			fmt.Fprintf(&completeQuery, ", ($%d, $%d, $%d, $%d, $%d)",
-				placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3, placeholderNum+4)
-			placeholderNum += 5
+		for i := range entries[1:] {
+			placeholderNum := 1 + colsPerEvent*(i+1)
+			fmt.Fprintf(&completeQuery, ", ($%d, $%d, $%d, $%d, 0)",
+				placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3)
 		}
 		query = completeQuery.String()
 	}
 
-	rows, err := ex.Exec(ctx, "log-event", txn, query, args...)
+	return query, args, events
+}
+
+func writeToSystemEventsTable(
+	ctx context.Context,
+	ie *InternalExecutor,
+	txn *kv.Txn,
+	numEntries int,
+	query string,
+	args []interface{},
+) error {
+	rows, err := ie.Exec(ctx, "log-event", txn, query, args...)
 	if err != nil {
 		return err
 	}
-	if rows != len(entries) {
-		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, len(entries))
+	if rows != numEntries {
+		return errors.AssertionFailedf("%d rows affected by log insertion; expected %d rows affected", rows, numEntries)
 	}
-
 	return nil
 }
