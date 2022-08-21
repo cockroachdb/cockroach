@@ -657,8 +657,8 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 }
 
 // DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
-// (exclusive) using an MVCC range tombstone. Callers must check the
-// MVCCRangeTombstones version gate before using this.
+// (exclusive) using an MVCC range tombstone. Callers must check
+// storage.CanUseMVCCRangeTombstones before using this.
 func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
 	start, err := marshalKey(s)
 	if err != nil {
