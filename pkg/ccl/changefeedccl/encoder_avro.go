@@ -145,7 +145,9 @@ func (e *confluentAvroEncoder) rawTableName(eventMeta cdcevent.Metadata) (string
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) ([]byte, error) {
+func (e *confluentAvroEncoder) EncodeKey(
+	ctx context.Context, row cdcevent.Row, partitioning bool,
+) ([]byte, error) {
 	// No familyID in the cache key for keys because it's the same schema for all families
 	cacheKey := tableIDAndVersion{tableID: row.TableID, version: row.Version}
 
@@ -162,7 +164,11 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		if err != nil {
 			return nil, err
 		}
-		registered.schema, err = primaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
+		if partitioning {
+			registered.schema, err = partitionColsToAvroSchema(row, tableName, e.schemaPrefix)
+		} else {
+			registered.schema, err = primaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
+		}
 		if err != nil {
 			return nil, err
 		}

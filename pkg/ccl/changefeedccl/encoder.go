@@ -20,11 +20,12 @@ import (
 // Encoder turns a row into a serialized changefeed key, value, or resolved
 // timestamp. It represents one of the `format=` changefeed options.
 type Encoder interface {
-	// EncodeKey encodes the primary key of the given row. The columns of the
+	// EncodeKey encodes the primary key of the given row or the partitionCols of
+	// the inputted row based upon the inputted bool. The columns of the
 	// datums are expected to match 1:1 with the `Columns` field of the
 	// `TableDescriptor`, but only the primary key fields will be used. The
 	// returned bytes are only valid until the next call to Encode*.
-	EncodeKey(context.Context, cdcevent.Row) ([]byte, error)
+	EncodeKey(context.Context, cdcevent.Row, bool) ([]byte, error)
 	// EncodeValue encodes the primary key of the given row. The columns of the
 	// datums are expected to match 1:1 with the `Columns` field of the
 	// `TableDescriptor`. The returned bytes are only valid until the next call
