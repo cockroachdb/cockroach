@@ -1629,6 +1629,12 @@ type mvccExportToSSTOpts struct {
 	exportAllRevisions                  bool
 }
 
+// runMVCCExportToSST runs MVCCExportToSST benchmarks. It will export the upper
+// half of the dataset -- numRevisions=1 will export everything, while
+// numRevisions=10 will export the last 5 revisions. Notably, numRevisions=1
+// will not enable a TBI optimization, as StartTime=0, but numRevisions>1 will
+// enable the TBI optimization -- this comes with a significant penalty for
+// small datasets where little data can be skipped across.
 func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -1647,7 +1653,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	}
 
 	mkWall := func(j int) int64 {
-		wt := int64(j + 2)
+		wt := int64(j + 1)
 		return wt
 	}
 
@@ -1657,9 +1663,9 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		batch := engine.NewBatch()
 		defer batch.Close()
 		for i := 0; i < opts.numRangeKeys; i++ {
-			// NB: regular keys are written at ts 2+, so this is below any of the
+			// NB: regular keys are written at ts 1+, so this is below any of the
 			// regular writes and thus won't delete anything.
-			ts := hlc.Timestamp{WallTime: 1, Logical: int32(i + 1)}
+			ts := hlc.Timestamp{WallTime: 0, Logical: int32(i + 1)}
 			start := rng.Intn(opts.numKeys)
 			end := start + rng.Intn(opts.numKeys-start) + 1
 			// As a special case, if we're only writing one range key, write it across
@@ -1697,7 +1703,12 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		b.Fatal(err)
 	}
 
-	startWall := mkWall(opts.numRevisions/2 - 1) // exclusive, at least 1, so never see rangedels
+	// NB: startWall > 0 will enable the TBI optimization in
+	// MVCCIncrementalIterator. This has a significant penalty unless it can skip
+	// across large amounts of data. Here, TBI will be enabled for numRevisions>1,
+	// but not for numRevisions=1. Furthermore, numRevisions=1 will export MVCC
+	// range tombstones at the bottom, while numRevisions>1 will not.
+	startWall := mkWall(opts.numRevisions/2 - 1) // exclusive
 	endWall := mkWall(opts.numRevisions + 1)     // see latest revision for every key
 	var expKVsInSST int
 	if opts.exportAllRevisions {
@@ -1724,7 +1735,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 		b.StartTimer()
-		startTS := hlc.Timestamp{WallTime: startWall, Logical: math.MaxInt32} // use 1.infinity to avoid rangedels at 1.<n>
+		startTS := hlc.Timestamp{WallTime: startWall}
 		endTS := hlc.Timestamp{WallTime: endWall}
 		_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
 			StartKey:           MVCCKey{Key: keys.LocalMax},
@@ -1777,8 +1788,13 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		it.Next()
 	}
 	require.Equal(b, expKVsInSST, n)
-	// Should not see any rangedel stacks.
-	require.Zero(b, r)
+	// Should not see any rangedel stacks if startTS is set.
+	if opts.numRangeKeys > 0 && startWall == 0 && opts.exportAllRevisions {
+		require.NotZero(b, r)
+		require.LessOrEqual(b, r, opts.numRangeKeys)
+	} else {
+		require.Zero(b, r)
+	}
 }
 
 func runCheckSSTConflicts(
