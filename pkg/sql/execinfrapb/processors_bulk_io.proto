@@ -303,7 +303,7 @@ message RestoreDataSpec {
   // information passed back to track progress in the backup job.
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
   reserved 7;
-  optional bool schema_only = 8 [(gogoproto.nullable) = false];
+  optional bool validate_only = 8 [(gogoproto.nullable) = false];
 
   // NEXT ID: 9.
 }
@@ -318,7 +318,7 @@ message SplitAndScatterSpec {
   repeated TableRekey table_rekeys = 2 [(gogoproto.nullable) = false];
   repeated TenantRekey tenant_rekeys = 3 [(gogoproto.nullable) = false];
   reserved 5;
-  optional bool schema_only = 6 [(gogoproto.nullable) = false];
+  optional bool validate_only = 6 [(gogoproto.nullable) = false];
 
   // NEXTID: 7.
 }
