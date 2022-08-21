@@ -4438,17 +4438,19 @@ func mvccResolveWriteIntent(
 		// The latestKey was not the smallest possible timestamp {WallTime: 0,
 		// Logical: 1}. Practically, this is the only case that will occur in
 		// production.
+		var hasPoint, hasRange bool
 		iter.SeekGE(nextKey)
 		if ok, err = iter.Valid(); err != nil {
 			return false, err
 		} else if ok {
 			// If the seek lands on a bare range key, attempt to step to a point.
-			if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
+			if hasPoint, hasRange = iter.HasPointAndRange(); hasRange && !hasPoint {
 				iter.Next()
 				if ok, err = iter.Valid(); err != nil {
 					return false, err
 				} else if ok {
-					ok, _ = iter.HasPointAndRange()
+					hasPoint, hasRange = iter.HasPointAndRange()
+					ok = hasPoint
 				}
 			}
 		}
@@ -4463,7 +4465,7 @@ func mvccResolveWriteIntent(
 			// If a non-tombstone point key is covered by a range tombstone, then
 			// synthesize a point tombstone at the lowest range tombstone covering it.
 			// This is where the point key ceases to exist, contributing to GCBytesAge.
-			if len(unsafeNextValueRaw) > 0 {
+			if len(unsafeNextValueRaw) > 0 && hasRange {
 				if v, found := iter.RangeKeys().FirstAbove(unsafeNextKey.Timestamp); found {
 					unsafeNextKey.Timestamp = v.Timestamp
 					unsafeNextValueRaw = []byte{}
