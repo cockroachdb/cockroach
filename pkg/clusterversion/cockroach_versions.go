@@ -180,16 +180,6 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
-	// EnablePebbleFormatVersionBlockProperties enables a new Pebble SSTable
-	// format version for block property collectors.
-	// NB: this cluster version is paired with PebbleFormatBlockPropertyCollector
-	// in a two-phase migration. The first cluster version acts as a gate for
-	// updating the format major version on all stores, while the second cluster
-	// version is used as a feature gate. A node in a cluster that sees the second
-	// version is guaranteed to have seen the first version, and therefore has an
-	// engine running at the required format major version, as do all other nodes
-	// in the cluster.
-	EnablePebbleFormatVersionBlockProperties
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
@@ -365,10 +355,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     EnablePebbleFormatVersionBlockProperties,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 	{
 		Key:     EnableNewStoreRebalancer,
