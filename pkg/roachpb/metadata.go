@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -787,6 +788,16 @@ func (h *GCHint) Merge(rhs *GCHint) bool {
 		// If right hand side of merge is higher, then use its timestamp and signal
 		// the change to caller.
 		h.LatestRangeDeleteTimestamp = rhs.LatestRangeDeleteTimestamp
+		return true
+	}
+	return false
+}
+
+// ForwardLatestRangeDeleteTimestamp bumps LatestDeleteRangeTimestamp in GC hint
+// if it is greater than previously set.
+func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
+	if h.LatestRangeDeleteTimestamp.Less(ts) {
+		h.LatestRangeDeleteTimestamp = ts
 		return true
 	}
 	return false
