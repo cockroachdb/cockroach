@@ -19,7 +19,9 @@ import {
   TimestampToMoment,
   RenderCount,
   DATE_FORMAT_24_UTC,
+  explainPlan,
 } from "../../util";
+import { Anchor } from "../../anchor";
 
 export type PlanHashStats =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
@@ -48,7 +50,14 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The ID of the Plan."}
+        content={
+          <p>
+            The ID of the{" "}
+            <Anchor href={explainPlan} target="_blank">
+              Explain Plan.
+            </Anchor>
+          </p>
+        }
       >
         {planDetailsColumnLabels.planID}
       </Tooltip>
@@ -59,7 +68,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The last time this Plan was executed."}
+        content={"The last time this Explain Plan was executed."}
       >
         {planDetailsColumnLabels.lastExecTime}
       </Tooltip>
@@ -70,7 +79,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The average execution time for this Plan."}
+        content={"The average execution time for this Explain Plan."}
       >
         {planDetailsColumnLabels.avgExecTime}
       </Tooltip>
@@ -81,7 +90,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The execution count for this Plan."}
+        content={"The execution count for this Explain Plan."}
       >
         {planDetailsColumnLabels.execCount}
       </Tooltip>
@@ -92,7 +101,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The average of rows read by this Plan."}
+        content={"The average of rows read by this Explain Plan."}
       >
         {planDetailsColumnLabels.avgRowsRead}
       </Tooltip>
@@ -103,7 +112,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"If the Plan executed a Full Scan."}
+        content={"If the Explain Plan executed a full scan."}
       >
         {planDetailsColumnLabels.fullScan}
       </Tooltip>
@@ -114,7 +123,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"If the Plan was distributed."}
+        content={"If the Explain Plan was distributed."}
       >
         {planDetailsColumnLabels.distSQL}
       </Tooltip>
@@ -125,7 +134,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"If the Plan was vectorized."}
+        content={"If the Explain Plan was vectorized."}
       >
         {planDetailsColumnLabels.vectorized}
       </Tooltip>
@@ -136,7 +145,7 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The amount of insights for the plan."}
+        content={"The amount of insights for the Explain Plan."}
       >
         {planDetailsColumnLabels.insights}
       </Tooltip>

@@ -678,7 +678,7 @@ export class StatementsPage extends React.Component<
         <Delayed delay={moment.duration(2, "s")}>
           <InlineAlert
             intent="info"
-            title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+            title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
           />
         </Delayed>
       );

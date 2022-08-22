@@ -622,7 +622,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {`Maximum memory used by a ${contentModifier} with this fingerprint${fingerprintModifier} at any time during its execution within the specified time interval.`}
+              {`Maximum memory used by a ${contentModifier} with this fingerprint${fingerprintModifier} at any time 
+              during its execution within the specified time interval. `}
             </p>
             <p>
               The gray bar indicates the average max memory usage. The blue bar

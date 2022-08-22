@@ -41,7 +41,7 @@ export const StatementsPageRoot = ({
           {`A statement fingerprint represents one or more completed SQL
           statements by replacing literal values (e.g., numbers and strings)
           with underscores (_).\nThis can help you quickly identify
-          frequently executed SQL statements and their latencies.`}
+          frequently executed SQL statements and their latencies. `}
           <Anchor href={statementsSql}>Learn more</Anchor>
         </span>
       ),
