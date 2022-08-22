@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
@@ -83,6 +84,10 @@ type Factory struct {
 	// rule has been applied by the factory. It can be set via a call to the
 	// NotifyOnAppliedRule method.
 	appliedRule AppliedRuleFunc
+
+	// disabledRules is a set of rules that are not allowed to run, used for
+	// testing.
+	disabledRules util.FastIntSet
 
 	// catalog is the opt catalog, used to resolve names during constant folding
 	// of special metadata queries like 'table_name'::regclass.
@@ -193,6 +198,15 @@ func (f *Factory) NotifyOnMatchedRule(matchedRule MatchedRuleFunc) {
 // no further notifications are sent.
 func (f *Factory) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
 	f.appliedRule = appliedRule
+}
+
+// SetDisabledRules is used to prevent normalization rule cycles when certain
+// rules are disabled during testing (e.g. column-pruning and null-rejection).
+// SetDisabledRules does not prevent rules from matching - rather, it notifies
+// the Factory that rules have been prevented from matching using
+// NotifyOnMatchedRule.
+func (f *Factory) SetDisabledRules(disabledRules util.FastIntSet) {
+	f.disabledRules = disabledRules
 }
 
 // Memo returns the memo structure that the factory is operating upon.
