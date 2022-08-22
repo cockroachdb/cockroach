@@ -54,3 +54,9 @@ BEGIN
 
 statement error DISCARD ALL cannot run inside a transaction block
 DISCARD ALL
+
+statement ok
+ROLLBACK
+
+statement ok
+UNLISTEN temp

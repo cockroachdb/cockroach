@@ -1,0 +1,2 @@
+unlisten_stmt ::=
+	'UNLISTEN' type_name
