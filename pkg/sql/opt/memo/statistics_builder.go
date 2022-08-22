@@ -610,15 +610,23 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
-	if tab.StatisticCount() == 0 {
+
+	// Find the most recent statistic. (Stats are ordered with most recent first.)
+	var first int
+	if !sb.evalCtx.SessionData().OptimizerUseForecasts {
+		for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+			first++
+		}
+	}
+
+	if first >= tab.StatisticCount() {
 		// No statistics.
 		stats.Available = false
 		stats.RowCount = unknownRowCount
 	} else {
-		// Get the RowCount from the most recent statistic. Stats are ordered
-		// with most recent first.
+		// Use the RowCount from the most recent statistic.
 		stats.Available = true
-		stats.RowCount = float64(tab.Statistic(0).RowCount())
+		stats.RowCount = float64(tab.Statistic(first).RowCount())
 
 		// Make sure the row count is at least 1. The stats may be stale, and we
 		// can end up with weird and inefficient plans if we estimate 0 rows.
@@ -626,8 +634,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 
 		// Add all the column statistics, using the most recent statistic for each
 		// column set. Stats are ordered with most recent first.
-		for i := 0; i < tab.StatisticCount(); i++ {
+		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
+			if stat.IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts {
+				continue
+			}
 			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
 				continue
 			}
