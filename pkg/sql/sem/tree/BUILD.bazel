@@ -105,6 +105,7 @@ go_library(
         "typing.go",
         "udf.go",
         "union.go",
+        "unlisten.go",
         "unsupported_error.go",
         "update.go",
         "values.go",

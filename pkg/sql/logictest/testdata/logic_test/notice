@@ -51,3 +51,10 @@ query T noticetrace
 REFRESH MATERIALIZED VIEW CONCURRENTLY v
 ----
 NOTICE: CONCURRENTLY is not required as views are refreshed concurrently
+
+query T noticetrace
+UNLISTEN temp
+----
+NOTICE: unimplemented: CRDB does not support LISTEN, making UNLISTEN a no-op
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/41522/v22.2
