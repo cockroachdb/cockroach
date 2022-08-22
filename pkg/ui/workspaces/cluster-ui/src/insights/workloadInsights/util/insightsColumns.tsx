@@ -20,6 +20,7 @@ export const insightsColumnLabels = {
   elapsedTime: "Elapsed Time",
   applicationName: "Application",
   fingerprintID: "Fingerprint ID",
+  numRetries: "Retries",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -128,6 +129,17 @@ export const insightsTableTitles: InsightsTableTitleType = {
         content={<p>The name of the application that ran the {execType}.</p>}
       >
         {getLabel("applicationName")}
+      </Tooltip>
+    );
+  },
+  numRetries: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The number of times this statement encountered a retry."}
+      >
+        {getLabel("numRetries")}
       </Tooltip>
     );
   },

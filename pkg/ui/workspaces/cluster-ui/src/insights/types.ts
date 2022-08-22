@@ -12,7 +12,12 @@ import { Moment } from "moment";
 import { Filters } from "../queryFilter";
 
 export enum InsightNameEnum {
-  highWaitTime = "HIGH_WAIT_TIME",
+  highWaitTime = "HighWaitTime",
+  unknown = "Unknown",
+  planRegression = "PlanRegression",
+  suboptimalPlan = "SuboptimalPlan",
+  highRetryCount = "HighRetryCount",
+  failedExecution = "FailedExecution",
 }
 
 export enum InsightExecEnum {
@@ -73,6 +78,7 @@ export type StatementInsightEvent = {
   problems: string[];
   query: string;
   application: string;
+  insights: Insight[];
 };
 
 export type Insight = {
@@ -105,18 +111,98 @@ const highWaitTimeInsight = (
   };
 };
 
+const unknownInsight = (execType: InsightExecEnum): Insight => {
+  const description = `Unable to identify a specific cause for this ${execType}.`;
+  return {
+    name: InsightNameEnum.unknown,
+    label: "Unknown",
+    description: description,
+    tooltipDescription:
+      description + ` Click the ${execType} execution ID to see more details.`,
+  };
+};
+
+const planRegressionInsight = (execType: InsightExecEnum): Insight => {
+  const description =
+    `This ${execType} was slow because we picked the wrong plan, ` +
+    `possibly due to outdated statistics, the statement using different literals or ` +
+    `search conditions, or a change in the database schema.`;
+  return {
+    name: InsightNameEnum.planRegression,
+    label: "Plan Regression",
+    description: description,
+    tooltipDescription:
+      description + ` Click the ${execType} execution ID to see more details.`,
+  };
+};
+
+const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
+  const description =
+    `This ${execType} was slow because a good plan was not available, whether ` +
+    `due to outdated statistics or missing indexes.`;
+  return {
+    name: InsightNameEnum.suboptimalPlan,
+    label: "Sub-Optimal Plan",
+    description: description,
+    tooltipDescription:
+      description + ` Click the ${execType} execution ID to see more details.`,
+  };
+};
+
+const highRetryCountInsight = (execType: InsightExecEnum): Insight => {
+  const description =
+    `This ${execType} was slow because of being retried multiple times, again due ` +
+    `to contention. The "high" threshold may be configured by the ` +
+    `'sql.insights.high_retry_count.threshold' cluster setting.`;
+  return {
+    name: InsightNameEnum.highRetryCount,
+    label: "High Retry Count",
+    description: description,
+    tooltipDescription:
+      description + ` Click the ${execType} execution ID to see more details.`,
+  };
+};
+
+const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
+  const description =
+    `This ${execType} execution failed completely, due to contention, resource ` +
+    `saturation, or syntax errors.`;
+  return {
+    name: InsightNameEnum.failedExecution,
+    label: "Failed Execution",
+    description: description,
+    tooltipDescription:
+      description + ` Click the ${execType} execution ID to see more details.`,
+  };
+};
+
 export const InsightTypes = [highWaitTimeInsight];
 
-export const InsightExecOptions = [
-  {
-    value: InsightExecEnum.TRANSACTION.toString(),
-    label: "Transaction Executions",
-  },
-  {
-    value: InsightExecEnum.STATEMENT.toString(),
-    label: "Statement Executions",
-  },
-];
+export const getInsightFromProblem = (
+  problem: string,
+  execOption: InsightExecEnum,
+  latencyThreshold?: number,
+): Insight => {
+  switch (problem) {
+    case InsightNameEnum.highWaitTime:
+      return highWaitTimeInsight(execOption, latencyThreshold);
+    case InsightNameEnum.failedExecution:
+      return failedExecutionInsight(execOption);
+    case InsightNameEnum.planRegression:
+      return planRegressionInsight(execOption);
+    case InsightNameEnum.suboptimalPlan:
+      return suboptimalPlanInsight(execOption);
+    case InsightNameEnum.highRetryCount:
+      return highRetryCountInsight(execOption);
+    default:
+      return unknownInsight(execOption);
+  }
+};
+
+export const InsightExecOptions = new Map<string, string>([
+  [InsightExecEnum.TRANSACTION.toString(), "Transaction Executions"],
+  [InsightExecEnum.STATEMENT.toString(), "Statement Executions"],
+]);
 
 export type InsightEventFilters = Omit<
   Filters,

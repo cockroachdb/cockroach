@@ -21,7 +21,6 @@ import {
   StatementInsightEvent,
 } from "src/insights";
 import moment from "moment";
-import { HexStringToInt64String } from "src/util";
 
 export type InsightEventState = Omit<InsightEvent, "insights"> & {
   insightName: string;
@@ -73,19 +72,18 @@ const highWaitTimeQuery: InsightQuery<
   InsightEventsResponse
 > = {
   name: InsightNameEnum.highWaitTime,
-  query: `SELECT * FROM (SELECT
-    blocking_txn_id,
-    blocking_txn_fingerprint_id,
-    blocking_queries,
-    collection_ts,
-    contention_duration,
-    app_name,
-    row_number() over (
+  query: `SELECT *
+          FROM (SELECT blocking_txn_id,
+                       encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
+                       blocking_queries,
+                       collection_ts,
+                       contention_duration,
+                       app_name,
+                       row_number()                                  over (
     PARTITION BY
     blocking_txn_fingerprint_id
-    ORDER BY collection_ts DESC ) AS rank,
-    threshold
-  FROM
+    ORDER BY collection_ts DESC ) AS rank, threshold
+                FROM
     (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
     crdb_internal.transaction_contention_events AS tce
       JOIN (
@@ -98,8 +96,8 @@ const highWaitTimeQuery: InsightQuery<
       GROUP BY
         transaction_fingerprint_id,
         app_name
-    ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id 
-    WHERE contention_duration > threshold) WHERE rank=1`,
+    ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
+                WHERE contention_duration > threshold)WHERE rank=1`,
   toState: transactionContentionResultsToEventState,
 };
 
@@ -183,14 +181,13 @@ const highWaitTimeDetailsQuery = (
 > => {
   return {
     name: InsightNameEnum.highWaitTime,
-    query: `SELECT
-  collection_ts, 
-  blocking_txn_id, 
-  blocking_txn_fingerprint_id, 
-  waiting_txn_id, 
-  waiting_txn_fingerprint_id, 
-  contention_duration, 
-  crdb_internal.pretty_key(contending_key, 0) as key, 
+    query: `SELECT collection_ts,
+                   blocking_txn_id,
+                   encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
+                   waiting_txn_id,
+                   encode(waiting_txn_fingerprint_id, 'hex')  AS waiting_txn_fingerprint_id,
+                   contention_duration,
+                   crdb_internal.pretty_key(contending_key, 0) as key, 
   database_name, 
   schema_name, 
   table_name, 
@@ -199,7 +196,7 @@ const highWaitTimeDetailsQuery = (
   blocking_queries, 
   waiting_queries,
   threshold
-FROM
+            FROM
   (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
   crdb_internal.transaction_contention_events AS tce 
   LEFT OUTER JOIN crdb_internal.ranges AS ranges ON tce.contending_key BETWEEN ranges.start_key 
@@ -224,7 +221,7 @@ FROM
       transaction_fingerprint_id,
       app_name
   ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
-    WHERE blocking_txn_id = '${id}'`,
+            WHERE blocking_txn_id = '${id}'`,
     toState: transactionContentionDetailsResultsToEventState,
   };
 };
@@ -288,7 +285,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
     const end = moment.utc(row.end_time);
     return {
       transactionID: row.txn_id,
-      transactionFingerprintID: HexStringToInt64String(row.txn_fingerprint_id),
+      transactionFingerprintID: row.txn_fingerprint_id,
       query: row.query,
       startTime: start,
       endTime: end,
@@ -296,7 +293,8 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       elapsedTimeMillis: end.diff(start, "milliseconds"),
       application: row.app_name,
       statementID: row.stmt_id,
-      statementFingerprintID: HexStringToInt64String(row.stmt_fingerprint_id),
+      statementFingerprintHexID: row.stmt_fingerprint_id,
+      statementFingerprintID: row.stmt_fingerprint_id,
       sessionID: row.session_id,
       isFullScan: row.full_scan,
       rowsRead: row.rows_read,
@@ -306,6 +304,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       lastRetryReason: row.last_retry_reason,
       timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
       problems: row.problems,
+      insights: null,
     };
   });
 }
