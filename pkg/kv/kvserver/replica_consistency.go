@@ -456,8 +456,8 @@ func (r *Replica) getReplicaChecksum(id uuid.UUID, now time.Time) *replicaChecks
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.gcOldChecksumEntriesLocked(now)
-	c, ok := r.mu.checksums[id]
-	if !ok {
+	c := r.mu.checksums[id]
+	if c == nil {
 		taskCtx, taskCancel := context.WithCancel(context.Background())
 		c = &replicaChecksum{
 			ctx:     taskCtx,
@@ -747,11 +747,6 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	// can't simply defer them here, because the async task below, if started,
 	// will take ownership of this.
 
-	// The close panics if there was another attempt to start computation with
-	// this ID, but it does not happen since post-apply triggers are invoked at
-	// most once per Raft log entry per process, and the IDs are unique.
-	close(c.started)
-
 	if c.ctx.Err() != nil { // note: no need to c.cancel() here again
 		c.computeChecksumDone(nil, nil)
 		log.Errorf(ctx, "checksum computation task %s was canceled", cc.ChecksumID)
@@ -760,6 +755,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 
 	if cc.Version != batcheval.ReplicaChecksumVersion {
 		c.cancel()
+		close(c.started)
 		c.computeChecksumDone(nil, nil)
 		log.Infof(ctx, "incompatible ComputeChecksum versions (requested: %d, have: %d)",
 			cc.Version, batcheval.ReplicaChecksumVersion)
@@ -807,7 +803,26 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 		// there should be no unintended disruption.
 		defer c.cancel()
 
-		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
+		// Wait until the CollectChecksum request handler joins in, and then start
+		// the checksum computation.
+		// TODO(pavelkalinnikov): Don't block the pool while waiting.
+		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
+			func(ctx context.Context) error {
+				// Notify the checksum collection handler that the computation has started.
+				// Panics if there was another computeChecksumPostApply on this ID, but it
+				// does not happen since post-apply triggers are invoked at most once per Raft
+				// log entry per process run, and the IDs are unique.
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case c.started <- struct{}{}:
+					close(c.started)
+					return nil
+				}
+			},
+		); err != nil {
+			log.Errorf(ctx, "checksum computation failed to join: %v", err)
+		} else if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
 			func(ctx context.Context) error {
 				defer snap.Close()
 				var snapshot *roachpb.RaftSnapshotData
@@ -873,6 +888,7 @@ A file preventing this node from restarting was placed at:
 	}); err != nil {
 		defer snap.Close()
 		c.cancel()
+		close(c.started)
 		c.computeChecksumDone(nil, nil)
 		log.Errorf(ctx, "could not run async checksum computation (ID = %s): %v", cc.ChecksumID, err)
 	}

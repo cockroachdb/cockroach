@@ -65,10 +65,9 @@ const consistencyCheckRateMinWait = 100 * time.Millisecond
 // which can schedule checks on other nodes, e.g. a 7-node cluster with a
 // replication factor of 7 could run 7 concurrent checks on every node.
 //
-// Note that checksum calculations below Raft are not tied to the caller's
-// context, and may continue to run even after the caller has given up on them,
-// which may cause them to build up. Although we do best effort to cancel the
-// running task on the receiving end when the incoming request is aborted.
+// Note that checksum calculations below Raft are loosely tied to the caller's
+// context, and will be canceled if the caller has not joined or has given up on
+// them. This way we do best effort to avoid a build-up of abandoned tasks.
 //
 // CHECK_STATS checks do not count towards this limit, as they are cheap and the
 // DistSender will parallelize them across all ranges (notably when calling
@@ -76,10 +75,15 @@ const consistencyCheckRateMinWait = 100 * time.Millisecond
 const consistencyCheckAsyncConcurrency = 7
 
 // consistencyCheckAsyncTimeout is a below-Raft timeout for asynchronous
-// consistency check calculations. These are not tied to the caller's context,
-// and thus may continue to run even if the caller has given up on them, so we
-// give them an upper timeout to prevent them from running forever.
+// consistency check calculations. These are loosely tied to the caller's
+// context, and will be canceled when the caller has given up on them, but we
+// give them an upper timeout to prevent them from running forever anyway.
 const consistencyCheckAsyncTimeout = time.Hour
+
+// consistencyCheckSyncTimeout is the max amount of time the consistency check
+// computation and the checksum collection request will wait for each other
+// before giving up.
+const consistencyCheckSyncTimeout = 5 * time.Second
 
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 

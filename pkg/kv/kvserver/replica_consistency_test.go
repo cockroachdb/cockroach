@@ -54,7 +54,7 @@ func TestReplicaChecksumVersion(t *testing.T) {
 		} else {
 			cc.Version = 1
 		}
-		tc.repl.computeChecksumPostApply(ctx, cc)
+		go tc.repl.computeChecksumPostApply(ctx, cc)
 		rc, err := tc.repl.getChecksum(ctx, cc.ChecksumID)
 		if !matchingVersion {
 			require.ErrorContains(t, err, "no checksum found")
@@ -109,6 +109,8 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "context deadline exceeded")
 	require.Nil(t, rc.Checksum)
+
+	// TODO(pavelkalinnikov): Add test for when the task waits for the request.
 }
 
 // TestReplicaChecksumSHA512 checks that a given dataset produces the expected
