@@ -148,6 +148,12 @@ var upgrades = []upgrade.Upgrade{
 		checkForPausedGCJobs,
 		waitForDelRangeInGCJob,
 	),
+	upgrade.NewTenantUpgrade(
+		"wait for all in-flight schema changes",
+		toCV(clusterversion.NoNonMVCCAddSSTable),
+		NoPrecondition,
+		waitForAllSchemaChanges,
+	),
 }
 
 func init() {

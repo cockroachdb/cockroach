@@ -29,8 +29,8 @@ const emptySearchResults = {
 
 export const EmptyInsightsTablePlaceholder: React.FC<{
   isEmptySearchResults: boolean;
-}> = isEmptySearchResults => {
-  const emptyPlaceholderProps: EmptyTableProps = isEmptySearchResults
+}> = props => {
+  const emptyPlaceholderProps: EmptyTableProps = props.isEmptySearchResults
     ? emptySearchResults
     : {
         title: "No insight events since this page was last refreshed.",
