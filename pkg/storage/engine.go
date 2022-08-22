@@ -153,11 +153,19 @@ type SimpleMVCCIterator interface {
 	// encoded key is identical to the range key's start bound, and they will
 	// be emitted together at that position.
 	NextKey()
-	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// UnsafeKey returns the current key position. This may be a point key, or
+	// the current position inside a range key (typically the start key
+	// or the seek key when using SeekGE within its bounds).
+	//
+	// The memory is invalidated on the next call to {Next,NextKey,Prev,SeekGE,
+	// SeekLT,Close}. Use Key() if this is undesirable.
 	UnsafeKey() MVCCKey
-	// UnsafeValue returns the same value as Value, but the memory is
-	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// UnsafeValue returns the current point key value as a byte slice.
+	// This must only be called when it is known that the iterator is positioned
+	// at a point value, i.e. HasPointAndRange has returned (true, *).
+	//
+	// The memory is invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	// Use Value() if that is undesirable.
 	UnsafeValue() []byte
 	// HasPointAndRange returns whether the current iterator position has a point
 	// key and/or a range key. Must check Valid() first. At least one of these
@@ -230,9 +238,7 @@ type MVCCIterator interface {
 	// keys by avoiding the need to iterate over many deleted intents.
 	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
 
-	// Key returns the current key position. This may be a point key, or
-	// the current position inside a range key (typically the start key
-	// or the seek key when using SeekGE within its bounds).
+	// Key is like UnsafeKey, but returns memory now owned by the caller.
 	Key() MVCCKey
 	// UnsafeRawKey returns the current raw key which could be an encoded
 	// MVCCKey, or the more general EngineKey (for a lock table key).
@@ -251,7 +257,7 @@ type MVCCIterator interface {
 	// currently used by callers who pass around key information as a []byte --
 	// this seems avoidable, and we should consider cleaning up the callers.
 	UnsafeRawMVCCKey() []byte
-	// Value returns the current point key value as a byte slice.
+	// Value is like UnsafeValue, but returns memory owned by the caller.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
