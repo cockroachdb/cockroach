@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { createIdxName } from "./indexActionBtn";
-import { getHighlightedText } from "../highlightedText";
 
 describe("Create index name", () => {
   const testCases = [

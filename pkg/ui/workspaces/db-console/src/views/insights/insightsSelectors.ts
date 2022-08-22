@@ -12,12 +12,12 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { createSelector } from "reselect";
 import {
-  defaultFilters,
-  SortSetting,
-  InsightEventFilters,
-  SchemaInsightEventFilters,
   api,
+  defaultFilters,
+  InsightEventFilters,
   insightType,
+  SchemaInsightEventFilters,
+  SortSetting,
 } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -43,6 +43,14 @@ export const selectInsights = createSelector(
   adminUiState => {
     if (!adminUiState.insights) return [];
     return adminUiState.insights.data;
+  },
+);
+
+export const selectStatementInsights = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  adminUiState => {
+    if (!adminUiState.statementInsights) return [];
+    return adminUiState.statementInsights.data;
   },
 );
 

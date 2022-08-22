@@ -10,21 +10,24 @@
 
 import { unset } from "src/util";
 import {
-  InsightEventsResponse,
-  InsightEventState,
   InsightEventDetailsResponse,
   InsightEventDetailsState,
+  InsightEventsResponse,
+  InsightEventState,
+  StatementInsights,
 } from "src/api/insightsApi";
 import {
+  getInsightFromProblem,
   Insight,
+  InsightEvent,
+  InsightEventDetails,
+  InsightEventFilters,
   InsightExecEnum,
   InsightTypes,
-  InsightEvent,
-  InsightEventFilters,
-  InsightEventDetails,
   SchemaInsightEventFilters,
   InsightType,
   InsightRecommendation,
+  StatementInsightEvent,
 } from "./types";
 
 export const getInsights = (
@@ -220,4 +223,83 @@ export function insightType(type: InsightType): string {
     default:
       return "Insight";
   }
+}
+
+export const filterStatementInsights = (
+  statements: StatementInsights | null,
+  filters: InsightEventFilters,
+  internalAppNamePrefix: string,
+  search?: string,
+): StatementInsights => {
+  if (statements == null) return [];
+
+  let filteredStatements = statements;
+
+  const isInternal = (appName: string) =>
+    appName.startsWith(internalAppNamePrefix);
+  if (filters.app) {
+    filteredStatements = filteredStatements.filter(
+      (stmt: StatementInsightEvent) => {
+        const apps = filters.app.toString().split(",");
+        let showInternal = false;
+        if (apps.includes(internalAppNamePrefix)) {
+          showInternal = true;
+        }
+        if (apps.includes(unset)) {
+          apps.push("");
+        }
+
+        return (
+          (showInternal && isInternal(stmt.application)) ||
+          apps.includes(stmt.application)
+        );
+      },
+    );
+  } else {
+    filteredStatements = filteredStatements.filter(
+      stmt => !isInternal(stmt.application),
+    );
+  }
+  if (search) {
+    search = search.toLowerCase();
+    filteredStatements = filteredStatements.filter(
+      stmt =>
+        !search ||
+        stmt.statementID.toLowerCase()?.includes(search) ||
+        stmt.query?.toLowerCase().includes(search),
+    );
+  }
+  return filteredStatements;
+};
+
+export function getAppsFromStatementInsights(
+  statements: StatementInsights | null,
+  internalAppNamePrefix: string,
+): string[] {
+  if (statements == null) return [];
+
+  const uniqueAppNames = new Set(
+    statements.map(t => {
+      if (t.application.startsWith(internalAppNamePrefix)) {
+        return internalAppNamePrefix;
+      }
+      return t.application ? t.application : unset;
+    }),
+  );
+
+  return Array.from(uniqueAppNames).sort();
+}
+
+export function populateStatementInsightsFromProblems(
+  statements: StatementInsightEvent[],
+): void {
+  if (!statements || statements?.length < 0) {
+    return;
+  }
+
+  statements.map(x => {
+    x.insights = x.problems.map(x =>
+      getInsightFromProblem(x, InsightExecEnum.STATEMENT),
+    );
+  });
 }

@@ -10,14 +10,14 @@
 
 import React from "react";
 import {
-  SortedTable,
-  ISortedTablePagination,
   ColumnDescriptor,
+  ISortedTablePagination,
+  SortedTable,
   SortSetting,
 } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
-import { InsightExecEnum, InsightEvent } from "src/insights";
-import { QueriesCell, InsightCell, insightsTableTitles } from "../util";
+import { InsightEvent, InsightExecEnum } from "src/insights";
+import { InsightCell, insightsTableTitles, QueriesCell } from "../util";
 import { Link } from "react-router-dom";
 
 interface TransactionInsightsTable {
