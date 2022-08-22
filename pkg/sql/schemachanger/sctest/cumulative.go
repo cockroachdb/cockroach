@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -347,6 +348,12 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 	cumulativeTest(t, path, testFunc)
 }
 
+// runAllBackups runs all the backup tests, disabling the random skipping.
+var runAllBackups = flag.Bool(
+	"run-all-backups", false,
+	"if true, run all backups instead of a random subset",
+)
+
 // Backup tests that the schema changer can handle being backed up and
 // restored correctly. This data-driven test uses the same input as
 // EndToEndSideEffects but ignores the expected output. Note that the
@@ -355,6 +362,13 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 	var after [][]string
 	var dbName string
+	r, _ := randutil.NewTestRand()
+	const runRate = .5
+	maybeRandomlySkip := func(t *testing.T) {
+		if !*runAllBackups && r.Float64() >= runRate {
+			skip.IgnoreLint(t, "skipping due to randomness")
+		}
+	}
 	countStages := func(
 		t *testing.T, setup, stmts []parser.Statement,
 	) (postCommit, nonRevertible int) {
@@ -388,7 +402,10 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 		for i := 0; i <= n; i++ {
 			if !t.Run(
 				fmt.Sprintf("backup/restore stage %d of %d", i, n),
-				func(t *testing.T) { testBackupRestoreCase(t, setup, stmts, i) },
+				func(t *testing.T) {
+					maybeRandomlySkip(t)
+					testBackupRestoreCase(t, setup, stmts, i)
+				},
 			) {
 				return
 			}
@@ -550,6 +567,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 					name = "schema-only"
 				}
 				t.Run(name, func(t *testing.T) {
+					maybeRandomlySkip(t)
 					t.Logf("testing backup %d %v", i, b.isRollback)
 					tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName))
 					tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
