@@ -114,21 +114,21 @@ func populateBatch(t *testing.T, batch Batch, input string) {
 		}
 		k := []byte{input[i]}
 		ts := hlc.Timestamp{WallTime: int64(input[i+1])}
-		var v []byte
+		var v MVCCValue
 		if i+1 < len(input) && input[i+1] == 'M' {
 			ts = hlc.Timestamp{}
-			v = nil
 		} else if i+2 < len(input) && input[i+2] == 'X' {
-			v = nil
 			i++
 		} else {
-			v = []byte{input[i+1]}
+			v.Value.SetString(string(input[i+1]))
 		}
 		i += 2
 		if ts.IsEmpty() {
-			require.NoError(t, batch.PutUnversioned(k, v))
+			vRaw, err := EncodeMVCCValue(v)
+			require.NoError(t, err)
+			require.NoError(t, batch.PutUnversioned(k, vRaw))
 		} else {
-			require.NoError(t, batch.PutRawMVCC(MVCCKey{Key: k, Timestamp: ts}, v))
+			require.NoError(t, batch.PutMVCC(MVCCKey{Key: k, Timestamp: ts}, v))
 		}
 	}
 }
@@ -154,7 +154,9 @@ func iterateSimpleMultiIter(t *testing.T, it SimpleMVCCIterator, subtest iterSub
 			output.WriteRune('M')
 		} else {
 			output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
-			if len(it.UnsafeValue()) == 0 {
+			v, err := DecodeMVCCValue(it.UnsafeValue())
+			require.NoError(t, err)
+			if v.IsTombstone() {
 				output.WriteRune('X')
 			}
 		}

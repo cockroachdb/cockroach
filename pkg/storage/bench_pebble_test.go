@@ -494,9 +494,13 @@ func BenchmarkCheckSSTConflicts(b *testing.B) {
 func BenchmarkSSTIterator(b *testing.B) {
 	for _, numKeys := range []int{1, 100, 10000} {
 		b.Run(fmt.Sprintf("keys=%d", numKeys), func(b *testing.B) {
-			for _, verify := range []bool{false, true} {
-				b.Run(fmt.Sprintf("verify=%t", verify), func(b *testing.B) {
-					runSSTIterator(b, numKeys, verify)
+			for _, variant := range []string{"legacy", "pebble"} {
+				b.Run(fmt.Sprintf("variant=%s", variant), func(b *testing.B) {
+					for _, verify := range []bool{false, true} {
+						b.Run(fmt.Sprintf("verify=%t", verify), func(b *testing.B) {
+							runSSTIterator(b, variant, numKeys, verify)
+						})
+					}
 				})
 			}
 		})
