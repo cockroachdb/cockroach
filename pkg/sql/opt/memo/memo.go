@@ -137,6 +137,7 @@ type Memo struct {
 	//       fields in explain_bundle.go.
 	reorderJoinsLimit                      int
 	zigzagJoinEnabled                      bool
+	useForecasts                           bool
 	useHistograms                          bool
 	useMultiColStats                       bool
 	useNotVisibleIndex                     bool
@@ -187,6 +188,7 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		metadata:                               m.metadata,
 		reorderJoinsLimit:                      int(evalCtx.SessionData().ReorderJoinsLimit),
 		zigzagJoinEnabled:                      evalCtx.SessionData().ZigzagJoinEnabled,
+		useForecasts:                           evalCtx.SessionData().OptimizerUseForecasts,
 		useHistograms:                          evalCtx.SessionData().OptimizerUseHistograms,
 		useMultiColStats:                       evalCtx.SessionData().OptimizerUseMultiColStats,
 		useNotVisibleIndex:                     evalCtx.SessionData().OptimizerUseNotVisibleIndexes,
@@ -321,6 +323,7 @@ func (m *Memo) IsStale(
 	// changed.
 	if m.reorderJoinsLimit != int(evalCtx.SessionData().ReorderJoinsLimit) ||
 		m.zigzagJoinEnabled != evalCtx.SessionData().ZigzagJoinEnabled ||
+		m.useForecasts != evalCtx.SessionData().OptimizerUseForecasts ||
 		m.useHistograms != evalCtx.SessionData().OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData().OptimizerUseMultiColStats ||
 		m.useNotVisibleIndex != evalCtx.SessionData().OptimizerUseNotVisibleIndexes ||

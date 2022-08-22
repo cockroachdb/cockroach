@@ -196,6 +196,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().ZigzagJoinEnabled = false
 	notStale()
 
+	// Stale optimizer forecast usage enable.
+	evalCtx.SessionData().OptimizerUseForecasts = true
+	stale()
+	evalCtx.SessionData().OptimizerUseForecasts = false
+	notStale()
+
 	// Stale optimizer histogram usage enable.
 	evalCtx.SessionData().OptimizerUseHistograms = true
 	stale()
