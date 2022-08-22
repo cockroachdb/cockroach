@@ -73,6 +73,10 @@ func (rsl StateLoader) Load(
 		return kvserverpb.ReplicaState{}, err
 	}
 
+	if s.GCHint, err = rsl.LoadGCHint(ctx, reader); err != nil {
+		return kvserverpb.ReplicaState{}, err
+	}
+
 	as, err := rsl.LoadRangeAppliedState(ctx, reader)
 	if err != nil {
 		return kvserverpb.ReplicaState{}, err
@@ -122,6 +126,9 @@ func (rsl StateLoader) Save(
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
@@ -271,6 +278,27 @@ func (rsl StateLoader) SetGCThreshold(
 	}
 	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeGCThresholdKey(),
 		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, threshold)
+}
+
+// LoadGCHint loads GC hint.
+func (rsl StateLoader) LoadGCHint(
+	ctx context.Context, reader storage.Reader,
+) (*roachpb.GCHint, error) {
+	var h roachpb.GCHint
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCHintKey(),
+		hlc.Timestamp{}, &h, storage.MVCCGetOptions{})
+	return &h, err
+}
+
+// SetGCHint writes the GC hint.
+func (rsl StateLoader) SetGCHint(
+	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, hint *roachpb.GCHint,
+) error {
+	if hint == nil {
+		return errors.New("cannot persist nil GCHint")
+	}
+	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeGCHintKey(),
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hint)
 }
 
 // LoadVersion loads the replica version.

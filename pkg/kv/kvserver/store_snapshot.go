@@ -1313,6 +1313,7 @@ func SendEmptySnapshot(
 		desc,
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
+		roachpb.GCHint{},
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
 		true, /* 22.1:AddRaftAppliedIndexTermMigration */
 	)
