@@ -306,6 +306,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       lastRetryReason: row.last_retry_reason,
       timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
       problems: row.problems,
+      insights: null,
     };
   });
 }

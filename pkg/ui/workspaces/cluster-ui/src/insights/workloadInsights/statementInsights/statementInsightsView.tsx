@@ -1,36 +1,44 @@
 // Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// included in the file licenses/BSL.txt.S
 //
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, {useEffect, useState} from "react";
+import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
-import {useHistory} from "react-router-dom";
-import {ISortedTablePagination, SortSetting,} from "src/sortedtable/sortedtable";
-import {Loading} from "src/loading/loading";
-import {PageConfig, PageConfigItem} from "src/pageConfig/pageConfig";
-import {Search} from "src/search/search";
-import {calculateActiveFilters, defaultFilters, Filter, getFullFiltersAsStringRecord,} from "src/queryFilter/filter";
-import {getInsightEventFiltersFromURL} from "src/queryFilter/utils";
-import {Pagination} from "src/pagination";
-import {queryByName, syncHistory} from "src/util/query";
-import {getTableSortFromURL} from "src/sortedtable/getTableSortFromURL";
-import {TableStatistics} from "src/tableStatistics";
-
-import {InsightEventsResponse} from "src/api/insightsApi";
+import { useHistory } from "react-router-dom";
 import {
-  filterTransactionInsights,
-  getAppsFromTransactionInsights,
-  getInsightsFromState,
+  ISortedTablePagination,
+  SortSetting,
+} from "src/sortedtable/sortedtable";
+import { Loading } from "src/loading/loading";
+import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
+import { Search } from "src/search/search";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  getFullFiltersAsStringRecord,
+} from "src/queryFilter/filter";
+import { getInsightEventFiltersFromURL } from "src/queryFilter/utils";
+import { Pagination } from "src/pagination";
+import { queryByName, syncHistory } from "src/util/query";
+import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
+import { TableStatistics } from "src/tableStatistics";
+
+import { StatementInsights } from "src/api/insightsApi";
+import {
+  filterStatementInsights,
+  getAppsFromStatementInsights,
   InsightEventFilters,
+  populateStatemetInsightsFromProblems,
 } from "src/insights";
-import {EmptyInsightsTablePlaceholder, WorkloadInsightsError} from "../util";
-import {TransactionInsightsTable} from "./transactionInsightsTable";
+import { EmptyInsightsTablePlaceholder, WorkloadInsightsError } from "../util";
+import { StatementInsightsTable } from "./statementInsightsTable";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -38,35 +46,35 @@ import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
-export type TransactionInsightsViewStateProps = {
-  transactions: InsightEventsResponse;
-  transactionsError: Error | null;
+export type StatementInsightsViewStateProps = {
+  statements: StatementInsights;
+  statementsError: Error | null;
   filters: InsightEventFilters;
   sortSetting: SortSetting;
   dropDownSelect?: React.ReactElement;
 };
 
-export type TransactionInsightsViewDispatchProps = {
+export type StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: InsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshTransactionInsights: () => void;
+  refreshStatementInsights: () => void;
 };
 
-export type TransactionInsightsViewProps = TransactionInsightsViewStateProps &
-  TransactionInsightsViewDispatchProps;
+export type StatementInsightsViewProps = StatementInsightsViewStateProps &
+  StatementInsightsViewDispatchProps;
 
-const INSIGHT_TXN_SEARCH_PARAM = "q";
+const INSIGHT_STMT_SEARCH_PARAM = "q";
 const INTERNAL_APP_NAME_PREFIX = "$ internal";
 
-export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
-  props: TransactionInsightsViewProps,
+export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
+  props: StatementInsightsViewProps,
 ) => {
   const {
     sortSetting,
-    transactions,
-    transactionsError,
+    statements,
+    statementsError,
     filters,
-    refreshTransactionInsights,
+    refreshStatementInsights,
     onFiltersChange,
     onSortChange,
     dropDownSelect,
@@ -78,17 +86,17 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
-    queryByName(history.location, INSIGHT_TXN_SEARCH_PARAM),
+    queryByName(history.location, INSIGHT_STMT_SEARCH_PARAM),
   );
 
   useEffect(() => {
     // Refresh every 10 seconds.
-    refreshTransactionInsights();
-    const interval = setInterval(refreshTransactionInsights, 10 * 1000);
+    refreshStatementInsights();
+    const interval = setInterval(refreshStatementInsights, 10 * 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshTransactionInsights]);
+  }, [refreshStatementInsights]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -115,7 +123,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
         ascending: sortSetting.ascending.toString(),
         columnTitle: sortSetting.columnTitle,
         ...getFullFiltersAsStringRecord(filters),
-        [INSIGHT_TXN_SEARCH_PARAM]: search,
+        [INSIGHT_STMT_SEARCH_PARAM]: search,
       },
       history,
     );
@@ -164,19 +172,19 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
       app: defaultFilters.app,
     });
 
-  const transactionInsights = getInsightsFromState(transactions);
-
-  const apps = getAppsFromTransactionInsights(
-    transactionInsights,
+  const apps = getAppsFromStatementInsights(
+    statements,
     INTERNAL_APP_NAME_PREFIX,
   );
   const countActiveFilters = calculateActiveFilters(filters);
-  const filteredTransactions = filterTransactionInsights(
-    transactionInsights,
+  const filteredStatements = filterStatementInsights(
+    statements,
     filters,
     INTERNAL_APP_NAME_PREFIX,
     search,
   );
+
+  populateStatemetInsightsFromProblems(filteredStatements);
 
   return (
     <div className={cx("root")}>
@@ -184,7 +192,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
         <PageConfigItem>{dropDownSelect}</PageConfigItem>
         <PageConfigItem>
           <Search
-            placeholder="Search Transactions"
+            placeholder="Search Statements"
             onSubmit={onSubmitSearch}
             onClear={clearSearch}
             defaultValue={search}
@@ -201,12 +209,12 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions == null}
-          page="transaction insights"
-          error={transactionsError}
+          loading={statements == null}
+          page="statement insights"
+          error={statementsError}
           renderError={() =>
             WorkloadInsightsError({
-              execType: "transaction insights",
+              execType: "statement insights",
             })
           }
         >
@@ -216,20 +224,20 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
                 <TableStatistics
                   pagination={pagination}
                   search={search}
-                  totalCount={filteredTransactions?.length}
-                  arrayItemName="transaction insights"
+                  totalCount={filteredStatements?.length}
+                  arrayItemName="statement insights"
                   activeFilters={countActiveFilters}
                   onClearFilters={clearFilters}
                 />
               </div>
-              <TransactionInsightsTable
-                data={filteredTransactions}
+              <StatementInsightsTable
+                data={filteredStatements}
                 sortSetting={sortSetting}
                 onChangeSortSetting={onChangeSortSetting}
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredTransactions?.length == 0
+                      search?.length > 0 && filteredStatements?.length > 0
                     }
                   />
                 }
@@ -239,7 +247,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
             <Pagination
               pageSize={pagination.pageSize}
               current={pagination.current}
-              total={filteredTransactions?.length}
+              total={filteredStatements?.length}
               onChange={onChangePage}
             />
           </div>
