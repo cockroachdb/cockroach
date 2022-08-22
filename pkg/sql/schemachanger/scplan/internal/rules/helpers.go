@@ -385,6 +385,32 @@ func isIndexDependent(e scpb.Element) bool {
 	return false
 }
 
+func isConstraint(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
+		return true
+	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint:
+		return true
+	}
+	return false
+}
+
+func isConstraintDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ConstraintName:
+		return true
+	case *scpb.ConstraintComment:
+		return true
+	}
+	return false
+}
+
+func not(predicate func(e scpb.Element) bool) func(e scpb.Element) bool {
+	return func(e scpb.Element) bool {
+		return !predicate(e)
+	}
+}
+
 // registerDepRuleForDrop is a convenience function which calls
 // registerDepRule with the cross-product of (ToAbsent,Transient)^2 target
 // states, which can't easily be composed.

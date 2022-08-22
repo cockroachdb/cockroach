@@ -180,13 +180,26 @@ func asCommentEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		constraint, err := tbl.FindConstraintWithID(e.ConstraintID)
-		if err != nil {
-			return nil, err
+		var constraintName string
+		if constraint, err := tbl.FindConstraintWithID(e.ConstraintID); err != nil {
+			// FindConstraintWithID excludes dropping indexes for no good reason.
+			// TODO(postamar): improve catalog.TableDescriptor interface
+			for _, idx := range tbl.AllIndexes() {
+				if idx.Dropped() && idx.GetConstraintID() == e.ConstraintID {
+					constraintName = idx.GetName()
+					err = nil
+					break
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			constraintName = constraint.GetConstraintName()
 		}
 		return &eventpb.CommentOnConstraint{
 			TableName:      fullName,
-			ConstraintName: constraint.GetConstraintName(),
+			ConstraintName: constraintName,
 			Comment:        e.Comment,
 			NullComment:    isNullComment,
 		}, nil

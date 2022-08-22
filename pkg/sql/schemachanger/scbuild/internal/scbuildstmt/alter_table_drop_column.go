@@ -33,13 +33,12 @@ func alterTableDropColumn(
 ) {
 	fallBackIfZoneConfigExists(b, n, tbl.TableID)
 	checkSafeUpdatesForDropColumn(b)
+	checkRegionalByRowColumnConflict(b, tbl, n)
 	col, elts, done := resolveColumnForDropColumn(b, tn, tbl, n)
 	if done {
 		return
 	}
 	checkRowLevelTTLColumn(b, tn, tbl, n, col)
-	checkRegionalByRowColumnConflict(b, tbl, n)
-	b.IncrementSchemaChangeAlterCounter("table", "drop_column")
 	checkColumnNotInaccessible(col, n)
 	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
 }
@@ -389,7 +388,7 @@ func handleDropColumnPrimaryIndexes(
 func handleDropColumnCreateNewPrimaryIndex(
 	b BuildCtx, existing *scpb.PrimaryIndex, col *scpb.Column,
 ) *scpb.PrimaryIndex {
-	out := makePrimaryIndexSpec(b, existing)
+	out := makeIndexSpec(b, existing.TableID, existing.IndexID)
 	inColumns := make([]indexColumnSpec, 0, len(out.columns)-1)
 	var dropped *scpb.IndexColumn
 	for _, ic := range out.columns {
@@ -406,11 +405,11 @@ func handleDropColumnCreateNewPrimaryIndex(
 		panic(errors.AssertionFailedf("can only drop columns which are stored in the primary index, this one is %v ",
 			dropped.Kind))
 	}
-	in, temp := makeSwapPrimaryIndexSpec(b, out, inColumns)
+	in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
 	out.apply(b.Drop)
 	in.apply(b.Add)
 	temp.apply(b.AddTransient)
-	return in.idx
+	return in.primary
 }
 
 func handleDropColumnFreshlyAddedPrimaryIndex(
