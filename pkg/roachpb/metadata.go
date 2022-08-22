@@ -773,3 +773,21 @@ func (l Locality) AddTier(tier Tier) Locality {
 	}
 	return Locality{Tiers: []Tier{tier}}
 }
+
+// IsEmpty returns true if hint contains no data.
+func (h *GCHint) IsEmpty() bool {
+	return h.LatestRangeDeleteTimestamp.IsEmpty()
+}
+
+// Merge combines GC hint information about merging replicas and updates
+// LHS receiver part.
+// Returns true if receiver state was changed.
+func (h *GCHint) Merge(rhs *GCHint) bool {
+	if h.LatestRangeDeleteTimestamp.Less(rhs.LatestRangeDeleteTimestamp) {
+		// If right hand side of merge is higher, then use its timestamp and signal
+		// the change to caller.
+		h.LatestRangeDeleteTimestamp = rhs.LatestRangeDeleteTimestamp
+		return true
+	}
+	return false
+}
