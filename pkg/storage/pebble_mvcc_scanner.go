@@ -614,7 +614,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		if p.curUnsafeKey.Timestamp.Less(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer
 			// than the most recent version's timestamp.
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curUnsafeKey.Timestamp, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 		}
 
 		// ts == read_ts
@@ -648,7 +648,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 
 			// 3. There is no intent and our read timestamp is equal to the most
 			// recent version's timestamp.
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curUnsafeKey.Timestamp, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 		}
 
 		// ts > read_ts
@@ -707,7 +707,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 	}
 	if len(p.meta.RawBytes) != 0 {
 		// 7. Emit immediately if the value is inline.
-		return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.meta.RawBytes)
+		return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curUnsafeKey.Timestamp, p.curRawKey, p.meta.RawBytes)
 	}
 
 	if p.meta.Txn == nil {
@@ -818,22 +818,14 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// history that has a sequence number equal to or less than the read
 		// sequence, read that value.
 		if intentValueRaw, found := p.getFromIntentHistory(); found {
-			// If we're adding a value due to a previous intent, we want to populate
-			// the timestamp as of current metaTimestamp. Note that this may be
-			// controversial as this maybe be neither the write timestamp when this
-			// intent was written. However, this was the only case in which a value
-			// could have been returned from a read without an MVCC timestamp.
-			//
-			// Note: this assumes that it is safe to corrupt curKey here because we're
-			// about to advance. If this proves to be a problem later, we can extend
-			// addAndAdvance to take an MVCCKey explicitly.
-			p.curUnsafeKey.Timestamp = metaTS
 			p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], p.curUnsafeKey)
 			p.curUnsafeValue, p.err = DecodeMVCCValue(intentValueRaw)
 			if p.err != nil {
 				return false
 			}
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.keyBuf, p.curUnsafeValue.Value.RawBytes)
+			// If we're adding a value due to a previous intent, we want to populate
+			// the timestamp as of current metaTimestamp.
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, metaTS, p.keyBuf, p.curUnsafeValue.Value.RawBytes)
 		}
 		// 14. If no value in the intent history has a sequence number equal to
 		// or less than the read, we must ignore the intents laid down by the
@@ -987,7 +979,7 @@ func (p *pebbleMVCCScanner) advanceKeyAtNewKey(key []byte) bool {
 // p.tombstones is true. Advances to the next key unless we've reached the max
 // results limit.
 func (p *pebbleMVCCScanner) addAndAdvance(
-	ctx context.Context, key roachpb.Key, rawKey []byte, rawValue []byte,
+	ctx context.Context, key roachpb.Key, ts hlc.Timestamp, rawKey []byte, rawValue []byte,
 ) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
@@ -1123,7 +1115,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 				}
 			}
 			if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
-				return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+				return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curUnsafeKey.Timestamp, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 			}
 			// Iterate through uncertainty interval. Though we found a value in
 			// the interval, it may not be uncertainty. This is because seekTS
@@ -1156,7 +1148,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 			}
 		}
 		if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curUnsafeKey.Timestamp, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
 		}
 		// Iterate through uncertainty interval. See the comment above about why
 		// a value in this interval is not necessarily cause for an uncertainty
