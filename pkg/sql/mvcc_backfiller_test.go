@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -700,7 +701,11 @@ func splitIndex(
 		}
 
 		for _, target := range rkt.KT.Targets {
-			if err := tc.TransferRangeLease(desc, target); err != nil {
+			if err := retry.WithMaxAttempts(context.Background(), retry.Options{
+				MaxBackoff: time.Millisecond,
+			}, 10, func() error {
+				return tc.TransferRangeLease(desc, target)
+			}); err != nil {
 				return err
 			}
 		}
