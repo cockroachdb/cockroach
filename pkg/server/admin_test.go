@@ -2686,7 +2686,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Jobs(ctx, &serverpb.JobsRequest{})
 			return err
 		}},
-		{"Liveness", codes.OK, func(c serverpb.AdminClient) error {
+		{"Liveness", codes.Internal, func(c serverpb.AdminClient) error {
 			_, err := c.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		}},

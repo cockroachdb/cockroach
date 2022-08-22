@@ -2029,9 +2029,12 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 //
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
-	nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
-) map[roachpb.NodeID]livenesspb.NodeLivenessStatus {
-	livenesses := nl.GetLivenesses()
+	ctx context.Context, nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
+) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
+	livenesses, err := nl.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, err
+	}
 	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
 
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
@@ -2039,23 +2042,41 @@ func getLivenessStatusMap(
 		status := storepool.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status
 	}
-	return statusMap
+	return statusMap, nil
 }
 
-// Liveness returns the liveness state of all nodes on the cluster
-// known to gossip. To reach all nodes in the cluster, consider
-// using (statusServer).NodesWithLiveness instead.
-func (s *adminServer) Liveness(
-	context.Context, *serverpb.LivenessRequest,
+// getLivenessResponse returns LivenessResponse: a map from NodeID to LivenessStatus and
+// a slice containing the liveness record of all nodes that have ever been a part of the
+// cluster.
+func getLivenessResponse(
+	ctx context.Context, nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
 ) (*serverpb.LivenessResponse, error) {
-	clock := s.server.clock
-	statusMap := getLivenessStatusMap(
-		s.server.nodeLiveness, clock.Now().GoTime(), s.server.st)
-	livenesses := s.server.nodeLiveness.GetLivenesses()
+	livenesses, err := nl.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
+
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
+	for _, liveness := range livenesses {
+		status := storepool.LivenessStatus(liveness, now, threshold)
+		statusMap[liveness.NodeID] = status
+	}
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
 		Statuses:   statusMap,
 	}, nil
+}
+
+// Liveness returns the liveness state of all nodes on the cluster
+// based on a KV transaction. To reach all nodes in the cluster, consider
+// using (statusServer).NodesWithLiveness instead.
+func (s *adminServer) Liveness(
+	ctx context.Context, _ *serverpb.LivenessRequest,
+) (*serverpb.LivenessResponse, error) {
+	clock := s.server.clock
+	return getLivenessResponse(ctx, s.server.nodeLiveness, clock.Now().GoTime(), s.server.st)
 }
 
 func (s *adminServer) Jobs(
