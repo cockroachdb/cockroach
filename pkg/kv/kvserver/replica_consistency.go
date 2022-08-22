@@ -51,10 +51,12 @@ import (
 // Up to 22.1, the consistency check initiator used to synchronously collect the
 // first replica's checksum before all others, so checksum collection requests
 // could arrive late if the first one was slow. Since 22.2, all requests are
-// parallel and likely arrive quickly.
+// parallel and likely arrive quickly. Thus, in 23.1 the checksum task waits a
+// short amount of time until the collection request arrives, and otherwise
+// doesn't start.
 //
-// TODO(pavelkalinnikov): Consider removing GC behaviour in 23.1+, when all the
-// incoming requests are from 22.2+ nodes (hence arrive timely).
+// We still need the delayed GC in order to help a late arriving participant to
+// learn that the other one gave up, and fail fast instead of waiting.
 const replicaChecksumGCInterval = time.Hour
 
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
@@ -422,7 +424,7 @@ func (r *Replica) getReplicaChecksum(id uuid.UUID, now time.Time) (*replicaCheck
 	c := r.mu.checksums[id]
 	if c == nil {
 		c = &replicaChecksum{
-			started: make(chan context.CancelFunc, 1),      // allow an async send
+			started: make(chan context.CancelFunc),         // require send/recv sync
 			result:  make(chan CollectChecksumResponse, 1), // allow an async send
 		}
 		r.mu.checksums[id] = c
@@ -496,13 +498,13 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 }
 
 // checksumInitialWait returns the amount of time to wait until the checksum
-// computation has started. It is set to min of 5s and 10% of the remaining time
-// in the passed-in context (if it has a deadline).
+// computation has started. It is set to min of consistencyCheckSyncTimeout and
+// 10% of the remaining time in the passed-in context (if it has a deadline).
 //
 // If it takes longer, chances are that the replica is being restored from
 // snapshots, or otherwise too busy to handle this request soon.
 func (*Replica) checksumInitialWait(ctx context.Context) time.Duration {
-	wait := 5 * time.Second
+	wait := consistencyCheckSyncTimeout
 	if d, ok := ctx.Deadline(); ok {
 		if dur := time.Duration(timeutil.Until(d).Nanoseconds() / 10); dur < wait {
 			wait = dur
@@ -768,15 +770,28 @@ func (r *Replica) computeChecksumPostApply(
 		WaitForSem: false,
 	}, func(ctx context.Context) {
 		defer taskCancel()
-		// There is only one writer to c.started (this task), so this doesn't block.
-		// But if by mistake there is another writer, one of us closes the channel
-		// eventually, and other send/close ops will crash. This is by design.
-		c.started <- taskCancel
-		close(c.started)
-
-		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
+		defer snap.Close()
+		defer r.gcReplicaChecksum(cc.ChecksumID, c)
+		// Wait until the CollectChecksum request handler joins in and learns about
+		// the starting computation, and then start it.
+		// TODO(pavelkalinnikov): Don't consume the pool while waiting.
+		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
 			func(ctx context.Context) error {
-				defer snap.Close()
+				// There is only one writer to c.started (this task), buf if by mistake
+				// there is another writer, one of us closes the channel eventually, and
+				// other writes to c.started will crash. By design.
+				defer close(c.started)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case c.started <- taskCancel:
+					return nil
+				}
+			},
+		); err != nil {
+			log.Errorf(ctx, "checksum collection did not join: %v", err)
+		} else if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
+			func(ctx context.Context) error {
 				var snapshot *roachpb.RaftSnapshotData
 				if cc.SaveSnapshot {
 					snapshot = &roachpb.RaftSnapshotData{}
@@ -787,7 +802,6 @@ func (r *Replica) computeChecksumPostApply(
 					result = nil
 				}
 				r.computeChecksumDone(c, result, snapshot)
-				r.gcReplicaChecksum(cc.ChecksumID, c)
 				return err
 			},
 		); err != nil {
