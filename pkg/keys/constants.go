@@ -133,6 +133,11 @@ var (
 	// LocalRangeLastReplicaGCTimestampSuffix is the suffix for a range's last
 	// replica GC timestamp (for GC of old replicas).
 	LocalRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
+	// LocalRangeRangeTombstoneStatsUpdateLockSuffix is the suffix for a lock
+	// obtained by range tombstone operations to ensure they don't overlap with
+	// potentially long running GC queues while allowing point traffic to go
+	// through unobstructed.
+	LocalRangeRangeTombstoneStatsUpdateLockSuffix = []byte("rltu")
 	// localRangeLastVerificationTimestampSuffix is DEPRECATED and remains to
 	// prevent reuse.
 	localRangeLastVerificationTimestampSuffix = []byte("rlvt")

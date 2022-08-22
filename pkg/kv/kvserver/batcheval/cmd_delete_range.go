@@ -56,6 +56,12 @@ func declareKeysDeleteRange(
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 			Key: keys.RangeDescriptorKey(rs.GetStartKey()),
 		})
+
+		// Obtain a read only lock on range key stats update key to serialize with
+		// range tombstone GC requests.
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+			Key: keys.MakeRangeIDPrefixBuf(rs.GetRangeID()).RangeTombstoneStatsUpdateKey(),
+		})
 	}
 }
 

@@ -1055,3 +1055,9 @@ func (b RangeIDPrefixBuf) RaftReplicaIDKey() roachpb.Key {
 func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastReplicaGCTimestampSuffix...)
 }
+
+// RangeTombstoneStatsUpdateKey returns a system-local key for last used GC threshold on the
+// user keyspace. Reads and writes <= this timestamp will not be served.
+func (b RangeIDPrefixBuf) RangeTombstoneStatsUpdateKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRangeRangeTombstoneStatsUpdateLockSuffix...)
+}
