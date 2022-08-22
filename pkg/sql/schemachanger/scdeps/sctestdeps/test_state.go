@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -177,6 +178,13 @@ func (s *TestState) AstFormatter() scbuild.AstFormatter {
 func (s *TestState) CheckFeature(ctx context.Context, featureName tree.SchemaFeatureName) error {
 	s.LogSideEffectf("checking for feature: %s", featureName)
 	return nil
+}
+
+// CanPerformDropOwnedBy implements scbuild.SchemaFeatureCheck.
+func (s *TestState) CanPerformDropOwnedBy(
+	ctx context.Context, role username.SQLUsername,
+) (bool, error) {
+	return true, nil
 }
 
 // FeatureChecker implements scbuild.Dependencies
