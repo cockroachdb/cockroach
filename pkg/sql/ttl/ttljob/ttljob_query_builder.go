@@ -281,10 +281,10 @@ func (b *deleteQueryBuilder) buildQueryAndArgs(rows []tree.Datums) (string, []in
 
 func (b *deleteQueryBuilder) run(
 	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, rows []tree.Datums,
-) error {
+) (int64, error) {
 	q, deleteArgs := b.buildQueryAndArgs(rows)
 	qosLevel := sessiondatapb.TTLLow
-	_, err := ie.ExecEx(
+	rowCount, err := ie.ExecEx(
 		ctx,
 		b.deleteOpName,
 		txn,
@@ -295,7 +295,7 @@ func (b *deleteQueryBuilder) run(
 		q,
 		deleteArgs...,
 	)
-	return err
+	return int64(rowCount), err
 }
 
 // makeColumnNamesSQL converts columns into an escape string

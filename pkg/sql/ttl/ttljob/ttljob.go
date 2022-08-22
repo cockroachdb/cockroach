@@ -624,7 +624,7 @@ func runTTLOnRange(
 		// SELECT query.
 		start := timeutil.Now()
 		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
-		metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
+		metrics.SelectDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
 			return errors.Wrapf(err, "error selecting rows to delete")
 		}
@@ -668,13 +668,13 @@ func runTTLOnRange(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				err = deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				batchRowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
+				metrics.RowDeletions.Inc(batchRowCount)
 				return err
 			}); err != nil {
 				return errors.Wrapf(err, "error during row deletion")
 			}
-			metrics.RowDeletions.Inc(int64(len(deleteBatch)))
 		}
 
 		// Step 3. Early exit if necessary.
