@@ -42,6 +42,14 @@ type Constraint struct {
 	// in RightSideCols. It will be nil if LookupExpr is non-nil.
 	KeyCols opt.ColList
 
+	// DerivedKeyCols is the set of lookup join key columns which are part of
+	// synthesized equality constraints based on another equality join condition
+	// and a computed index key column in the lookup table. Since these key
+	// columns are not reducing the selectivity of the join, but are just added to
+	// facilitate index lookups, they should not be used in determining join
+	// selectivity.
+	DerivedKeyCols opt.ColSet
+
 	// RightSideCols is an ordered list of prefix index columns that are
 	// constrained by this constraint. It corresponds 1:1 with the columns in
 	// KeyCols if KeyCols is non-nil. Otherwise, it includes the prefix of index
@@ -177,6 +185,7 @@ func (b *ConstraintBuilder) Build(
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
 	keyCols := make(opt.ColList, 0, numIndexKeyCols)
+	var derivedKeyCols opt.ColSet
 	rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
@@ -191,7 +200,10 @@ func (b *ConstraintBuilder) Build(
 	// expression in lookupExpr. In both cases, rightCol is added to
 	// rightSideCols so the caller of Build can determine if the right equality
 	// columns form a key.
-	addEqualityColumns := func(leftCol, rightCol opt.ColumnID) {
+	addEqualityColumns := func(leftCol, rightCol, derivedKeyCol opt.ColumnID) {
+		if derivedKeyCol != 0 {
+			derivedKeyCols.Add(derivedKeyCol)
+		}
 		if !lookupExprRequired {
 			keyCols = append(keyCols, leftCol)
 		} else {
@@ -224,7 +236,7 @@ func (b *ConstraintBuilder) Build(
 		idxCol := b.table.IndexColumnID(index, j)
 		idxColIsDesc := index.Column(j).Descending
 		if eqIdx, ok := rightEq.Find(idxCol); ok {
-			addEqualityColumns(leftEq[eqIdx], idxCol)
+			addEqualityColumns(leftEq[eqIdx], idxCol, opt.ColumnID(0))
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
 			foundEqualityCols = true
 			foundLookupCols = true
@@ -252,7 +264,7 @@ func (b *ConstraintBuilder) Build(
 			// in rightEq to corresponding columns in leftEq.
 			projection := b.f.ConstructProjectionsItem(b.f.RemapCols(expr, b.eqColMap), compEqCol)
 			inputProjections = append(inputProjections, projection)
-			addEqualityColumns(compEqCol, idxCol)
+			addEqualityColumns(compEqCol, idxCol, compEqCol)
 			foundEqualityCols = true
 			foundLookupCols = true
 			continue
@@ -277,7 +289,7 @@ func (b *ConstraintBuilder) Build(
 				constColID,
 			))
 			constFilters = append(constFilters, allFilters[allIdx])
-			addEqualityColumns(constColID, idxCol)
+			addEqualityColumns(constColID, idxCol, opt.ColumnID(0))
 			filterOrdsToExclude.Add(allIdx)
 			continue
 		}
@@ -364,6 +376,7 @@ func (b *ConstraintBuilder) Build(
 
 	c := Constraint{
 		KeyCols:          keyCols,
+		DerivedKeyCols:   derivedKeyCols,
 		RightSideCols:    rightSideCols,
 		LookupExpr:       lookupExpr,
 		InputProjections: inputProjections,
