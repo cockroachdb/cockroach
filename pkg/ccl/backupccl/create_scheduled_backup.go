@@ -188,6 +188,17 @@ type scheduleRecurrence struct {
 // A sentinel value indicating the schedule never recurs.
 var neverRecurs *scheduleRecurrence
 
+func frequencyFromCron(now time.Time, cronStr string) (time.Duration, error) {
+	expr, err := cron.ParseStandard(cronStr)
+	if err != nil {
+		return 0, errors.Newf(
+			`error parsing schedule expression: %q; it must be a valid cron expression`,
+			cronStr)
+	}
+	nextRun := expr.Next(now)
+	return expr.Next(nextRun).Sub(nextRun), nil
+}
+
 func computeScheduleRecurrence(
 	now time.Time, evalFn func() (string, error),
 ) (*scheduleRecurrence, error) {
@@ -198,14 +209,12 @@ func computeScheduleRecurrence(
 	if err != nil {
 		return nil, err
 	}
-	expr, err := cron.ParseStandard(cronStr)
+
+	frequency, err := frequencyFromCron(now, cronStr)
 	if err != nil {
-		return nil, errors.Newf(
-			`error parsing schedule expression: %q; it must be a valid cron expression`,
-			cronStr)
+		return nil, err
 	}
-	nextRun := expr.Next(now)
-	frequency := expr.Next(nextRun).Sub(nextRun)
+
 	return &scheduleRecurrence{cronStr, frequency}, nil
 }
 
@@ -271,13 +280,16 @@ func doCreateBackupSchedules(
 	if err != nil {
 		return err
 	}
-	origFullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
+	fullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
 	if err != nil {
 		return err
 	}
 
+	if fullRecurrence != nil && incRecurrence != nil && incRecurrence.frequency > fullRecurrence.frequency {
+		return errors.Newf("incremental backups must occur more often than full backups")
+	}
+
 	fullRecurrencePicked := false
-	fullRecurrence := origFullRecurrence
 	if incRecurrence != nil && fullRecurrence == nil {
 		// It's an enterprise user; let's see if we can pick a reasonable
 		// full  backup recurrence based on requested incremental recurrence.

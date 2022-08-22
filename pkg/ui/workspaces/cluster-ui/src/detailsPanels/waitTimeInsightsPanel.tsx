@@ -67,7 +67,9 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
   const showWaitTimeInsightsDetails = waitTime != null;
 
   return (
-    <section className={cx("section", "section--container")}>
+    <section
+      className={cx("section", "section--container", "margin-bottom-large")}
+    >
       <Row gutter={24}>
         <Col>
           <Heading type="h5">{WaitTimeInsightsLabels.SECTION_HEADING}</Heading>
@@ -122,12 +124,12 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
           )}
           {blockingExecutions.length > 0 && (
             <Row>
-              <Text>
+              <Heading type="h5">
                 {WaitTimeInsightsLabels.BLOCKING_TXNS_TABLE_TITLE(
                   executionID,
                   execType,
                 )}
-              </Text>
+              </Heading>
               <div>
                 <ExecutionContentionTable
                   execType={execType}
@@ -138,12 +140,12 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
           )}
           {waitingExecutions.length > 0 && (
             <Row>
-              <Text>
+              <Heading type="h5">
                 {WaitTimeInsightsLabels.WAITING_TXNS_TABLE_TITLE(
                   executionID,
                   execType,
                 )}
-              </Text>
+              </Heading>
               <div>
                 <ExecutionContentionTable
                   execType={execType}
