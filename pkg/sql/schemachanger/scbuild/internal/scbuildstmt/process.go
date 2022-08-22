@@ -134,10 +134,6 @@ func CheckIfStmtIsSupported(n tree.Statement, mode sessiondatapb.NewSchemaChange
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
-	// If a statement is not supported throw a not implemented error.
-	if !CheckIfStmtIsSupported(n, b.EvalCtx().SessionData().NewSchemaChangerMode) {
-		panic(scerrors.NotImplementedError(n))
-	}
 	// Check if an entry exists for the statement type, in which
 	// case it is either fully or partially supported.
 	info, ok := supportedStatements[reflect.TypeOf(n)]
