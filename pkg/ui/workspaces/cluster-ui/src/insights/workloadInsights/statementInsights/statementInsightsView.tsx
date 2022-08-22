@@ -1,7 +1,11 @@
 // Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
+<<<<<<< HEAD
 // included in the file licenses/BSL.txt.
+=======
+// included in the file licenses/BSL.txt.S
+>>>>>>> d8c540baf1 (ui: adds insights statement overview page)
 //
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
