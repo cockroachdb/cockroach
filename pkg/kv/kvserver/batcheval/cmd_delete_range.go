@@ -16,11 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,6 +58,13 @@ func declareKeysDeleteRange(
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 			Key: keys.RangeDescriptorKey(rs.GetStartKey()),
 		})
+
+		if args.GcRangeHint != nil {
+			// If we are updating GC hint, add it to the latch span.
+			latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+				Key: keys.RangeGCHintKey(rs.GetRangeID()),
+			})
+		}
 	}
 }
 
@@ -77,6 +86,13 @@ func DeleteRange(
 			"UseRangeTombstones must be passed with predicate based Delete Range")
 	}
 
+	if args.GcRangeHint != nil && !args.UseRangeTombstone {
+		// Check for prerequisite for gc hint. If it doesn't hold, this is incorrect
+		// usage of hint.
+		return result.Result{}, errors.AssertionFailedf(
+			"GcRangeHint must only be used together with UseRangeTombstone")
+	}
+
 	// Use MVCC range tombstone if requested.
 	if args.UseRangeTombstone {
 		if cArgs.Header.Txn != nil {
@@ -89,7 +105,31 @@ func DeleteRange(
 			return result.Result{}, errors.AssertionFailedf(
 				"ReturnKeys can't be used with range tombstones")
 		}
+
 		desc := cArgs.EvalCtx.Desc()
+
+		updateGCHint := func(res *result.Result) error {
+			if args.GcRangeHint != nil {
+				// If GCHint was provided, then we need to check if this request meets
+				// range gc criteria of removing all data. This is not an error as range
+				// might have split/merged since request was sent and we don't want to
+				// fail deletion.
+				if args.Key.Equal(desc.StartKey.AsRawKey()) && args.EndKey.Equal(desc.EndKey.AsRawKey()) {
+					if err := MakeStateLoader(cArgs.EvalCtx).SetGCHint(
+						ctx, readWriter, cArgs.Stats, args.GcRangeHint,
+					); err != nil {
+						return err
+					}
+					res.Replicated.State = &kvserverpb.ReplicaState{
+						GCRangeHint: args.GcRangeHint,
+					}
+				} else {
+					log.Warningf(ctx, "attempt to set GC hint for the incompletely covered range")
+				}
+			}
+			return nil
+		}
+
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
@@ -105,10 +145,14 @@ func DeleteRange(
 				s := cArgs.EvalCtx.GetMVCCStats()
 				statsCovered = &s
 			}
-			err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
+			if err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
 				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
-				args.IdempotentTombstone, maxIntents, statsCovered)
-			return result.Result{}, err
+				args.IdempotentTombstone, maxIntents, statsCovered); err != nil {
+				return result.Result{}, err
+			}
+			var res result.Result
+			err := updateGCHint(&res)
+			return res, err
 		}
 
 		if h.MaxSpanRequestKeys == 0 {

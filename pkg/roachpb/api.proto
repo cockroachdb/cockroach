@@ -384,6 +384,10 @@ message DeleteRangeRequest {
   // considers empty spans equivalent to being covered by an MVCC range
   // tombstone, so it will omit the write across an entirely empty span too.
   bool idempotent_tombstone = 7;
+  // If set and DeleteRangeRequest is deleting the whole range with a range
+  // tombstone, gc_range_hint will update replica GC hint to notify mvcc gc
+  // queue that this range would benefit from optimized GC process.
+  GCRangeHint gc_range_hint = 8;
 
   DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = false];
 }
