@@ -279,6 +279,12 @@ func RangeGCThresholdKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeGCThresholdKey()
 }
 
+// RangeGCHintKey returns a system-local key for last used GC threshold on the
+// user keyspace. Reads and writes <= this timestamp will not be served.
+func RangeGCHintKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeGCHintKey()
+}
+
 // RangeVersionKey returns a system-local for the range version.
 func RangeVersionKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeVersionKey()
@@ -1012,6 +1018,11 @@ func (b RangeIDPrefixBuf) RangePriorReadSummaryKey() roachpb.Key {
 // RangeGCThresholdKey returns a system-local key for the GC threshold.
 func (b RangeIDPrefixBuf) RangeGCThresholdKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeGCThresholdSuffix...)
+}
+
+// RangeGCHintKey returns a range-local key for the GC hint.
+func (b RangeIDPrefixBuf) RangeGCHintKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeGCHintSuffix...)
 }
 
 // RangeVersionKey returns a system-local key for the range version.

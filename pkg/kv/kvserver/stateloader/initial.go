@@ -54,6 +54,7 @@ func WriteInitialReplicaState(
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
+	gcHint roachpb.GCRangeHint,
 	replicaVersion roachpb.Version,
 	writeRaftAppliedIndexTerm bool,
 ) (enginepb.MVCCStats, error) {
@@ -73,6 +74,7 @@ func WriteInitialReplicaState(
 	s.Stats = &ms
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
+	s.GCHint = &gcHint
 	if (replicaVersion != roachpb.Version{}) {
 		s.Version = &replicaVersion
 	}
@@ -87,6 +89,12 @@ func WriteInitialReplicaState(
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if !existingGCThreshold.IsEmpty() {
 		log.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
+	}
+
+	if existingGCHint, err := rsl.LoadGCHint(ctx, readWriter); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCHint")
+	} else if !existingGCHint.LatestRangeDeleteTimestamp.IsEmpty() {
+		log.Fatalf(ctx, "expected trivial GCHint, but found %+v", existingGCHint)
 	}
 
 	if existingVersion, err := rsl.LoadVersion(ctx, readWriter); err != nil {
@@ -114,10 +122,11 @@ func WriteInitialRangeState(
 ) error {
 	initialLease := roachpb.Lease{}
 	initialGCThreshold := hlc.Timestamp{}
+	initialGCHint := roachpb.GCRangeHint{}
 	initialMS := enginepb.MVCCStats{}
 
 	if _, err := WriteInitialReplicaState(
-		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
+		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
 		replicaVersion, true, /* 22.1:AddRaftAppliedIndexTermMigration */
 	); err != nil {
 		return err

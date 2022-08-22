@@ -293,6 +293,7 @@ func buildReplicaDescriptorFromTestData(
 			Term:  1,
 		},
 		GCThreshold:         &hlc.Timestamp{},
+		GCHint:              &roachpb.GCRangeHint{},
 		Version:             nil,
 		Stats:               &enginepb.MVCCStats{},
 		RaftClosedTimestamp: clock.Now().Add(-30*time.Second.Nanoseconds(), 0),
