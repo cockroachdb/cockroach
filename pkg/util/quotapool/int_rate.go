@@ -98,6 +98,28 @@ func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
 	})
 }
 
+// Available returns the number of available tokens.
+func (rl *RateLimiter) Available() Tokens {
+	var available Tokens
+	rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		tb := res.(*TokenBucket)
+		tb.Update() // replenish to get most up-to-date token count
+		available = tb.current
+		return false
+	})
+	return available
+}
+
+// Adjust returns tokens to the bucket (positive delta) or accounts for a debt
+// of tokens (negative delta).
+func (rl *RateLimiter) Adjust(delta Tokens) {
+	rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		tb := res.(*TokenBucket)
+		tb.Adjust(delta)
+		return delta > 0
+	})
+}
+
 // RateAlloc is an allocated quantity of quota which can be released back into
 // the token-bucket RateLimiter.
 type RateAlloc struct {
@@ -114,6 +136,13 @@ func (ra *RateAlloc) Return() {
 		return true
 	})
 	ra.rl.putRateAlloc((*rateAlloc)(ra))
+}
+
+// ReturnN returns a portion of the RateAlloc to the RateLimiter. It is not safe
+// to call any methods on the RateAlloc after this call.
+func (ra *RateAlloc) ReturnN(n int64) {
+	ra.alloc = n
+	ra.Return()
 }
 
 // Consume destroys the RateAlloc. It is not safe to call any methods on the
