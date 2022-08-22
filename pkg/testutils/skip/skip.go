@@ -64,7 +64,7 @@ func UnderDeadlockWithIssue(t SkippableTest, githubIssueID int, args ...interfac
 	t.Helper()
 	if syncutil.DeadlockEnabled {
 		t.Skip(append([]interface{}{fmt.Sprintf(
-			"disabled under deadlock detector. issue: https://github.com/cockroachdb/cockroach/issue/%d",
+			"disabled under deadlock detector. issue: https://github.com/cockroachdb/cockroach/issues/%d",
 			githubIssueID,
 		)}, args...))
 	}
@@ -84,7 +84,7 @@ func UnderRaceWithIssue(t SkippableTest, githubIssueID int, args ...interface{})
 	t.Helper()
 	if util.RaceEnabled {
 		t.Skip(append([]interface{}{fmt.Sprintf(
-			"disabled under race. issue: https://github.com/cockroachdb/cockroach/issue/%d", githubIssueID,
+			"disabled under race. issue: https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID,
 		)}, args...))
 	}
 }
@@ -95,7 +95,7 @@ func UnderBazelWithIssue(t SkippableTest, githubIssueID int, args ...interface{}
 	t.Helper()
 	if bazel.BuiltWithBazel() {
 		t.Skip(append([]interface{}{fmt.Sprintf(
-			"disabled under bazel. issue: https://github.com/cockroachdb/cockroach/issue/%d", githubIssueID,
+			"disabled under bazel. issue: https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID,
 		)}, args...))
 	}
 }
