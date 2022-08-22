@@ -53,7 +53,7 @@ As a general rule of thumb, if running against "real" VMs, and the version to
 test is checked out, the following will build the right binaries and put them
 where `roachtest` will find them:
 
-`build/builder.sh mkrelease amd64-linux-gnu build bin/workload`
+`dev build --cross cockroach workload`
 
 `roachtest` will look first in `$PATH`, then (except when `--local` is
 specified) in `bin.docker_amd64` in the repo root, followed by `bin`. This
@@ -65,7 +65,7 @@ cluster on the local machine created via `roachprod create local`. In that
 case, the `cockroach` and `workload` binary must target the local architecture,
 which means
 
-`make build bin/workload`
+`dev build cockroach workload`
 
 will do the trick. However, most roachtests don't make a lot of sense in local
 mode or will do outright dangerous things (like trying to install packages on
@@ -87,14 +87,12 @@ mv ~/local/1/cockroach cockroach
 ```
 
 This doesn't work for the `workload` binary but this builds a lot faster anyway
-(via `build/builder.sh mkrelease amd64-linux-gnu bin/workload`; note the
-absence of the word `build` which prevents unnecessarily building CockroachDB
-again).  The above strategy also works for recent SHAs from the master/release
-branches, where the incantation is `roachprod stage local cockroach <SHA>`; the
-SHA is optional and defaults to a recent build from the `master` branch, which
-may not be what you want. As a bonus, `roachprod stage local workload <SHA>
---os linux` does allow getting a `workload` binary as well, meaning you can run
-a roachtest without compiling anything yourself.
+(via `dev build --cross workload`).  The above strategy also works for recent
+SHAs from the master/release branches, where the incantation is
+`roachprod stage local cockroach <SHA>`; the SHA is optional and defaults to a
+recent build from the `master` branch, which may not be what you want. As a bonus,
+`roachprod stage local workload <SHA> --os linux` does allow getting a `workload`
+binary as well, meaning you can run a roachtest without compiling anything yourself.
 
 ## Running a test
 
@@ -169,7 +167,7 @@ case which is helpful during development), don't forget to rebuild the binaries
 you've touched (i.e. most likely only `roachtest`). For example, the command
 line that you might use while iterating on a new test `foo/garble-wozzler` is
 
-`make bin/roachtest && roachtest run --local foo/garble-wozzler`.
+`dev build roachtest && roachtest run --local foo/garble-wozzler`.
 
 ### Reproducing a test failure
 

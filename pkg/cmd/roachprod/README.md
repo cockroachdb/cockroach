@@ -10,7 +10,7 @@ Note that an internal tutorial is also maintained [at the Developer Infrastructu
 1. Make sure you have [gcloud installed] and configured (`gcloud auth list` to
 check, `gcloud auth login` to authenticate). You may want to update old
 installations (`gcloud components update`).
-1. Build a local binary of `roachprod`: `make bin/roachprod`
+1. Build a local binary of `roachprod`: `dev build roachprod`
 1. Add `$PWD/bin` to your `PATH` so you can run `roachprod` from the root directory of `cockroach`.
 
 ## Summary
@@ -45,7 +45,7 @@ roachprod stage ${CLUSTER} workload
 roachprod stage ${CLUSTER} release v2.0.5
 
 # ...or using roachprod directly (e.g., for your locally-built binary).
-build/builder.sh mkrelease
+dev build --cross
 roachprod put ${CLUSTER} cockroach-linux-2.6.32-gnu-amd64 cockroach
 
 # Start a cluster.
