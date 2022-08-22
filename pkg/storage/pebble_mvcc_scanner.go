@@ -979,7 +979,11 @@ func (p *pebbleMVCCScanner) advanceKeyAtNewKey(key []byte) bool {
 // p.tombstones is true. Advances to the next key unless we've reached the max
 // results limit.
 func (p *pebbleMVCCScanner) addAndAdvance(
-	ctx context.Context, key roachpb.Key, ts hlc.Timestamp, rawKey []byte, rawValue []byte,
+	ctx context.Context,
+	key roachpb.Key,
+	ts hlc.Timestamp, // remove this and encode rawKey instead at the one caller
+	rawKey []byte,
+	rawValue []byte,
 ) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.

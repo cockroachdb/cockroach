@@ -575,12 +575,14 @@ with t=A ts=11,0 targetbytes=32
   scan      k=k end=o
   scan      k=k end=o reverse=true
 ----
-scan: "k" -> /BYTES/b @11.000000000,0
-scan: resume span ["k","o") RESUME_BYTE_LIMIT nextBytes=25
-scan: 25 bytes (target 32)
-scan: "n" -> /BYTES/b @11.000000000,0
-scan: resume span ["k","m\x00") RESUME_BYTE_LIMIT nextBytes=25
-scan: 25 bytes (target 32)
+scan: "k" -> /BYTES/b @0,0
+scan: "l" -> /BYTES/b @0,0
+scan: resume span ["m","o") RESUME_BYTE_LIMIT nextBytes=16
+scan: 32 bytes (target 32)
+scan: "n" -> /BYTES/b @0,0
+scan: "m" -> /BYTES/b @0,0
+scan: resume span ["k","l\x00") RESUME_BYTE_LIMIT nextBytes=16
+scan: 32 bytes (target 32)
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 data: "a"/123.000000000,45 -> /BYTES/abcdef

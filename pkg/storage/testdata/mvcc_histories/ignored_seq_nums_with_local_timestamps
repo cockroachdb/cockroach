@@ -25,7 +25,7 @@ with t=A
   resolve_intent  k=k status=PENDING
   get             k=k
 ----
-get: "k" -> /BYTES/b @50.000000000,0
+get: "k" -> /BYTES/b @0,0
 get: "k" -> /BYTES/b @50.000000000,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
