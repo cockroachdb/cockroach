@@ -838,10 +838,10 @@ func fillInLazyProps(e opt.Expr) {
 		rel = rel.FirstExpr()
 
 		// Derive columns that are candidates for pruning.
-		norm.DerivePruneCols(rel)
+		norm.DerivePruneCols(rel, util.FastIntSet{} /* disabledRules */)
 
 		// Derive columns that are candidates for null rejection.
-		norm.DeriveRejectNullCols(rel)
+		norm.DeriveRejectNullCols(rel, util.FastIntSet{} /* disabledRules */)
 
 		// Make sure the interesting orderings are calculated.
 		ordering.DeriveInterestingOrderings(rel)
