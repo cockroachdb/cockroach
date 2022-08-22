@@ -71,34 +71,30 @@ const highWaitTimeQuery: InsightQuery<
   TransactionContentionResponseColumns,
   InsightEventsResponse
 > = {
-  name: InsightNameEnum.highWaitTime,
-  query: `SELECT * FROM (SELECT
-    blocking_txn_id,
-    blocking_txn_fingerprint_id,
-    blocking_queries,
-    collection_ts,
-    contention_duration,
-    app_name,
-    row_number() over (
+  name: InsightNameEnum.highContentionTime,
+  query: `SELECT *
+          FROM (SELECT blocking_txn_id,
+                       encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
+                       blocking_queries,
+                       collection_ts,
+                       contention_duration,
+                       app_name,
+                       row_number()                                  over (
     PARTITION BY
     blocking_txn_fingerprint_id
-    ORDER BY collection_ts DESC ) AS rank,
-    threshold
-  FROM
-    (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
-    crdb_internal.transaction_contention_events AS tce
-      JOIN (
-      SELECT
-        transaction_fingerprint_id,
-        app_name,
-        array_agg(metadata ->> 'query') AS blocking_queries
-      FROM
-        crdb_internal.statement_statistics
-      GROUP BY
-        transaction_fingerprint_id,
-        app_name
-    ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id 
-    WHERE contention_duration > threshold) WHERE rank=1`,
+    ORDER BY collection_ts DESC ) AS rank, threshold
+                FROM (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold
+                      FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
+                     crdb_internal.transaction_contention_events AS tce
+                       JOIN (SELECT transaction_fingerprint_id,
+                                    app_name,
+                                    array_agg(metadata ->> 'query') AS blocking_queries
+                             FROM crdb_internal.statement_statistics
+                             GROUP BY transaction_fingerprint_id,
+                                      app_name) AS bqs
+                            ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
+                WHERE contention_duration > threshold)
+          WHERE rank = 1`,
   toState: transactionContentionResultsToEventState,
 };
 
@@ -181,15 +177,14 @@ const highWaitTimeDetailsQuery = (
   InsightEventDetailsResponse
 > => {
   return {
-    name: InsightNameEnum.highWaitTime,
-    query: `SELECT
-  collection_ts, 
-  blocking_txn_id, 
-  blocking_txn_fingerprint_id, 
-  waiting_txn_id, 
-  waiting_txn_fingerprint_id, 
-  contention_duration, 
-  crdb_internal.pretty_key(contending_key, 0) as key, 
+    name: InsightNameEnum.highContentionTime,
+    query: `SELECT collection_ts,
+                   blocking_txn_id,
+                   encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
+                   waiting_txn_id,
+                   encode(waiting_txn_fingerprint_id, 'hex')  AS waiting_txn_fingerprint_id,
+                   contention_duration,
+                   crdb_internal.pretty_key(contending_key, 0) as key, 
   database_name, 
   schema_name, 
   table_name, 
@@ -198,7 +193,7 @@ const highWaitTimeDetailsQuery = (
   blocking_queries, 
   waiting_queries,
   threshold
-FROM
+            FROM
   (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
   crdb_internal.transaction_contention_events AS tce 
   LEFT OUTER JOIN crdb_internal.ranges AS ranges ON tce.contending_key BETWEEN ranges.start_key 
@@ -223,7 +218,7 @@ FROM
       transaction_fingerprint_id,
       app_name
   ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
-    WHERE blocking_txn_id = '${id}'`,
+            WHERE blocking_txn_id = '${id}'`,
     toState: transactionContentionDetailsResultsToEventState,
   };
 };
@@ -294,6 +289,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       databaseName: row.database_name,
       elapsedTimeMillis: end.diff(start, "milliseconds"),
       application: row.app_name,
+      username: row.user_name,
       statementID: row.stmt_id,
       statementFingerprintID: row.stmt_fingerprint_id,
       sessionID: row.session_id,
@@ -305,6 +301,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       lastRetryReason: row.last_retry_reason,
       timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
       problems: row.problems,
+      insights: null,
     };
   });
 }
@@ -313,13 +310,13 @@ const statementInsightsQuery: InsightQuery<
   ExecutionInsightsResponseRow,
   StatementInsights
 > = {
-  name: InsightNameEnum.highWaitTime,
+  name: InsightNameEnum.highContentionTime,
   // We only surface the most recently observed problem for a given statement.
   query: `SELECT * from (
     SELECT
       session_id,
       txn_id,
-      encode(txn_fingerprint_id, 'hex') AS txn_fingerprint_id,
+      encode(txn_fingerprint_id, 'hex')  AS txn_fingerprint_id,
       stmt_id,
       encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
       query,
@@ -328,6 +325,7 @@ const statementInsightsQuery: InsightQuery<
       full_scan,
       app_name,
       database_name,
+      user_name,
       rows_read,
       rows_written,
       priority,
@@ -335,7 +333,7 @@ const statementInsightsQuery: InsightQuery<
       contention,
       last_retry_reason,
       problems,
-      row_number() OVER (
+      row_number()                          OVER (
         PARTITION BY txn_fingerprint_id
         ORDER BY end_time DESC
       ) AS rank

@@ -18,8 +18,10 @@ export const insightsColumnLabels = {
   insights: "Insights",
   startTime: "Start Time (UTC)",
   elapsedTime: "Elapsed Time",
-  applicationName: "Application",
+  applicationName: "Application Name",
+  username: "User Name",
   fingerprintID: "Fingerprint ID",
+  numRetries: "Retries",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -120,6 +122,17 @@ export const insightsTableTitles: InsightsTableTitleType = {
       </Tooltip>
     );
   },
+  username: (execType: InsightExecEnum) => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={<p>The user that opened the {execType}.</p>}
+      >
+        {getLabel("username")}
+      </Tooltip>
+    );
+  },
   applicationName: (execType: InsightExecEnum) => {
     return (
       <Tooltip
@@ -128,6 +141,17 @@ export const insightsTableTitles: InsightsTableTitleType = {
         content={<p>The name of the application that ran the {execType}.</p>}
       >
         {getLabel("applicationName")}
+      </Tooltip>
+    );
+  },
+  numRetries: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The number of times this statement encountered a retry."}
+      >
+        {getLabel("numRetries")}
       </Tooltip>
     );
   },
