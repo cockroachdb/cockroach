@@ -233,22 +233,22 @@ func (r *Replica) updateTimestampCacheAndDropLatches(
 
 var allowDroppingLatchesBeforeEval = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.transaction.allow_dropping_latches_before_eval",
+	"kv.transaction.dropping_latches_before_eval.enabled",
 	"if enabled, allows certain read-only KV requests to drop latches before they evaluate",
 	true,
 )
 
 // canDropLatchesBeforeEval determines whether a given batch request can proceed
-// with evaluation without continuing to hold onto its latches[1] and whether
-// the evaluation of the requests in the batch needs an intent interleaving
-// iterator[2].
+// with evaluation without continuing to hold onto its latches[1] and if so,
+// whether the evaluation of the requests in the batch needs an intent
+// interleaving iterator[2].
 //
 // [1] whether the request can safely release latches at this point in the
 // execution.
 // For certain qualifying types of requests (certain types of read-only
-// requests: see `canReadOnlyRequestDropLatchesBeforeEval`), this method performs a scan
-// of the lock table keyspace corresponding to the latch spans declared by the
-// BatchRequest.
+// requests: see `canReadOnlyRequestDropLatchesBeforeEval`), this method
+// performs a scan of the lock table keyspace corresponding to the latch spans
+// declared by the BatchRequest.
 // If no conflicting intents are found, then it is deemed safe for this request
 // to release its latches at this point. This is because read-only requests
 // evaluate over a stable pebble snapshot (see the call to
@@ -258,8 +258,8 @@ var allowDroppingLatchesBeforeEval = settings.RegisterBoolSetting(
 // If any conflicting intents are found, then it returns a WriteIntentError
 // which needs to be handled by the caller before proceeding.
 //
-// [2] whether the request needs an intent interleaving iterator to perform its
-// evaluation.
+// [2] if the request can drop its latches early, whether it needs an intent
+// interleaving iterator to perform its evaluation.
 // If the aforementioned lock table scan determines that any of the requests in
 // the batch may need access to the intent history of a key, then an intent
 // interleaving iterator is needed to perform the evaluation.
@@ -277,20 +277,18 @@ func (r *Replica) canDropLatchesBeforeEval(
 		// non-interleaving iterator.
 		return false /* ok */, true /* stillNeedsIntentInterleaving */, nil
 	}
+
 	log.VEventf(
 		ctx, 3, "can drop latches early for batch (%v); scanning lock table first to detect conflicts", ba,
 	)
-	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&r.store.cfg.Settings.SV)
 
+	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&r.store.cfg.Settings.SV)
 	var start, end roachpb.Key
 	var intents []roachpb.Intent
 	var err error
 	var cumIntentBytes int64
-
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.
-	//
-	// !!! test that these limits are respected.
 	for _, req := range ba.Requests {
 		start, end = req.GetInner().Header().Key, req.GetInner().Header().EndKey
 		var needsIntentInterleavingForThisRequest bool
