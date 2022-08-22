@@ -174,6 +174,8 @@ func (o *andProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -612,6 +614,8 @@ func (o *andRightNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -1017,6 +1021,8 @@ func (o *andLeftNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -1403,6 +1409,8 @@ func (o *orProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -1842,6 +1850,8 @@ func (o *orRightNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -2248,6 +2258,8 @@ func (o *orLeftNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
