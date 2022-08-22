@@ -1046,7 +1046,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, getNonDeterministicFailureExplanation(err), err
 		}
 		if r.store.cfg.KVAdmissionController != nil &&
-			stats.apply.followerStoreWriteBytes.numEntries > 0 {
+			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
 			r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
 				r.store.StoreID(), stats.apply.followerStoreWriteBytes)
 		}

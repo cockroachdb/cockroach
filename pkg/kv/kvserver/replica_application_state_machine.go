@@ -57,20 +57,7 @@ type applyCommittedEntriesStats struct {
 	stateAssertions         int
 	numEmptyEntries         int
 	numConfChangeEntries    int
-	followerStoreWriteBytes followerStoreWriteBytes
-}
-
-// followerStoreWriteBytes captures stats about writes done to a store by a
-// replica that is not the leaseholder. These are used for admission control.
-type followerStoreWriteBytes struct {
-	numEntries int64
-	admission.StoreWorkDoneInfo
-}
-
-func (f *followerStoreWriteBytes) merge(from followerStoreWriteBytes) {
-	f.numEntries += from.numEntries
-	f.WriteBytes += from.WriteBytes
-	f.IngestedBytes += from.IngestedBytes
+	followerStoreWriteBytes admission.FollowerStoreWriteBytes
 }
 
 // nonDeterministicFailure is an error type that indicates that a state machine
@@ -450,7 +437,7 @@ type replicaAppBatch struct {
 	emptyEntries            int
 	mutations               int
 	start                   time.Time
-	followerStoreWriteBytes followerStoreWriteBytes
+	followerStoreWriteBytes admission.FollowerStoreWriteBytes
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc enginepb.RangeAppliedState
@@ -551,7 +538,7 @@ func (b *replicaAppBatch) Stage(
 	// nils the AddSSTable field.
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.followerStoreWriteBytes.numEntries++
+		b.followerStoreWriteBytes.NumEntries++
 		b.followerStoreWriteBytes.WriteBytes += writeBytes
 		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
 	}
@@ -1072,7 +1059,7 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.sm.stats.entriesProcessedBytes += b.entryBytes
 	b.sm.stats.numEmptyEntries += b.emptyEntries
 	b.sm.stats.batchesProcessed++
-	b.sm.stats.followerStoreWriteBytes.merge(b.followerStoreWriteBytes)
+	b.sm.stats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())

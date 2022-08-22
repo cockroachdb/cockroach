@@ -379,7 +379,7 @@ func NewNode(
 		spanConfigAccessor:    spanConfigAccessor,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
-	n.storeCfg.KVAdmissionController = kvserver.MakeKVAdmissionController(
+	n.storeCfg.KVAdmissionController = admission.MakeKVAdmissionController(
 		kvAdmissionQ, storeGrantCoords, cfg.Settings)
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -786,13 +786,13 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 }
 
 // GetTenantWeights implements kvserver.TenantWeightProvider.
-func (n *Node) GetTenantWeights() kvserver.TenantWeights {
-	weights := kvserver.TenantWeights{
+func (n *Node) GetTenantWeights() admission.TenantWeights {
+	weights := admission.TenantWeights{
 		Node: make(map[uint64]uint32),
 	}
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		sw := make(map[uint64]uint32)
-		weights.Stores = append(weights.Stores, kvserver.TenantWeightsForStore{
+		weights.Stores = append(weights.Stores, admission.TenantWeightsForStore{
 			StoreID: store.StoreID(),
 			Weights: sw,
 		})
@@ -992,7 +992,7 @@ func (n *Node) batchInternal(
 	}
 	var writeBytes *kvserver.StoreWriteBytes
 	defer func() {
-		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
+		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, (*admission.StoreWorkDoneInfo)(writeBytes))
 		writeBytes.Release()
 	}()
 	var pErr *roachpb.Error

@@ -368,7 +368,9 @@ func NewGrantCoordinators(
 	}, metricStructs
 }
 
-func makeStoreGrantCoordinators(opts Options, st *cluster.Settings, metrics GrantCoordinatorMetrics) *StoreGrantCoordinators {
+func makeStoreGrantCoordinators(
+	opts Options, st *cluster.Settings, metrics GrantCoordinatorMetrics,
+) *StoreGrantCoordinators {
 	// TODO(sumeerbhola): these metrics are shared across all stores and all
 	// priorities across stores (even the coarser workClasses, which are a
 	// mapping from priority, share the same metrics). Fix this by adding

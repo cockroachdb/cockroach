@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -445,7 +446,7 @@ func suspectedFullRangeDeletion(ms enginepb.MVCCStats) bool {
 type replicaGCer struct {
 	repl                *Replica
 	count               int32 // update atomically
-	admissionController KVAdmissionController
+	admissionController admission.KVAdmissionController
 	storeID             roachpb.StoreID
 }
 
@@ -514,7 +515,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	_, writeBytes, pErr := r.repl.SendWithWriteBytes(ctx, ba)
 	defer writeBytes.Release()
 	if r.admissionController != nil {
-		r.admissionController.AdmittedKVWorkDone(admissionHandle, writeBytes)
+		r.admissionController.AdmittedKVWorkDone(admissionHandle, (*admission.StoreWorkDoneInfo)(writeBytes))
 	}
 	if pErr != nil {
 		log.VErrEventf(ctx, 2, "%v", pErr.String())
