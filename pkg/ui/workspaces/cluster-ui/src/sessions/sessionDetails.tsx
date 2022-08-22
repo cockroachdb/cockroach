@@ -91,7 +91,6 @@ export const MemoryUsageItem: React.FC<{
     value={
       Bytes(alloc_bytes?.toNumber()) + "/" + Bytes(max_alloc_bytes?.toNumber())
     }
-    className={cx("details-item")}
   />
 );
 
@@ -247,57 +246,56 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       );
     }
 
-    let txnInfo = <React.Fragment>No Active Transaction</React.Fragment>;
+    let txnInfo = (
+      <SummaryCard className={cx("details-section")}>
+        No Active Transaction
+      </SummaryCard>
+    );
     if (session.active_txn && session.end == null) {
       const txn = session.active_txn;
       const start = TimestampToMoment(txn.start);
       txnInfo = (
-        <Row gutter={16}>
-          <Col className="gutter-row" span={10}>
-            <SummaryCardItem
-              label={"Transaction Start Time"}
-              value={start.format(DATE_FORMAT)}
-              className={cx("details-item")}
-            />
-            <SummaryCardItem
-              label={"Number of Statements Executed"}
-              value={txn.num_statements_executed}
-              className={cx("details-item")}
-            />
-            <SummaryCardItem
-              label={"Number of Retries"}
-              value={txn.num_retries}
-              className={cx("details-item")}
-            />
-            <SummaryCardItem
-              label={"Number of Automatic Retries"}
-              value={txn.num_auto_retries}
-              className={cx("details-item")}
-            />
-          </Col>
-          <Col className="gutter-row" span={4} />
-          <Col className="gutter-row" span={10}>
-            <SummaryCardItem
-              label={"Read Only"}
-              value={yesOrNo(txn.read_only)}
-              className={cx("details-item")}
-            />
-            <SummaryCardItem
-              label={"AS OF SYSTEM TIME?"}
-              value={yesOrNo(txn.is_historical)}
-              className={cx("details-item")}
-            />
-            <SummaryCardItem
-              label={"Priority"}
-              value={txn.priority}
-              className={cx("details-item")}
-            />
-            <MemoryUsageItem
-              alloc_bytes={txn.alloc_bytes}
-              max_alloc_bytes={txn.max_alloc_bytes}
-            />
-          </Col>
-        </Row>
+        <>
+          <Row gutter={24}>
+            <Col className="gutter-row" span={12}>
+              <SummaryCard className={cx("summary-card")}>
+                <SummaryCardItem
+                  label={"Transaction Start Time"}
+                  value={start.format(DATE_FORMAT)}
+                />
+                <SummaryCardItem
+                  label={"Number of Statements Executed"}
+                  value={txn.num_statements_executed}
+                />
+                <SummaryCardItem
+                  label={"Number of Retries"}
+                  value={txn.num_retries}
+                />
+                <SummaryCardItem
+                  label={"Number of Automatic Retries"}
+                  value={txn.num_auto_retries}
+                />
+              </SummaryCard>
+            </Col>
+            <Col className="gutter-row" span={12}>
+              <SummaryCard className={cx("summary-card")}>
+                <SummaryCardItem
+                  label={"Read Only"}
+                  value={yesOrNo(txn.read_only)}
+                />
+                <SummaryCardItem
+                  label={"AS OF SYSTEM TIME?"}
+                  value={yesOrNo(txn.is_historical)}
+                />
+                <SummaryCardItem label={"Priority"} value={txn.priority} />
+                <MemoryUsageItem
+                  alloc_bytes={txn.alloc_bytes}
+                  max_alloc_bytes={txn.max_alloc_bytes}
+                />
+              </SummaryCard>
+            </Col>
+          </Row>
+        </>
       );
     }
     let curStmtInfo = (
@@ -335,20 +333,18 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
     }
 
     return (
-      <React.Fragment>
-        <SummaryCard className={cx("details-section")}>
-          <Row gutter={12}>
-            <Col className="gutter-row" span={10}>
+      <>
+        <Row gutter={24}>
+          <Col className="gutter-row" span={12}>
+            <SummaryCard className={cx("summary-card")}>
               <SummaryCardItem
-                label={"Session Start Time"}
+                label="Session Start Time"
                 value={TimestampToMoment(session.start).format(DATE_FORMAT)}
-                className={cx("details-item")}
               />
               {session.end && (
                 <SummaryCardItem
                   label={"Session End Time"}
                   value={TimestampToMoment(session.end).format(DATE_FORMAT)}
-                  className={cx("details-item")}
                 />
               )}
               <SummaryCardItem
@@ -356,7 +352,6 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 value={DurationToMomentDuration(
                   session.total_active_time,
                 ).humanize()}
-                className={cx("details-item")}
               />
               {!isTenant && (
                 <SummaryCardItem
@@ -373,13 +368,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                       session.node_id.toString()
                     )
                   }
-                  className={cx("details-item")}
                 />
               )}
               <SummaryCardItem
                 label={"Application Name"}
                 value={session.application_name}
-                className={cx("details-item")}
               />
               <SummaryCardItem
                 label={"Status"}
@@ -391,37 +384,31 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                     <span>{getStatusString(session.status)}</span>
                   </div>
                 }
-                className={cx("details-item")}
               />
-            </Col>
-            <Col className="gutter-row" span={4} />
-            <Col className="gutter-row" span={10}>
+            </SummaryCard>
+          </Col>
+          <Col className="gutter-row" span={12}>
+            <SummaryCard className={cx("summary-card")}>
               <SummaryCardItem
                 label={"Client IP Address"}
                 value={session.client_address}
-                className={cx("details-item")}
               />
               <MemoryUsageItem
                 alloc_bytes={session.alloc_bytes}
                 max_alloc_bytes={session.max_alloc_bytes}
               />
-              <SummaryCardItem
-                label={"User Name"}
-                value={session.username}
-                className={cx("details-item")}
-              />
+              <SummaryCardItem label={"User Name"} value={session.username} />
               <SummaryCardItem
                 label="Transaction Count"
                 value={session.num_txns_executed}
-                className={cx("details-item")}
               />
-            </Col>
-          </Row>
-        </SummaryCard>
+            </SummaryCard>
+          </Col>
+        </Row>
         <Text textType={TextTypes.Heading5} className={cx("details-header")}>
           Transaction
         </Text>
-        <SummaryCard className={cx("details-section")}>{txnInfo}</SummaryCard>
+        {txnInfo}
         <Text textType={TextTypes.Heading5} className={cx("details-header")}>
           Most Recent Statement
         </Text>
@@ -442,7 +429,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             ))}
           </SummaryCard>
         </div>
-      </React.Fragment>
+      </>
     );
   };
 }
