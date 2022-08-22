@@ -176,3 +176,6 @@ SELECT crdb_internal.stream_ingestion_stats_json(unique_rowid());
 
 query error pq: crdb_internal\.stream_ingestion_stats_json\(\): job.*is not a stream ingestion job
 SELECT crdb_internal.stream_ingestion_stats_json(id) FROM (SELECT id FROM system.jobs LIMIT 1);
+
+query error pq: crdb_internal\.replication_stream_spec\(\): job.*is not a replication stream job
+SELECT crdb_internal.replication_stream_spec(crdb_internal.create_sql_schema_telemetry_job())
