@@ -5164,3 +5164,104 @@ project
  │    └── filters (true)
  └── projections
       └── NULL [as="?column?":18]
+
+# Regression test for #86308.
+exec-ddl
+CREATE TABLE table86308 (
+	col3_0 INET NOT NULL,
+	col3_1 INT4 NOT NULL,
+	col3_2 TIMETZ NOT NULL,
+	col3_3 FLOAT4 NOT NULL,
+	col3_4 BIT(17) NOT NULL,
+	col3_5 GEOGRAPHY NOT NULL,
+	col3_6 BIT(22) NOT NULL,
+	col3_7 STRING NOT NULL,
+	col3_8 UUID NOT NULL,
+	col3_9 FLOAT8 NOT NULL AS (col3_3 + 0.7530620098114014:::FLOAT8) STORED,
+	col3_10 STRING NOT NULL AS (lower(CAST(col3_0 AS STRING))) STORED,
+	col3_11 FLOAT8 NOT NULL AS (col3_3 + 0.8790965676307678:::FLOAT8) VIRTUAL,
+	col3_12 STRING NOT NULL AS (lower(CAST(col3_0 AS STRING))) VIRTUAL,
+	col3_13 STRING NOT NULL AS (lower(CAST(col3_6 AS STRING))) STORED,
+	col3_14 FLOAT8 NOT NULL AS (col3_3 + (-0.27059364318847656):::FLOAT8) STORED,
+	col3_15 STRING NOT NULL AS (lower(CAST(col3_5 AS STRING))) STORED,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT table3_pkey PRIMARY KEY (rowid ASC),
+	UNIQUE INDEX table3_col3_4_col3_11_col3_1_col3_0_col3_3_key (col3_4 DESC, col3_11 ASC, col3_1 DESC, col3_0 ASC, col3_3 DESC) STORING (col3_5, col3_8, col3_9, col3_10, col3_13) WHERE ((((col3_9 = 5e-324:::FLOAT8) OR (col3_1 = (-32768):::INT8)) OR (col3_15 = '':::STRING)) AND (col3_3 > 3.4028234663852886e+38:::FLOAT8)) AND (col3_12 != '""':::STRING)
+);
+----
+
+# Before the fix, PruneGroupByCols would fire to push a Project below the
+# GroupBy. Then, since PruneWindowInputCols was disabled,
+# EliminateGroupByProject would remove the Project and the cycle would repeat.
+norm disable=PruneWindowInputCols
+SELECT concat_agg(tab_1739.col3_7::STRING ORDER BY tab_1739.col3_7 DESC)::STRING AS col_4664
+FROM table86308@[0] AS tab_1739 GROUP BY tab_1739.col3_7 HAVING bool_and(false::BOOL)::BOOL
+----
+project
+ ├── columns: col_4664:20
+ ├── immutable
+ └── group-by (hash)
+      ├── columns: col3_7:8!null concat_agg:20
+      ├── grouping columns: col3_7:8!null
+      ├── immutable
+      ├── key: (8)
+      ├── fd: (8)-->(20)
+      ├── select
+      │    ├── columns: col3_0:1!null col3_1:2!null col3_2:3!null col3_3:4!null col3_4:5!null col3_5:6!null col3_6:7!null col3_7:8!null col3_8:9!null col3_9:10!null col3_10:11!null col3_11:12!null col3_12:13 col3_13:14!null col3_14:15!null col3_15:16!null rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19 concat_agg:20 column21:21!null bool_and:22!null
+      │    ├── immutable
+      │    ├── key: (17)
+      │    ├── fd: ()-->(21,22), (17)-->(1-11,14-16,18-20), (4)-->(10,12,15), (1)-->(11,13), (7)-->(14), (6)-->(16)
+      │    ├── window partition=(8)
+      │    │    ├── columns: col3_0:1!null col3_1:2!null col3_2:3!null col3_3:4!null col3_4:5!null col3_5:6!null col3_6:7!null col3_7:8!null col3_8:9!null col3_9:10!null col3_10:11!null col3_11:12!null col3_12:13 col3_13:14!null col3_14:15!null col3_15:16!null rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19 concat_agg:20 column21:21!null bool_and:22
+      │    │    ├── immutable
+      │    │    ├── key: (17)
+      │    │    ├── fd: ()-->(21), (17)-->(1-11,14-16,18,19), (4)-->(10,12,15), (1)-->(11,13), (7)-->(14), (6)-->(16)
+      │    │    ├── window partition=(8)
+      │    │    │    ├── columns: col3_0:1!null col3_1:2!null col3_2:3!null col3_3:4!null col3_4:5!null col3_5:6!null col3_6:7!null col3_7:8!null col3_8:9!null col3_9:10!null col3_10:11!null col3_11:12!null col3_12:13 col3_13:14!null col3_14:15!null col3_15:16!null rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19 concat_agg:20 column21:21!null
+      │    │    │    ├── immutable
+      │    │    │    ├── key: (17)
+      │    │    │    ├── fd: ()-->(21), (17)-->(1-11,14-16,18,19), (4)-->(10,12,15), (1)-->(11,13), (7)-->(14), (6)-->(16)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column21:21!null col3_11:12!null col3_12:13 col3_0:1!null col3_1:2!null col3_2:3!null col3_3:4!null col3_4:5!null col3_5:6!null col3_6:7!null col3_7:8!null col3_8:9!null col3_9:10!null col3_10:11!null col3_13:14!null col3_14:15!null col3_15:16!null rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── key: (17)
+      │    │    │    │    ├── fd: ()-->(21), (17)-->(1-11,14-16,18,19), (4)-->(10,12,15), (1)-->(11,13), (7)-->(14), (6)-->(16)
+      │    │    │    │    ├── scan table86308
+      │    │    │    │    │    ├── columns: col3_0:1!null col3_1:2!null col3_2:3!null col3_3:4!null col3_4:5!null col3_5:6!null col3_6:7!null col3_7:8!null col3_8:9!null col3_9:10!null col3_10:11!null col3_13:14!null col3_14:15!null col3_15:16!null rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    ├── col3_9:10
+      │    │    │    │    │    │    │    └── col3_3:4 + 0.7530620098114014
+      │    │    │    │    │    │    ├── col3_10:11
+      │    │    │    │    │    │    │    └── lower(col3_0:1::STRING)
+      │    │    │    │    │    │    ├── col3_11:12
+      │    │    │    │    │    │    │    └── col3_3:4 + 0.8790965676307678
+      │    │    │    │    │    │    ├── col3_12:13
+      │    │    │    │    │    │    │    └── lower(col3_0:1::STRING)
+      │    │    │    │    │    │    ├── col3_13:14
+      │    │    │    │    │    │    │    └── lower(col3_6:7::STRING)
+      │    │    │    │    │    │    ├── col3_14:15
+      │    │    │    │    │    │    │    └── col3_3:4 + -0.27059364318847656
+      │    │    │    │    │    │    └── col3_15:16
+      │    │    │    │    │    │         └── lower(col3_5:6::STRING)
+      │    │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    │    └── table3_col3_4_col3_11_col3_1_col3_0_col3_3_key: filters
+      │    │    │    │    │    │         ├── ((col3_9:10 = 5e-324) OR (col3_1:2 = -32768)) OR (col3_15:16 = '') [outer=(2,10,16)]
+      │    │    │    │    │    │         ├── col3_3:4 > 3.4028234663852886e+38 [outer=(4), constraints=(/4: [/3.402823466385289e+38 - ]; tight)]
+      │    │    │    │    │    │         └── lower(col3_0:1::STRING) != '""' [outer=(1), immutable]
+      │    │    │    │    │    ├── key: (17)
+      │    │    │    │    │    └── fd: (17)-->(1-11,14-16,18,19), (4)-->(10,15), (1)-->(11), (7)-->(14), (6)-->(16)
+      │    │    │    │    └── projections
+      │    │    │    │         ├── false [as=column21:21]
+      │    │    │    │         ├── col3_3:4 + 0.8790965676307678 [as=col3_11:12, outer=(4), immutable]
+      │    │    │    │         └── lower(col3_0:1::STRING) [as=col3_12:13, outer=(1), immutable]
+      │    │    │    └── windows
+      │    │    │         └── concat-agg [as=concat_agg:20, frame="range from unbounded to unbounded", outer=(8)]
+      │    │    │              └── col3_7:8
+      │    │    └── windows
+      │    │         └── bool-and [as=bool_and:22, frame="range from unbounded to unbounded", outer=(21)]
+      │    │              └── column21:21
+      │    └── filters
+      │         └── bool_and:22 [outer=(22), constraints=(/22: [/true - /true]; tight), fd=()-->(22)]
+      └── aggregations
+           └── const-agg [as=concat_agg:20, outer=(20)]
+                └── concat_agg:20

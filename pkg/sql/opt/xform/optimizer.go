@@ -152,7 +152,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 	o.defaultCoster.Init(evalCtx, o.mem, costPerturbation, o.rng)
 	o.coster = &o.defaultCoster
 	if disableRuleProbability > 0 {
-		o.disableRules(disableRuleProbability)
+		o.disableRulesRandom(disableRuleProbability)
 	}
 }
 
@@ -968,8 +968,17 @@ func (a *groupStateAlloc) allocate() *groupState {
 	return state
 }
 
-// disableRules disables rules with the given probability for testing.
-func (o *Optimizer) disableRules(probability float64) {
+// SetDisabledRules notifies the Optimizer that rules have been prevented from
+// matching using NotifyOnMatchedRule. This information is used to prevent rule
+// cycles (e.g. caused by column-pruning and null-rejection). It is up to the
+// caller to set NotifyOnMatchedRule, if desired.
+func (o *Optimizer) SetDisabledRules(disabledRules RuleSet) {
+	o.disabledRules.UnionWith(disabledRules)
+	o.f.SetDisabledRules(disabledRules)
+}
+
+// disableRulesRandom disables rules with the given probability for testing.
+func (o *Optimizer) disableRulesRandom(probability float64) {
 	essentialRules := util.MakeFastIntSet(
 		// Needed to prevent constraint building from failing.
 		int(opt.NormalizeInConst),
@@ -1018,6 +1027,8 @@ func (o *Optimizer) disableRules(probability float64) {
 			o.disabledRules.Add(int(i))
 		}
 	}
+
+	o.f.SetDisabledRules(o.disabledRules)
 
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if o.disabledRules.Contains(int(ruleName)) {
