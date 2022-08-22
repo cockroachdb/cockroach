@@ -2207,22 +2207,38 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		return err
 	}
 
-	// Update the database's zone configuration.
-	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+	// We need to validate that the zone config extension won't violate the original
+	// region config before we truly write the update. Since the zone config
+	// extension can affect the final zone config of the database AND
+	// tables in it, we now follow these steps:
+	// 1. Generate and validate the newly created zone config for the database.
+	// 2. For each table under this database, validate the newly derived zone
+	// config. After the validation passed for all tables, we are now sure that the
+	// new zone config is sound and update the zone config for each table.
+	// 3. Update the zone config for the database.
+
+	// Validate if the zone config extension is compatible with the database.
+	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(updatedRegionConfig)
+	if err != nil {
+		return err
+	}
+
+	// Validate and update all tables' zone configurations.
+	if err := params.p.refreshZoneConfigsForTablesWithValidation(
 		params.ctx,
-		n.desc.ID,
-		updatedRegionConfig,
-		params.p.txn,
-		params.p.execCfg,
-		params.p.Descriptors(),
+		n.desc,
 	); err != nil {
 		return err
 	}
 
-	// Update all tables' zone configurations.
-	if err := params.p.refreshZoneConfigsForTables(
+	// Apply the zone config extension to the database.
+	if err := applyZoneConfigForMultiRegionDatabase(
 		params.ctx,
-		n.desc,
+		n.desc.ID,
+		dbZoneConfig,
+		params.p.txn,
+		params.p.execCfg,
+		params.p.Descriptors(),
 	); err != nil {
 		return err
 	}
