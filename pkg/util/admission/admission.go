@@ -129,8 +129,11 @@
 package admission
 
 import (
+	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -324,6 +327,38 @@ type storeRequester interface {
 	getRequesters() [numWorkClasses]requester
 	getStoreAdmissionStats() storeAdmissionStats
 	setStoreRequestEstimates(estimates storeRequestEstimates)
+}
+
+// KVAdmissionController provides admission control for the KV layer.
+type KVAdmissionController interface {
+	// AdmitKVWork must be called before performing KV work.
+	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
+	// populated for admission to work correctly. If err is non-nil, the
+	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
+	// called after the KV work is done executing.
+	AdmitKVWork(
+		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
+	) (handle interface{}, err error)
+	// AdmittedKVWorkDone is called after the admitted KV work is done
+	// executing.
+	AdmittedKVWorkDone(handle interface{}, writeBytes *StoreWorkDoneInfo)
+	// SetTenantWeightProvider is used to set the provider that will be
+	// periodically polled for weights. The stopper should be used to terminate
+	// the periodic polling.
+	SetTenantWeightProvider(provider TenantWeightProvider, stopper *stop.Stopper)
+	// SnapshotIngested informs admission control about a range snapshot
+	// ingestion.
+	SnapshotIngested(storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats)
+	// FollowerStoreWriteBytes informs admission control about writes
+	// replicated to a raft follower, that have not been subject to admission
+	// control.
+	FollowerStoreWriteBytes(storeID roachpb.StoreID, followerWriteBytes FollowerStoreWriteBytes)
+}
+
+// TenantWeightProvider can be periodically asked to provide the tenant
+// weights.
+type TenantWeightProvider interface {
+	GetTenantWeights() TenantWeights
 }
 
 // grantKind represents the two kind of ways we grant admission: using a slot
@@ -543,4 +578,32 @@ type storeAdmissionStats struct {
 type storeRequestEstimates struct {
 	// writeTokens is the tokens to request at admission time. Must be > 0.
 	writeTokens int64
+}
+
+// FollowerStoreWriteBytes captures stats about writes done to a store by a
+// replica that is not the leaseholder. These are used for admission control.
+type FollowerStoreWriteBytes struct {
+	NumEntries int64
+	StoreWorkDoneInfo
+}
+
+func (f *FollowerStoreWriteBytes) Merge(from FollowerStoreWriteBytes) {
+	f.NumEntries += from.NumEntries
+	f.WriteBytes += from.WriteBytes
+	f.IngestedBytes += from.IngestedBytes
+}
+
+// TenantWeights contains the various tenant weights.
+type TenantWeights struct {
+	// Node is the node level tenant ID => weight.
+	Node map[uint64]uint32
+	// Stores contains the per-store tenant weights.
+	Stores []TenantWeightsForStore
+}
+
+// TenantWeightsForStore contains the tenant weights for a store.
+type TenantWeightsForStore struct {
+	roachpb.StoreID
+	// Weights is tenant ID => weight.
+	Weights map[uint64]uint32
 }
