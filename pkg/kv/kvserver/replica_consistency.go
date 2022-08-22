@@ -70,8 +70,9 @@ var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTEN
 // replicaChecksum contains progress on a replica checksum computation.
 type replicaChecksum struct {
 	CollectChecksumResponse
-	// started is true if the checksum computation has started.
-	started bool
+	// stop terminates the checksum computation. It is not nil iff the computation
+	// has started.
+	stop func()
 	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
 	// is zero if and only if the checksum computation is in progress.
 	gcTimestamp time.Time
@@ -466,11 +467,14 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksu
 	if err != nil {
 		return replicaChecksum{}, err
 	}
-	// If the checksum started, but has not completed commit
-	// to waiting the full deadline.
+	// The task has started, so we can grab the function that allows stopping it.
+	r.mu.RLock()
+	stop := r.mu.checksums[id].stop
+	r.mu.RUnlock()
+	// If the task started, but has not completed, wait for it.
 	if !computed {
-		_, err = r.checksumWait(ctx, id, c.notify, nil)
-		if err != nil {
+		if _, err = r.checksumWait(ctx, id, c.notify, nil); err != nil {
+			stop() // cancel the task too, because its result won't be used
 			return replicaChecksum{}, err
 		}
 	}
@@ -532,7 +536,7 @@ func (r *Replica) checksumWait(
 	case <-initialWait:
 		{
 			r.mu.Lock()
-			started := r.mu.checksums[id].started
+			started := r.mu.checksums[id].stop != nil
 			r.mu.Unlock()
 			if !started {
 				return false,
@@ -750,6 +754,8 @@ func (*Replica) sha512(
 }
 
 func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.ComputeChecksum) {
+	taskCtx, taskCancel := context.WithCancel(context.Background())
+
 	stopper := r.store.Stopper()
 	now := timeutil.Now()
 	r.mu.Lock()
@@ -757,7 +763,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	if c, ok := r.mu.checksums[cc.ChecksumID]; !ok {
 		// There is no record of this ID. Make a new notification.
 		notify = make(chan struct{})
-	} else if !c.started {
+	} else if c.stop == nil {
 		// A CollectChecksumRequest is waiting on the existing notification.
 		notify = c.notify
 	} else {
@@ -768,11 +774,12 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	r.gcOldChecksumEntriesLocked(now)
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[cc.ChecksumID] = replicaChecksum{started: true, notify: notify}
+	r.mu.checksums[cc.ChecksumID] = replicaChecksum{stop: taskCancel, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 
 	if cc.Version != batcheval.ReplicaChecksumVersion {
+		taskCancel()
 		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
 		log.Infof(ctx, "incompatible ComputeChecksum versions (requested: %d, have: %d)",
 			cc.Version, batcheval.ReplicaChecksumVersion)
@@ -811,11 +818,13 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 		// they don't count towards the semaphore limit.
 		sem = nil
 	}
-	if err := stopper.RunAsyncTaskEx(r.AnnotateCtx(context.Background()), stop.TaskOpts{
+	// Note: taskCtx can be cancelled by a getChecksum handler.
+	if err := stopper.RunAsyncTaskEx(r.AnnotateCtx(taskCtx), stop.TaskOpts{
 		TaskName:   taskName,
 		Sem:        sem,
 		WaitForSem: false,
 	}, func(ctx context.Context) {
+		defer taskCancel()
 		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
 			func(ctx context.Context) error {
 				defer snap.Close()
@@ -880,6 +889,7 @@ A file preventing this node from restarting was placed at:
 		}
 
 	}); err != nil {
+		taskCancel()
 		defer snap.Close()
 		log.Errorf(ctx, "could not run async checksum computation (ID = %s): %v", cc.ChecksumID, err)
 		// Set checksum to nil.
