@@ -29,12 +29,14 @@ type ColSet struct {
 const offset = 1
 
 // setVal returns the value to store in the internal set for the given ColumnID.
+//gcassert:inline
 func setVal(col ColumnID) int {
 	return int(col - offset)
 }
 
 // retVal returns the ColumnID to return for the given value in the internal
 // set.
+//gcassert:inline
 func retVal(i int) ColumnID {
 	return ColumnID(i + offset)
 }
