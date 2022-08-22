@@ -53,10 +53,10 @@ func TestReplicaChecksumVersion(t *testing.T) {
 		} else {
 			cc.Version = 1
 		}
-		tc.repl.computeChecksumPostApply(ctx, cc)
+		go tc.repl.computeChecksumPostApply(ctx, cc)
 		rc, err := tc.repl.getChecksum(ctx, cc.ChecksumID)
 		if !matchingVersion {
-			if !testutils.IsError(err, "no checksum found") {
+			if !testutils.IsError(err, "context deadline exceeded") {
 				t.Fatal(err)
 			}
 			require.Nil(t, rc.Checksum)
@@ -83,47 +83,35 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	close(notify)
 
 	// Simple condition, the checksum is notified, but not computed.
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: notify}
-	tc.repl.mu.Unlock()
-	rc, err := tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "no checksum found") {
+	rc := tc.repl.getReplicaChecksum(id)
+	close(rc.ready)
+	rc.complete(CollectChecksumResponse{})
+	resp, err := tc.repl.getChecksum(ctx, id)
+	if !testutils.IsError(err, "checksum computation failed to start") {
 		t.Fatal(err)
 	}
-	require.Nil(t, rc.Checksum)
+	require.Nil(t, resp.Checksum)
+
 	// Next condition, the initial wait expires and checksum is not started,
 	// this will take 10ms.
 	id = uuid.FastMakeV4()
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	tc.repl.mu.Unlock()
-	rc, err = tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "checksum computation did not start") {
+	rc = tc.repl.getReplicaChecksum(id)
+	resp, err = tc.repl.getChecksum(ctx, id)
+	if !testutils.IsError(err, "joining the computation.* timed out") {
 		t.Fatal(err)
 	}
-	require.Nil(t, rc.Checksum)
+	require.Nil(t, resp.Checksum)
+
 	// Next condition, initial wait expired and we found the started flag,
 	// so next step is for context deadline.
 	id = uuid.FastMakeV4()
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{stop: func() {}, notify: make(chan struct{})}
-	tc.repl.mu.Unlock()
-	rc, err = tc.repl.getChecksum(ctx, id)
+	rc = tc.repl.getReplicaChecksum(id)
+	go require.NoError(t, rc.start(ctx, func() {}))
+	resp, err = tc.repl.getChecksum(ctx, id)
 	if !testutils.IsError(err, "context deadline exceeded") {
 		t.Fatal(err)
 	}
-	require.Nil(t, rc.Checksum)
-
-	// Need to reset the context, since we deadlined it above.
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	// Next condition, node should quiesce.
-	tc.repl.store.Stopper().Quiesce(ctx)
-	rc, err = tc.repl.getChecksum(ctx, uuid.FastMakeV4())
-	if !testutils.IsError(err, "store quiescing") {
-		t.Fatal(err)
-	}
-	require.Nil(t, rc.Checksum)
+	require.Nil(t, resp.Checksum)
 }
 
 // TestReplicaChecksumSHA512 checks that a given dataset produces the expected
