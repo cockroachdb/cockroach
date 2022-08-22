@@ -164,6 +164,15 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedCatchupDuration = metric.Metadata{
+		Name: "distsender.rangefeed.catchup_duration",
+		Help: `Catchup scan duration
+
+This is a histogram of the catchup scan duration
+`,
+		Measurement: "Nanosecond",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -216,22 +225,23 @@ func max(a, b int64) int64 {
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
-	BatchCount              *metric.Counter
-	PartialBatchCount       *metric.Counter
-	AsyncSentCount          *metric.Counter
-	AsyncThrottledCount     *metric.Counter
-	SentCount               *metric.Counter
-	LocalSentCount          *metric.Counter
-	NextReplicaErrCount     *metric.Counter
-	NotLeaseHolderErrCount  *metric.Counter
-	InLeaseTransferBackoffs *metric.Counter
-	RangeLookups            *metric.Counter
-	SlowRPCs                *metric.Gauge
-	RangefeedRanges         *metric.Gauge
-	RangefeedCatchupRanges  *metric.Gauge
-	RangefeedErrorCatchup   *metric.Counter
-	MethodCounts            [roachpb.NumMethods]*metric.Counter
-	ErrCounts               [roachpb.NumErrors]*metric.Counter
+	BatchCount               *metric.Counter
+	PartialBatchCount        *metric.Counter
+	AsyncSentCount           *metric.Counter
+	AsyncThrottledCount      *metric.Counter
+	SentCount                *metric.Counter
+	LocalSentCount           *metric.Counter
+	NextReplicaErrCount      *metric.Counter
+	NotLeaseHolderErrCount   *metric.Counter
+	InLeaseTransferBackoffs  *metric.Counter
+	RangeLookups             *metric.Counter
+	SlowRPCs                 *metric.Gauge
+	RangefeedRanges          *metric.Gauge
+	RangefeedCatchupRanges   *metric.Gauge
+	RangefeedCatchupDuration *metric.Histogram
+	RangefeedErrorCatchup    *metric.Counter
+	MethodCounts             [roachpb.NumMethods]*metric.Counter
+	ErrCounts                [roachpb.NumErrors]*metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -249,7 +259,9 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
 		RangefeedRanges:         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
 		RangefeedCatchupRanges:  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedErrorCatchup:   metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedCatchupDuration: metric.NewHistogram(metaDistSenderRangefeedCatchupDuration,
+			base.DefaultHistogramWindowInterval(), (30 * time.Second).Nanoseconds(), 1),
+		RangefeedErrorCatchup: metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
 	}
 	for i := range m.MethodCounts {
 		method := roachpb.Method(i).String()

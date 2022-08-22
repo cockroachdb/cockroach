@@ -291,6 +291,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Catchup Scans",
+				Metrics: []string{
+					"distsender.rangefeed.catchup_duration",
+				},
+			},
+			{
 				Title: "RPCs",
 				Metrics: []string{
 					"distsender.rpc.sent.local",
