@@ -1290,6 +1290,9 @@ func (s *SQLServer) preStart(
 		s.execCfg.DB,
 		s.execCfg.Codec,
 		&migrationsExecutor,
+		// TODO(janexing): should we create the migration manager's own collection
+		// factory, or it's ok to reuse the one from s.execCfg?
+		s.execCfg.CollectionFactory,
 		s.execCfg.Clock,
 		mmKnobs,
 		s.execCfg.NodeInfo.NodeID.SQLInstanceID().String(),

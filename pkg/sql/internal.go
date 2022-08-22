@@ -884,7 +884,7 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
-	if tree.CanModifySchema(parsed.AST) {
+	if tree.CanModifySchema(parsed.AST) && txn != nil {
 		if ie.extraTxnState == nil || ie.extraTxnState.descCollection == nil {
 			return nil, errors.New("DDL statement is disallowed if internal executor is not bound with txn metadata")
 		}

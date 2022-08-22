@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -31,6 +32,7 @@ type Controller struct {
 	db *kv.DB
 	ie sqlutil.InternalExecutor
 	st *cluster.Settings
+	cf collectionfactory.CollectionFactory
 }
 
 // NewController returns a new instance of sqlstats.Controller.
@@ -39,11 +41,13 @@ func NewController(
 	status serverpb.SQLStatusServer,
 	db *kv.DB,
 	ie sqlutil.InternalExecutor,
+	cf collectionfactory.CollectionFactory,
 ) *Controller {
 	return &Controller{
 		Controller: sslocal.NewController(sqlStats.SQLStats, status),
 		db:         db,
 		ie:         ie,
+		cf:         cf,
 		st:         sqlStats.cfg.Settings,
 	}
 }

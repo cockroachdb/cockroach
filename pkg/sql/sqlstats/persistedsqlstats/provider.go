@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -38,6 +39,7 @@ import (
 type Config struct {
 	Settings                *cluster.Settings
 	InternalExecutor        sqlutil.InternalExecutor
+	CollectionFactory       collectionfactory.CollectionFactory
 	InternalExecutorMonitor *mon.BytesMonitor
 	KvDB                    *kv.DB
 	SQLIDContainer          *base.SQLIDContainer
@@ -108,7 +110,7 @@ func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 
 // GetController returns the controller of the PersistedSQLStats.
 func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
-	return NewController(s, server, s.cfg.KvDB, s.cfg.InternalExecutor)
+	return NewController(s, server, s.cfg.KvDB, s.cfg.InternalExecutor, s.cfg.CollectionFactory)
 }
 
 func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {

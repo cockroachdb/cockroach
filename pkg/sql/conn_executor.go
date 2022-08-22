@@ -414,6 +414,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
 		Settings:                s.cfg.Settings,
 		InternalExecutor:        &sqlStatsInternalExecutor,
+		CollectionFactory:       s.cfg.CollectionFactory,
 		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
 		KvDB:                    cfg.DB,
 		SQLIDContainer:          cfg.NodeInfo.NodeID,

@@ -25,9 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -371,19 +375,37 @@ func init() {
 }
 
 type runner struct {
-	db          DB
-	codec       keys.SQLCodec
-	sqlExecutor *sql.InternalExecutor
-	settings    *cluster.Settings
+	db                DB
+	codec             keys.SQLCodec
+	sqlExecutor       *sql.InternalExecutor
+	collectionFactory *descs.CollectionFactory
+	settings          *cluster.Settings
 }
 
 func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
-	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.RootUserName(),
+	sd := &sessiondata.SessionData{
+		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+			// Migrations need an executor with query distribution turned off. This is
+			// because the node crashes if upgrades fail to execute, and query
+			// distribution introduces more moving parts. Local execution is more
+			// robust; for example, the DistSender has retries if it can't connect to
+			// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
+			// particularly fragile immediately after a node is started (i.e. the
+			// present situation).
+			DistSQLMode: sessiondatapb.DistSQLOff,
 		},
-		stmt, qargs...)
-	return err
+	}
+
+	return r.collectionFactory.TxnWithExecutor(ctx, r.db.(dbAdapter).DB, sd, func(
+		ctx context.Context, txn *kv.Txn, descsCol collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
+	) error {
+		_, err := ie.ExecEx(ctx, opName, txn, /* txn */
+			sessiondata.InternalExecutorOverride{
+				User: username.RootUserName(),
+			},
+			stmt, qargs...)
+		return err
+	})
 }
 
 func (r runner) execAsRootWithRetry(
@@ -428,14 +450,15 @@ type DB interface {
 // Manager encapsulates the necessary functionality for handling migrations
 // of data in the cluster.
 type Manager struct {
-	stopper      *stop.Stopper
-	leaseManager leaseManager
-	db           DB
-	codec        keys.SQLCodec
-	sqlExecutor  *sql.InternalExecutor
-	testingKnobs MigrationManagerTestingKnobs
-	settings     *cluster.Settings
-	jobRegistry  *jobs.Registry
+	stopper           *stop.Stopper
+	leaseManager      leaseManager
+	db                DB
+	codec             keys.SQLCodec
+	sqlExecutor       *sql.InternalExecutor
+	collectionFactory *descs.CollectionFactory
+	testingKnobs      MigrationManagerTestingKnobs
+	settings          *cluster.Settings
+	jobRegistry       *jobs.Registry
 }
 
 // NewManager initializes and returns a new Manager object.
@@ -444,6 +467,7 @@ func NewManager(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	executor *sql.InternalExecutor,
+	collectionFactory *descs.CollectionFactory,
 	clock *hlc.Clock,
 	testingKnobs MigrationManagerTestingKnobs,
 	clientID string,
@@ -455,14 +479,15 @@ func NewManager(
 		LeaseDuration: leaseDuration,
 	}
 	return &Manager{
-		stopper:      stopper,
-		leaseManager: leasemanager.New(db, clock, opts),
-		db:           dbAdapter{DB: db},
-		codec:        codec,
-		sqlExecutor:  executor,
-		testingKnobs: testingKnobs,
-		settings:     settings,
-		jobRegistry:  registry,
+		stopper:           stopper,
+		leaseManager:      leasemanager.New(db, clock, opts),
+		db:                dbAdapter{DB: db},
+		codec:             codec,
+		sqlExecutor:       executor,
+		collectionFactory: collectionFactory,
+		testingKnobs:      testingKnobs,
+		settings:          settings,
+		jobRegistry:       registry,
 	}
 }
 
@@ -577,10 +602,11 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 
 	startTime := timeutil.Now().String()
 	r := runner{
-		db:          m.db,
-		codec:       m.codec,
-		sqlExecutor: m.sqlExecutor,
-		settings:    m.settings,
+		db:                m.db,
+		codec:             m.codec,
+		sqlExecutor:       m.sqlExecutor,
+		collectionFactory: m.collectionFactory,
+		settings:          m.settings,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		if !m.shouldRunMigration(migration, bootstrapVersion) {
