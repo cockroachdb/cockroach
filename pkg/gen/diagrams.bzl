@@ -256,6 +256,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:truncate.html",
   "//docs/generated/sql/bnf:unique_column_level.html",
   "//docs/generated/sql/bnf:unique_table_level.html",
+  "//docs/generated/sql/bnf:unlisten.html",
   "//docs/generated/sql/bnf:unsplit_index_at.html",
   "//docs/generated/sql/bnf:unsplit_table_at.html",
   "//docs/generated/sql/bnf:update.html",

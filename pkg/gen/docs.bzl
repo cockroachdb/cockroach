@@ -271,6 +271,7 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:truncate_stmt.bnf",
   "//docs/generated/sql/bnf:unique_column_level.bnf",
   "//docs/generated/sql/bnf:unique_table_level.bnf",
+  "//docs/generated/sql/bnf:unlisten_stmt.bnf",
   "//docs/generated/sql/bnf:unsplit_index_at.bnf",
   "//docs/generated/sql/bnf:unsplit_table_at.bnf",
   "//docs/generated/sql/bnf:update_stmt.bnf",
