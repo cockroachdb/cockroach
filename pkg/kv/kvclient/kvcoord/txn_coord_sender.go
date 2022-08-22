@@ -698,8 +698,12 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnError:
 		return tc.mu.storedErr
 	case txnFinalized:
+		summary := "nil batch"
+		if ba != nil {
+			summary = ba.Summary()
+		}
 		msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
-			"Trying to execute: %s", ba.Summary())
+			"Trying to execute: %s", summary)
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
 		reason := roachpb.TransactionStatusError_REASON_UNKNOWN
@@ -1209,6 +1213,7 @@ func (tc *TxnCoordSender) checkTxnStatusLocked(ctx context.Context, opt kv.TxnSt
 		// Nothing to check.
 	case kv.OnlyPending:
 		// Check the coordinator's proto status.
+		// todo fix
 		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
 		if rejectErr != nil {
 			return rejectErr.GoError()
