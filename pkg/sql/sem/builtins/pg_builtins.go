@@ -273,7 +273,7 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 			}
 			return r[0], nil
 		},
-		Info:       notUsableInfo,
+		Info:       "Returns the CREATE statement for an existing view.",
 		Volatility: volatility.Stable,
 	}
 }
