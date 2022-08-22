@@ -1951,6 +1951,68 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 	repl.AssertState(ctx, store.Engine())
 }
 
+func TestStoreSplitGCHint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue: true,
+				DisableSplitQueue: true,
+			},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	leftKey := roachpb.Key("a")
+	splitKey := roachpb.Key("b")
+	rightKey := roachpb.Key("c")
+	content := []byte("test")
+
+	pArgs := putArgs(leftKey, content)
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	pArgs = putArgs(rightKey, content)
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	r, err := s.LookupRange(splitKey)
+	require.NoError(t, err, "failed to lookup range")
+
+	repl := store.LookupReplica(roachpb.RKey(splitKey))
+	gcHint := repl.GetGCHint()
+	require.True(t, gcHint.IsEmpty(), "GC hint is not empty by default")
+
+	drArgs := &roachpb.DeleteRangeRequest{
+		UpdateRangeDeleteGCHint: true,
+		UseRangeTombstone:       true,
+		RequestHeader: roachpb.RequestHeader{
+			Key:    r.StartKey.AsRawKey(),
+			EndKey: r.EndKey.AsRawKey(),
+		},
+	}
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), drArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	args := adminSplitArgs(splitKey)
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	gcHint = repl.GetGCHint()
+	require.False(t, gcHint.IsEmpty(), "GC hint is empty after range delete")
+
+	repl.AssertState(ctx, store.Engine())
+}
+
 // TestStoreRangeSplitRaceUninitializedRHS reproduces #7600 (before it was
 // fixed). While splits are happening, we simulate incoming messages for the
 // right-hand side to trigger a race between the creation of the proper replica
