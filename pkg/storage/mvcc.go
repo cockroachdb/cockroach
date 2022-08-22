@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissionhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -5825,6 +5826,7 @@ func MVCCExportToSST(
 		return maxSize
 	}
 
+	admissionHandle := kvadmissionhandle.HandleFromContext(ctx)
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -5842,6 +5844,9 @@ func MVCCExportToSST(
 			curKey = append(curKey[:0], unsafeKey.Key...)
 		}
 
+		// TODO(irfansharif): Remove this time-based resource limiter once
+		// enabling elastic CPU limiting by default. There needs to be a
+		// compelling reason to need two mechanisms.
 		if opts.ResourceLimiter != nil {
 			// Don't check resources on first iteration to ensure we can make some progress regardless
 			// of starvation. Otherwise operations could spin indefinitely.
@@ -5867,6 +5872,16 @@ func MVCCExportToSST(
 					break
 				}
 			}
+		}
+
+		// Check if we're over our allotted CPU time + on a key boundary (we
+		// prefer callers being able to use SSTs directly). Going over limit is
+		// accounted for in admission control by penalizing the subsequent
+		// request, so doing it slightly is find.
+		if admissionHandle.OverElasticCPULimit() && isNewKey {
+			resumeKey = unsafeKey.Clone()
+			resumeKey.Timestamp = hlc.Timestamp{}
+			break
 		}
 
 		// When we encounter an MVCC range tombstone stack, we buffer it in

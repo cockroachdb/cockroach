@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissionhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
@@ -1088,6 +1089,11 @@ type StoreConfig struct {
 
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController KVAdmissionController
+
+	// SchedulerLatencyListener listens in on scheduling latencies, information
+	// that's then used to adjust various admission control components (like how
+	// many CPU tokens are granted to elastic work like backups).
+	SchedulerLatencyListener admission.SchedulerLatencyListener
 
 	// SystemConfigProvider is used to drive replication decision-making in the
 	// mixed-version state, before the span configuration infrastructure has been
@@ -3729,10 +3735,10 @@ type KVAdmissionController interface {
 	// called after the KV work is done executing.
 	AdmitKVWork(
 		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-	) (handle interface{}, err error)
+	) (kvadmissionhandle.Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(handle interface{}, writeBytes *StoreWriteBytes)
+	AdmittedKVWorkDone(kvadmissionhandle.Handle, *StoreWriteBytes)
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
@@ -3769,100 +3775,122 @@ type TenantWeightsForStore struct {
 
 // KVAdmissionControllerImpl implements KVAdmissionController interface.
 type KVAdmissionControllerImpl struct {
-	// Admission control queues and coordinators. Both should be nil or non-nil.
-	kvAdmissionQ     *admission.WorkQueue
-	storeGrantCoords *admission.StoreGrantCoordinators
-	settings         *cluster.Settings
-	every            log.EveryN
+	// Admission control queues and coordinators. All three should be nil or
+	// non-nil.
+	kvAdmissionQ        *admission.WorkQueue
+	storeGrantCoords    *admission.StoreGrantCoordinators
+	elasticCPUWorkQueue *admission.ElasticCPUWorkQueue
+	settings            *cluster.Settings
+	every               log.EveryN
 }
 
 var _ KVAdmissionController = &KVAdmissionControllerImpl{}
 
-type admissionHandle struct {
-	tenantID                           roachpb.TenantID
-	callAdmittedWorkDoneOnKVAdmissionQ bool
-	storeAdmissionQ                    *admission.StoreWorkQueue
-	storeWorkHandle                    admission.StoreWorkHandle
-}
-
-// MakeKVAdmissionController returns a KVAdmissionController. Both parameters
-// must together either be nil or non-nil.
+// MakeKVAdmissionController returns a KVAdmissionController. All three
+// parameters must together be nil or non-nil.
 func MakeKVAdmissionController(
 	kvAdmissionQ *admission.WorkQueue,
+	elasticCPUWorkQueue *admission.ElasticCPUWorkQueue,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	settings *cluster.Settings,
 ) KVAdmissionController {
 	return &KVAdmissionControllerImpl{
-		kvAdmissionQ:     kvAdmissionQ,
-		storeGrantCoords: storeGrantCoords,
-		settings:         settings,
-		every:            log.Every(10 * time.Second),
+		kvAdmissionQ:        kvAdmissionQ,
+		storeGrantCoords:    storeGrantCoords,
+		elasticCPUWorkQueue: elasticCPUWorkQueue,
+		settings:            settings,
+		every:               log.Every(10 * time.Second),
 	}
 }
 
 // AdmitKVWork implements the KVAdmissionController interface.
 func (n *KVAdmissionControllerImpl) AdmitKVWork(
 	ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-) (handle interface{}, err error) {
-	ah := admissionHandle{tenantID: tenantID}
-	if n.kvAdmissionQ != nil {
-		bypassAdmission := ba.IsAdmin()
-		source := ba.AdmissionHeader.Source
-		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-			// Request is from a SQL node.
-			bypassAdmission = false
-			source = roachpb.AdmissionHeader_FROM_SQL
-		}
-		if source == roachpb.AdmissionHeader_OTHER {
-			bypassAdmission = true
-		}
-		createTime := ba.AdmissionHeader.CreateTime
-		if !bypassAdmission && createTime == 0 {
-			// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-			// of zero CreateTime needs to be revisited. It should use high priority.
-			createTime = timeutil.Now().UnixNano()
-		}
-		admissionInfo := admission.WorkInfo{
-			TenantID:        tenantID,
-			Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-			CreateTime:      createTime,
-			BypassAdmission: bypassAdmission,
-		}
-		var err error
-		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
-		// it would bypass admission, it would consume a slot. When writes are
-		// throttled, we start generating more txn heartbeats, which then consume
-		// all the slots, causing no useful work to happen. We do want useful work
-		// to continue even when throttling since there are often significant
-		// number of tokens available.
-		if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-			ah.storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
-		}
-		admissionEnabled := true
-		if ah.storeAdmissionQ != nil {
-			ah.storeWorkHandle, err = ah.storeAdmissionQ.Admit(
+) (handle kvadmissionhandle.Handle, retErr error) {
+	ah := kvadmissionhandle.Handle{TenantID: tenantID}
+	if n.kvAdmissionQ == nil {
+		return ah, nil
+	}
+
+	bypassAdmission := ba.IsAdmin()
+	source := ba.AdmissionHeader.Source
+	if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+		// Request is from a SQL node.
+		bypassAdmission = false
+		source = roachpb.AdmissionHeader_FROM_SQL
+	}
+	if source == roachpb.AdmissionHeader_OTHER {
+		bypassAdmission = true
+	}
+	createTime := ba.AdmissionHeader.CreateTime
+	if !bypassAdmission && createTime == 0 {
+		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+		// of zero CreateTime needs to be revisited. It should use high priority.
+		createTime = timeutil.Now().UnixNano()
+	}
+	admissionInfo := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+		CreateTime:      createTime,
+		BypassAdmission: bypassAdmission,
+	}
+
+	admissionEnabled := true
+	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
+	// it would bypass admission, it would consume a slot. When writes are
+	// throttled, we start generating more txn heartbeats, which then consume
+	// all the slots, causing no useful work to happen. We do want useful work
+	// to continue even when throttling since there are often significant
+	// number of tokens available.
+	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
+		storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+		if storeAdmissionQ != nil {
+			storeWorkHandle, err := storeAdmissionQ.Admit(
 				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
 			if err != nil {
-				return admissionHandle{}, err
+				return kvadmissionhandle.Handle{}, err
 			}
-			if !ah.storeWorkHandle.AdmissionEnabled() {
-				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
-				// on it. Additionally, the code below will not call
-				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
-				// stay false.
-				ah.storeAdmissionQ = nil
-				admissionEnabled = false
+			admissionEnabled = storeWorkHandle.AdmissionEnabled()
+			if admissionEnabled {
+				defer func() {
+					if retErr != nil {
+						// No bytes were written.
+						_ = storeAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, admission.StoreWorkDoneInfo{})
+					}
+				}()
+				ah.StoreAdmissionQ, ah.StoreWorkHandle = storeAdmissionQ, storeWorkHandle
 			}
 		}
-		if admissionEnabled {
-			ah.callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
+	}
+	if admissionEnabled {
+		// TODO(irfansharif): Make this into a cluster setting and run
+		// experiments with different values.
+		const cpuSliceForExports = 100 * time.Millisecond
+
+		if ba.IsSingleExportRequest() {
+			// Backups generate batches with single export requests, which we
+			// admit through the elastic CPU work queue. We grant this
+			// CPU-intensive work a set amount of CPU time and expect it to
+			// terminate (cooperatively) once it exceeds its grant. The amount
+			// disbursed is 100ms, which we've experimentally found to be long
+			// enough to do enough useful work per-request while not causing too
+			// much in the way of scheduling delays on individual cores. Within
+			// admission control we have machinery that observes scheduling
+			// latencies periodically and reduces the total amount of CPU time
+			// handed out through this mechanism, as a way to provide latency
+			// isolation to non-elastic ("latency sensitive") work running on
+			// the same machine.
+			elasticWorkHandle, err := n.elasticCPUWorkQueue.Admit(ctx, cpuSliceForExports, admissionInfo)
 			if err != nil {
-				if ah.storeAdmissionQ != nil {
-					// No bytes were written.
-					_ = ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
-				}
-				return admissionHandle{}, err
+				return kvadmissionhandle.Handle{}, err
 			}
+			ah.ElasticCPUWorkHandle = elasticWorkHandle
+		} else {
+			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			if err != nil {
+				return kvadmissionhandle.Handle{}, err
+			}
+			ah.CallAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
 		}
 	}
 	return ah, nil
@@ -3870,18 +3898,18 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 
 // AdmittedKVWorkDone implements the KVAdmissionController interface.
 func (n *KVAdmissionControllerImpl) AdmittedKVWorkDone(
-	handle interface{}, writeBytes *StoreWriteBytes,
+	ah kvadmissionhandle.Handle, writeBytes *StoreWriteBytes,
 ) {
-	ah := handle.(admissionHandle)
-	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
+	n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
+	if ah.CallAdmittedWorkDoneOnKVAdmissionQ {
+		n.kvAdmissionQ.AdmittedWorkDone(ah.TenantID)
 	}
-	if ah.storeAdmissionQ != nil {
+	if ah.StoreAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
 		if writeBytes != nil {
 			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
 		}
-		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
+		err := ah.StoreAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
 			if util.RaceEnabled {
@@ -3898,6 +3926,7 @@ func (n *KVAdmissionControllerImpl) AdmittedKVWorkDone(
 func (n *KVAdmissionControllerImpl) SetTenantWeightProvider(
 	provider TenantWeightProvider, stopper *stop.Stopper,
 ) {
+	// TODO(irfansharif): Use a stopper here instead.
 	go func() {
 		const weightCalculationPeriod = 10 * time.Minute
 		ticker := time.NewTicker(weightCalculationPeriod)
@@ -3918,6 +3947,8 @@ func (n *KVAdmissionControllerImpl) SetTenantWeightProvider(
 					weights.Node = nil
 				}
 				n.kvAdmissionQ.SetTenantWeights(weights.Node)
+				n.elasticCPUWorkQueue.SetTenantWeights(weights.Node)
+
 				for _, storeWeights := range weights.Stores {
 					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
 					if q != nil {
