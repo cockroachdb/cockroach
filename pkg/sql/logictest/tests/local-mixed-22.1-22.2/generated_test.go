@@ -72,6 +72,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_new_schema_changer_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "new_schema_changer_mixed")
+}
+
 func TestLogic_system_privileges_mixed(
 	t *testing.T,
 ) {
