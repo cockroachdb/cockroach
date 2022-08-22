@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -772,4 +773,29 @@ func (l Locality) AddTier(tier Tier) Locality {
 		return Locality{Tiers: tiers}
 	}
 	return Locality{Tiers: []Tier{tier}}
+}
+
+// IsEmpty returns true if hint contains no data.
+func (h *GCRangeHint) IsEmpty() bool {
+	return h.EstimatedRangeRemovalTime.IsEmpty()
+}
+
+// Merge combines GC hint information about merging replicas and updates
+// LHS receiver part.
+// returns true if receiver state was changed.
+func (h *GCRangeHint) Merge(rhs *GCRangeHint) bool {
+	leftEmpty := h.EstimatedRangeRemovalTime.IsEmpty()
+	rightEmpty := rhs.EstimatedRangeRemovalTime.IsEmpty()
+	if leftEmpty || rightEmpty {
+		// If one of sides doesn't have hint we probably can't do anything sensible.
+		h.EstimatedRangeRemovalTime = hlc.Timestamp{}
+		return !leftEmpty
+	}
+	if h.EstimatedRangeRemovalTime.Less(rhs.EstimatedRangeRemovalTime) {
+		// If right hand side of merge is higher, then use its timestamp and signal
+		// the change to caller.
+		h.EstimatedRangeRemovalTime = rhs.EstimatedRangeRemovalTime
+		return true
+	}
+	return false
 }

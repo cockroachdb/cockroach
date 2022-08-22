@@ -451,3 +451,12 @@ message Version {
   // internal version set to 0.
   optional int32 internal = 4 [(gogoproto.nullable) = false];
 }
+
+// GCRangeHint contains information that MVCC GC could use to optimize data deletion.
+message GCRangeHint {
+  option (gogoproto.equal) = true;
+
+  // estimated_range_removal_time indicates projected time when all data in the range
+  // would become garbage. If empty, no such estimate is known.
+  optional util.hlc.Timestamp estimated_range_removal_time = 2 [(gogoproto.nullable) = false];
+}
