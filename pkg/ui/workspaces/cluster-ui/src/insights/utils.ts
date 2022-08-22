@@ -29,8 +29,13 @@ export const getInsights = (
 ): Insight[] => {
   const insights: Insight[] = [];
   InsightTypes.forEach(insight => {
-    if (insight(eventState.execType).name == eventState.insightName) {
-      insights.push(insight(eventState.execType));
+    if (
+      insight(eventState.execType, eventState.contentionThreshold).name ==
+      eventState.insightName
+    ) {
+      insights.push(
+        insight(eventState.execType, eventState.contentionThreshold),
+      );
     }
   });
   return insights;
@@ -51,12 +56,14 @@ export function getInsightsFromState(
     } else {
       insightEvents.push({
         executionID: e.executionID,
+        fingerprintID: e.fingerprintID,
         queries: e.queries,
         insights: insightsForEvent,
         startTime: e.startTime,
         elapsedTime: e.elapsedTime,
         application: e.application,
         execType: InsightExecEnum.TRANSACTION,
+        contentionThreshold: e.contentionThreshold,
       });
     }
   });
