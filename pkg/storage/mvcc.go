@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -5825,6 +5826,7 @@ func MVCCExportToSST(
 		return maxSize
 	}
 
+	admissionHandle := admission.HandleFromContext(ctx)
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -5867,6 +5869,11 @@ func MVCCExportToSST(
 					break
 				}
 			}
+		}
+		if admissionHandle.OverElasticCPULimit() && isNewKey {
+			resumeKey = unsafeKey.Clone()
+			resumeKey.Timestamp = hlc.Timestamp{}
+			break
 		}
 
 		// When we encounter an MVCC range tombstone stack, we buffer it in

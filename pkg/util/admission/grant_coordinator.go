@@ -26,18 +26,20 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// GrantCoordinators holds a regular GrantCoordinator for all work, and a
-// StoreGrantCoordinators that allows for per-store GrantCoordinators for
-// KVWork that involves writes.
+// GrantCoordinators holds {regular,elastic} GrantCoordinators for
+// {regular,elastic} work, and a StoreGrantCoordinators that allows for
+// per-store GrantCoordinators for KVWork that involves writes.
 type GrantCoordinators struct {
-	Stores  *StoreGrantCoordinators
 	Regular *GrantCoordinator
+	Elastic *ElasticCPUGrantCoordinator
+	Stores  *StoreGrantCoordinators
 }
 
 // Close implements the stop.Closer interface.
 func (gcs GrantCoordinators) Close() {
 	gcs.Stores.close()
 	gcs.Regular.Close()
+	gcs.Elastic.close()
 }
 
 // StoreGrantCoordinators is a container for GrantCoordinators for each store,
@@ -166,6 +168,9 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 		},
 	}
 
+	// kvStoreTokenGranter itself has two child granters, and there are two
+	// requesters up top. Sounds like slotGranter needs to be a child granter,
+	// handling the regular class, and another thing handling the elastic class.
 	storeReq := sgc.makeStoreRequesterFunc(sgc.ambientCtx, granters, sgc.settings, opts)
 	coord.queues[KVWork] = storeReq
 	requesters := storeReq.getRequesters()
@@ -211,11 +216,12 @@ func (sgc *StoreGrantCoordinators) close() {
 
 // GrantCoordinator is the top-level object that coordinates grants across
 // different WorkKinds (for more context see the comment in admission.go, and
-// the comment where WorkKind is declared). Typically there will one
-// GrantCoordinator in a node for CPU intensive work, and for nodes that also
-// have the KV layer, one GrantCoordinator per store (these are managed by
-// StoreGrantCoordinators) for KVWork that uses that store. See the
-// NewGrantCoordinators and NewGrantCoordinatorSQL functions.
+// the comment where WorkKind is declared). Typically there are two
+// GrantCoordinators in a node for CPU intensive {regular,elastic} work
+// respectively, and for nodes that also have the KV layer, one GrantCoordinator
+// per store (these are managed by StoreGrantCoordinators) for KVWork that uses
+// that store. See the NewGrantCoordinators and NewGrantCoordinatorSQL
+// functions.
 type GrantCoordinator struct {
 	ambientCtx log.AmbientContext
 
@@ -338,33 +344,50 @@ type makeStoreRequesterFunc func(
 	settings *cluster.Settings, opts workQueueOptions) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
-// regular cluster node. Caller is responsible for hooking up
-// GrantCoordinators.Regular to receive calls to CPULoad, and to set a
-// PebbleMetricsProvider on GrantCoordinators.Stores. Every request must pass
-// through GrantCoordinators.Regular, while only subsets of requests pass
-// through each store's GrantCoordinator. We arrange these such that requests
-// (that need to) first pass through a store's GrantCoordinator and then
-// through the regular one. This ensures that we are not using slots in the
-// latter on requests that are blocked elsewhere for admission. Additionally,
-// we don't want the CPU scheduler signal that is implicitly used in grant
-// chains to delay admission through the per store GrantCoordinators since
-// they are not trying to control CPU usage, so we turn off grant chaining in
-// those coordinators.
+// regular cluster node. Caller is responsible for:
+// - hooking up GrantCoordinators.Regular to receive calls to CPULoad, and
+// - to set a PebbleMetricsProvider on GrantCoordinators.Stores
+//
+// Regular and elastic requests pass through GrantCoordinators.{Regular,Elastic}
+// respectively, and a subset of requests pass through each store's
+// GrantCoordinator. We arrange these such that requests (that need to) first
+// pass through a store's GrantCoordinator and then through the
+// {regular,elastic} one. This ensures that we are not using slots/elastic CPU
+// tokens in the latter level on requests that are blocked elsewhere for
+// admission. Additionally, we don't want the CPU scheduler signal that is
+// implicitly used in grant chains to delay admission through the per store
+// GrantCoordinators since they are not trying to control CPU usage, so we turn
+// off grant chaining in those coordinators.
 func NewGrantCoordinators(
 	ambientCtx log.AmbientContext, opts Options,
 ) (GrantCoordinators, []metric.Struct) {
 	st := opts.Settings
 
 	metrics := makeGrantCoordinatorMetrics()
+	metricStructs := append([]metric.Struct(nil), metrics)
+
 	regularCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics)
 	storeCoordinators := makeStoreGrantCoordinators(opts, st, metrics)
-
-	metricStructs := append([]metric.Struct(nil), metrics)
 	metricStructs = appendMetricStructsForQueues(metricStructs, regularCoord)
 	metricStructs = append(metricStructs, storeCoordinators.workQueueMetrics)
+
+	elasticCPUGranterMetrics := makeElasticCPUGranterMetrics()
+	schedulerLatencyListenerMetrics := makeSchedulerLatencyListenerMetrics()
+	elasticWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-elastic")
+	elasticCPUGranter := newElasticCPUGranter(st, elasticCPUGranterMetrics)
+	schedulerLatencyListener := newSchedulerLatencyListener(st, schedulerLatencyListenerMetrics, elasticCPUGranter)
+	elasticCPUWorkQueue := makeElasticCPUStoreWorkQueue(ambientCtx, st, elasticCPUGranter, elasticCPUGranterMetrics, workQueueOptions{
+		usesTokens: true,
+		metrics:    &elasticWorkQueueMetrics,
+	})
+	elasticCoord := makeElasticGrantCoordinator(elasticCPUGranter, elasticCPUWorkQueue, schedulerLatencyListener)
+	metricStructs = append(metricStructs, elasticCPUGranterMetrics)
+	metricStructs = append(metricStructs, schedulerLatencyListenerMetrics)
+
 	return GrantCoordinators{
 		Stores:  storeCoordinators,
 		Regular: regularCoord,
+		Elastic: elasticCoord,
 	}, metricStructs
 }
 
@@ -665,7 +688,9 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 }
 
 // tryGet is called by granter.tryGet with the WorkKind.
-func (coord *GrantCoordinator) tryGet(workKind WorkKind, count int64, demuxHandle int8) bool {
+func (coord *GrantCoordinator) tryGet(
+	workKind WorkKind, count int64, demuxHandle int8,
+) (granted bool) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	// It is possible that a grant chain is active, and has not yet made its way

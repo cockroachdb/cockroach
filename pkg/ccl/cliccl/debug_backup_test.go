@@ -44,7 +44,10 @@ func TestShowSummary(t *testing.T) {
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
-	defer srv.Stopper().Stop(ctx)
+	defer func() {
+		log.Infof(ctx, "xxx: stopping test stopper")
+		srv.Stopper().Stop(ctx)
+	}()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE testDB`)

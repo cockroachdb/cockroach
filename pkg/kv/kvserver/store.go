@@ -1087,6 +1087,10 @@ type StoreConfig struct {
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController admission.KVAdmissionController
 
+	// SchedulerLatencyListener listens in on scheduling latencies, data that's
+	// used to adjust admission control components.
+	SchedulerLatencyListener admission.SchedulerLatencyListener
+
 	// SystemConfigProvider is used to drive replication decision-making in the
 	// mixed-version state, before the span configuration infrastructure has been
 	// bootstrapped.
@@ -2366,7 +2370,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 
 	ctx := s.AnnotateCtx(context.Background())
 	s.computeInitialMetrics.Do(func() {
-		// Metrics depend in part on the system config. Compute them as soon as we
+		// elasticCPUGranterMetrics depend in part on the system config. Compute them as soon as we
 		// get the first system config, then periodically in the background
 		// (managed by the Node).
 		if err := s.ComputeMetrics(ctx, -1); err != nil {

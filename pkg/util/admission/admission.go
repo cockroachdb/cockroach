@@ -168,7 +168,7 @@ type granter interface {
 	// avoids queueing in the requester.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
-	tryGet(count int64) bool
+	tryGet(count int64) (granted bool)
 	// returnGrant is called for:
 	// - returning slots after use.
 	// - returning either slots or tokens when the grant raced with the work
@@ -338,10 +338,10 @@ type KVAdmissionController interface {
 	// called after the KV work is done executing.
 	AdmitKVWork(
 		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-	) (handle interface{}, err error)
+	) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(handle interface{}, writeBytes *StoreWorkDoneInfo)
+	AdmittedKVWorkDone(Handle, *StoreWorkDoneInfo)
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
@@ -359,6 +359,18 @@ type KVAdmissionController interface {
 // weights.
 type TenantWeightProvider interface {
 	GetTenantWeights() TenantWeights
+}
+
+type elasticCPUUtilizationAdjuster interface {
+	getTargetUtilization() float64
+	setTargetUtilization(float64)
+	getObservedUtilization() float64
+}
+
+// SchedulerLatencyListener listens to the latest scheduler latency data. We
+// expect this to be called every goschedstats.scheduler_latency_sample_period.
+type SchedulerLatencyListener interface {
+	SchedulerLatency(p99, period time.Duration)
 }
 
 // grantKind represents the two kind of ways we grant admission: using a slot
@@ -607,4 +619,27 @@ type TenantWeightsForStore struct {
 	roachpb.StoreID
 	// Weights is tenant ID => weight.
 	Weights map[uint64]uint32
+}
+
+// Handle is used to maintain context around a piece of admitted work for
+// various internal tracking. It's also used for cooperative scheduling for
+// elastic CPU work.
+type Handle struct {
+	tenantID                           roachpb.TenantID
+	callAdmittedWorkDoneOnKVAdmissionQ bool
+	storeAdmissionQ                    *StoreWorkQueue
+	storeWorkHandle                    StoreWorkHandle
+	elasticCPUWorkHandle               elasticCPUWorkHandle
+}
+
+// OverElasticCPULimit is used to check we're over the allotted elastic CPU
+// limit. Integrated callers are expected to invoke this in tight loops and bail
+// once done.
+//
+// TODO(irfansharif): Could this be made smarter/structured as an iterator?
+// Perhaps auto-estimating the per-loop-iteration time and only retrieving the
+// running time only after the estimated "iters until over limit" has passed.
+func (h *Handle) OverElasticCPULimit() bool {
+	overLimit, _ := h.elasticCPUWorkHandle.overLimit()
+	return overLimit
 }

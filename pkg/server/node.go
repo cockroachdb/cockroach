@@ -360,6 +360,7 @@ func NewNode(
 	stores *kvserver.Stores,
 	clusterID *base.ClusterIDContainer,
 	kvAdmissionQ *admission.WorkQueue,
+	elasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
@@ -380,7 +381,9 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = admission.MakeKVAdmissionController(
-		kvAdmissionQ, storeGrantCoords, cfg.Settings)
+		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
+	)
+	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.Listener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -990,6 +993,7 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
+	ctx = admission.ContextWithHandle(ctx, handle)
 	var writeBytes *kvserver.StoreWriteBytes
 	defer func() {
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, (*admission.StoreWorkDoneInfo)(writeBytes))
