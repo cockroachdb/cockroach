@@ -55,6 +55,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
+        "//pkg/kv/kvserver/kvadmissionhandle",
         "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb",
         "//pkg/settings",

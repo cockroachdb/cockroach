@@ -4,12 +4,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "goschedstats",
     srcs = [
+        "latency.go",
         "runnable.go",
         "runtime_go1.19.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/goschedstats",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/settings",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -18,7 +20,10 @@ go_library(
 
 go_test(
     name = "goschedstats_test",
-    srcs = ["runnable_test.go"],
+    srcs = [
+        "latency_test.go",
+        "runnable_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":goschedstats"],
     deps = [

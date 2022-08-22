@@ -160,6 +160,10 @@ func maybeTick(m periodic) {
 	}
 }
 
+// TODO(irfansharif): Figure out how to export runtime scheduler latencies as a
+// prometheus histogram? Can we use a functional histogram? And maintain deltas
+// underneath? What does prometheus/client_golang do?
+
 // NewHistogram is a prometheus-backed histogram. Depending on the value of
 // opts.Buckets, this is suitable for recording any kind of quantity. Common
 // sensible choices are {IO,Network}LatencyBuckets.
@@ -489,11 +493,20 @@ func (g *Gauge) GetMetadata() Metadata {
 type GaugeFloat64 struct {
 	Metadata
 	bits *uint64
+	fn   func() float64
 }
 
 // NewGaugeFloat64 creates a GaugeFloat64.
 func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
-	return &GaugeFloat64{metadata, new(uint64)}
+	return &GaugeFloat64{metadata, new(uint64), nil}
+}
+
+// NewFunctionalGaugeFloat64 creates a GaugeFloat64 metric whose value is
+// determined when asked for by calling the provided function.
+// Note that Update, Inc, and Dec should NOT be called on a Gauge returned
+// from NewFunctionalGaugeFloat64.
+func NewFunctionalGaugeFloat64(metadata Metadata, f func() float64) *GaugeFloat64 {
+	return &GaugeFloat64{metadata, nil, f}
 }
 
 // Snapshot returns a read-only copy of the gauge.
@@ -508,6 +521,9 @@ func (g *GaugeFloat64) Update(v float64) {
 
 // Value returns the gauge's current value.
 func (g *GaugeFloat64) Value() float64 {
+	if g.fn != nil {
+		return g.fn()
+	}
 	return math.Float64frombits(atomic.LoadUint64(g.bits))
 }
 

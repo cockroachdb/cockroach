@@ -323,6 +323,12 @@ func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 	return ba.isSingleRequestWithMethod(CheckConsistency)
 }
 
+// IsSingleExportRequest returns true iff the batch contains a single
+// request, and that request is an ExportRequest.
+func (ba *BatchRequest) IsSingleExportRequest() bool {
+	return ba.isSingleRequestWithMethod(Export)
+}
+
 // RequiresConsensus returns true iff the batch contains a request that should
 // always force replication and proposal through raft, even if evaluation is
 // a no-op. The Barrier request requires consensus even though its evaluation

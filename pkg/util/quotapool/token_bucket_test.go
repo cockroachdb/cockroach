@@ -27,7 +27,7 @@ func TestTokenBucket(t *testing.T) {
 	check := func(expected Tokens) {
 		t.Helper()
 		const eps = 1e-10
-		tb.update()
+		tb.Update()
 		if delta := tb.current - expected; delta > eps || delta < -eps {
 			t.Fatalf("expected current amount %v, got %v", expected, tb.current)
 		}

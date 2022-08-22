@@ -165,7 +165,7 @@ type granter interface {
 	// avoids queueing in the requester.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
-	tryGet(count int64) bool
+	tryGet(count int64) (granted bool)
 	// returnGrant is called for:
 	// - returning slots after use.
 	// - returning either slots or tokens when the grant raced with the work
@@ -324,6 +324,20 @@ type storeRequester interface {
 	getRequesters() [numWorkClasses]requester
 	getStoreAdmissionStats() storeAdmissionStats
 	setStoreRequestEstimates(estimates storeRequestEstimates)
+}
+
+// elasticCPUUtilizationAdjuster is used to adjust the utilization target
+// (defined as a % of available system CPU).
+type elasticCPUUtilizationAdjuster interface {
+	getTargetUtilization() float64
+	setTargetUtilization(target float64)
+	getObservedUtilization() float64
+}
+
+// SchedulerLatencyListener listens to the latest scheduler latency data. We
+// expect this to be called every goschedstats.scheduler_latency_sample_period.
+type SchedulerLatencyListener interface {
+	SchedulerLatency(p99, period time.Duration)
 }
 
 // grantKind represents the two kind of ways we grant admission: using a slot
