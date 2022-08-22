@@ -14,31 +14,38 @@ import { ColumnDescriptor, SortedTable } from "../sortedtable";
 import classNames from "classnames/bind";
 import styles from "./insightsTable.module.scss";
 import { StatementLink } from "../statementsTable";
-import { Duration } from "../util";
 import IdxRecAction from "../insights/indexActionBtn";
+import { Duration, statementsRetries } from "../util";
+import { Anchor } from "../anchor";
+
 const cx = classNames.bind(styles);
 
 export type InsightType =
   | "DROP_INDEX"
   | "CREATE_INDEX"
   | "REPLACE_INDEX"
-  | "HIGH_WAIT_TIME";
+  | "HIGH_WAIT_TIME"
+  | "HIGH_RETRIES"
+  | "SUBOPTIMAL_PLAN"
+  | "FAILED";
 
 export interface InsightRecommendation {
   type: InsightType;
   database?: string;
   table?: string;
-  index_id?: number;
+  indexID?: number;
   query?: string;
   execution?: executionDetails;
   details?: insightDetails;
 }
 
 export interface executionDetails {
-  statement: string;
-  summary: string;
-  fingerprintID: string;
-  implicit: boolean;
+  statement?: string;
+  summary?: string;
+  fingerprintID?: string;
+  implicit?: boolean;
+  retries?: number;
+  indexRecommendations?: string[];
 }
 
 export interface insightDetails {
@@ -97,6 +104,12 @@ function insightType(type: InsightType): string {
       return "Replace Index";
     case "HIGH_WAIT_TIME":
       return "High Wait Time";
+    case "HIGH_RETRIES":
+      return "High Retry Counts";
+    case "SUBOPTIMAL_PLAN":
+      return "Sub-Optimal Plan";
+    case "FAILED":
+      return "Failed Execution";
     default:
       return "Insight";
   }
@@ -131,7 +144,7 @@ function descriptionCell(
         </>
       );
     case "DROP_INDEX":
-      return <>{`Index ${insightRec.index_id}`}</>;
+      return <>{`Index ${insightRec.indexID}`}</>;
     case "HIGH_WAIT_TIME":
       return (
         <>
@@ -142,6 +155,46 @@ function descriptionCell(
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Description: </span>{" "}
             {insightRec.details.description}
+          </div>
+        </>
+      );
+    case "HIGH_RETRIES":
+      return (
+        <>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Retries: </span>{" "}
+            {insightRec.execution.retries}
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description}
+            {" Learn more about "}
+            <Anchor href={statementsRetries} target="_blank">
+              retries
+            </Anchor>
+          </div>
+        </>
+      );
+    case "SUBOPTIMAL_PLAN":
+      return (
+        <>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Index Recommendations: </span>{" "}
+            {insightRec.execution.indexRecommendations.length}
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Recommendation: </span>{" "}
+            {insightRec.execution.indexRecommendations
+              .map(rec => rec.split(" : ")[1])
+              .join(" ")}
+          </div>
+        </>
+      );
+    case "FAILED":
+      return (
+        <>
+          <div className={cx("description-item")}>
+            This execution has failed.
           </div>
         </>
       );

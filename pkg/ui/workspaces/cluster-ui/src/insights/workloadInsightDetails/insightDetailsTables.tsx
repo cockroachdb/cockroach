@@ -22,7 +22,7 @@ interface InsightDetailsTableProps {
 export function makeInsightDetailsColumns(
   execType: InsightExecEnum,
 ): ColumnDescriptor<EventExecution>[] {
-  const columns: ColumnDescriptor<EventExecution>[] = [
+  return [
     {
       name: "executionID",
       title: insightsTableTitles.executionID(execType),
@@ -55,7 +55,6 @@ export function makeInsightDetailsColumns(
       sort: (item: EventExecution) => item.elapsedTime,
     },
   ];
-  return columns;
 }
 
 export const WaitTimeDetailsTable: React.FC<

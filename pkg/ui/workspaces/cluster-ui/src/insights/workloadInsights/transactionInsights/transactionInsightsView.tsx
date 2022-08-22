@@ -238,7 +238,7 @@ export const TransactionInsightsView: React.FC<
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredTransactions?.length > 0
+                      search?.length > 0 && filteredTransactions?.length == 0
                     }
                   />
                 }

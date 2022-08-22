@@ -14,6 +14,7 @@ import {
   durationUnits,
   BytesFitScale,
   byteUnits,
+  HexStringToInt64String,
 } from "./format";
 
 describe("Format utils", () => {
@@ -45,6 +46,17 @@ describe("Format utils", () => {
       assert.equal(BytesFitScale(byteUnits[6])(1.3835058e19), "12.00 EiB");
       assert.equal(BytesFitScale(byteUnits[7])(1.4167099e22), "12.00 ZiB");
       assert.equal(BytesFitScale(byteUnits[8])(1.450711e25), "12.00 YiB");
+    });
+  });
+
+  describe("HexStringToInt64String", () => {
+    it("converts hex to int64", () => {
+      expect(HexStringToInt64String("af6ade04cbbc1c95")).toBe(
+        "12640159416348056725",
+      );
+      expect(HexStringToInt64String("fb9111f22f2213b7")).toBe(
+        "18127289707013477303",
+      );
     });
   });
 });

@@ -790,7 +790,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 
 	mutationIdx := len(n.tableDesc.Mutations)
 	if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
-		params.ctx, indexDesc, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings,
+		indexDesc, descpb.DescriptorMutation_ADD,
 	); err != nil {
 		return err
 	}

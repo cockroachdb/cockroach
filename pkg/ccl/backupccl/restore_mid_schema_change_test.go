@@ -27,7 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	clusterRestoreVersion = version.MustParse("v20.1.0")
+	noNonMVCCAddSSTable   = version.MustParse("v22.1.0")
 )
 
 // TestRestoreMidSchemaChanges attempts to RESTORE several BACKUPs that are
@@ -79,10 +85,11 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 					t.Run(blockLocation, func(t *testing.T) {
 						versionDirs, err := ioutil.ReadDir(filepath.Join(exportDirs, blockLocation))
 						require.NoError(t, err)
-
 						for _, clusterVersionDir := range versionDirs {
-							if clusterVersionDir.Name() == "19.2" && isClusterRestore {
-								// 19.2 does not support cluster backups.
+							clusterVersion, err := parseMajorVersion(clusterVersionDir.Name())
+							require.NoError(t, err)
+
+							if !clusterVersion.AtLeast(clusterRestoreVersion) && isClusterRestore {
 								continue
 							}
 
@@ -101,7 +108,7 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 									fullBackupDir, err := filepath.Abs(filepath.Join(fullClusterVersionDir, backupDir.Name()))
 									require.NoError(t, err)
 									t.Run(backupDir.Name(), restoreMidSchemaChange(fullBackupDir, backupDir.Name(),
-										isClusterRestore, isSchemaOnly))
+										isClusterRestore, isSchemaOnly, clusterVersion))
 								}
 							})
 						}
@@ -112,9 +119,15 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 	}
 }
 
+// parseMajorVersion parses our major-versioned directory names as if they were
+// full crdb versions.
+func parseMajorVersion(verStr string) (*version.Version, error) {
+	return version.Parse(fmt.Sprintf("v%s.0", verStr))
+}
+
 // expectedSCJobCount returns the expected number of schema change jobs
 // we expect to find.
-func expectedSCJobCount(scName string) int {
+func expectedSCJobCount(scName string, ver *version.Version) int {
 	// The number of schema change under test. These will be the ones that are
 	// synthesized in database restore.
 	var expNumSCJobs int
@@ -126,8 +139,13 @@ func expectedSCJobCount(scName string) int {
 	case "midmultitable":
 		expNumSCJobs = 2 // this test perform a schema change for each table
 	case "midprimarykeyswap":
-		// PK change + PK cleanup
-		expNumSCJobs = 2
+		if ver.AtLeast(noNonMVCCAddSSTable) {
+			// PK change and PK cleanup
+			expNumSCJobs = 2
+		} else {
+			// This will fail so we expect no cleanup job.
+			expNumSCJobs = 1
+		}
 	case "midprimarykeyswapcleanup":
 		expNumSCJobs = 1
 	default:
@@ -179,12 +197,17 @@ func getTablesInTest(scName string) (tableNames []string) {
 }
 
 func verifyMidSchemaChange(
-	t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, isSchemaOnly bool,
+	t *testing.T,
+	scName string,
+	kvDB *kv.DB,
+	sqlDB *sqlutils.SQLRunner,
+	isSchemaOnly bool,
+	majorVer *version.Version,
 ) {
 	tables := getTablesInTest(scName)
 
 	// Check that we are left with the expected number of schema change jobs.
-	expNumSchemaChangeJobs := expectedSCJobCount(scName)
+	expNumSchemaChangeJobs := expectedSCJobCount(scName, majorVer)
 
 	synthesizedSchemaChangeJobs := sqlDB.QueryStr(t,
 		"SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%RESTORING%'")
@@ -201,7 +224,10 @@ func verifyMidSchemaChange(
 }
 
 func restoreMidSchemaChange(
-	backupDir, schemaChangeName string, isClusterRestore bool, isSchemaOnly bool,
+	backupDir, schemaChangeName string,
+	isClusterRestore bool,
+	isSchemaOnly bool,
+	majorVer *version.Version,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
@@ -243,7 +269,7 @@ func restoreMidSchemaChange(
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})
-		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB, isSchemaOnly)
+		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB, isSchemaOnly, majorVer)
 
 		// Because crdb_internal.invalid_objects is a virtual table, by default, the
 		// query will take a lease on the database sqlDB is connected to and only run
