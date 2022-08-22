@@ -3488,6 +3488,40 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Elastic CPU Granter Utilization",
+				Metrics: []string{
+					"admission.elastic_cpu_granter.observed_utilization",
+					"admission.elastic_cpu_granter.target_utilization",
+				},
+			},
+			{
+				Title: "Scheduler Latency Listener",
+				Metrics: []string{
+					"admission.scheduler_latency_listener.instantaneous_p99_nanos",
+					"admission.scheduler_latency_listener.smoothed_p99_nanos",
+				},
+			},
+			{
+				Title: "Elastic CPU Grants",
+				Metrics: []string{
+					"admission.elastic_cpu.acquisitions",
+				},
+			},
+			{
+				Title: "Elastic CPU Waiters",
+				Metrics: []string{
+					"admission.elastic_cpu.waiters",
+				},
+			},
+			{
+				Title: "Elastic CPU Durations",
+				Metrics: []string{
+					"admission.elastic_cpu.acquired_nanos",
+					"admission.elastic_cpu.returned_nanos",
+					"admission.elastic_cpu.waiting_nanos",
+				},
+			},
+			{
 				Title: "IO Tokens Exhausted Duration Sum",
 				Metrics: []string{
 					"admission.granter.io_tokens_exhausted_duration.kv",

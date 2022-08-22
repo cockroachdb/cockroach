@@ -102,6 +102,7 @@ func TestGranterBasic(t *testing.T) {
 			delayForGrantChainTermination = 0
 			opts.RunnableAlphaOverride = 1 // This gives weight to only the most recent sample.
 			coords, _ := NewGrantCoordinators(ambientCtx, opts)
+			defer coords.Close()
 			coord = coords.Regular
 			var err error
 			ssg, err = MakeSoftSlotGranter(coord)

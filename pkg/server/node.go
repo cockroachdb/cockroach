@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissionhandle"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -362,6 +363,7 @@ func NewNode(
 	stores *kvserver.Stores,
 	clusterID *base.ClusterIDContainer,
 	kvAdmissionQ *admission.WorkQueue,
+	elasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
@@ -382,7 +384,9 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = kvserver.MakeKVAdmissionController(
-		kvAdmissionQ, storeGrantCoords, cfg.Settings)
+		kvAdmissionQ, elasticCPUGrantCoord.ElasticCPUWorkQueue, storeGrantCoords, cfg.Settings,
+	)
+	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -1071,6 +1075,8 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
+	ctx = kvadmissionhandle.ContextWithHandle(ctx, handle)
+
 	var writeBytes *kvserver.StoreWriteBytes
 	defer func() {
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
