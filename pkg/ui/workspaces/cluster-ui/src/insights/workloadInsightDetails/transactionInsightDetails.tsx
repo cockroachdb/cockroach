@@ -180,7 +180,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
             <Col>
               <Row>
                 <Heading type="h5">
-                  {WaitTimeInsightsLabels.BLOCKING_TXNS_TABLE_TITLE(
+                  {WaitTimeInsightsLabels.WAITING_TXNS_TABLE_TITLE(
                     insightDetails.executionID,
                     insightDetails.execType,
                   )}
