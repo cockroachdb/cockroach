@@ -712,6 +712,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_use_forecasts`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_forecasts`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_forecasts", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseForecasts(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseForecasts), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`optimizer_use_histograms`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_histograms`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

@@ -278,6 +278,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().UserProto = username.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
+	ot.evalCtx.SessionData().OptimizerUseForecasts = true
 	ot.evalCtx.SessionData().OptimizerUseHistograms = true
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit

@@ -3048,6 +3048,10 @@ func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
 	m.data.OptimizerFKCascadesLimit = int64(val)
 }
 
+func (m *sessionDataMutator) SetOptimizerUseForecasts(val bool) {
+	m.data.OptimizerUseForecasts = val
+}
+
 func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 	m.data.OptimizerUseHistograms = val
 }
