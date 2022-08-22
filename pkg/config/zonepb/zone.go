@@ -287,6 +287,30 @@ func (z *ZoneConfig) InheritedVoterConstraints() bool {
 	return len(z.VoterConstraints) == 0 && !z.NullVoterConstraintsIsEmpty
 }
 
+// ShouldInheritGC returns true if the zone config should inherit the GC policy
+// from the parent.
+func (z *ZoneConfig) ShouldInheritGC(parent *ZoneConfig) bool {
+	return z.GC == nil && parent.GC != nil
+}
+
+// ShouldInheritLeasePreferences returns true if the zone config should
+// inherit the lease preferences from the parent.
+func (z *ZoneConfig) ShouldInheritLeasePreferences(parent *ZoneConfig) bool {
+	return z.InheritedLeasePreferences && !parent.InheritedLeasePreferences
+}
+
+// ShouldInheritConstraints returns true if the zone config should
+// inherit the constraints from the parent.
+func (z *ZoneConfig) ShouldInheritConstraints(parent *ZoneConfig) bool {
+	return z.InheritedConstraints && !parent.InheritedConstraints
+}
+
+// ShouldInheritVoterConstraints returns true if the zone config should
+// inherit the voter constraints from the parent.
+func (z *ZoneConfig) ShouldInheritVoterConstraints(parent *ZoneConfig) bool {
+	return z.InheritedVoterConstraints() && !parent.InheritedVoterConstraints()
+}
+
 // ValidateTandemFields returns an error if the ZoneConfig to be written
 // specifies a configuration that could cause problems with the introduction
 // of cascading zone configs.
@@ -547,29 +571,23 @@ func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 			z.RangeMaxBytes = proto.Int64(*parent.RangeMaxBytes)
 		}
 	}
-	if z.GC == nil {
-		if parent.GC != nil {
-			tempGC := *parent.GC
-			z.GC = &tempGC
-		}
+
+	if z.ShouldInheritGC(parent) {
+		tempGC := *parent.GC
+		z.GC = &tempGC
 	}
-	if z.InheritedConstraints {
-		if !parent.InheritedConstraints {
-			z.Constraints = parent.Constraints
-			z.InheritedConstraints = false
-		}
+	if z.ShouldInheritConstraints(parent) {
+		z.Constraints = parent.Constraints
+		z.InheritedConstraints = false
 	}
-	if z.InheritedVoterConstraints() {
-		if !parent.InheritedVoterConstraints() {
-			z.VoterConstraints = parent.VoterConstraints
-			z.NullVoterConstraintsIsEmpty = parent.NullVoterConstraintsIsEmpty
-		}
+	if z.ShouldInheritVoterConstraints(parent) {
+		z.VoterConstraints = parent.VoterConstraints
+		z.NullVoterConstraintsIsEmpty = parent.NullVoterConstraintsIsEmpty
+
 	}
-	if z.InheritedLeasePreferences {
-		if !parent.InheritedLeasePreferences {
-			z.LeasePreferences = parent.LeasePreferences
-			z.InheritedLeasePreferences = false
-		}
+	if z.ShouldInheritLeasePreferences(parent) {
+		z.LeasePreferences = parent.LeasePreferences
+		z.InheritedLeasePreferences = false
 	}
 }
 
