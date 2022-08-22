@@ -47,11 +47,12 @@ func _() {
 	_ = x[WaitedForDelRangeInGCJob-36]
 	_ = x[RangefeedUseOneStreamPerNode-37]
 	_ = x[NoNonMVCCAddSSTable-38]
+	_ = x[GCHintInReplicaState-39]
 }
 
-const _Key_name = "V21_2Start22_1ProbeRequestEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnableNewStoreRebalancerV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTable"
+const _Key_name = "V21_2Start22_1ProbeRequestEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnableNewStoreRebalancerV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTableGCHintInReplicaState"
 
-var _Key_index = [...]uint16{0, 5, 14, 26, 56, 84, 105, 129, 134, 143, 158, 198, 232, 266, 288, 308, 327, 360, 379, 399, 420, 455, 489, 519, 572, 586, 607, 638, 671, 702, 736, 758, 787, 814, 845, 878, 896, 920, 948, 967}
+var _Key_index = [...]uint16{0, 5, 14, 26, 56, 84, 105, 129, 134, 143, 158, 198, 232, 266, 288, 308, 327, 360, 379, 399, 420, 455, 489, 519, 572, 586, 607, 638, 671, 702, 736, 758, 787, 814, 845, 878, 896, 920, 948, 967, 987}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
