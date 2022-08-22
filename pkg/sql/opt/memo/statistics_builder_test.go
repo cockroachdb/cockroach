@@ -156,79 +156,79 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs1 := constraint.SingleConstraint(&c1)
 	statsFunc(
 		cs1,
-		"[rows=1.4e+08, distinct(1)=7, null(1)=0, avgsize(1)=4]",
+		"[rows=1.4e+08, distinct(1)=7, null(1)=0]",
 	)
 
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc(
 		cs2,
-		"[rows=3.333333e+09, distinct(2)=166.667, null(2)=0, avgsize(2)=4]",
+		"[rows=3.333333e+09, distinct(2)=166.667, null(2)=0]",
 	)
 
 	cs3 := constraint.SingleConstraint(&c3)
 	statsFunc(
 		cs3,
-		"[rows=2e+07, distinct(3)=1, null(3)=0, avgsize(3)=4]",
+		"[rows=2e+07, distinct(3)=1, null(3)=0]",
 	)
 
 	cs12 := constraint.SingleConstraint(&c12)
 	statsFunc(
 		cs12,
-		"[rows=2e+07, distinct(1)=1, null(1)=0, avgsize(1)=4]",
+		"[rows=2e+07, distinct(1)=1, null(1)=0]",
 	)
 
 	cs123 := constraint.SingleConstraint(&c123)
 	statsFunc(
 		cs123,
-		"[rows=400, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=5, null(1-3)=0, avgsize(1-3)=12]",
+		"[rows=400, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=5, null(3)=0, distinct(1,2)=1, null(1,2)=0, distinct(1-3)=5, null(1-3)=0]",
 	)
 
 	cs123n := constraint.SingleConstraint(&c123n)
 	statsFunc(
 		cs123n,
-		"[rows=40000, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8]",
+		"[rows=40000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]",
 	)
 
 	cs32 := constraint.SingleConstraint(&c32)
 	statsFunc(
 		cs32,
-		"[rows=80000, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(2,3)=2, null(2,3)=0, avgsize(2,3)=8]",
+		"[rows=80000, distinct(2)=2, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2, null(2,3)=0]",
 	)
 
 	cs321 := constraint.SingleConstraint(&c321)
 	statsFunc(
 		cs321,
-		"[rows=160000, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(2,3)=4, null(2,3)=0, avgsize(2,3)=8]",
+		"[rows=160000, distinct(2)=2, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=4, null(2,3)=0]",
 	)
 
 	cs312 := constraint.SingleConstraint(&c312)
 	statsFunc(
 		cs312,
-		"[rows=2.449065e+07, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(2)=7, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(1-3)=26.9395, null(1-3)=0, avgsize(1-3)=12]",
+		"[rows=2.449065e+07, distinct(1)=2, null(1)=0, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(1-3)=26.9395, null(1-3)=0]",
 	)
 
 	cs312n := constraint.SingleConstraint(&c312n)
 	statsFunc(
 		cs312n,
-		"[rows=160000, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(1,3)=4, null(1,3)=0, avgsize(1,3)=8]",
+		"[rows=160000, distinct(1)=2, null(1)=0, distinct(3)=2, null(3)=0, distinct(1,3)=4, null(1,3)=0]",
 	)
 
 	cs := cs3.Intersect(&evalCtx, cs123)
 	statsFunc(
 		cs,
-		"[rows=909098.9, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]",
+		"[rows=909098.9, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
 	)
 
 	cs = cs32.Intersect(&evalCtx, cs123)
 	statsFunc(
 		cs,
-		"[rows=909098.9, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]",
+		"[rows=909098.9, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
 	)
 
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
 	statsFunc(
 		cs45,
-		"[rows=1e+09, distinct(4)=1, null(4)=0, avgsize(4)=4]",
+		"[rows=1e+09, distinct(4)=1, null(4)=0]",
 	)
 }
 

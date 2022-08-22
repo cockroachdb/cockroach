@@ -13,18 +13,18 @@ union
  ├── columns: k:12 i:13
  ├── left columns: a.k:1 a.i:2
  ├── right columns: x:7 z:8
- ├── stats: [rows=2000, distinct(12,13)=2000, null(12,13)=0, avgsize(12,13)=8]
+ ├── stats: [rows=2000, distinct(12,13)=2000, null(12,13)=0]
  ├── cost: 2199.76501
  ├── key: (12,13)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
- │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0, avgsize(1,2)=8]
+ │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
  │    ├── cost: 1084.62
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
-      ├── stats: [rows=1000, distinct(7,8)=1000, null(7,8)=0, avgsize(7,8)=8]
+      ├── stats: [rows=1000, distinct(7,8)=1000, null(7,8)=0]
       └── cost: 1074.52
 
 opt

@@ -1387,11 +1387,7 @@ func (c *coster) rowScanCost(
 		if isSystemCol && !isScannedCol {
 			continue
 		}
-		colSet := opt.MakeColSet(colID)
-		colStat, ok := c.mem.RequestColStatTable(tabID, colSet)
-		if !ok {
-			panic(errors.AssertionFailedf("could not request the stats for ColSet %s", colSet.String()))
-		}
+		avgSize := c.mem.RequestColAvgSize(tabID, colID)
 		// Scanned columns are double-counted due to the cost of transferring data
 		// over the network.
 		var networkCostFactor memo.Cost = 1
@@ -1402,7 +1398,7 @@ func (c *coster) rowScanCost(
 		// default the cost of plans involving tables that use the default AvgSize
 		// (e.g., if the stat is not available) is the same as if
 		// CostScansWithDefaultColSize were true.
-		cost += memo.Cost(colStat.AvgSize/4) * costFactor * networkCostFactor
+		cost += memo.Cost(float64(avgSize)/4) * costFactor * networkCostFactor
 	}
 	return cost
 }

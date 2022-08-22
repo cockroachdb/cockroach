@@ -45,14 +45,14 @@ expr
 ----
 select
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int)
- ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 1104.75
  ├── fd: ()-->(1)
  ├── prune: (2,3)
  ├── interesting orderings: (+2 opt(1))
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1094.72
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2)
