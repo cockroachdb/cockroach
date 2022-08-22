@@ -114,3 +114,6 @@ query I
 SELECT nextval('s2')
 ----
 11
+
+statement ok
+UNLISTEN temp
