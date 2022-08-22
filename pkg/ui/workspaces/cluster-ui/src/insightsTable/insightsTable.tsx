@@ -24,10 +24,12 @@ export type InsightType =
   | "DROP_INDEX"
   | "CREATE_INDEX"
   | "REPLACE_INDEX"
-  | "HIGH_WAIT_TIME"
-  | "HIGH_RETRIES"
-  | "SUBOPTIMAL_PLAN"
-  | "FAILED";
+  | "HighContentionTime"
+  | "HighRetryCount"
+  | "SuboptimalPlan"
+  | "PlanRegression"
+  | "FAILED"
+  | "Unknown";
 
 export interface InsightRecommendation {
   type: InsightType;
@@ -49,7 +51,7 @@ export interface executionDetails {
 }
 
 export interface insightDetails {
-  duration: number;
+  duration?: number;
   description: string;
 }
 
@@ -102,14 +104,18 @@ function insightType(type: InsightType): string {
       return "Drop Unused Index";
     case "REPLACE_INDEX":
       return "Replace Index";
-    case "HIGH_WAIT_TIME":
-      return "High Wait Time";
-    case "HIGH_RETRIES":
+    case "HighContentionTime":
+      return "High Contention Time";
+    case "HighRetryCount":
       return "High Retry Counts";
-    case "SUBOPTIMAL_PLAN":
+    case "SuboptimalPlan":
       return "Sub-Optimal Plan";
+    case "PlanRegression":
+      return "Plan Regression";
     case "FAILED":
       return "Failed Execution";
+    case "Unknown":
+      return "Slow Execution";
     default:
       return "Insight";
   }
@@ -145,7 +151,7 @@ function descriptionCell(
       );
     case "DROP_INDEX":
       return <>{`Index ${insightRec.indexID}`}</>;
-    case "HIGH_WAIT_TIME":
+    case "HighContentionTime":
       return (
         <>
           <div className={cx("description-item")}>
@@ -158,7 +164,7 @@ function descriptionCell(
           </div>
         </>
       );
-    case "HIGH_RETRIES":
+    case "HighRetryCount":
       return (
         <>
           <div className={cx("description-item")}>
@@ -175,18 +181,37 @@ function descriptionCell(
           </div>
         </>
       );
-    case "SUBOPTIMAL_PLAN":
+    case "SuboptimalPlan":
       return (
         <>
           <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Index Recommendations: </span>{" "}
-            {insightRec.execution.indexRecommendations.length}
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description}
           </div>
+          {insightRec.execution && (
+            <>
+              <div className={cx("description-item")}>
+                <span className={cx("label-bold")}>
+                  Index Recommendations:{" "}
+                </span>{" "}
+                {insightRec.execution.indexRecommendations.length}
+              </div>
+              <div className={cx("description-item")}>
+                <span className={cx("label-bold")}>Recommendation: </span>{" "}
+                {insightRec.execution.indexRecommendations
+                  .map(rec => rec.split(" : ")[1])
+                  .join(" ")}
+              </div>
+            </>
+          )}
+        </>
+      );
+    case "PlanRegression":
+      return (
+        <>
           <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Recommendation: </span>{" "}
-            {insightRec.execution.indexRecommendations
-              .map(rec => rec.split(" : ")[1])
-              .join(" ")}
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description}
           </div>
         </>
       );
@@ -195,6 +220,14 @@ function descriptionCell(
         <>
           <div className={cx("description-item")}>
             This execution has failed.
+          </div>
+        </>
+      );
+    case "Unknown":
+      return (
+        <>
+          <div className={cx("description-item")}>
+            Unable to identify specific reasons why this execution was slow.
           </div>
         </>
       );

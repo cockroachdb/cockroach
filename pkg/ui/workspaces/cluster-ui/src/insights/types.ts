@@ -12,7 +12,7 @@ import { Moment } from "moment";
 import { Filters } from "../queryFilter";
 
 export enum InsightNameEnum {
-  highWaitTime = "HighWaitTime",
+  highContentionTime = "HighContentionTime",
   unknown = "Unknown",
   planRegression = "PlanRegression",
   suboptimalPlan = "SuboptimalPlan",
@@ -80,6 +80,7 @@ export type StatementInsightEvent = {
   query: string;
   application: string;
   insights: Insight[];
+  indexRecommendations: string[];
 };
 
 export type Insight = {
@@ -98,14 +99,14 @@ export type EventExecution = {
   execType: InsightExecEnum;
 };
 
-const highWaitTimeInsight = (
+const highContentionTimeInsight = (
   execType: InsightExecEnum = InsightExecEnum.TRANSACTION,
   latencyThreshold: number,
 ): Insight => {
   const description = `This ${execType} has been waiting for more than ${latencyThreshold}ms on other ${execType}s to execute.`;
   return {
-    name: InsightNameEnum.highWaitTime,
-    label: "High Wait Time",
+    name: InsightNameEnum.highContentionTime,
+    label: "High Contention Time",
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -177,7 +178,7 @@ const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
   };
 };
 
-export const InsightTypes = [highWaitTimeInsight];
+export const InsightTypes = [highContentionTimeInsight];
 
 export const getInsightFromProblem = (
   problem: string,
@@ -185,8 +186,8 @@ export const getInsightFromProblem = (
   latencyThreshold?: number,
 ): Insight => {
   switch (problem) {
-    case InsightNameEnum.highWaitTime:
-      return highWaitTimeInsight(execOption, latencyThreshold);
+    case InsightNameEnum.highContentionTime:
+      return highContentionTimeInsight(execOption, latencyThreshold);
     case InsightNameEnum.failedExecution:
       return failedExecutionInsight(execOption);
     case InsightNameEnum.planRegression:

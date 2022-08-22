@@ -242,3 +242,9 @@ export function HexStringToInt64String(s: string): string {
   });
   return dec;
 }
+
+// capitalize capitalizes a string.
+export function capitalize(str: string): string {
+  if (!str) return str;
+  return str[0].toUpperCase() + str.substring(1);
+}

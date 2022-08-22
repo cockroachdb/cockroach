@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// getInsightEventState is currently hardcoded to use the High Wait Time insight type
+// getInsightEventState is currently hardcoded to use the High Contention Time insight type
 // for transaction contention events
 import { executeSql, SqlExecutionRequest } from "./sqlApi";
 

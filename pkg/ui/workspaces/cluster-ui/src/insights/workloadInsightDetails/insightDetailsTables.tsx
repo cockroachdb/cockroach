@@ -38,8 +38,7 @@ export function makeInsightDetailsColumns(
     {
       name: "query",
       title: insightsTableTitles.query(execType),
-      cell: (item: EventExecution) =>
-        QueriesCell({ transactionQueries: item.queries, textLimit: 50 }),
+      cell: (item: EventExecution) => QueriesCell(item.queries, 50),
       sort: (item: EventExecution) => item.queries.length,
     },
     {

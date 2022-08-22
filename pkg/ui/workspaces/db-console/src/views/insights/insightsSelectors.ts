@@ -16,6 +16,7 @@ import {
   defaultFilters,
   InsightEventFilters,
   SortSetting,
+  StatementInsightEvent,
 } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -36,11 +37,25 @@ export const sortSettingLocalSetting = new LocalSetting<
   columnTitle: "startTime",
 });
 
-export const selectInsights = createSelector(
+export const selectTransactionInsights = createSelector(
   (state: AdminUIState) => state.cachedData,
   adminUiState => {
     if (!adminUiState.insights) return [];
     return adminUiState.insights.data;
+  },
+);
+
+export const selectTransactionInsightDetails = createSelector(
+  [
+    (state: AdminUIState) => state.cachedData.insightDetails,
+    (_state: AdminUIState, props: RouteComponentProps) => props,
+  ],
+  (insight, props): CachedDataReducerState<api.InsightEventDetailsResponse> => {
+    if (!insight) {
+      return null;
+    }
+    const insightId = getMatchParamByName(props.match, "id");
+    return insight[insightId];
   },
 );
 
@@ -52,16 +67,16 @@ export const selectStatementInsights = createSelector(
   },
 );
 
-export const selectInsightDetails = createSelector(
+export const selectStatementInsightDetails = createSelector(
   [
-    (state: AdminUIState) => state.cachedData.insightDetails,
+    (state: AdminUIState) => state.cachedData.statementInsights,
     (_state: AdminUIState, props: RouteComponentProps) => props,
   ],
-  (insight, props): CachedDataReducerState<api.InsightEventDetailsResponse> => {
-    const insightId = getMatchParamByName(props.match, "id");
-    if (!insight) {
+  (insights, props): StatementInsightEvent => {
+    if (!insights) {
       return null;
     }
-    return insight[insightId];
+    const insightId = getMatchParamByName(props.match, "id");
+    return insights.data.find(insight => insight.statementID === insightId);
   },
 );

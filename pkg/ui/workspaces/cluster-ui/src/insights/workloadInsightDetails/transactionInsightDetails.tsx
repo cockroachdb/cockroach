@@ -48,21 +48,22 @@ import { CockroachCloudContext } from "../../contexts";
 
 const tableCx = classNames.bind(insightTableStyles);
 
-export interface InsightDetailsStateProps {
+export interface TransactionInsightDetailsStateProps {
   insightEventDetails: InsightEventDetailsResponse;
   insightError: Error | null;
 }
 
-export interface InsightDetailsDispatchProps {
+export interface TransactionInsightDetailsDispatchProps {
   refreshInsightDetails: (req: InsightEventDetailsRequest) => void;
 }
 
-export type InsightDetailsProps = InsightDetailsStateProps &
-  InsightDetailsDispatchProps &
-  RouteComponentProps<unknown>;
+export type TransactionInsightDetailsProps =
+  TransactionInsightDetailsStateProps &
+    TransactionInsightDetailsDispatchProps &
+    RouteComponentProps<unknown>;
 
-export class InsightDetails extends React.Component<InsightDetailsProps> {
-  constructor(props: InsightDetailsProps) {
+export class TransactionInsightDetails extends React.Component<TransactionInsightDetailsProps> {
+  constructor(props: TransactionInsightDetailsProps) {
     super(props);
   }
   private refresh(): void {
@@ -104,9 +105,9 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
       let rec: InsightRecommendation;
       insightDetails.insights.forEach(insight => {
         switch (insight.name.toString()) {
-          case "HIGH_WAIT_TIME":
+          case "HighContentionTime":
             rec = {
-              type: "HIGH_WAIT_TIME",
+              type: "HighContentionTime",
               details: {
                 duration: insightDetails.elapsedTime,
                 description: insight.description,
@@ -226,11 +227,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
             page={"Transaction Insight details"}
             error={this.props.insightError}
             render={this.renderContent}
-            renderError={() =>
-              WorkloadInsightsError({
-                execType: "transaction insights",
-              })
-            }
+            renderError={() => WorkloadInsightsError()}
           />
         </section>
       </div>

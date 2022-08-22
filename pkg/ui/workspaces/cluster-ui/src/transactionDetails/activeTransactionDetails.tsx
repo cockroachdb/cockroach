@@ -32,8 +32,7 @@ import { executionIdAttr } from "../util";
 
 import styles from "../statementDetails/statementDetails.module.scss";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
-import { Duration } from "../util/format";
-import { capitalize } from "src/activeExecutions/execTableCommon";
+import { capitalize, Duration } from "../util/format";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 

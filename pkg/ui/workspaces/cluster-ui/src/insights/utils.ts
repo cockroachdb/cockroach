@@ -200,7 +200,7 @@ export function getAppsFromStatementInsights(
   statements: StatementInsights | null,
   internalAppNamePrefix: string,
 ): string[] {
-  if (statements == null) return [];
+  if (statements == null || statements?.length === 0) return [];
 
   const uniqueAppNames = new Set(
     statements.map(t => {
@@ -217,13 +217,26 @@ export function getAppsFromStatementInsights(
 export function populateStatemetInsightsFromProblems(
   statements: StatementInsightEvent[],
 ): void {
-  if (!statements || statements?.length < 0) {
+  if (!statements || statements?.length === 0) {
     return;
   }
 
   statements.map(x => {
-    x.insights = x.problems.map(x =>
+    x.insights = x.problems?.map(x =>
       getInsightFromProblem(x, InsightExecEnum.STATEMENT),
     );
   });
+}
+
+export function getPriorityFromNumber(priority: number): string {
+  switch (priority) {
+    case 0:
+      return "Low";
+    case 1:
+      return "Normal";
+    case 2:
+      return "High";
+    default:
+      return null;
+  }
 }
