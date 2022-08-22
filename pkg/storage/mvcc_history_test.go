@@ -1605,16 +1605,15 @@ func cmdIterScan(e *evalCtx) error {
 	// adjust e.iterRangeKeys to comply with the previous positioning operation.
 	// The previous position already passed this check, so it doesn't matter that
 	// we're fudging e.rangeKeys.
-	if _, ok := e.bareIter().(*MVCCIncrementalIterator); !ok {
-		if e.iter.RangeKeyChanged() {
-			if e.iterRangeKeys.IsEmpty() {
-				e.iterRangeKeys = MVCCRangeKeyStack{
-					Bounds:   roachpb.Span{Key: keys.MinKey.Next(), EndKey: keys.MaxKey},
-					Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
-				}
-			} else {
-				e.iterRangeKeys.Clear()
+	if e.iter.RangeKeyChanged() {
+		if e.iterRangeKeys.IsEmpty() {
+			e.iterRangeKeys = MVCCRangeKeyStack{
+				// NB: Clone MinKey/MaxKey, since we write into these byte slices later.
+				Bounds:   roachpb.Span{Key: keys.MinKey.Next().Clone(), EndKey: keys.MaxKey.Clone()},
+				Versions: MVCCRangeKeyVersions{{Timestamp: hlc.MinTimestamp}},
 			}
+		} else {
+			e.iterRangeKeys.Clear()
 		}
 	}
 
@@ -1704,6 +1703,13 @@ func printIter(e *evalCtx) {
 	e.results.buf.Printf("%s:", e.td.Cmd)
 	defer e.results.buf.Printf("\n")
 
+	// MVCCIncrementalIterator has odd behavior following a NextIgnoringTime()
+	// call, so we detect this and adjust expectations.
+	var incrIterIgnoringTime bool
+	if incrIter, ok := e.bareIter().(*MVCCIncrementalIterator); ok {
+		incrIterIgnoringTime = incrIter.ignoringTime
+	}
+
 	ok, err := e.iter.Valid()
 	if err != nil {
 		e.results.buf.Printf(" err=%v", err)
@@ -1716,7 +1722,9 @@ func printIter(e *evalCtx) {
 	}
 	hasPoint, hasRange := e.iter.HasPointAndRange()
 	if !hasPoint && !hasRange {
-		e.t.Fatalf("valid iterator at %s without point nor range keys", e.iter.UnsafeKey())
+		if !incrIterIgnoringTime || e.mvccIncrementalIter().RangeKeysIgnoringTime().IsEmpty() {
+			e.t.Fatalf("valid iterator at %s without point nor range keys", e.iter.UnsafeKey())
+		}
 	}
 
 	if hasPoint {
@@ -1751,18 +1759,53 @@ func printIter(e *evalCtx) {
 		e.results.buf.Printf("]")
 	}
 
+	if incrIterIgnoringTime {
+		rangeKeys := e.mvccIncrementalIter().RangeKeysIgnoringTime()
+		if !rangeKeys.Equal(e.iter.RangeKeys()) {
+			e.results.buf.Printf(" (+%s/[", rangeKeys.Bounds)
+			for i, version := range rangeKeys.Versions {
+				value, err := DecodeMVCCValue(version.Value)
+				if err != nil {
+					e.Fatalf("%v", err)
+				}
+				if i > 0 {
+					e.results.buf.Printf(" ")
+				}
+				e.results.buf.Printf("%s=%s", version.Timestamp, value)
+			}
+			e.results.buf.Printf("]")
+			if e.mvccIncrementalIter().RangeKeyChangedIgnoringTime() {
+				e.results.buf.Printf(" !")
+			}
+			e.results.buf.Printf(")")
+
+		}
+	}
+
 	if checkAndUpdateRangeKeyChanged(e) {
 		e.results.buf.Printf(" !")
 	}
 }
 
 func checkAndUpdateRangeKeyChanged(e *evalCtx) bool {
-	// MVCCIncrementalIterator does not yet support RangeKeyChanged().
-	if _, ok := e.bareIter().(*MVCCIncrementalIterator); ok {
-		return false
-	}
 	rangeKeyChanged := e.iter.RangeKeyChanged()
 	rangeKeys := e.iter.RangeKeys()
+
+	if incrIter, ok := e.bareIter().(*MVCCIncrementalIterator); ok {
+		// For MVCCIncrementalIterator, make sure RangeKeyChangedIgnoringTime() fires
+		// whenever RangeKeyChanged() does. The inverse is not true.
+		rangeKeyChangedIgnoringTime := incrIter.RangeKeyChangedIgnoringTime()
+		if rangeKeyChanged && !rangeKeyChangedIgnoringTime {
+			e.t.Fatalf("RangeKeyChanged=%t but RangeKeyChangedIgnoringTime=%t",
+				rangeKeyChanged, incrIter.RangeKeyChangedIgnoringTime())
+		}
+		// If RangeKeyChangedIgnoringTime() fires, and RangeKeyChanged() doesn't,
+		// then RangeKeys() must be empty.
+		if rangeKeyChangedIgnoringTime && !rangeKeyChanged && !rangeKeys.IsEmpty() {
+			e.t.Fatalf("RangeKeyChangedIgnoringTime without RangeKeyChanged, but RangeKeys not empty")
+		}
+	}
+
 	if rangeKeyChanged != !rangeKeys.Equal(e.iterRangeKeys) {
 		e.t.Fatalf("incorrect RangeKeyChanged=%t (was:%s is:%s) at %s\n",
 			rangeKeyChanged, e.iterRangeKeys, rangeKeys, e.td.Pos)

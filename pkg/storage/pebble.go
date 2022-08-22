@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1124,17 +1123,11 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
-		if util.RaceEnabled {
-			iter = wrapInUnsafeIter(iter)
-		}
-		return iter
+		return maybeWrapInUnsafeIter(iter)
 	}
 
 	iter := newPebbleIterator(p.db, opts, StandardDurability, p.SupportsRangeKeys())
-	if util.RaceEnabled {
-		return wrapInUnsafeIter(iter)
-	}
-	return iter
+	return maybeWrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Engine interface.
@@ -2049,10 +2042,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
-		if util.RaceEnabled {
-			iter = wrapInUnsafeIter(iter)
-		}
-		return iter
+		return maybeWrapInUnsafeIter(iter)
 	}
 
 	iter := &p.normalIter
@@ -2077,11 +2067,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	iter.inuse = true
-	var rv MVCCIterator = iter
-	if util.RaceEnabled {
-		rv = wrapInUnsafeIter(rv)
-	}
-	return rv
+	return maybeWrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Engine interface.
@@ -2322,18 +2308,12 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
-		if util.RaceEnabled {
-			iter = wrapInUnsafeIter(iter)
-		}
-		return iter
+		return maybeWrapInUnsafeIter(iter)
 	}
 
 	iter := MVCCIterator(newPebbleIterator(
 		p.snapshot, opts, StandardDurability, p.SupportsRangeKeys()))
-	if util.RaceEnabled {
-		iter = wrapInUnsafeIter(iter)
-	}
-	return iter
+	return maybeWrapInUnsafeIter(iter)
 }
 
 // NewEngineIterator implements the Reader interface.

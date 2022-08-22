@@ -332,7 +332,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 				if d.HasArg("prefix") {
 					d.ScanArgs(t, "prefix", &opts.Prefix)
 				}
-				iter := wrapInUnsafeIter(newIntentInterleavingIterator(eng, opts))
+				iter := maybeWrapInUnsafeIter(newIntentInterleavingIterator(eng, opts))
 				var b strings.Builder
 				defer iter.Close()
 				// pos is the original <file>:<lineno> prefix computed by

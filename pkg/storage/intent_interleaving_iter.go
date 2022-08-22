@@ -86,7 +86,7 @@ type intentInterleavingIter struct {
 	constraint intentInterleavingIterConstraint
 
 	// iter is for iterating over MVCC keys and interleaved intents.
-	iter MVCCIterator
+	iter *pebbleIterator // MVCCIterator
 	// The valid value from iter.Valid() after the last positioning call.
 	iterValid bool
 	// When iterValid = true, this contains the result of iter.UnsafeKey(). We
@@ -96,7 +96,7 @@ type intentInterleavingIter struct {
 
 	// intentIter is for iterating over separated intents, so that
 	// intentInterleavingIter can make them look as if they were interleaved.
-	intentIter      EngineIterator
+	intentIter      *pebbleIterator // EngineIterator
 	intentIterState pebble.IterValidityState
 	// The decoded key from the lock table. This is an unsafe key
 	// in that it is only valid when intentIter has not been
@@ -255,17 +255,21 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 		// constrainedToGlobal.
 		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
+
+	// All readers given to intentInterleavingIter construct pebbleIterators, so
+	// we can use the concrete type here to avoid the cost of dynamic dispatch.
+	//
 	// Note that we can reuse intentKeyBuf, intentLimitKeyBuf after
 	// NewEngineIterator returns.
-	intentIter := reader.NewEngineIterator(intentOpts)
+	intentIter := reader.NewEngineIterator(intentOpts).(*pebbleIterator)
 
 	// The creation of these iterators can race with concurrent mutations, which
 	// may make them inconsistent with each other. So we clone here, to ensure
 	// consistency (certain Reader implementations already ensure consistency,
 	// and we use that when possible to save allocations).
-	var iter MVCCIterator
+	var iter *pebbleIterator
 	if reader.ConsistentIterators() {
-		iter = reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		iter = maybeUnwrapUnsafeIter(reader.NewMVCCIterator(MVCCKeyIterKind, opts)).(*pebbleIterator)
 	} else {
 		iter = newPebbleIteratorByCloning(
 			intentIter.GetRawIter(), opts, StandardDurability, reader.SupportsRangeKeys())
@@ -345,6 +349,8 @@ func (i *intentInterleavingIter) makeLowerLimitKey() roachpb.Key {
 // NB: This is called before computePos(), and can't rely on intentCmp.
 //
 // REQUIRES: i.dir > 0
+//
+// gcassert:inline
 func (i *intentInterleavingIter) maybeSkipIntentRangeKey() error {
 	if util.RaceEnabled && i.dir < 0 {
 		i.err = errors.AssertionFailedf("maybeSkipIntentRangeKey called in reverse")
@@ -352,38 +358,45 @@ func (i *intentInterleavingIter) maybeSkipIntentRangeKey() error {
 		return i.err
 	}
 	if i.iterValid && i.intentKey != nil {
-		if hasPoint, hasRange := i.iter.HasPointAndRange(); hasRange && !hasPoint {
-			// iter may be on a bare range key that will cover the provisional value,
-			// in which case we can step onto it. We guard against emitting the wrong
-			// range key for the intent if the provisional value turns out to be
-			// missing by:
-			//
-			// 1. Before we step, make sure iter isn't ahead of intentIter. We have
-			//    to do a key comparison anyway in case intentIter is ahead of iter.
-			// 2. After we step, make sure we're on a point key covered by a range key.
-			//    We don't need a key comparison (but do so under race), because if
-			//    the provisional value is missing then we'll either land on a
-			//    different point key below the range key (which will emit the
-			//    correct range key), or we'll land on a different bare range key.
-			//
-			// TODO(erikgrinaker): in cases where we don't step iter, we can save
-			// the result of the comparison in i.intentCmp to avoid another one.
-			if intentCmp := i.intentKey.Compare(i.iterKey.Key); intentCmp < 0 {
-				i.err = errors.Errorf("iter ahead of provisional value for intent %s (at %s)",
-					i.intentKey, i.iterKey)
+		return i.doMaybeSkipIntentRangeKey()
+	}
+	return nil
+}
+
+// doMaybeSkipIntentRangeKey is a helper for maybeSkipIntentRangeKey(), which
+// allows mid-stack inlining of the former.
+func (i *intentInterleavingIter) doMaybeSkipIntentRangeKey() error {
+	if hasPoint, hasRange := i.iter.HasPointAndRange(); hasRange && !hasPoint {
+		// iter may be on a bare range key that will cover the provisional value,
+		// in which case we can step onto it. We guard against emitting the wrong
+		// range key for the intent if the provisional value turns out to be
+		// missing by:
+		//
+		// 1. Before we step, make sure iter isn't ahead of intentIter. We have
+		//    to do a key comparison anyway in case intentIter is ahead of iter.
+		// 2. After we step, make sure we're on a point key covered by a range key.
+		//    We don't need a key comparison (but do so under race), because if
+		//    the provisional value is missing then we'll either land on a
+		//    different point key below the range key (which will emit the
+		//    correct range key), or we'll land on a different bare range key.
+		//
+		// TODO(erikgrinaker): in cases where we don't step iter, we can save
+		// the result of the comparison in i.intentCmp to avoid another one.
+		if intentCmp := i.intentKey.Compare(i.iterKey.Key); intentCmp < 0 {
+			i.err = errors.Errorf("iter ahead of provisional value for intent %s (at %s)",
+				i.intentKey, i.iterKey)
+			i.valid = false
+			return i.err
+		} else if intentCmp == 0 {
+			i.iter.Next()
+			if err := i.tryDecodeKey(); err != nil {
+				return err
+			}
+			hasPoint, hasRange = i.iter.HasPointAndRange()
+			if !hasPoint || !hasRange || (util.RaceEnabled && !i.iterKey.Key.Equal(i.intentKey)) {
+				i.err = errors.Errorf("iter not on provisional value for intent %s", i.intentKey)
 				i.valid = false
 				return i.err
-			} else if intentCmp == 0 {
-				i.iter.Next()
-				if err := i.tryDecodeKey(); err != nil {
-					return err
-				}
-				hasPoint, hasRange = i.iter.HasPointAndRange()
-				if !hasPoint || !hasRange || (util.RaceEnabled && !i.iterKey.Key.Equal(i.intentKey)) {
-					i.err = errors.Errorf("iter not on provisional value for intent %s", i.intentKey)
-					i.valid = false
-					return i.err
-				}
 			}
 		}
 	}
@@ -394,14 +407,22 @@ func (i *intentInterleavingIter) maybeSkipIntentRangeKey() error {
 // direction if the underlying iterator has moved past an intent onto a
 // different range key that should not be surfaced yet. Must be called after
 // computePos().
+//
+// gcassert:inline
 func (i *intentInterleavingIter) maybeSuppressRangeKeyChanged() {
 	if util.RaceEnabled && i.dir > 0 {
 		panic(errors.AssertionFailedf("maybeSuppressRangeKeyChanged called in forward direction"))
 	}
-	if i.rangeKeyChanged && i.isCurAtIntentIterReverse() && i.intentCmp > 0 &&
-		i.iter.RangeBounds().EndKey.Compare(i.intentKey) <= 0 {
-		i.rangeKeyChanged = false
+	// NB: i.intentCmp implies isCurAtIntentIterReverse(), but cheaper.
+	if i.rangeKeyChanged && i.intentCmp > 0 {
+		i.doMaybeSuppressRangeKeyChanged()
 	}
+}
+
+// doMaybeSuppressRangeKeyChanges is a helper for maybeSuppressRangeKeyChanged
+// which allows mid-stack inlining of the former.
+func (i *intentInterleavingIter) doMaybeSuppressRangeKeyChanged() {
+	i.rangeKeyChanged = i.iter.RangeBounds().EndKey.Compare(i.intentKey) > 0
 }
 
 func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
@@ -1245,7 +1266,7 @@ func (i *intentInterleavingIter) SupportsPrev() bool {
 	return true
 }
 
-// unsageMVCCIterator is used in RaceEnabled test builds to randomly inject
+// unsafeMVCCIterator is used in RaceEnabled test builds to randomly inject
 // changes to unsafe keys retrieved from MVCCIterators.
 type unsafeMVCCIterator struct {
 	MVCCIterator
@@ -1254,8 +1275,22 @@ type unsafeMVCCIterator struct {
 	rawMVCCKeyBuf []byte
 }
 
-func wrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
-	return &unsafeMVCCIterator{MVCCIterator: iter}
+// gcassert:inline
+func maybeWrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
+	if util.RaceEnabled {
+		return &unsafeMVCCIterator{MVCCIterator: iter}
+	}
+	return iter
+}
+
+// gcassert:inline
+func maybeUnwrapUnsafeIter(iter MVCCIterator) MVCCIterator {
+	if util.RaceEnabled {
+		if unsafeIter, ok := iter.(*unsafeMVCCIterator); ok {
+			return unsafeIter.MVCCIterator
+		}
+	}
+	return iter
 }
 
 var _ MVCCIterator = &unsafeMVCCIterator{}

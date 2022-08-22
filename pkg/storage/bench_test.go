@@ -1845,7 +1845,7 @@ func runCheckSSTConflicts(
 	}
 }
 
-func runSSTIterator(b *testing.B, numKeys int, verify bool) {
+func runSSTIterator(b *testing.B, variant string, numKeys int, verify bool) {
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 	value := MVCCValue{Value: roachpb.MakeValueFromBytes(bytes.Repeat([]byte("a"), 128))}
 
@@ -1861,9 +1861,27 @@ func runSSTIterator(b *testing.B, numKeys int, verify bool) {
 	}
 	sstWriter.Close()
 
+	var makeSSTIterator func(data []byte, verify bool) (SimpleMVCCIterator, error)
+	switch variant {
+	case "legacy":
+		makeSSTIterator = func(data []byte, verify bool) (SimpleMVCCIterator, error) {
+			return NewMemSSTIterator(data, verify)
+		}
+	case "pebble":
+		makeSSTIterator = func(data []byte, verify bool) (SimpleMVCCIterator, error) {
+			return NewPebbleMemSSTIterator(data, verify, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				LowerBound: keys.MinKey,
+				UpperBound: keys.MaxKey,
+			})
+		}
+	default:
+		b.Fatalf("unknown variant %q", variant)
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		iter, err := NewMemSSTIterator(sstFile.Bytes(), verify)
+		iter, err := makeSSTIterator(sstFile.Bytes(), verify)
 		if err != nil {
 			b.Fatal(err)
 		}
