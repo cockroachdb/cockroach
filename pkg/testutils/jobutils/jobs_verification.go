@@ -246,6 +246,15 @@ func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
 	return jobID
 }
 
+// GetLastJobIDByType gets the most recent job's ID with the specified job type.
+func GetLastJobIDByType(t testing.TB, db *sqlutils.SQLRunner, jobType string) jobspb.JobID {
+	var jobID jobspb.JobID
+	db.QueryRow(
+		t, `SELECT id FROM system.jobs WHERE job_type = %s ORDER BY created DESC LIMIT 1`,
+		jobType).Scan(&jobID)
+	return jobID
+}
+
 // GetJobProgress loads the Progress message associated with the job.
 func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {
 	ret := &jobspb.Progress{}

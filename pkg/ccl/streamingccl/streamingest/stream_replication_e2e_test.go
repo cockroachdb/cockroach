@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -50,10 +52,12 @@ type srcInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *s
 type destInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner) // Tenant is created by the replication stream
 
 type tenantStreamingClustersArgs struct {
-	srcTenantID        roachpb.TenantID
-	srcInitFunc        srcInitExecFunc
-	srcNumNodes        int
-	srcClusterSettings map[string]string
+	srcTenantID          roachpb.TenantID
+	srcInitFunc          srcInitExecFunc
+	srcNumNodes          int
+	srcClusterSettings   map[string]string
+	baseDir              string
+	skipWaitingForMVCCGC bool
 
 	destTenantID        roachpb.TenantID
 	destInitFunc        destInitExecFunc
@@ -69,7 +73,7 @@ var defaultTenantStreamingClustersArgs = tenantStreamingClustersArgs{
 	CREATE DATABASE d;
 	CREATE TABLE d.t1(i int primary key, a string, b string);
 	CREATE TABLE d.t2(i int primary key);
-	INSERT INTO d.t1 (i) VALUES (42);
+	INSERT INTO d.t1 (i, a, b) VALUES (42, 'a', 'b');
 	INSERT INTO d.t2 VALUES (2);
 	UPDATE d.t1 SET b = 'world' WHERE i = 42;
 	`)
@@ -191,7 +195,11 @@ func createTenantStreamingClusters(
 			DistSQL: &execinfra.TestingKnobs{
 				StreamingTestingKnobs: args.testingKnobs,
 			},
+			GCJob: &sql.GCJobTestingKnobs{
+				SkipWaitingForMVCCGC: args.skipWaitingForMVCCGC,
+			},
 		},
+		ExternalIODir: args.baseDir,
 	}
 
 	startTestCluster := func(
@@ -217,8 +225,12 @@ func createTenantStreamingClusters(
 	// Start the src cluster tenant with tenant pods on every node in the cluster,
 	// ensuring they're all active beofre proceeding.
 	tenantArgs := base.TestTenantArgs{
-		TenantID: args.srcTenantID,
+		TenantID:      args.srcTenantID,
+		ExternalIODir: args.baseDir,
 		TestingKnobs: base.TestingKnobs{
+			GCJob: &sql.GCJobTestingKnobs{
+				SkipWaitingForMVCCGC: args.skipWaitingForMVCCGC,
+			},
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				AllowSplitAndScatter: true,
 			}},
@@ -994,4 +1006,132 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 
 	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+func TestTenantStreamingSchemaChangeBulkOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	args.baseDir = testutils.TestDataPath(t)
+	args.skipWaitingForMVCCGC = true
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.srcSysServer.Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+	cleanUpTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanUpTenant())
+	}()
+
+	c.srcTenantSQL.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '20KB'`)
+	c.srcTenantSQL.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1'`)
+	c.srcTenantSQL.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';")
+
+	t.Run("cancel-import-into", func(t *testing.T) {
+		c.srcTenantSQL.Exec(t, `CREATE TABLE d.t (a INT PRIMARY KEY, b STRING)`)
+		insert := []string{"'a'", "'b'", "'c'"}
+		for i, v := range insert {
+			c.srcTenantSQL.Exec(t, "INSERT INTO d.t (a, b) VALUES ($1, $2)", i+1000, v)
+		}
+
+		preImportData := c.srcTenantSQL.QueryStr(t, `SELECT * FROM d.t`)
+		timeBeforeImport := c.srcSysServer.Clock().Now()
+
+		// The import job hit an injected failure during import and got paused.
+		c.srcTenantSQL.ExpectErr(
+			t, `.*pausing due to error.*`,
+			`IMPORT INTO d.t (a, b) CSV DATA ($1)`, "nodelocal://0/data-0")
+		importJobID := jobutils.GetLastJobIDByType(t, c.srcTenantSQL, "IMPORT")
+		jobutils.WaitForJobToPause(t, c.srcTenantSQL, importJobID)
+
+		c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		jobutils.WaitForJobToPause(t, c.destTenantSQL, importJobID)
+
+		// Cancel the import job, the imported data got rolled back through a DelRange
+		c.srcTenantSQL.Exec(t, "CANCEL JOB $1", importJobID)
+		jobutils.WaitForJobToCancel(t, c.srcTenantSQL, importJobID)
+
+		c.srcTenantSQL.CheckQueryResults(t, `SELECT * FROM d.t`, preImportData)
+		c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		c.compareResult("SELECT * FROM d.t")
+		c.compareResult(fmt.Sprintf("SELECT * FROM d.t AS OF SYSTEM TIME %d", timeBeforeImport.WallTime))
+	})
+
+	t.Run("cancel-import", func(t *testing.T) {
+		defer gcjob.SetSmallMaxGCIntervalForTest()()
+		c.srcTenantSQL.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
+		// The import job hit an injected failure during import and got paused.
+		c.srcTenantSQL.ExpectErr(
+			t, `.*pausing due to error.*`,
+			fmt.Sprintf(`IMPORT TABLE simple FROM PGDUMP ('%s') WITH ignore_unsupported_statements`, "nodelocal://0/simple.sql"),
+		)
+		// Import job gets paused and cancel the job
+		importJobID := jobutils.GetLastJobIDByType(t, c.srcTenantSQL, "IMPORT")
+
+		jobutils.WaitForJobToPause(t, c.srcTenantSQL, importJobID)
+		c.srcTenantSQL.Exec(t, "CANCEL JOB $1", importJobID)
+		jobutils.WaitForJobToCancel(t, c.srcTenantSQL, importJobID)
+
+		gcJobID := jobutils.GetLastJobID(t, c.srcTenantSQL)
+		jobutils.WaitForJobToSucceed(t, c.srcTenantSQL, gcJobID)
+
+		c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		jobutils.WaitForJobToSucceed(t, c.destTenantSQL, gcJobID)
+	})
+
+	cmpExecCmp := func(t *testing.T, execStmts []string, cmpBefore []string, cmpAfter []string) {
+		c.t = t
+		if len(cmpBefore) > 0 {
+			c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		}
+		for _, cmp := range cmpBefore {
+			c.compareResult(cmp)
+		}
+
+		timeBeforeExec := c.srcSysServer.Clock().Now()
+		c.srcTenantSQL.ExecMultiple(c.t, execStmts...)
+
+		if len(cmpAfter) > 0 {
+			c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+		}
+		for _, cmp := range cmpAfter {
+			c.compareResult(cmp)
+			if strings.Contains(cmp, "SELECT") {
+				c.compareResult(fmt.Sprintf("%s AS OF SYSTEM TIME %d", cmp, timeBeforeExec.WallTime))
+			}
+		}
+	}
+
+	t.Run("drop-truncate", func(t *testing.T) {
+		defer gcjob.SetSmallMaxGCIntervalForTest()()
+
+		// Drop index.
+		cmpExecCmp(t, []string{"CREATE INDEX t1index ON d.t1 (a)"},
+			[]string{}, []string{"SHOW INDEXES FROM d.t1"})
+
+		cmpExecCmp(t, []string{"DROP INDEX d.t1index"},
+			[]string{}, []string{"SHOW INDEXES FROM d.t1"})
+
+		// Drop table.
+		cmpExecCmp(t, []string{"DROP TABLE d.t1"},
+			[]string{"SHOW TABLES FROM d", "SELECT * FROM d.t1"},
+			[]string{"SHOW TABLES FROM d"})
+
+		// Truncate table.
+		cmpExecCmp(t, []string{"TRUNCATE TABLE d.t2"},
+			[]string{"SHOW TABLES FROM d", "SELECT * FROM d.t2"},
+			[]string{"SHOW TABLES FROM d", "SELECT * FROM d.t2"})
+	})
 }

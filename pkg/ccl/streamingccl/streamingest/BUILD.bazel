@@ -74,6 +74,7 @@ go_test(
         "stream_ingestion_test.go",
         "stream_replication_e2e_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":streamingest"],
     deps = [
         "//pkg/base",
@@ -105,6 +106,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/gcjob",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/storage",
