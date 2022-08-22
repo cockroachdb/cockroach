@@ -11,6 +11,8 @@
 package scbuildstmt
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // DropOwnedBy implements DROP OWNED BY.
@@ -37,6 +40,17 @@ func DropOwnedBy(b BuildCtx, n *tree.DropOwnedBy) {
 		}
 		if role != b.SessionData().User() && !b.CurrentUserHasAdminOrIsMemberOf(role) {
 			panic(pgerror.New(pgcode.InsufficientPrivilege, "permission denied to drop objects"))
+		}
+		ok, err := b.CanPerformDropOwnedBy(b.EvalCtx().Ctx(), role)
+		if err != nil {
+			panic(err)
+		}
+		if !ok {
+			panic(errors.WithHint(pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot perform drop owned by if role has synthetic privileges; %s has entries in system.privileges",
+				role),
+				fmt.Sprintf(`perform REVOKE SYSTEM ... for the relevant privileges %s has in system.privileges`, role)))
 		}
 	}
 
