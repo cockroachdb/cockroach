@@ -957,6 +957,11 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	// serialize on the stats key.
 	deltaStats := res.Delta.ToStats()
 	b.state.Stats.Add(deltaStats)
+
+	if res.State != nil && res.State.GCHint != nil {
+		b.r.handleGCHintResult(ctx, res.State.GCHint)
+		res.State.GCHint = nil
+	}
 }
 
 // ApplyToStateMachine implements the apply.Batch interface. The method handles
