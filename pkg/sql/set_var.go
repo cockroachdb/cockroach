@@ -200,7 +200,7 @@ func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setVarNode) Values() tree.Datums            { return nil }
 func (n *setVarNode) Close(_ context.Context)        {}
 
-func (n *resetAllNode) startExec(params runParams) error {
+func (p *planner) resetAllSessionVars(ctx context.Context) error {
 	for varName, v := range varGen {
 		if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
 			continue
@@ -212,16 +212,16 @@ func (n *resetAllNode) startExec(params runParams) error {
 		hasDefault, defVal := getSessionVarDefaultString(
 			varName,
 			v,
-			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+			p.sessionDataMutatorIterator.sessionDataMutatorBase,
 		)
 		if !hasDefault {
 			continue
 		}
-		if err := params.p.SetSessionVar(params.ctx, varName, defVal, false /* isLocal */); err != nil {
+		if err := p.SetSessionVar(ctx, varName, defVal, false /* isLocal */); err != nil {
 			return err
 		}
 	}
-	for varName := range params.SessionData().CustomOptions {
+	for varName := range p.SessionData().CustomOptions {
 		_, v, err := getSessionVar(varName, false /* missingOK */)
 		if err != nil {
 			return err
@@ -229,13 +229,17 @@ func (n *resetAllNode) startExec(params runParams) error {
 		_, defVal := getSessionVarDefaultString(
 			varName,
 			v,
-			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+			p.sessionDataMutatorIterator.sessionDataMutatorBase,
 		)
-		if err := params.p.SetSessionVar(params.ctx, varName, defVal, false /* isLocal */); err != nil {
+		if err := p.SetSessionVar(ctx, varName, defVal, false /* isLocal */); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (n *resetAllNode) startExec(params runParams) error {
+	return params.p.resetAllSessionVars(params.ctx)
 }
 
 func (n *resetAllNode) Next(_ runParams) (bool, error) { return false, nil }
