@@ -248,3 +248,29 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
            voter_constraints = '{+region=ca-central-1: 2}',
            lease_preferences = '[[+region=ca-central-1]]'
+
+subtest conflicting_zone_config_extension
+
+statement error pq: REGIONAL zone config extensions are not allowed to set lease_preferences
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY REGIONAL CONFIGURE ZONE USING
+  lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+statement error pq: zone config extension \{\[-region=ca-central-1\]\} violates the home region's lease preference: \{\[\+region=ca-central-1\]\}
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY REGIONAL IN "ca-central-1" CONFIGURE ZONE USING
+  lease_preferences = '[[-region=ca-central-1], [+region=ap-southeast-2]]'
+
+statement error pq: zone config extension cannot change priority of lease preference for the home region: \{\[\+region=ca-central-1\]\}
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY REGIONAL IN "ca-central-1" CONFIGURE ZONE USING
+  lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+statement error pq: zone config extension cannot unset the home region's lease preference: \{\[\+region=ca-central-1\]\}
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY REGIONAL IN "ca-central-1" CONFIGURE ZONE USING
+  lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement error pq: zone config extension cannot set a replica number lower than the one required for the survival goal: 5 with goal REGION_FAILURE
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE USING
+  num_replicas = 4
+
+statement error pq: zone config extension cannot set a voter number lower than the one required for the survival goal: 5 with goal REGION_FAILURE
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE USING
+  num_voters = 4

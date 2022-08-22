@@ -155,11 +155,30 @@ func (r *RegionConfig) ZoneConfigExtensions() descpb.ZoneConfigExtensions {
 
 // ApplyZoneConfigExtensionForGlobal applies the global table zone configuration
 // extensions to the provided zone configuration, returning the updated config.
-func (r *RegionConfig) ApplyZoneConfigExtensionForGlobal(zc zonepb.ZoneConfig) zonepb.ZoneConfig {
+func (r *RegionConfig) ApplyZoneConfigExtensionForGlobal(
+	zc zonepb.ZoneConfig,
+) (zonepb.ZoneConfig, error) {
 	if ext := r.zoneCfgExtensions.Global; ext != nil {
+		var numVoters, numReplicas int32
+		if zc.NumVoters != nil {
+			numVoters = *zc.NumVoters
+		}
+		if zc.NumReplicas != nil {
+			numReplicas = *zc.NumReplicas
+		}
 		zc = extendZoneCfg(zc, *ext)
+		if zc.NumVoters != nil && *zc.NumVoters < numVoters {
+			return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
+				"cannot set a voter number lower than the one required for the "+
+				"survival goal: %v with goal %v\n", numVoters, r.SurvivalGoal())
+		}
+		if zc.NumReplicas != nil && *zc.NumReplicas < numReplicas {
+			return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
+				"cannot set a replica number lower than the one required for the "+
+				"survival goal: %v with goal %v\n", numReplicas, r.SurvivalGoal())
+		}
 	}
-	return zc
+	return zc, nil
 }
 
 // ApplyZoneConfigExtensionForRegionalIn applies the regional table zone
@@ -167,14 +186,44 @@ func (r *RegionConfig) ApplyZoneConfigExtensionForGlobal(zc zonepb.ZoneConfig) z
 // configuration, returning the updated config.
 func (r *RegionConfig) ApplyZoneConfigExtensionForRegionalIn(
 	zc zonepb.ZoneConfig, region catpb.RegionName,
-) zonepb.ZoneConfig {
+) (zonepb.ZoneConfig, error) {
+	var numVoters, numReplicas int32
+	if zc.NumVoters != nil {
+		numVoters = *zc.NumVoters
+	}
+	if zc.NumReplicas != nil {
+		numReplicas = *zc.NumReplicas
+	}
+
 	if ext := r.zoneCfgExtensions.Regional; ext != nil {
+		if ext.LeasePreferences != nil {
+			return zonepb.ZoneConfig{}, errors.New("REGIONAL zone config extensions " +
+				"are not allowed to set lease_preferences")
+		}
 		zc = extendZoneCfg(zc, *ext)
 	}
 	if ext, ok := r.zoneCfgExtensions.RegionalIn[region]; ok {
+		if err := validateZoneConfigExtension(ext, zc, region.String()); err != nil {
+			return zonepb.ZoneConfig{}, err
+		}
 		zc = extendZoneCfg(zc, ext)
 	}
-	return zc
+
+	// TODO(janexing): to ensure that the zone config extension won't break the
+	// survival goal, here we only add restriction on the number of voters and
+	// replicas. We may want to consider adding constraint to their distribution
+	// across zones/regions as well.
+	if zc.NumVoters != nil && *zc.NumVoters < numVoters {
+		return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
+			"cannot set a voter number lower than the one required for the "+
+			"survival goal: %v with goal %v\n", numVoters, r.SurvivalGoal())
+	}
+	if zc.NumReplicas != nil && *zc.NumReplicas < numReplicas {
+		return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
+			"cannot set a replica number lower than the one required for the "+
+			"survival goal: %v with goal %v\n", numReplicas, r.SurvivalGoal())
+	}
+	return zc, nil
 }
 
 // "extending" a zone config means having the extension inherit any missing
@@ -467,4 +516,107 @@ func CanDropRegion(name catpb.RegionName, config RegionConfig) error {
 		)
 	}
 	return CanSatisfySurvivalGoal(config.survivalGoal, len(config.regions)-1)
+}
+
+// getHomeRegionConstraintConjunction returns the ConstraintsConjunction from
+// a list of ConstraintsConjunction for the given region name.
+// If we found the constraint for the region, we return the corresponding
+// ConstraintsConjunction and "true" as the second boolean returned value.
+// If not found in the list, it returns an empty lease preference and "false".
+func getHomeRegionConstraintConjunction(
+	constraints []zonepb.ConstraintsConjunction, homeRegion string,
+) (constraintConjunction zonepb.ConstraintsConjunction, found bool) {
+	for _, constraint := range constraints {
+		// TODO(janexing): We should also consider the case with contraints on zone
+		// level.
+		if constraint.Constraints[0].Key == "region" &&
+			constraint.Constraints[0].Value == homeRegion {
+			return constraint, true
+		}
+	}
+	return zonepb.ConstraintsConjunction{}, false
+}
+
+// getHomeRegionLeasePreference returns the lease preference and its index from
+// a list of lease preference for the given region name. If not found in the
+// list, it returns an empty lease preference and -1 as the index.
+func getHomeRegionLeasePreference(
+	leasePreferences []zonepb.LeasePreference, homeRegion string,
+) (zonepb.LeasePreference, int) {
+	for idx, leasePreference := range leasePreferences {
+		// TODO(janexing): We should also consider the case with contraints on zone
+		// level.
+		if leasePreference.Constraints[0].Value == homeRegion {
+			return leasePreference, idx
+		}
+	}
+	return zonepb.LeasePreference{}, -1
+}
+
+// validateZoneConfigExtension ensures that the zone config extensions don't
+// set configs that disagree with their home region.
+func validateZoneConfigExtension(
+	ext zonepb.ZoneConfig, zc zonepb.ZoneConfig, homeRegion string,
+) error {
+	if homeRegion == "" {
+		return nil
+	}
+
+	// Lease preferences.
+	if len(zc.LeasePreferences) > 0 && len(ext.LeasePreferences) > 0 {
+		oriHomeRegionLeasePreference, idx1 := getHomeRegionLeasePreference(zc.LeasePreferences, homeRegion)
+		extHomeRegionLeasePreference, idx2 := getHomeRegionLeasePreference(ext.LeasePreferences, homeRegion)
+		if idx1 != -1 {
+			// If can' find a lease preference for the home region in the zone config
+			// extension's lease preferences.
+			if idx2 == -1 {
+				return errors.Newf("zone config extension cannot unset the home "+
+					"region's lease preference: %v\n", oriHomeRegionLeasePreference)
+			}
+			if idx1 != idx2 {
+				return errors.Newf("zone config extension cannot change priority"+
+					" of lease preference for the home region: %v\n", oriHomeRegionLeasePreference)
+			}
+			if oriHomeRegionLeasePreference.Constraints[0].Type != extHomeRegionLeasePreference.Constraints[0].Type {
+				return errors.Newf("zone config extension %v violates the home"+
+					" region's lease preference: %v\n", extHomeRegionLeasePreference, oriHomeRegionLeasePreference)
+			}
+		}
+	}
+
+	// Replica constraints.
+	if len(zc.Constraints) > 0 && len(ext.Constraints) > 0 {
+		oriHomeRegionReplicaConstraint, ok1 := getHomeRegionConstraintConjunction(zc.Constraints, homeRegion)
+		extHomeRegionReplicaConstraint, ok2 := getHomeRegionConstraintConjunction(ext.Constraints, homeRegion)
+		if ok1 {
+			if !ok2 {
+				return errors.Newf("zone config extension cannot unset the home"+
+					" region's replica constraint: %v\n", oriHomeRegionReplicaConstraint)
+			}
+			if oriHomeRegionReplicaConstraint.Constraints[0].Type != extHomeRegionReplicaConstraint.Constraints[0].Type ||
+				oriHomeRegionReplicaConstraint.NumReplicas > extHomeRegionReplicaConstraint.NumReplicas {
+				return errors.Newf("zone config extension %v violates the home"+
+					" region's replica constraint: %v\n", extHomeRegionReplicaConstraint, oriHomeRegionReplicaConstraint)
+			}
+		}
+	}
+
+	// Voter constraints.
+	if len(zc.VoterConstraints) > 0 && len(ext.VoterConstraints) > 0 {
+		oriHomeRegionVoterConstraint, ok1 := getHomeRegionConstraintConjunction(zc.Constraints, homeRegion)
+		extHomeRegionVoterConstraint, ok2 := getHomeRegionConstraintConjunction(ext.Constraints, homeRegion)
+		if ok1 {
+			if !ok2 {
+				return errors.Newf("zone config extension cannot unset the home"+
+					" region's voter constraint: %v\n", oriHomeRegionVoterConstraint)
+			}
+			if oriHomeRegionVoterConstraint.Constraints[0].Type != extHomeRegionVoterConstraint.Constraints[0].Type ||
+				oriHomeRegionVoterConstraint.NumReplicas > extHomeRegionVoterConstraint.NumReplicas {
+				return errors.Newf("zone config extension %v violates the home"+
+					" region's voter constraint: %v\n", extHomeRegionVoterConstraint, oriHomeRegionVoterConstraint)
+			}
+		}
+	}
+
+	return nil
 }
