@@ -914,6 +914,13 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
+// GetGCHint returns the GC hint.
+func (r *Replica) GetGCHint() roachpb.GCHint {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.GCHint
+}
+
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
 func (r *Replica) ExcludeDataFromBackup() bool {

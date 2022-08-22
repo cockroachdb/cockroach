@@ -250,6 +250,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			q.Replicated.State.GCThreshold = nil
 		}
 
+		if q.Replicated.State.GCHint != nil {
+			p.Replicated.State.GCHint = q.Replicated.State.GCHint
+		}
+		q.Replicated.State.GCHint = nil
+
 		if p.Replicated.State.Version == nil {
 			p.Replicated.State.Version = q.Replicated.State.Version
 		} else if q.Replicated.State.Version != nil {
