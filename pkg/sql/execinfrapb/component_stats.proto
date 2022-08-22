@@ -162,4 +162,5 @@ message OutputStats {
 message FlowStats {
   optional util.optional.Uint max_mem_usage = 1 [(gogoproto.nullable) = false];
   optional util.optional.Uint max_disk_usage = 2 [(gogoproto.nullable) = false];
+  optional util.optional.Uint estimated_cpu = 3 [(gogoproto.nullable) = false];
 }

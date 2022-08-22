@@ -13,13 +13,16 @@ package flowinfra
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -207,6 +210,10 @@ type FlowBase struct {
 	spec *execinfrapb.FlowSpec
 
 	admissionInfo admission.WorkInfo
+
+	baselineCPU   int64
+	flowStartCPU  int64
+	flowStartTime time.Time
 }
 
 // Setup is part of the Flow interface.
@@ -376,6 +383,8 @@ func (f *FlowBase) GetAdmissionInfo() admission.WorkInfo {
 	return f.admissionInfo
 }
 
+const baselineDuration = 100 * time.Millisecond
+
 // StartInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to rowSyncFlowConsumer if
 // set.
@@ -412,6 +421,15 @@ func (f *FlowBase) StartInternal(
 
 	f.status = flowRunning
 
+	if execstats.ShouldCollectStats(ctx, f.CollectStats) {
+		before := getCPU(ctx)
+		time.Sleep(baselineDuration)
+		f.baselineCPU = getCPU(ctx) - before
+
+		f.flowStartCPU = getCPU(ctx)
+		f.flowStartTime = timeutil.Now()
+	}
+
 	if log.V(1) {
 		log.Infof(ctx, "registered flow %s", f.ID.Short())
 	}
@@ -433,6 +451,45 @@ func (f *FlowBase) StartInternal(
 	return nil
 }
 
+// EndInternal should be called after all foreground work is done for the flow,
+// and all worker goroutines have been started. It is used to collect execution
+// statistics. It is necessary to do this in EndInternal instead of Cleanup
+// because there could be a significant delay before Cleanup is called.
+func (f *FlowBase) EndInternal(ctx context.Context) {
+	if execstats.ShouldCollectStats(ctx, f.CollectStats) {
+		go func() {
+			f.waitGroup.Wait()
+			flowCPU := getCPU(ctx) - f.flowStartCPU
+			flowDuration := timeutil.Now().Sub(f.flowStartTime)
+			scaleFactor := float64(1)
+			if baselineDuration.Nanoseconds() > 0 {
+				scaleFactor = float64(flowDuration.Nanoseconds()) / float64(baselineDuration.Nanoseconds())
+			}
+			// Estimate the cpu usage for the flow by subtracting the expected usage
+			// from the actual usage measured while the flow ran.
+			estimatedCPU := flowCPU - int64(float64(f.baselineCPU)*scaleFactor)
+			if estimatedCPU < 0 {
+				estimatedCPU = 0
+			}
+			f.sp.RecordStructured(&execinfrapb.ComponentStats{
+				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
+				FlowStats: execinfrapb.FlowStats{
+					EstimatedCpu: optional.MakeUint(uint64(estimatedCPU)),
+				},
+			})
+		}()
+	}
+}
+
+func getCPU(ctx context.Context) int64 {
+	// Based off the multitenant.ExternalUsage implementation in tenant.go.
+	userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return userTimeMillis + sysTimeMillis
+}
+
 // IsLocal returns whether this flow is being run as part of a local-only query.
 func (f *FlowBase) IsLocal() bool {
 	return f.Local
@@ -445,6 +502,7 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
+	defer f.EndInternal(ctx)
 	return f.StartInternal(ctx, f.processors, doneFn)
 }
 
@@ -470,6 +528,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) {
 	}
 	log.VEventf(ctx, 1, "running %T in the flow's goroutine", headProc)
 	headProc.Run(ctx)
+	f.EndInternal(ctx)
 }
 
 // Wait is part of the Flow interface.

@@ -318,6 +318,7 @@ func (f *vectorizedFlow) Run(ctx context.Context, doneFn func()) {
 
 	log.VEvent(ctx, 1, "running the batch flow coordinator in the flow's goroutine")
 	f.batchFlowCoordinator.Run(ctx)
+	f.EndInternal(ctx)
 }
 
 var _ colcontainer.GetPather = &vectorizedFlow{}

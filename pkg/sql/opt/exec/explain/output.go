@@ -361,6 +361,18 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	}
 }
 
+func (ob *OutputBuilder) AddCPUUsage(cpuMs int64) {
+	if cpuMs < 1 {
+		// Use 1ms as the minimum estimated cpu time.
+		cpuMs = 1
+	}
+	cpuUsage := time.Duration(cpuMs * int64(time.Millisecond))
+	ob.AddRedactableTopLevelField(RedactVolatile,
+		"estimated sql cpu usage",
+		string(humanizeutil.Duration(cpuUsage)),
+	)
+}
+
 // AddRegionsStats adds a top-level field for regions executed on statistics.
 func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 	ob.AddRedactableTopLevelField(

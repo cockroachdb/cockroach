@@ -107,6 +107,7 @@ type NodeLevelStats struct {
 	KVTimeGroupedByNode                map[base.SQLInstanceID]time.Duration
 	NetworkMessagesGroupedByNode       map[base.SQLInstanceID]int64
 	ContentionTimeGroupedByNode        map[base.SQLInstanceID]time.Duration
+	EstimatedCPUGroupedByNode          map[base.SQLInstanceID]int64
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the
@@ -122,6 +123,7 @@ type QueryLevelStats struct {
 	KVTime                time.Duration
 	NetworkMessages       int64
 	ContentionTime        time.Duration
+	EstimatedCPU          int64
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -155,6 +157,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.KVTime += other.KVTime
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
+	s.EstimatedCPU += other.EstimatedCPU
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -230,6 +233,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		KVTimeGroupedByNode:                make(map[base.SQLInstanceID]time.Duration),
 		NetworkMessagesGroupedByNode:       make(map[base.SQLInstanceID]int64),
 		ContentionTimeGroupedByNode:        make(map[base.SQLInstanceID]time.Duration),
+		EstimatedCPUGroupedByNode:          make(map[base.SQLInstanceID]int64),
 	}
 	var errs error
 
@@ -306,7 +310,9 @@ func (a *TraceAnalyzer) ProcessStats() error {
 				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] {
 					a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] = diskUsage
 				}
-
+			}
+			if v.FlowStats.EstimatedCpu.HasValue() {
+				a.nodeLevelStats.EstimatedCPUGroupedByNode[instanceID] += int64(v.FlowStats.EstimatedCpu.Value())
 			}
 		}
 	}
@@ -352,6 +358,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, contentionTime := range a.nodeLevelStats.ContentionTimeGroupedByNode {
 		a.queryLevelStats.ContentionTime += contentionTime
+	}
+
+	for _, estimatedCPU := range a.nodeLevelStats.EstimatedCPUGroupedByNode {
+		a.queryLevelStats.EstimatedCPU += estimatedCPU
 	}
 	return errs
 }
