@@ -34,6 +34,7 @@ func TestRuleAssertions(t *testing.T) {
 		checkIsWithExpression,
 		checkIsColumnDependent,
 		checkIsIndexDependent,
+		checkIsConstraintDependent,
 	} {
 		var fni interface{} = fn
 		fullName := runtime.FuncForPC(reflect.ValueOf(fni).Pointer()).Name()
@@ -124,8 +125,7 @@ func checkIsWithExpression(e scpb.Element) error {
 // element.
 func checkIsColumnDependent(e scpb.Element) error {
 	// Exclude columns themselves.
-	switch e.(type) {
-	case *scpb.Column:
+	if isColumn(e) {
 		return nil
 	}
 	// A column dependent should have a ColumnID attribute.
@@ -155,6 +155,25 @@ func checkIsIndexDependent(e scpb.Element) error {
 		}
 	} else if err == nil {
 		return errors.New("has IndexID attr but doesn't verify isIndexDependent")
+	}
+	return nil
+}
+
+// Assert that checkIsConstraintDependent covers all elements of a constraint
+// element.
+func checkIsConstraintDependent(e scpb.Element) error {
+	// Exclude constraints themselves.
+	if isConstraint(e) {
+		return nil
+	}
+	// A constraint dependent should have a ConstraintID attribute.
+	_, err := screl.Schema.GetAttribute(screl.ConstraintID, e)
+	if isConstraintDependent(e) {
+		if err != nil {
+			return errors.New("verifies isConstraintDependent but doesn't have ConstraintID attr")
+		}
+	} else if err == nil {
+		return errors.New("has ConstraintID attr but doesn't verify isConstraintDependent")
 	}
 	return nil
 }

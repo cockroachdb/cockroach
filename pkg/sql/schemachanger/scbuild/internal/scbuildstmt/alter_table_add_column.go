@@ -40,7 +40,6 @@ import (
 func alterTableAddColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddColumn,
 ) {
-	b.IncrementSchemaChangeAlterCounter("table", "add_column")
 	d := t.ColumnDef
 	// We don't support handling zone config related properties for tables, so
 	// throw an unsupported error.
@@ -350,7 +349,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 
 	// Otherwise, create a new primary index target and swap it with the existing
 	// primary index.
-	out := makePrimaryIndexSpec(b, existing)
+	out := makeIndexSpec(b, existing.TableID, existing.IndexID)
 	inColumns := make([]indexColumnSpec, len(out.columns)+1)
 	for i, ic := range out.columns {
 		inColumns[i] = makeIndexColumnSpec(ic)
@@ -360,10 +359,10 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		kind:     scpb.IndexColumn_STORED,
 	}
 	out.apply(b.Drop)
-	in, temp := makeSwapPrimaryIndexSpec(b, out, inColumns)
+	in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
 	in.apply(b.Add)
 	temp.apply(b.AddTransient)
-	return in.idx
+	return in.primary
 }
 
 // handleAddColumnFreshlyAddedPrimaryIndex is used when adding a column to a
@@ -443,7 +442,7 @@ func getNextStoredIndexColumnOrdinal(allTargets ElementResultSet, idx *scpb.Prim
 func getImplicitSecondaryIndexName(
 	b BuildCtx, tbl *scpb.Table, id descpb.IndexID, numImplicitColumns int,
 ) string {
-	elts := b.QueryByID(tbl.TableID)
+	elts := b.QueryByID(tbl.TableID).Filter(notAbsentTargetFilter)
 	var idx *scpb.Index
 	scpb.ForEachSecondaryIndex(elts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndex) {
 		if e.IndexID == id {
@@ -458,37 +457,24 @@ func getImplicitSecondaryIndexName(
 	// final word (either "idx" or "key").
 	segments := make([]string, 0, len(keyColumns)+2)
 	// Add the table name segment.
-	var tblName *scpb.Namespace
-	scpb.ForEachNamespace(b, func(current scpb.Status, target scpb.TargetStatus, e *scpb.Namespace) {
-		if e.DescriptorID == tbl.TableID {
-			tblName = e
-		}
-	})
+	_, _, tblName := scpb.FindNamespace(elts)
 	if tblName == nil {
 		panic(errors.AssertionFailedf("unable to find table name."))
 	}
 	segments = append(segments, tblName.Name)
-	findColumnNameByID := func(colID descpb.ColumnID) ElementResultSet {
-		var columnName *scpb.ColumnName
-		scpb.ForEachColumnName(b, func(current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnName) {
-			if e.ColumnID == colID {
-				columnName = e
-			}
-		})
-		if columnName == nil {
-			panic(errors.AssertionFailedf("unable to find column name."))
-		}
-		return b.ResolveColumn(tbl.TableID, tree.Name(columnName.Name), ResolveParams{})
-	}
 	// Add the key column segments. For inaccessible columns, use "expr" as the
 	// segment. If there are multiple inaccessible columns, add an incrementing
 	// integer suffix.
 	exprCount := 0
 	for i, n := numImplicitColumns, len(keyColumns); i < n; i++ {
+		colID := keyColumns[i].ColumnID
+		colElts := elts.Filter(hasColumnIDAttrFilter(colID))
+		_, _, col := scpb.FindColumn(colElts)
+		if col == nil {
+			panic(errors.AssertionFailedf("unable to find column %d.", colID))
+		}
 		var segmentName string
-		colElts := findColumnNameByID(keyColumns[i].ColumnID)
-		_, _, col := scpb.FindColumnType(colElts)
-		if col.ComputeExpr != nil {
+		if col.IsInaccessible {
 			if exprCount == 0 {
 				segmentName = "expr"
 			} else {

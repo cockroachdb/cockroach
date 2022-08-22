@@ -552,6 +552,17 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 	} else if err != nil {
 		panic(err)
 	}
+	if constraintID := idx.GetConstraintID(); constraintID != 0 {
+		if comment, ok, err := w.commentCache.GetConstraintComment(w.ctx, tbl.GetID(), constraintID); err == nil && ok {
+			w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
+				TableID:      tbl.GetID(),
+				ConstraintID: constraintID,
+				Comment:      comment,
+			})
+		} else if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(
