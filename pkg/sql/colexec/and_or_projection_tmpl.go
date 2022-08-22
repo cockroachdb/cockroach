@@ -151,6 +151,8 @@ func (o *_OP_LOWERProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
