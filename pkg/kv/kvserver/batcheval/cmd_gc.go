@@ -37,22 +37,25 @@ func declareKeysGC(
 	_ time.Duration,
 ) {
 	gcr := req.(*roachpb.GCRequest)
-	// When GC-ing MVCC range key tombstones or individual range keys, we need to
-	// serialize with all writes that overlap the MVCC range tombstone, as well as
-	// the immediate left/right neighboring keys. This is because a range key
-	// write has non-local effects, i.e. it can fragment or merge other range keys
-	// at other timestamps and at its boundaries, and this has a non-commutative
-	// effect on MVCC stats -- if someone writes a new range key while we're GCing
-	// one below, the stats would come out wrong.
-	// Note that we only need to serialize with writers (including other GC
-	// processes) and not with readers (that are guaranteed to be above the GC
-	// threshold). To achieve this, we declare read-write access at
-	// hlc.MaxTimestamp which will not block any readers.
-	for _, span := range mergeAdjacentSpans(makeLookupBoundariesForGCRanges(
-		rs.GetStartKey().AsRawKey(), nil, gcr.RangeKeys,
-	)) {
-		latchSpans.AddMVCC(spanset.SpanReadWrite, span, hlc.MaxTimestamp)
+	if gcr.RangeKeys != nil {
+		// When GC-ing MVCC range key tombstones, we need to serialize with
+		// range key writes that overlap the MVCC range tombstone, as well as
+		// the immediate left/right neighboring keys. This is because a range
+		// key write has non-local effects, i.e. it can fragment or merge other
+		// range keys at other timestamps and at its boundaries, and this has
+		// a non-commutative effect on MVCC stats -- if someone writes a new
+		// range key while we're GCing one below, the stats would come out wrong.
+		//
+		// To achieve this, we use a virtual latch key that will prevent any
+		// range key write operations until GC request is done. All other range
+		// tombstone write operations obtain a read latch on this key and can
+		// run concurrently.
+		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
+		})
 	}
+	// For ClearRangeKey request we still obtain a wide write lock as we don't
+	// expect any operations running on the range.
 	if rk := gcr.ClearRangeKey; rk != nil {
 		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: rk.StartKey, EndKey: rk.EndKey},
 			hlc.MaxTimestamp)
