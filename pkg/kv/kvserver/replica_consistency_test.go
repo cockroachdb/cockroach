@@ -106,7 +106,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	// so next step is for context deadline.
 	id = uuid.FastMakeV4()
 	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{}), started: true}
+	tc.repl.mu.checksums[id] = replicaChecksum{stop: func() {}, notify: make(chan struct{})}
 	tc.repl.mu.Unlock()
 	rc, err = tc.repl.getChecksum(ctx, id)
 	if !testutils.IsError(err, "context deadline exceeded") {
