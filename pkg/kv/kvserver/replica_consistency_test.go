@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -76,14 +77,10 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	id := uuid.FastMakeV4()
-	notify := make(chan struct{})
-	close(notify)
-
 	// Simple condition, the checksum is notified, but not computed.
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: notify}
-	tc.repl.mu.Unlock()
+	id := uuid.FastMakeV4()
+	tc.repl.getReplicaChecksum(ctx, id, timeutil.Now(), true)
+	tc.repl.computeChecksumDone(ctx, id, nil, nil)
 	rc, err := tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "no checksum found")
 	require.Nil(t, rc.Checksum)
@@ -91,19 +88,22 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	// Next condition, the initial wait expires and checksum is not started,
 	// this will take 10ms.
 	id = uuid.FastMakeV4()
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	tc.repl.mu.Unlock()
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "checksum computation did not start")
 	require.Nil(t, rc.Checksum)
+	// An attempt to run the checksum task after it should fail.
+	tc.repl.computeChecksumPostApply(context.Background(), kvserverpb.ComputeChecksum{
+		ChecksumID: id,
+		Mode:       roachpb.ChecksumMode_CHECK_FULL,
+		Version:    batcheval.ReplicaChecksumVersion,
+	})
+	r := tc.repl.getReplicaChecksum(context.Background(), id, timeutil.Now(), false)
+	require.Nil(t, r.Checksum)
 
 	// Next condition, initial wait expired and we found the started flag,
 	// so next step is for context deadline.
 	id = uuid.FastMakeV4()
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{}), started: true}
-	tc.repl.mu.Unlock()
+	tc.repl.getReplicaChecksum(ctx, id, timeutil.Now(), true)
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "context deadline exceeded")
 	require.Nil(t, rc.Checksum)
