@@ -58,7 +58,7 @@ func TestReplicaChecksumVersion(t *testing.T) {
 		rc, err := tc.repl.getChecksum(ctx, cc.ChecksumID)
 		if !matchingVersion {
 			require.ErrorContains(t, taskErr, "incompatible versions")
-			require.ErrorContains(t, err, "no checksum found")
+			require.ErrorContains(t, err, "checksum task failed to start")
 			require.Nil(t, rc.Checksum)
 		} else {
 			require.NoError(t, taskErr)
@@ -79,26 +79,41 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	// Simple condition, the checksum is notified, but not computed.
+	// Checksum computation failed to start.
 	id := uuid.FastMakeV4()
-	c := tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c, _ := tc.repl.getReplicaChecksum(id, timeutil.Now())
+	close(c.started)
+	rc, err := tc.repl.getChecksum(ctx, id)
+	require.ErrorContains(t, err, "checksum task failed to start")
+	require.Nil(t, rc.Checksum)
+
+	// Checksum computation started, but failed.
+	id = uuid.FastMakeV4()
+	c, _ = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c.started <- func() {}
 	close(c.started)
 	close(c.result)
-	rc, err := tc.repl.getChecksum(ctx, id)
+	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "no checksum found")
 	require.Nil(t, rc.Checksum)
 
-	// Next condition, the initial wait expires and checksum is not started,
-	// this will take 10ms.
+	// The initial wait for the task start expires. This will take 10ms.
 	id = uuid.FastMakeV4()
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "checksum computation did not start")
 	require.Nil(t, rc.Checksum)
+	// Now, an attempt to run the checksum task should fail.
+	require.ErrorContains(t,
+		tc.repl.computeChecksumPostApply(context.Background(), kvserverpb.ComputeChecksum{
+			ChecksumID: id,
+			Mode:       roachpb.ChecksumMode_CHECK_FULL,
+			Version:    batcheval.ReplicaChecksumVersion,
+		}), "checksum collection request gave up")
 
-	// Next condition, initial wait expired and we found the started flag,
-	// so next step is for context deadline.
+	// The computation has started, but the request context timed out.
 	id = uuid.FastMakeV4()
-	c = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c, _ = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c.started <- func() {}
 	close(c.started)
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
