@@ -4327,10 +4327,19 @@ func addEqExprConjuncts(
 func (sb *statisticsBuilder) selectivityFromEquivalency(
 	equivGroup opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity props.Selectivity) {
+	var derivedEquivCols opt.ColSet
+	if lookupJoinExpr, ok := e.(*LookupJoinExpr); ok {
+		derivedEquivCols = lookupJoinExpr.DerivedEquivCols
+	}
 	// Find the maximum input distinct count for all columns in this equivalency
 	// group.
 	maxDistinctCount := float64(0)
 	equivGroup.ForEach(func(i opt.ColumnID) {
+		if derivedEquivCols.Contains(i) {
+			// Don't apply selectivity from derived equivalencies internally
+			// manufactured by lookup join solely to facilitate index lookups.
+			return
+		}
 		// If any of the distinct counts were updated by the filter, we want to use
 		// the updated value.
 		colSet := opt.MakeColSet(i)
