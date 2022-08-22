@@ -76,7 +76,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.11111, distinct(2)=7, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+      ├── stats: [rows=11.11111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
@@ -107,7 +107,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=m
-      │              ├── stats: [rows=60.78475, distinct(1)=17.3671, null(1)=0, avgsize(1)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(7)=1.18757, null(7)=0, avgsize(7)=4, distinct(3,7)=1.18757, null(3,7)=0, avgsize(3,7)=8]
+      │              ├── stats: [rows=60.78475, distinct(1)=17.3671, null(1)=0, distinct(3)=1, null(3)=0, distinct(7)=1.18757, null(7)=0, distinct(3,7)=1.18757, null(3,7)=0]
       │              │   histogram(3)=  0   60.785
       │              │                <--- 'banana'
       │              │   histogram(7)=  0             0              9.3283e-11           51.184           9.6005             0              0             0
@@ -128,7 +128,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.11111, distinct(2)=7, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+      ├── stats: [rows=11.11111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
@@ -158,7 +158,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=p
-      │              ├── stats: [rows=60.78475, distinct(1)=17.3671, null(1)=0, avgsize(1)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(8)=1.18757, null(8)=0, avgsize(8)=4, distinct(3,8)=1.18757, null(3,8)=0, avgsize(3,8)=8]
+      │              ├── stats: [rows=60.78475, distinct(1)=17.3671, null(1)=0, distinct(3)=1, null(3)=0, distinct(8)=1.18757, null(8)=0, distinct(3,8)=1.18757, null(3,8)=0]
       │              │   histogram(3)=  0   60.785
       │              │                <--- 'banana'
       │              │   histogram(8)=  0             0              9.3283e-11           51.184           9.6005             0              0             0
@@ -191,7 +191,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.22222, distinct(2)=7, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4]
+      ├── stats: [rows=22.22222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
@@ -225,7 +225,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=m
-      │              ├── stats: [rows=121.5695, distinct(1)=34.7341, null(1)=0, avgsize(1)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(7)=1.18757, null(7)=0, avgsize(7)=4, distinct(3,7)=2.37514, null(3,7)=0, avgsize(3,7)=8]
+      │              ├── stats: [rows=121.5695, distinct(1)=34.7341, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=1.18757, null(7)=0, distinct(3,7)=2.37514, null(3,7)=0]
       │              │   histogram(3)=  0   60.785   0   60.785
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(7)=  0             0              1.8657e-10           102.37           19.201             0              0             0
@@ -246,7 +246,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.22222, distinct(2)=7, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4]
+      ├── stats: [rows=22.22222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
@@ -276,7 +276,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=p
-      │              ├── stats: [rows=121.5695, distinct(1)=34.7341, null(1)=0, avgsize(1)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(9)=1.18757, null(9)=0, avgsize(9)=4, distinct(3,9)=2.37514, null(3,9)=0, avgsize(3,9)=8]
+      │              ├── stats: [rows=121.5695, distinct(1)=34.7341, null(1)=0, distinct(3)=2, null(3)=0, distinct(9)=1.18757, null(9)=0, distinct(3,9)=2.37514, null(3,9)=0]
       │              │   histogram(3)=  0   60.785   0   60.785
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(9)=  0             0              1.8657e-10           102.37           19.201             0              0             0
@@ -307,7 +307,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=0.3355995, distinct(2)=0.3356, null(2)=0, avgsize(2)=4, distinct(3)=0.3356, null(3)=0, avgsize(3)=4, distinct(4)=0.3356, null(4)=0, avgsize(4)=4, distinct(3,4)=0.3356, null(3,4)=0, avgsize(3,4)=8]
+      ├── stats: [rows=0.3355995, distinct(2)=0.3356, null(2)=0, distinct(3)=0.3356, null(3)=0, distinct(4)=0.3356, null(4)=0, distinct(3,4)=0.3356, null(3,4)=0]
       │   histogram(3)=  0   0.1678   0   0.1678
       │                <--- 'banana' --- 'cherry'
       │   histogram(4)=  0 0.3356
@@ -340,7 +340,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=5.512417, distinct(1)=1.57498, null(1)=0, avgsize(1)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(10)=1.18757, null(10)=0, avgsize(10)=4, distinct(3,4,10)=2.36876, null(3,4,10)=0, avgsize(3,4,10)=12]
+      │              ├── stats: [rows=5.512417, distinct(1)=1.57498, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=2.36876, null(3,4,10)=0]
       │              │   histogram(3)=  0   2.7562   0   2.7562
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(4)=  0 5.5124
@@ -363,7 +363,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=0.6737262, distinct(2)=0.673726, null(2)=0, avgsize(2)=4, distinct(3)=0.673726, null(3)=0, avgsize(3)=4, distinct(4)=0.673726, null(4)=0, avgsize(4)=4, distinct(3,4)=0.673726, null(3,4)=0, avgsize(3,4)=8]
+      ├── stats: [rows=0.6737262, distinct(2)=0.673726, null(2)=0, distinct(3)=0.673726, null(3)=0, distinct(4)=0.673726, null(4)=0, distinct(3,4)=0.673726, null(3,4)=0]
       │   histogram(3)=  0  0.33686   0  0.33686
       │                <--- 'banana' --- 'cherry'
       │   histogram(4)=  0 0.11229 0 0.22458 0 0.33686
@@ -399,7 +399,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=14.82863, distinct(1)=4.23675, null(1)=0, avgsize(1)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(4)=3, null(4)=0, avgsize(4)=4, distinct(10)=1.18757, null(10)=0, avgsize(10)=4, distinct(3,4,10)=7.05532, null(3,4,10)=0, avgsize(3,4,10)=12]
+      │              ├── stats: [rows=14.82863, distinct(1)=4.23675, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=7.05532, null(3,4,10)=0]
       │              │   histogram(3)=  0   7.4143   0   7.4143
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(4)=  0 2.4714 0 4.9429 0 7.4143

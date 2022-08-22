@@ -72,16 +72,16 @@ SELECT * FROM xysd JOIN uv ON true
 ----
 inner-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
- ├── stats: [rows=5e+07, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=500, null(3)=500000, avgsize(3)=4, distinct(4)=500, null(4)=0, avgsize(4)=4, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(2,7,8)=4e+06, null(2,7,8)=0, avgsize(2,7,8)=14]
+ ├── stats: [rows=5e+07, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=500, null(3)=500000, distinct(4)=500, null(4)=0, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(2,7,8)=4e+06, null(2,7,8)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(4)=500, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:7(int) v:8(int!null)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(7,8)=10000, null(7,8)=0, avgsize(7,8)=11]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(7,8)=10000, null(7,8)=0]
  └── filters (true)
 
 norm
@@ -99,23 +99,23 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=0, avgsize(2)=3]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=0]
  ├── key: (9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2,7), (9)-->(1-4,7,8), (1)==(7), (7)==(1)
  └── inner-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int!null) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
       ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(7)=500, null(7)=0, avgsize(7)=5]
+      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=0, distinct(7)=500, null(7)=0]
       ├── key: (9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(4)=500, null(4)=0, avgsize(4)=4]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=500, null(4)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -132,17 +132,17 @@ project
  └── left-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
       ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      ├── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5]
+      ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
       ├── key: (1,9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(4)=500, null(4)=0, avgsize(4)=4]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -158,17 +158,17 @@ project
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(1-4,7,8)
  └── right-join (hash)
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, avgsize(1)=2]
+      ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
       ├── key: (9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(1-8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -190,12 +190,12 @@ project
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -259,22 +259,22 @@ project
  ├── fd: ()-->(8), (1)-->(2-4), (3,4)~~>(1,2)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      ├── stats: [rows=500000, distinct(8)=1, null(8)=0, avgsize(8)=6]
+      ├── stats: [rows=500000, distinct(8)=1, null(8)=0]
       ├── key: (1,9)
       ├── fd: ()-->(8), (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,10,11)
       ├── inner-join (cross)
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=5e+07, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(4)=500, null(4)=0, avgsize(4)=4, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=5e+07, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
       │    ├── key: (1,9)
       │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(4)=500, null(4)=0, avgsize(4)=4]
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    │    ├── stats: [rows=10000, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    │    ├── stats: [rows=10000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
       │    │    ├── key: (9)
       │    │    └── fd: (9)-->(7,8,10,11)
       │    └── filters (true)
@@ -289,25 +289,25 @@ SELECT sum(v), x, v FROM xysd, uv GROUP BY x, v
 group-by (hash)
  ├── columns: sum:12(decimal!null) x:1(int!null) v:8(int!null)
  ├── grouping columns: x:1(int!null) v:8(int!null)
- ├── stats: [rows=500000, distinct(1,8)=500000, null(1,8)=0, avgsize(1,8)=8]
+ ├── stats: [rows=500000, distinct(1,8)=500000, null(1,8)=0]
  ├── key: (1,8)
  ├── fd: (1,8)-->(12)
  ├── project
  │    ├── columns: x:1(int!null) v:8(int!null)
- │    ├── stats: [rows=5e+07, distinct(1,8)=500000, null(1,8)=0, avgsize(1,8)=8]
+ │    ├── stats: [rows=5e+07, distinct(1,8)=500000, null(1,8)=0]
  │    └── inner-join (cross)
  │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
- │         ├── stats: [rows=5e+07, distinct(1,8)=500000, null(1,8)=0, avgsize(1,8)=8]
+ │         ├── stats: [rows=5e+07, distinct(1,8)=500000, null(1,8)=0]
  │         ├── key: (1,9)
  │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
  │         ├── scan xysd
  │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
- │         │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2]
+ │         │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │         ├── scan uv
  │         │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
- │         │    ├── stats: [rows=10000, distinct(8)=100, null(8)=0, avgsize(8)=6]
+ │         │    ├── stats: [rows=10000, distinct(8)=100, null(8)=0]
  │         │    ├── key: (9)
  │         │    └── fd: (9)-->(7,8,10,11)
  │         └── filters (true)
@@ -322,21 +322,21 @@ SELECT sum(v), x, v FROM xysd, uv WHERE x=u GROUP BY x, v
 group-by (hash)
  ├── columns: sum:12(decimal!null) x:1(int!null) v:8(int!null)
  ├── grouping columns: x:1(int!null) v:8(int!null)
- ├── stats: [rows=10000, distinct(1,8)=10000, null(1,8)=0, avgsize(1,8)=8]
+ ├── stats: [rows=10000, distinct(1,8)=10000, null(1,8)=0]
  ├── key: (1,8)
  ├── fd: (1,8)-->(12)
  ├── inner-join (hash)
  │    ├── columns: x:1(int!null) u:7(int!null) v:8(int!null)
  │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- │    ├── stats: [rows=10000, distinct(1)=500, null(1)=0, avgsize(1)=2, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(1,8)=10000, null(1,8)=0, avgsize(1,8)=8]
+ │    ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(7)=500, null(7)=0, distinct(1,8)=10000, null(1,8)=0]
  │    ├── fd: (1)==(7), (7)==(1)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null)
- │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2]
+ │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  │    │    └── key: (1)
  │    ├── scan uv
  │    │    ├── columns: u:7(int) v:8(int!null)
- │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6]
+ │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
  │    └── filters
  │         └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  └── aggregations
@@ -349,17 +349,17 @@ SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u)
 ----
 semi-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=500, distinct(1)=500, null(1)=0, avgsize(1)=2]
+ ├── stats: [rows=500, distinct(1)=500, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(4)=500, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:7(int)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
  └── filters
       └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
@@ -374,12 +374,12 @@ anti-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(4)=500, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:7(int)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
  └── filters
       └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
@@ -390,16 +390,16 @@ SELECT * FROM xysd JOIN uv ON x=u AND y=v
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null)
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- ├── stats: [rows=25, distinct(1)=25, null(1)=0, avgsize(1)=2, distinct(2)=25, null(2)=0, avgsize(2)=3, distinct(7)=25, null(7)=0, avgsize(7)=5, distinct(8)=25, null(8)=0, avgsize(8)=6]
+ ├── stats: [rows=25, distinct(1)=25, null(1)=0, distinct(2)=25, null(2)=0, distinct(7)=25, null(7)=0, distinct(8)=25, null(8)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(4)=500, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=500, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:7(int) v:8(int!null)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
  └── filters
       ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       └── y:2 = v:8 [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
@@ -412,23 +412,23 @@ inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null)
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── immutable
- ├── stats: [rows=3333.333, distinct(1)=500, null(1)=0, avgsize(1)=2, distinct(7)=500, null(7)=0, avgsize(7)=5]
+ ├── stats: [rows=3333.333, distinct(1)=500, null(1)=0, distinct(7)=500, null(7)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=3737.5, distinct(1)=3737.5, null(1)=0, avgsize(1)=2, distinct(2)=299, null(2)=0, avgsize(2)=3, distinct(4)=499.999, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=3737.5, distinct(1)=3737.5, null(1)=0, distinct(2)=299, null(2)=0, distinct(4)=499.999, null(4)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(4)=500, null(4)=0, avgsize(4)=4]
+ │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=500, null(4)=0]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters
  │         └── (y:2 > 0) AND (y:2 < 300) [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
  ├── scan uv
  │    ├── columns: u:7(int) v:8(int!null)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
  └── filters
       ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -447,23 +447,23 @@ project
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=138.1701, distinct(2)=138.17, null(2)=0, avgsize(2)=3]
+      ├── stats: [rows=138.1701, distinct(2)=138.17, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(12)
       ├── semi-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
-      │    ├── stats: [rows=166.6667, distinct(1)=166.667, null(1)=0, avgsize(1)=2, distinct(2)=138.17, null(2)=0, avgsize(2)=3]
+      │    ├── stats: [rows=166.6667, distinct(1)=166.667, null(1)=0, distinct(2)=138.17, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
-      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
       │    └── filters
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -484,23 +484,23 @@ project
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=400, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(12)
       ├── anti-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
-      │    ├── stats: [rows=4833.333, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      │    ├── stats: [rows=4833.333, distinct(2)=400, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
-      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
       │    └── filters
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -521,23 +521,23 @@ project
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=400, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(12)
       ├── left-join (hash)
       │    ├── columns: x:1(int!null) y:2(int) u:7(int) v:8(int)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
       │    ├── immutable
-      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(7)=500, null(7)=1666.67, avgsize(7)=5]
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0, distinct(7)=500, null(7)=1666.67]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
-      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    └── filters
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -558,21 +558,21 @@ project
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=399.9039, distinct(2)=399.904, null(2)=1, avgsize(2)=3]
+      ├── stats: [rows=399.9039, distinct(2)=399.904, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(12)
       ├── left-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:7(int) v:8(int!null)
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    ├── immutable
-      │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.67, avgsize(1)=2, distinct(2)=399.904, null(2)=6666.67, avgsize(2)=3]
+      │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.67, distinct(2)=399.904, null(2)=6666.67]
       │    ├── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
-      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── filters
@@ -595,23 +595,23 @@ project
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=400, distinct(2)=400, null(2)=1, avgsize(2)=3]
+      ├── stats: [rows=400, distinct(2)=400, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(12)
       ├── full-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:7(int) v:8(int)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
       │    ├── immutable
-      │    ├── stats: [rows=11666.67, distinct(2)=400, null(2)=6666.67, avgsize(2)=3]
+      │    ├── stats: [rows=11666.67, distinct(2)=400, null(2)=6666.67]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
-      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3]
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    └── filters
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -636,24 +636,24 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN (SELECT * FROM xyz WHERE x=10) 
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:7(int!null) y:8(int) z:9(int)
- ├── stats: [rows=10.35371, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(7)=1, null(7)=0, avgsize(7)=4]
+ ├── stats: [rows=10.35371, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
  ├── fd: ()-->(1,3,7), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
- │    ├── stats: [rows=10, distinct(1)=9.56179, null(1)=0.1, avgsize(1)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+ │    ├── stats: [rows=10, distinct(1)=9.56179, null(1)=0.1, distinct(3)=1, null(3)=0]
  │    ├── fd: ()-->(3)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
- │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(3)=100, null(3)=10, avgsize(3)=4]
+ │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
  │    └── filters
  │         └── w:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── select
  │    ├── columns: x:7(int!null) y:8(int) z:9(int)
- │    ├── stats: [rows=10, distinct(7)=1, null(7)=0, avgsize(7)=4]
+ │    ├── stats: [rows=10, distinct(7)=1, null(7)=0]
  │    ├── fd: ()-->(7)
  │    ├── scan xyz
  │    │    ├── columns: x:7(int) y:8(int) z:9(int)
- │    │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4]
+ │    │    └── stats: [rows=1000, distinct(7)=100, null(7)=10]
  │    └── filters
  │         └── x:7 = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
  └── filters
@@ -664,20 +664,20 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:7(int!null) y:8(int) z:9(int)
- ├── stats: [rows=10.35371, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(7)=1, null(7)=0, avgsize(7)=4]
+ ├── stats: [rows=10.35371, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
  ├── fd: ()-->(1,3,7), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
- │    ├── stats: [rows=10, distinct(1)=9.56179, null(1)=0.1, avgsize(1)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
+ │    ├── stats: [rows=10, distinct(1)=9.56179, null(1)=0.1, distinct(3)=1, null(3)=0]
  │    ├── fd: ()-->(3)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
- │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(3)=100, null(3)=10, avgsize(3)=4]
+ │    │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(3)=100, null(3)=10]
  │    └── filters
  │         └── w:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── scan xyz
  │    ├── columns: x:7(int) y:8(int) z:9(int)
- │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4]
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10]
  └── filters
       ├── u:1 = x:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       └── x:7 = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
@@ -734,23 +734,23 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
- ├── stats: [rows=5000, distinct(2)=399.999, null(2)=2500, avgsize(2)=3, distinct(3)=499.977, null(3)=50, avgsize(3)=4, distinct(7)=499, null(7)=0, avgsize(7)=5, distinct(2,3)=3160.69, null(2,3)=25, avgsize(2,3)=7, distinct(3,7)=5000, null(3,7)=0, avgsize(3,7)=9, distinct(1,2,9)=5000, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=5000, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
  ├── key: (9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2,7), (9)-->(1-4,7,8), (1)==(7), (7)==(1)
  └── inner-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int!null) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
       ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      ├── stats: [rows=5000, distinct(1)=499, null(1)=0, avgsize(1)=2, distinct(2)=399.999, null(2)=2500, avgsize(2)=3, distinct(3)=499.977, null(3)=50, avgsize(3)=4, distinct(7)=499, null(7)=0, avgsize(7)=5, distinct(2,3)=3160.69, null(2,3)=25, avgsize(2,3)=7, distinct(3,7)=5000, null(3,7)=0, avgsize(3,7)=9, distinct(1,2,9)=5000, null(1,2,9)=0, avgsize(1,2,9)=9]
+      ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
       ├── key: (9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(4)=500, null(4)=0, avgsize(4)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -761,23 +761,23 @@ SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, avgsize(2)=3, distinct(3)=500, null(3)=100, avgsize(3)=4, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=50, avgsize(2,3)=7, distinct(3,7)=10000, null(3,7)=50, avgsize(3,7)=9, distinct(1,2,9)=10000, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
  ├── key: (1,9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
  └── left-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
       ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, avgsize(2)=3, distinct(3)=500, null(3)=100, avgsize(3)=4, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=50, avgsize(2,3)=7, distinct(3,7)=10000, null(3,7)=50, avgsize(3,7)=9, distinct(1,2,9)=10000, null(1,2,9)=0, avgsize(1,2,9)=9]
+      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
       ├── key: (1,9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(4)=500, null(4)=0, avgsize(4)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -788,22 +788,22 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int!null) rowid:9(int!null)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, avgsize(2)=3, distinct(3)=500, null(3)=100, avgsize(3)=4, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(2,3)=4323.46, null(2,3)=50, avgsize(2,3)=7, distinct(3,7)=10000, null(3,7)=50, avgsize(3,7)=9, distinct(1,2,9)=10000, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=4323.46, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
  ├── key: (9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(1-4,7,8)
  └── right-join (hash)
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=5000, avgsize(2)=3, distinct(3)=500, null(3)=100, avgsize(3)=4, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(2,3)=4323.46, null(2,3)=50, avgsize(2,3)=7, distinct(3,7)=10000, null(3,7)=50, avgsize(3,7)=9, distinct(1,2,9)=10000, null(1,2,9)=0, avgsize(1,2,9)=9]
+      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=4323.46, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
       ├── key: (9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(1-8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -814,23 +814,23 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, avgsize(2)=3, distinct(3)=500, null(3)=100, avgsize(3)=4, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=50, avgsize(2,3)=7, distinct(3,7)=10000, null(3,7)=50, avgsize(3,7)=9, distinct(1,2,9)=10000, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
  ├── key: (1,9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
  └── full-join (hash)
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
       ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
-      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, avgsize(2)=3, distinct(3)=500, null(3)=100, avgsize(3)=4, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=50, avgsize(2,3)=7, distinct(3,7)=10000, null(3,7)=50, avgsize(3,7)=9, distinct(1,2,9)=10000, null(1,2,9)=0, avgsize(1,2,9)=9]
+      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
       ├── key: (1,9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -842,28 +842,28 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u WHERE s IS NOT NULL
 ----
 project
  ├── columns: x:1(int) y:2(int) s:3(string!null) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
- ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, avgsize(2)=3, distinct(3)=500, null(3)=0, avgsize(3)=4, distinct(7)=500, null(7)=4950, avgsize(7)=5, distinct(2,3)=4999.5, null(2,3)=0, avgsize(2,3)=7, distinct(3,7)=9900, null(3,7)=0, avgsize(3,7)=9, distinct(1,2,9)=9900, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, distinct(3)=500, null(3)=0, distinct(7)=500, null(7)=4950, distinct(2,3)=4999.5, null(2,3)=0, distinct(3,7)=9900, null(3,7)=0, distinct(1,2,9)=9900, null(1,2,9)=0]
  ├── key: (1,9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
  └── select
       ├── columns: x:1(int) y:2(int) s:3(string!null) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, avgsize(2)=3, distinct(3)=500, null(3)=0, avgsize(3)=4, distinct(7)=500, null(7)=4950, avgsize(7)=5, distinct(2,3)=4999.5, null(2,3)=0, avgsize(2,3)=7, distinct(3,7)=9900, null(3,7)=0, avgsize(3,7)=9, distinct(1,2,9)=9900, null(1,2,9)=0, avgsize(1,2,9)=9]
+      ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, distinct(3)=500, null(3)=0, distinct(7)=500, null(7)=4950, distinct(2,3)=4999.5, null(2,3)=0, distinct(3,7)=9900, null(3,7)=0, distinct(1,2,9)=9900, null(1,2,9)=0]
       ├── key: (1,9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── full-join (hash)
       │    ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
-      │    ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, avgsize(2)=3, distinct(3)=500, null(3)=100, avgsize(3)=4, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=50, avgsize(2,3)=7, distinct(3,7)=10000, null(3,7)=50, avgsize(3,7)=9, distinct(1,2,9)=10000, null(1,2,9)=0, avgsize(1,2,9)=9]
+      │    ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(7)=500, null(7)=5000, distinct(2,3)=5000, null(2,3)=50, distinct(3,7)=10000, null(3,7)=50, distinct(1,2,9)=10000, null(1,2,9)=0]
       │    ├── key: (1,9)
       │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+      │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
       │    │    ├── key: (9)
       │    │    └── fd: (9)-->(7,8,10,11)
       │    └── filters
@@ -878,22 +878,22 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
 ----
 project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:7(int) v:8(int) rowid:9(int)
- ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, avgsize(2)=3, distinct(3)=500, null(3)=500000, avgsize(3)=4, distinct(7)=500, null(7)=2.5e+07, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=250000, avgsize(2,3)=7, distinct(3,7)=250000, null(3,7)=250000, avgsize(3,7)=9, distinct(1,2,9)=5e+07, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(3)=500, null(3)=500000, distinct(7)=500, null(7)=2.5e+07, distinct(2,3)=5000, null(2,3)=250000, distinct(3,7)=250000, null(3,7)=250000, distinct(1,2,9)=5e+07, null(1,2,9)=0]
  ├── key: (1,9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
  └── full-join (cross)
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int) rowid:9(int) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, avgsize(2)=3, distinct(3)=500, null(3)=500000, avgsize(3)=4, distinct(7)=500, null(7)=2.5e+07, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=250000, avgsize(2,3)=7, distinct(3,7)=250000, null(3,7)=250000, avgsize(3,7)=9, distinct(1,2,9)=5e+07, null(1,2,9)=0, avgsize(1,2,9)=9]
+      ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(3)=500, null(3)=500000, distinct(7)=500, null(7)=2.5e+07, distinct(2,3)=5000, null(2,3)=250000, distinct(3,7)=250000, null(3,7)=250000, distinct(1,2,9)=5e+07, null(1,2,9)=0]
       ├── key: (1,9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -904,21 +904,21 @@ SELECT * FROM xysd, uv
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int!null)
- ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, avgsize(2)=3, distinct(1,2,9)=5e+07, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(1,2,9)=5e+07, null(1,2,9)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── inner-join (cross)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, avgsize(2)=3, distinct(1,2,9)=5e+07, null(1,2,9)=0, avgsize(1,2,9)=9]
+      ├── stats: [rows=5e+07, distinct(2)=400, null(2)=2.5e+07, distinct(1,2,9)=5e+07, null(1,2,9)=0]
       ├── key: (1,9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5]
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(1,2)=5000, null(1,2)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=10000, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters (true)
@@ -928,17 +928,17 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
 ----
 semi-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=500, distinct(1)=500, null(1)=0, avgsize(1)=2]
+ ├── stats: [rows=500, distinct(1)=500, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(4)=500, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
  │    ├── columns: u:7(int)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=5000]
  └── filters
       └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
@@ -947,13 +947,13 @@ SELECT * FROM uv WHERE EXISTS(SELECT * FROM xysd WHERE x=u)
 ----
 semi-join (hash)
  ├── columns: u:1(int) v:2(int!null)
- ├── stats: [rows=10000, distinct(1)=500, null(1)=0, avgsize(1)=5]
+ ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
  ├── scan uv
  │    ├── columns: u:1(int) v:2(int!null)
- │    └── stats: [rows=10000, distinct(1)=500, null(1)=5000, avgsize(1)=5, distinct(2)=100, null(2)=0, avgsize(2)=6]
+ │    └── stats: [rows=10000, distinct(1)=500, null(1)=5000, distinct(2)=100, null(2)=0]
  ├── scan xysd
  │    ├── columns: x:6(int!null)
- │    ├── stats: [rows=5000, distinct(6)=5000, null(6)=0, avgsize(6)=2]
+ │    ├── stats: [rows=5000, distinct(6)=5000, null(6)=0]
  │    └── key: (6)
  └── filters
       └── x:6 = u:1 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -977,24 +977,24 @@ inner-join (merge)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
  ├── left ordering: +1
  ├── right ordering: +7
- ├── stats: [rows=5000, distinct(1)=499, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(7)=499, null(7)=0, avgsize(7)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7, distinct(3,7)=5000, null(3,7)=0, avgsize(3,7)=9, distinct(1,2,8)=5000, null(1,2,8)=0, avgsize(1,2,8)=11]
+ ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=5000, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
  ├── key: (9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8), (1)==(7), (7)==(1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(4)=500, null(4)=0, avgsize(4)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
  ├── sort
  │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
- │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+ │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
  │    ├── key: (9)
  │    ├── fd: (9)-->(7,8)
  │    ├── ordering: +7
  │    └── scan uv
  │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
- │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+ │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
  │         ├── key: (9)
  │         └── fd: (9)-->(7,8)
  └── filters (true)
@@ -1018,24 +1018,24 @@ left-join (merge)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int) v:8(int) rowid:9(int)
  ├── left ordering: +1
  ├── right ordering: +7
- ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(7)=500, null(7)=1666.67, avgsize(7)=5, distinct(8)=100, null(8)=1666.67, avgsize(8)=6, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7, distinct(3,7)=5000, null(3,7)=25, avgsize(3,7)=9, distinct(1,2,9)=5000, null(1,2,9)=0, avgsize(1,2,9)=9]
+ ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(7)=500, null(7)=1666.67, distinct(8)=100, null(8)=1666.67, distinct(2,3)=5000, null(2,3)=25, distinct(3,7)=5000, null(3,7)=25, distinct(1,2,9)=5000, null(1,2,9)=0]
  ├── key: (1,9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=2500, avgsize(2)=3, distinct(3)=500, null(3)=50, avgsize(3)=4, distinct(4)=500, null(4)=0, avgsize(4)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5, distinct(2,3)=5000, null(2,3)=25, avgsize(2,3)=7]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
  ├── sort
  │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
- │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+ │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
  │    ├── key: (9)
  │    ├── fd: (9)-->(7,8)
  │    ├── ordering: +7
  │    └── scan uv
  │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
- │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+ │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
  │         ├── key: (9)
  │         └── fd: (9)-->(7,8)
  └── filters
@@ -1201,19 +1201,19 @@ inner-join (cross)
  │    ├── left columns: "?column?":1(int)
  │    ├── right columns: "?column?":2(int)
  │    ├── cardinality: [1 - 2]
- │    ├── stats: [rows=2, distinct(3)=2, null(3)=0, avgsize(3)=4]
+ │    ├── stats: [rows=2, distinct(3)=2, null(3)=0]
  │    ├── key: (3)
  │    ├── values
  │    │    ├── columns: "?column?":1(int!null)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    └── (1,) [type=tuple{int}]
  │    └── values
  │         ├── columns: "?column?":2(int!null)
  │         ├── cardinality: [1 - 1]
- │         ├── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ │         ├── stats: [rows=1, distinct(2)=1, null(2)=0]
  │         ├── key: ()
  │         ├── fd: ()-->(2)
  │         └── (2,) [type=tuple{int}]
@@ -1271,7 +1271,7 @@ project
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── outer: (2)
  │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    │    │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ │    │    │    │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
  │    │    │    │    ├── scan table1
  │    │    │    │    │    └── stats: [rows=1000]
  │    │    │    │    ├── values
@@ -1296,20 +1296,20 @@ left-join (cross)
  ├── columns: x:1(int!null) x:2(int)
  ├── cardinality: [1 - 1]
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=1, avgsize(2)=0]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
  │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
  ├── values
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0, distinct(2)=0, null(2)=0, avgsize(2)=0]
+ │    ├── stats: [rows=0, distinct(2)=0, null(2)=0]
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── filters (true)
@@ -1370,14 +1370,14 @@ expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 cols
 inner-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int) t.public.def.d:6(int!null) t.public.def.e:7(int!null) t.public.def.f:8(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, avgsize(1)=1, distinct(2)=0.01, null(2)=0, avgsize(2)=2, distinct(3)=0.009995, null(3)=0.0001, avgsize(3)=4, distinct(6)=0.01, null(6)=0, avgsize(6)=4, distinct(7)=0.01, null(7)=0, avgsize(7)=4, distinct(8)=0.00999995, null(8)=0.0001, avgsize(8)=4, distinct(7,8)=0.01, null(7,8)=0, avgsize(7,8)=8, distinct(1-3)=0.0099995, null(1-3)=0, avgsize(1-3)=7]
+ ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.009995, null(3)=0.0001, distinct(6)=0.01, null(6)=0, distinct(7)=0.01, null(7)=0, distinct(8)=0.00999995, null(8)=0.0001, distinct(7,8)=0.01, null(7,8)=0, distinct(1-3)=0.0099995, null(1-3)=0]
  ├── cost: 2127.9107
  ├── key: (6,7)
  ├── fd: (1,2)-->(3), (6,7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── interesting orderings: (+(1|6),+(2|7))
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=1, distinct(2)=10, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=1, avgsize(3)=4, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=7]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 127.87
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1398,14 +1398,14 @@ expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 cols
 semi-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=1, distinct(2)=10, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=1, avgsize(3)=4, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(7,8)=1, null(7,8)=0, avgsize(7,8)=8, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
  ├── cost: 2127.9106
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=1, distinct(2)=10, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=1, avgsize(3)=4, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=7]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 127.87
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1423,14 +1423,14 @@ expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 cols
 anti-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, avgsize(1)=1, distinct(2)=1e-10, null(2)=0, avgsize(2)=2, distinct(3)=1e-10, null(3)=1e-10, avgsize(3)=4, distinct(7)=1e-10, null(7)=0, avgsize(7)=4, distinct(8)=1e-10, null(8)=0, avgsize(8)=4, distinct(7,8)=1e-10, null(7,8)=0, avgsize(7,8)=8, distinct(1-3)=1e-10, null(1-3)=0, avgsize(1-3)=7]
+ ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(3)=1e-10, null(3)=1e-10, distinct(7)=1e-10, null(7)=0, distinct(8)=1e-10, null(8)=0, distinct(7,8)=1e-10, null(7,8)=0, distinct(1-3)=1e-10, null(1-3)=0]
  ├── cost: 2127.9106
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=1, distinct(2)=10, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=1, avgsize(3)=4, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=7]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 127.87
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1448,14 +1448,14 @@ expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 cols
 semi-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=0, distinct(1)=0, null(1)=0, avgsize(1)=1, distinct(2)=0, null(2)=0, avgsize(2)=2, distinct(3)=0, null(3)=0, avgsize(3)=4, distinct(7)=0, null(7)=0, avgsize(7)=0, distinct(8)=0, null(8)=0, avgsize(8)=0, distinct(7,8)=0, null(7,8)=0, avgsize(7,8)=0, distinct(1-3)=0, null(1-3)=0, avgsize(1-3)=7]
+ ├── stats: [rows=0, distinct(1)=0, null(1)=0, distinct(2)=0, null(2)=0, distinct(3)=0, null(3)=0, distinct(7)=0, null(7)=0, distinct(8)=0, null(8)=0, distinct(7,8)=0, null(7,8)=0, distinct(1-3)=0, null(1-3)=0]
  ├── cost: 2127.9206
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=1, distinct(2)=10, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=1, avgsize(3)=4, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=7]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 127.87
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1474,14 +1474,14 @@ expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 cols
 anti-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=1, distinct(2)=10, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=1, avgsize(3)=4, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(7,8)=1, null(7,8)=0, avgsize(7,8)=8, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
  ├── cost: 2127.9206
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=1, distinct(2)=10, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=1, avgsize(3)=4, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=7]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(1-3)=100, null(1-3)=0]
  │    ├── cost: 127.87
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3)
@@ -1650,14 +1650,14 @@ SELECT * FROM xysd, uv WHERE (s = 'foo' AND u = 3 AND v = 4) OR (s = 'bar' AND u
 ----
 inner-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null)
- ├── stats: [rows=59573.61, distinct(3)=2, null(3)=0, avgsize(3)=9, distinct(7)=2, null(7)=0, avgsize(7)=5, distinct(8)=2, null(8)=0, avgsize(8)=6, distinct(7,8)=2.18365, null(7,8)=0, avgsize(7,8)=8]
+ ├── stats: [rows=59573.61, distinct(3)=2, null(3)=0, distinct(7)=2, null(7)=0, distinct(8)=2, null(8)=0, distinct(7,8)=2.18365, null(7,8)=0]
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  ├── scan uv
  │    ├── columns: u:7(int) v:8(int!null)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, avgsize(7)=5, distinct(8)=100, null(8)=0, avgsize(8)=6, distinct(7,8)=550, null(7,8)=0, avgsize(7,8)=8]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(7,8)=550, null(7,8)=0]
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(3)=10, null(3)=0, avgsize(3)=9, distinct(4)=500, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=500, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters
@@ -1681,14 +1681,14 @@ SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = clas
 ----
 inner-join (cross)
  ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- ├── stats: [rows=19701, distinct(1)=100, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=19701, distinct(1)=100, null(1)=0]
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1701,14 +1701,14 @@ SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = clas
 ----
 inner-join (cross)
  ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- ├── stats: [rows=29403.99, distinct(1)=100, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=29403.99, distinct(1)=100, null(1)=0]
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10, distinct(9)=100, null(9)=10]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1725,10 +1725,10 @@ left-join (cross)
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1765,13 +1765,13 @@ SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
 ----
 semi-join (cross)
  ├── columns: classid:1(int) description:2(varchar)
- ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
- │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
  └── filters
       └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
 
@@ -1783,13 +1783,13 @@ SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
 ----
 semi-join (cross)
  ├── columns: classid:1(int) description:2(varchar)
- ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4]
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10, distinct(9)=100, null(9)=10]
  └── filters
       └── ((firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1)) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7-9), constraints=(/1: (/NULL - ])]
 
@@ -1803,10 +1803,10 @@ anti-join (cross)
  ├── stats: [rows=1e-10]
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
- │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
  └── filters
       └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
 
@@ -1870,14 +1870,14 @@ SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = clas
 ----
 inner-join (cross)
  ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- ├── stats: [rows=1999.8, distinct(1)=1999.8, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1999.8, distinct(1)=1999.8, null(1)=0]
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=500, null(7)=0, avgsize(7)=4, distinct(8)=50, null(8)=0, avgsize(8)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1889,14 +1889,14 @@ SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = clas
 ----
 inner-join (cross)
  ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- ├── stats: [rows=1999.8, distinct(1)=1999.8, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1999.8, distinct(1)=1999.8, null(1)=0]
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=500, null(7)=0, avgsize(7)=4, distinct(9)=10, null(9)=0, avgsize(9)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=500, null(7)=0, distinct(9)=10, null(9)=0]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1909,14 +1909,14 @@ SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = clas
 ----
 inner-join (cross)
  ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- ├── stats: [rows=2999.4, distinct(1)=2999.4, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=2999.4, distinct(1)=2999.4, null(1)=0]
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=500, null(7)=0, avgsize(7)=4, distinct(8)=50, null(8)=0, avgsize(8)=4, distinct(9)=10, null(9)=0, avgsize(9)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0, distinct(9)=10, null(9)=0]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1933,10 +1933,10 @@ left-join (cross)
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, avgsize(7)=4, distinct(8)=50, null(8)=0, avgsize(8)=4]
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1949,13 +1949,13 @@ SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
 ----
 semi-join (cross)
  ├── columns: classid:1(int) description:2(varchar)
- ├── stats: [rows=545, distinct(1)=545, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=545, distinct(1)=545, null(1)=0]
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
- │    └── stats: [rows=1000, distinct(7)=500, null(7)=0, avgsize(7)=4, distinct(8)=50, null(8)=0, avgsize(8)=4]
+ │    └── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
  └── filters
       └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
 
@@ -1969,10 +1969,10 @@ anti-join (cross)
  ├── stats: [rows=4455]
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
- │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
- │    └── stats: [rows=1000, distinct(7)=500, null(7)=0, avgsize(7)=4, distinct(8)=50, null(8)=0, avgsize(8)=4]
+ │    └── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
  └── filters
       └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
 
@@ -2032,7 +2032,7 @@ project
  │    │         ├── values
  │    │         │    ├── columns: col1_5:15(bool!null)
  │    │         │    ├── cardinality: [0 - 0]
- │    │         │    ├── stats: [rows=0, distinct(15)=0, null(15)=0, avgsize(15)=0]
+ │    │         │    ├── stats: [rows=0, distinct(15)=0, null(15)=0]
  │    │         │    ├── key: ()
  │    │         │    └── fd: ()-->(15)
  │    │         └── filters

@@ -566,20 +566,20 @@ project
       ├── key columns: [10] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.00014, null(1)=0, avgsize(1)=4, distinct(10)=0.00014, null(10)=0, avgsize(10)=4]
+      ├── stats: [rows=1, distinct(1)=0.00014, null(1)=0, distinct(10)=0.00014, null(10)=0]
       ├── key: (10)
       ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
       ├── index-join cardsinfo
       │    ├── columns: dealerid:9!null cardid:10!null buyprice:11!null sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null version:17!null
       │    ├── immutable
-      │    ├── stats: [rows=0.00014, distinct(9)=0.00014, null(9)=0, avgsize(9)=4, distinct(10)=0.00014, null(10)=0, avgsize(10)=4, distinct(11)=0.00014, null(11)=0, avgsize(11)=4, distinct(12)=0.00014, null(12)=0, avgsize(12)=4, distinct(13)=0.00014, null(13)=0, avgsize(13)=4, distinct(14)=0.00014, null(14)=0, avgsize(14)=4, distinct(15)=0.00014, null(15)=0, avgsize(15)=4, distinct(16)=0.00014, null(16)=0, avgsize(16)=4, distinct(17)=0.00014, null(17)=0, avgsize(17)=4, distinct(9,17)=0.00014, null(9,17)=0, avgsize(9,17)=8]
+      │    ├── stats: [rows=0.00014, distinct(9)=0.00014, null(9)=0, distinct(10)=0.00014, null(10)=0, distinct(11)=0.00014, null(11)=0, distinct(12)=0.00014, null(12)=0, distinct(13)=0.00014, null(13)=0, distinct(14)=0.00014, null(14)=0, distinct(15)=0.00014, null(15)=0, distinct(16)=0.00014, null(16)=0, distinct(17)=0.00014, null(17)=0, distinct(9,17)=0.00014, null(9,17)=0]
       │    │   histogram(17)=
       │    ├── key: (10)
       │    ├── fd: ()-->(9), (10)-->(11-17), (17)-->(10-16)
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:9!null cardid:10!null version:17!null
       │         ├── constraint: /9/17: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=0.00014, distinct(9)=0.00014, null(9)=0, avgsize(9)=4, distinct(10)=0.00014, null(10)=0, avgsize(10)=4, distinct(17)=0.00014, null(17)=0, avgsize(17)=4, distinct(9,17)=0.00014, null(9,17)=0, avgsize(9,17)=8]
+      │         ├── stats: [rows=0.00014, distinct(9)=0.00014, null(9)=0, distinct(10)=0.00014, null(10)=0, distinct(17)=0.00014, null(17)=0, distinct(9,17)=0.00014, null(9,17)=0]
       │         │   histogram(17)=
       │         ├── key: (10)
       │         └── fd: ()-->(9), (10)-->(17), (17)-->(10)
@@ -629,7 +629,7 @@ project
  │    │    │    │    │    ├── columns: dealerid:42!null version:50!null
  │    │    │    │    │    ├── constraint: /42/50: [/1 - /1]
  │    │    │    │    │    ├── limit: 1(rev)
- │    │    │    │    │    ├── stats: [rows=1, distinct(42)=1, null(42)=0, avgsize(42)=4]
+ │    │    │    │    │    ├── stats: [rows=1, distinct(42)=1, null(42)=0]
  │    │    │    │    │    ├── key: ()
  │    │    │    │    │    ├── fd: ()-->(42,50)
  │    │    │    │    │    └── limit hint: 1.00
@@ -637,7 +637,7 @@ project
  │    │    │    │         ├── columns: dealerid:57!null version:65!null
  │    │    │    │         ├── constraint: /57/65: [/2 - /2]
  │    │    │    │         ├── limit: 1(rev)
- │    │    │    │         ├── stats: [rows=1, distinct(57)=1, null(57)=0, avgsize(57)=4]
+ │    │    │    │         ├── stats: [rows=1, distinct(57)=1, null(57)=0]
  │    │    │    │         ├── key: ()
  │    │    │    │         ├── fd: ()-->(57,65)
  │    │    │    │         └── limit hint: 1.00
@@ -653,7 +653,7 @@ project
  │    │    │         │    ├── columns: dealerid:72!null version:80!null
  │    │    │         │    ├── constraint: /72/80: [/3 - /3]
  │    │    │         │    ├── limit: 1(rev)
- │    │    │         │    ├── stats: [rows=1, distinct(72)=1, null(72)=0, avgsize(72)=4]
+ │    │    │         │    ├── stats: [rows=1, distinct(72)=1, null(72)=0]
  │    │    │         │    ├── key: ()
  │    │    │         │    ├── fd: ()-->(72,80)
  │    │    │         │    └── limit hint: 1.00
@@ -661,7 +661,7 @@ project
  │    │    │              ├── columns: dealerid:87!null version:95!null
  │    │    │              ├── constraint: /87/95: [/4 - /4]
  │    │    │              ├── limit: 1(rev)
- │    │    │              ├── stats: [rows=1, distinct(87)=1, null(87)=0, avgsize(87)=4]
+ │    │    │              ├── stats: [rows=1, distinct(87)=1, null(87)=0]
  │    │    │              ├── key: ()
  │    │    │              ├── fd: ()-->(87,95)
  │    │    │              └── limit hint: 1.00
@@ -708,7 +708,7 @@ project
       │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
       │    ├── key columns: [24 25 3] = [13 14 15]
       │    ├── lookup columns are key
-      │    ├── stats: [rows=478.6466, distinct(3)=478.647, null(3)=0, avgsize(3)=4, distinct(15)=478.647, null(15)=0, avgsize(15)=4]
+      │    ├── stats: [rows=478.6466, distinct(3)=478.647, null(3)=0, distinct(15)=478.647, null(15)=0]
       │    ├── key: (5,15)
       │    ├── fd: ()-->(1,2,4,13,14), (3,5)-->(6,7), (15)-->(16,17), (3)==(15), (15)==(3)
       │    ├── ordering: -(3|15) opt(1,2,4,13,14) [actual: -3]
@@ -722,7 +722,7 @@ project
       │    │    ├── limit hint: 100.00
       │    │    ├── index-join transactiondetails
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
-      │    │    │    ├── stats: [rows=478.6466, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=478.647, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=478.641, null(5)=0, avgsize(5)=4, distinct(6)=478.641, null(6)=0, avgsize(6)=4, distinct(7)=478.641, null(7)=0, avgsize(7)=4, distinct(1,2,4)=1, null(1,2,4)=0, avgsize(1,2,4)=12]
+      │    │    │    ├── stats: [rows=478.6466, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.647, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=478.641, null(5)=0, distinct(6)=478.641, null(6)=0, distinct(7)=478.641, null(7)=0, distinct(1,2,4)=1, null(1,2,4)=0]
       │    │    │    ├── key: (3,5)
       │    │    │    ├── fd: ()-->(1,2,4), (3,5)-->(6,7)
       │    │    │    ├── ordering: -3 opt(1,2,4) [actual: -3]
@@ -730,7 +730,7 @@ project
       │    │    │    └── scan transactiondetails@detailscardidindex,rev
       │    │    │         ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
       │    │    │         ├── constraint: /1/2/4/3/5: [/1/false/21953 - /1/false/21953]
-      │    │    │         ├── stats: [rows=478.6466, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=478.647, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=478.641, null(5)=0, avgsize(5)=4, distinct(1,2,4)=1, null(1,2,4)=0, avgsize(1,2,4)=12]
+      │    │    │         ├── stats: [rows=478.6466, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.647, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=478.641, null(5)=0, distinct(1,2,4)=1, null(1,2,4)=0]
       │    │    │         ├── key: (3,5)
       │    │    │         ├── fd: ()-->(1,2,4)
       │    │    │         ├── ordering: -3 opt(1,2,4) [actual: -3]
@@ -821,7 +821,7 @@ project
  │         ├── grouping columns: cardsinfo.cardid:10!null
  │         ├── internal-ordering: +(1|10) opt(9)
  │         ├── immutable
- │         ├── stats: [rows=19000, distinct(10)=19000, null(10)=0, avgsize(10)=4]
+ │         ├── stats: [rows=19000, distinct(10)=19000, null(10)=0]
  │         ├── key: (10)
  │         ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(1-6,11-17,36), (17)-->(10-16), (1)==(10), (10)==(1)
  │         ├── inner-join (merge)
@@ -829,7 +829,7 @@ project
  │         │    ├── left ordering: +1
  │         │    ├── right ordering: +10
  │         │    ├── immutable
- │         │    ├── stats: [rows=659920.1, distinct(10)=19000, null(10)=0, avgsize(10)=4, distinct(27)=19000, null(27)=0, avgsize(27)=4]
+ │         │    ├── stats: [rows=659920.1, distinct(10)=19000, null(10)=0, distinct(27)=19000, null(27)=0]
  │         │    ├── key: (10,26-28)
  │         │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1), (10,26-28)-->(24,25)
  │         │    ├── ordering: +(1|10) opt(9) [actual: +1]
@@ -842,7 +842,7 @@ project
  │         │    │    │         ├── id:1 = transactiondetails.cardid:27 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
  │         │    │    │         └── (transactiondate:26 >= '2020-02-28 00:00:00+00:00') AND (transactiondate:26 <= '2020-03-01 00:00:00+00:00') [outer=(26), constraints=(/26: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
  │         │    │    ├── immutable
- │         │    │    ├── stats: [rows=423333.3, distinct(1)=19000, null(1)=0, avgsize(1)=4, distinct(2)=13000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5601.15, null(6)=0, avgsize(6)=4, distinct(27)=19000, null(27)=0, avgsize(27)=4]
+ │         │    │    ├── stats: [rows=423333.3, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15, null(6)=0, distinct(27)=19000, null(27)=0]
  │         │    │    ├── key: (1,26-28)
  │         │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (1,26-28)-->(24,25)
  │         │    │    ├── ordering: +1
@@ -856,13 +856,13 @@ project
  │         │    │    │    ├── select
  │         │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
  │         │    │    │    │    ├── immutable
- │         │    │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, avgsize(1)=4, distinct(2)=13000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5601.15, null(6)=0, avgsize(6)=4]
+ │         │    │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15, null(6)=0]
  │         │    │    │    │    ├── key: (1)
  │         │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
  │         │    │    │    │    ├── ordering: +1
  │         │    │    │    │    ├── scan cards
  │         │    │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
- │         │    │    │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0, avgsize(1)=4, distinct(2)=39000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5700, null(6)=0, avgsize(6)=4]
+ │         │    │    │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0, distinct(2)=39000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5700, null(6)=0]
  │         │    │    │    │    │    ├── key: (1)
  │         │    │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
  │         │    │    │    │    │    └── ordering: +1
@@ -875,7 +875,7 @@ project
  │         │    ├── scan cardsinfo
  │         │    │    ├── columns: cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
  │         │    │    ├── constraint: /9/10: [/1 - /1]
- │         │    │    ├── stats: [rows=58333.33, distinct(9)=1, null(9)=0, avgsize(9)=4, distinct(10)=37420.4, null(10)=0, avgsize(10)=4, distinct(11)=40676.7, null(11)=0, avgsize(11)=4, distinct(12)=40676.7, null(12)=0, avgsize(12)=4, distinct(13)=40676.7, null(13)=0, avgsize(13)=4, distinct(14)=40676.7, null(14)=0, avgsize(14)=4, distinct(15)=40676.7, null(15)=0, avgsize(15)=4, distinct(16)=40676.7, null(16)=0, avgsize(16)=4, distinct(17)=58333.3, null(17)=0, avgsize(17)=4]
+ │         │    │    ├── stats: [rows=58333.33, distinct(9)=1, null(9)=0, distinct(10)=37420.4, null(10)=0, distinct(11)=40676.7, null(11)=0, distinct(12)=40676.7, null(12)=0, distinct(13)=40676.7, null(13)=0, distinct(14)=40676.7, null(14)=0, distinct(15)=40676.7, null(15)=0, distinct(16)=40676.7, null(16)=0, distinct(17)=58333.3, null(17)=0]
  │         │    │    ├── key: (10)
  │         │    │    ├── fd: ()-->(9), (10)-->(11-17), (17)-->(10-16)
  │         │    │    └── ordering: +10 opt(9) [actual: +10]
@@ -949,7 +949,7 @@ ORDER BY extract(day from d.TransactionDate)
 sort
  ├── columns: extract:53 totalsell:48!null totalbuy:50!null totalprofit:52!null
  ├── stable
- ├── stats: [rows=82395.87, distinct(53)=82395.9, null(53)=0, avgsize(53)=4]
+ ├── stats: [rows=82395.87, distinct(53)=82395.9, null(53)=0]
  ├── key: (53)
  ├── fd: (53)-->(48,50,52)
  ├── ordering: +53
@@ -957,43 +957,43 @@ sort
       ├── columns: sum:48!null sum:50!null sum:52!null column53:53
       ├── grouping columns: column53:53
       ├── stable
-      ├── stats: [rows=82395.87, distinct(53)=82395.9, null(53)=0, avgsize(53)=4]
+      ├── stats: [rows=82395.87, distinct(53)=82395.9, null(53)=0]
       ├── key: (53)
       ├── fd: (53)-->(48,50,52)
       ├── project
       │    ├── columns: column47:47!null column49:49!null column51:51!null column53:53
       │    ├── stable
-      │    ├── stats: [rows=139576.9, distinct(53)=82395.9, null(53)=0, avgsize(53)=4]
+      │    ├── stats: [rows=139576.9, distinct(53)=82395.9, null(53)=0]
       │    ├── inner-join (hash)
       │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null id:24!null cardsinfo.dealerid:32!null cardsinfo.cardid:33!null
       │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    ├── stats: [rows=139576.9, distinct(3)=82395.9, null(3)=0, avgsize(3)=4, distinct(4)=37420.4, null(4)=0, avgsize(4)=4, distinct(24)=37420.4, null(24)=0, avgsize(24)=4]
+      │    │    ├── stats: [rows=139576.9, distinct(3)=82395.9, null(3)=0, distinct(4)=37420.4, null(4)=0, distinct(24)=37420.4, null(24)=0]
       │    │    ├── key: (5,15,33)
       │    │    ├── fd: ()-->(1,2,13,14,32), (3-5)-->(6,7), (15)-->(16,17), (3)==(15), (15)==(3), (24)==(4,33), (33)==(4,24), (4)==(24,33)
       │    │    ├── inner-join (merge)
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
       │    │    │    ├── left ordering: +3
       │    │    │    ├── right ordering: +15
-      │    │    │    ├── stats: [rows=119679, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=119679, null(3)=0, avgsize(3)=4, distinct(4)=50017.4, null(4)=0, avgsize(4)=4, distinct(5)=114043, null(5)=0, avgsize(5)=4, distinct(6)=114043, null(6)=0, avgsize(6)=4, distinct(7)=114043, null(7)=0, avgsize(7)=4, distinct(13)=1, null(13)=0, avgsize(13)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=119679, null(15)=0, avgsize(15)=4, distinct(16)=75651.6, null(16)=0, avgsize(16)=4, distinct(17)=75651.6, null(17)=0, avgsize(17)=4]
+      │    │    │    ├── stats: [rows=119679, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=119679, null(3)=0, distinct(4)=50017.4, null(4)=0, distinct(5)=114043, null(5)=0, distinct(6)=114043, null(6)=0, distinct(7)=114043, null(7)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=119679, null(15)=0, distinct(16)=75651.6, null(16)=0, distinct(17)=75651.6, null(17)=0]
       │    │    │    ├── key: (4,5,15)
       │    │    │    ├── fd: ()-->(1,2,13,14), (3-5)-->(6,7), (15)-->(16,17), (3)==(15), (15)==(3)
       │    │    │    ├── scan transactiondetails
       │    │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null
       │    │    │    │    ├── constraint: /1/2/3/4/5: [/1/false/'2020-02-23 00:00:00+00:00' - /1/false/'2020-03-01 00:00:00+00:00']
-      │    │    │    │    ├── stats: [rows=1270000, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1.27e+06, null(3)=0, avgsize(3)=4, distinct(4)=57000, null(4)=0, avgsize(4)=4, distinct(5)=1.23043e+06, null(5)=0, avgsize(5)=4, distinct(6)=1.23043e+06, null(6)=0, avgsize(6)=4, distinct(7)=1.23043e+06, null(7)=0, avgsize(7)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=1.27e+06, null(1-3)=0, avgsize(1-3)=12]
+      │    │    │    │    ├── stats: [rows=1270000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1.27e+06, null(3)=0, distinct(4)=57000, null(4)=0, distinct(5)=1.23043e+06, null(5)=0, distinct(6)=1.23043e+06, null(6)=0, distinct(7)=1.23043e+06, null(7)=0, distinct(1,2)=1, null(1,2)=0, distinct(1-3)=1.27e+06, null(1-3)=0]
       │    │    │    │    ├── key: (3-5)
       │    │    │    │    ├── fd: ()-->(1,2), (3-5)-->(6,7)
       │    │    │    │    └── ordering: +3 opt(1,2) [actual: +3]
       │    │    │    ├── select
       │    │    │    │    ├── columns: transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
-      │    │    │    │    ├── stats: [rows=119679, distinct(13)=1, null(13)=0, avgsize(13)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=119679, null(15)=0, avgsize(15)=4, distinct(16)=119679, null(16)=0, avgsize(16)=4, distinct(17)=119679, null(17)=0, avgsize(17)=4, distinct(13,14)=1, null(13,14)=0, avgsize(13,14)=8, distinct(15-17)=119679, null(15-17)=0, avgsize(15-17)=12, distinct(13-17)=119679, null(13-17)=0, avgsize(13-17)=20]
+      │    │    │    │    ├── stats: [rows=119679, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=119679, null(15)=0, distinct(16)=119679, null(16)=0, distinct(17)=119679, null(17)=0, distinct(13,14)=1, null(13,14)=0, distinct(15-17)=119679, null(15-17)=0, distinct(13-17)=119679, null(13-17)=0]
       │    │    │    │    ├── key: (15)
       │    │    │    │    ├── fd: ()-->(13,14), (15)-->(16,17)
       │    │    │    │    ├── ordering: +15 opt(13,14) [actual: +15]
       │    │    │    │    ├── scan transactions
       │    │    │    │    │    ├── columns: transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
       │    │    │    │    │    ├── constraint: /13/14/15: [/1/false/'2020-02-23 00:00:00+00:00' - /1/false/'2020-03-01 00:00:00+00:00']
-      │    │    │    │    │    ├── stats: [rows=141111.1, distinct(13)=1, null(13)=0, avgsize(13)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=141111, null(15)=0, avgsize(15)=4, distinct(13,14)=1, null(13,14)=0, avgsize(13,14)=8, distinct(13-15)=141111, null(13-15)=0, avgsize(13-15)=12]
+      │    │    │    │    │    ├── stats: [rows=141111.1, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=141111, null(15)=0, distinct(13,14)=1, null(13,14)=0, distinct(13-15)=141111, null(13-15)=0]
       │    │    │    │    │    ├── key: (15)
       │    │    │    │    │    ├── fd: ()-->(13,14), (15)-->(16,17)
       │    │    │    │    │    └── ordering: +15 opt(13,14) [actual: +15]
@@ -1004,18 +1004,18 @@ sort
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: id:24!null cardsinfo.dealerid:32!null cardsinfo.cardid:33!null
       │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    │    │    ├── stats: [rows=58333.33, distinct(24)=37420.4, null(24)=0, avgsize(24)=4, distinct(32)=1, null(32)=0, avgsize(32)=4, distinct(33)=37420.4, null(33)=0, avgsize(33)=4]
+      │    │    │    ├── stats: [rows=58333.33, distinct(24)=37420.4, null(24)=0, distinct(32)=1, null(32)=0, distinct(33)=37420.4, null(33)=0]
       │    │    │    ├── key: (33)
       │    │    │    ├── fd: ()-->(32), (24)==(33), (33)==(24)
       │    │    │    ├── scan cardsinfo@cardsinfoversionindex
       │    │    │    │    ├── columns: cardsinfo.dealerid:32!null cardsinfo.cardid:33!null
       │    │    │    │    ├── constraint: /32/40: [/1 - /1]
-      │    │    │    │    ├── stats: [rows=58333.33, distinct(32)=1, null(32)=0, avgsize(32)=4, distinct(33)=37420.4, null(33)=0, avgsize(33)=4]
+      │    │    │    │    ├── stats: [rows=58333.33, distinct(32)=1, null(32)=0, distinct(33)=37420.4, null(33)=0]
       │    │    │    │    ├── key: (33)
       │    │    │    │    └── fd: ()-->(32)
       │    │    │    ├── scan cards@cardsnamesetnumber
       │    │    │    │    ├── columns: id:24!null
-      │    │    │    │    ├── stats: [rows=57000, distinct(24)=57000, null(24)=0, avgsize(24)=4]
+      │    │    │    │    ├── stats: [rows=57000, distinct(24)=57000, null(24)=0]
       │    │    │    │    └── key: (24)
       │    │    │    └── filters
       │    │    │         └── id:24 = cardsinfo.cardid:33 [outer=(24,33), constraints=(/24: (/NULL - ]; /33: (/NULL - ]), fd=(24)==(33), (33)==(24)]

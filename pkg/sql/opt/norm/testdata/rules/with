@@ -550,7 +550,7 @@ with &2 (cte)
  ├── columns: c:14(int!null)
  ├── cardinality: [1 - 2]
  ├── volatile, mutations
- ├── stats: [rows=2, distinct(14)=2, null(14)=0, avgsize(14)=4]
+ ├── stats: [rows=2, distinct(14)=2, null(14)=0]
  ├── cost: 1056.9075
  ├── key: (14)
  ├── insert t.public.child
@@ -561,14 +561,14 @@ with &2 (cte)
  │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    ├── cost: 1056.7975
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:5(int!null) column2:6(int!null)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(5)=1, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4]
+ │    │    ├── stats: [rows=1, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0]
  │    │    ├── cost: 0.02
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(5,6)
@@ -592,7 +592,7 @@ with &2 (cte)
  │                   │    ├── mapping:
  │                   │    │    └──  column2:6(int) => p:7(int)
  │                   │    ├── cardinality: [1 - 1]
- │                   │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, avgsize(7)=4]
+ │                   │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
  │                   │    ├── cost: 0.01
  │                   │    ├── key: ()
  │                   │    ├── fd: ()-->(7)
@@ -602,7 +602,7 @@ with &2 (cte)
  │                   ├── scan t.public.parent
  │                   │    ├── columns: t.public.parent.p:8(int!null)
  │                   │    ├── flags: disabled not visible index feature
- │                   │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │                   │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │                   │    ├── cost: 1044.22
  │                   │    ├── key: (8)
  │                   │    ├── prune: (8)
@@ -618,7 +618,7 @@ with &2 (cte)
       ├── right columns: "?column?":13(int)
       ├── cardinality: [1 - 2]
       ├── immutable
-      ├── stats: [rows=2, distinct(14)=2, null(14)=0, avgsize(14)=4]
+      ├── stats: [rows=2, distinct(14)=2, null(14)=0]
       ├── cost: 0.1
       ├── key: (14)
       ├── with-scan &2 (cte)
@@ -626,7 +626,7 @@ with &2 (cte)
       │    ├── mapping:
       │    │    └──  t.public.child.c:1(int) => c:11(int)
       │    ├── cardinality: [1 - 1]
-      │    ├── stats: [rows=1, distinct(11)=1, null(11)=0, avgsize(11)=4]
+      │    ├── stats: [rows=1, distinct(11)=1, null(11)=0]
       │    ├── cost: 0.01
       │    ├── key: ()
       │    ├── fd: ()-->(11)
@@ -635,7 +635,7 @@ with &2 (cte)
            ├── columns: "?column?":13(int!null)
            ├── cardinality: [1 - 1]
            ├── immutable
-           ├── stats: [rows=1, distinct(13)=1, null(13)=0, avgsize(13)=4]
+           ├── stats: [rows=1, distinct(13)=1, null(13)=0]
            ├── cost: 0.04
            ├── key: ()
            ├── fd: ()-->(13)
@@ -645,7 +645,7 @@ with &2 (cte)
            │    ├── mapping:
            │    │    └──  t.public.child.c:1(int) => c:12(int)
            │    ├── cardinality: [1 - 1]
-           │    ├── stats: [rows=1, distinct(12)=1, null(12)=0, avgsize(12)=4]
+           │    ├── stats: [rows=1, distinct(12)=1, null(12)=0]
            │    ├── cost: 0.01
            │    ├── key: ()
            │    ├── fd: ()-->(12)

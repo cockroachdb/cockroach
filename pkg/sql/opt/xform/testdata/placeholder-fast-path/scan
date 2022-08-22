@@ -30,7 +30,7 @@ placeholder-scan kv
  ├── columns: k:1!null v:2
  ├── cardinality: [0 - 1]
  ├── has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── span
@@ -44,7 +44,7 @@ placeholder-scan kv
  ├── locking: for-update
  ├── cardinality: [0 - 1]
  ├── volatile, has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── span
@@ -57,7 +57,7 @@ placeholder-scan kv
  ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── span
@@ -70,7 +70,7 @@ placeholder-scan kv
  ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── span
@@ -120,7 +120,7 @@ SELECT a, b, c FROM abcd WHERE a=$1 AND b=$2
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=1.1, distinct(1)=1.1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=1.1, distinct(1)=1.1, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── $1
@@ -132,7 +132,7 @@ SELECT a, b, c FROM abcd WHERE b=$1 AND a=$2
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=1.1, distinct(1)=1.1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=1.1, distinct(1)=1.1, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── $2
@@ -145,7 +145,7 @@ SELECT a, b, c FROM abcd WHERE a=0 AND b=$1
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, avgsize(1)=4, distinct(2)=0.666, null(2)=0, avgsize(2)=4, distinct(1,2)=0.666, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, distinct(2)=0.666, null(2)=0, distinct(1,2)=0.666, null(1,2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── 0
@@ -157,7 +157,7 @@ SELECT a, b, c FROM abcd WHERE a=$1 AND b=0
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=3.3, distinct(1)=3.3, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=3.3, distinct(1)=3.3, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── $1
@@ -170,7 +170,7 @@ SELECT a, b, c FROM abcd WHERE a=1+2 AND b=$1
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, avgsize(1)=4, distinct(2)=0.666, null(2)=0, avgsize(2)=4, distinct(1,2)=0.666, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, distinct(2)=0.666, null(2)=0, distinct(1,2)=0.666, null(1,2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── 3
@@ -182,7 +182,7 @@ SELECT a, b, c FROM abcd WHERE a=fnv32a('foo') AND b=$1
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, avgsize(1)=4, distinct(2)=0.666, null(2)=0, avgsize(2)=4, distinct(1,2)=0.666, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, distinct(2)=0.666, null(2)=0, distinct(1,2)=0.666, null(1,2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── 2851307223
@@ -290,7 +290,7 @@ SELECT a, b FROM partial1 WHERE a = $1
 placeholder-scan partial1@pseudo_ab,partial
  ├── columns: a:2!null b:3
  ├── has-placeholder
- ├── stats: [rows=3.3, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=3.3, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(2)
  └── span
       └── $1
@@ -321,7 +321,7 @@ placeholder-scan t_dec
  ├── columns: a:1!null b:2
  ├── cardinality: [0 - 1]
  ├── immutable, has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── span

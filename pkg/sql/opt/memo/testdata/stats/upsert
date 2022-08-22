@@ -91,7 +91,7 @@ WHERE y=10
 with &1
  ├── columns: x:22(string!null) y:23(int!null) z:24(float)
  ├── volatile, mutations
- ├── stats: [rows=1, distinct(23)=1, null(23)=0, avgsize(23)=8]
+ ├── stats: [rows=1, distinct(23)=1, null(23)=0]
  ├── fd: ()-->(23)
  ├── upsert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
@@ -109,24 +109,24 @@ with &1
  │    │    ├── upsert_y:20 => xyz.y:2
  │    │    └── upsert_z:21 => xyz.z:3
  │    ├── volatile, mutations
- │    ├── stats: [rows=9.949749, distinct(1)=9.94975, null(1)=0, avgsize(1)=8, distinct(2)=9.94975, null(2)=0, avgsize(2)=8]
+ │    ├── stats: [rows=9.949749, distinct(1)=9.94975, null(1)=0, distinct(2)=9.94975, null(2)=0]
  │    └── project
  │         ├── columns: upsert_x:19(string) upsert_y:20(int!null) upsert_z:21(float) a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid) y_new:18(int!null)
  │         ├── immutable
- │         ├── stats: [rows=9.949749, distinct(19)=9.94975, null(19)=0, avgsize(19)=8, distinct(20)=9.94975, null(20)=0, avgsize(20)=8]
+ │         ├── stats: [rows=9.949749, distinct(19)=9.94975, null(19)=0, distinct(20)=9.94975, null(20)=0]
  │         ├── lax-key: (7,13)
  │         ├── fd: ()-->(12,18), (7)~~>(6), (13)-->(14-17), (7,13)-->(19), (6,13)-->(20), (7,13)~~>(6,20,21)
  │         ├── project
  │         │    ├── columns: y_new:18(int!null) a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
  │         │    ├── immutable
- │         │    ├── stats: [rows=9.949749, distinct(7,13)=9.94975, null(7,13)=0, avgsize(7,13)=8, distinct(6,13,18)=9.94975, null(6,13,18)=0, avgsize(6,13,18)=8]
+ │         │    ├── stats: [rows=9.949749, distinct(7,13)=9.94975, null(7,13)=0, distinct(6,13,18)=9.94975, null(6,13,18)=0]
  │         │    ├── lax-key: (7,13)
  │         │    ├── fd: ()-->(12,18), (7)~~>(6), (13)-->(14-17)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
  │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │         │    │    ├── immutable
- │         │    │    ├── stats: [rows=9.949749, distinct(13)=9.94975, null(13)=0, avgsize(13)=4, distinct(6,13)=9.94975, null(6,13)=0, avgsize(6,13)=8, distinct(7,13)=9.94975, null(7,13)=0, avgsize(7,13)=8]
+ │         │    │    ├── stats: [rows=9.949749, distinct(13)=9.94975, null(13)=0, distinct(6,13)=9.94975, null(6,13)=0, distinct(7,13)=9.94975, null(7,13)=0]
  │         │    │    ├── lax-key: (7,13)
  │         │    │    ├── fd: ()-->(12), (7)~~>(6), (13)-->(14-17)
  │         │    │    ├── ensure-upsert-distinct-on
@@ -134,20 +134,20 @@ with &1
  │         │    │    │    ├── grouping columns: b:7(string)
  │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │         │    │    │    ├── immutable
- │         │    │    │    ├── stats: [rows=9.949749, distinct(6)=6.31184, null(6)=0, avgsize(6)=4, distinct(7)=9.94975, null(7)=0, avgsize(7)=4]
+ │         │    │    │    ├── stats: [rows=9.949749, distinct(6)=6.31184, null(6)=0, distinct(7)=9.94975, null(7)=0]
  │         │    │    │    ├── lax-key: (7)
  │         │    │    │    ├── fd: ()-->(12), (7)~~>(6,12)
  │         │    │    │    ├── project
  │         │    │    │    │    ├── columns: z_default:12(float) a:6(int!null) b:7(string)
  │         │    │    │    │    ├── immutable
- │         │    │    │    │    ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0, avgsize(7)=4]
+ │         │    │    │    │    ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0]
  │         │    │    │    │    ├── fd: ()-->(12)
  │         │    │    │    │    ├── project
  │         │    │    │    │    │    ├── columns: a:6(int!null) b:7(string)
- │         │    │    │    │    │    ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0, avgsize(7)=4]
+ │         │    │    │    │    │    ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0]
  │         │    │    │    │    │    └── select
  │         │    │    │    │    │         ├── columns: a:6(int!null) b:7(string) c:8(float!null) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
- │         │    │    │    │    │         ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4]
+ │         │    │    │    │    │         ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0, distinct(8)=1, null(8)=0]
  │         │    │    │    │    │         ├── key: (9)
  │         │    │    │    │    │         ├── fd: ()-->(8), (9)-->(6,7,10,11)
  │         │    │    │    │    │         ├── scan abc
@@ -155,7 +155,7 @@ with &1
  │         │    │    │    │    │         │    ├── computed column expressions
  │         │    │    │    │    │         │    │    └── c:8
  │         │    │    │    │    │         │    │         └── a:6::FLOAT8 [type=float]
- │         │    │    │    │    │         │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, avgsize(6)=4, distinct(7)=10, null(7)=0, avgsize(7)=4, distinct(8)=200, null(8)=20, avgsize(8)=4, distinct(9)=2000, null(9)=0, avgsize(9)=4]
+ │         │    │    │    │    │         │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
  │         │    │    │    │    │         │    ├── key: (9)
  │         │    │    │    │    │         │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
  │         │    │    │    │    │         └── filters
@@ -169,7 +169,7 @@ with &1
  │         │    │    │              └── z_default:12 [type=float]
  │         │    │    ├── scan xyz
  │         │    │    │    ├── columns: xyz.x:13(string!null) xyz.y:14(int!null) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
- │         │    │    │    ├── stats: [rows=1000, distinct(13)=1000, null(13)=0, avgsize(13)=4]
+ │         │    │    │    ├── stats: [rows=1000, distinct(13)=1000, null(13)=0]
  │         │    │    │    ├── key: (13)
  │         │    │    │    └── fd: (13)-->(14-17)
  │         │    │    └── filters
@@ -182,7 +182,7 @@ with &1
  │              └── CASE WHEN xyz.x:13 IS NULL THEN z_default:12 ELSE xyz.z:15 END [as=upsert_z:21, type=float, outer=(12,13,15)]
  └── select
       ├── columns: x:22(string!null) y:23(int!null) z:24(float)
-      ├── stats: [rows=1, distinct(23)=1, null(23)=0, avgsize(23)=8]
+      ├── stats: [rows=1, distinct(23)=1, null(23)=0]
       ├── fd: ()-->(23)
       ├── with-scan &1
       │    ├── columns: x:22(string!null) y:23(int!null) z:24(float)
@@ -190,7 +190,7 @@ with &1
       │    │    ├──  xyz.x:1(string) => x:22(string)
       │    │    ├──  xyz.y:2(int) => y:23(int)
       │    │    └──  xyz.z:3(float) => z:24(float)
-      │    └── stats: [rows=9.949749, distinct(22)=9.94975, null(22)=0, avgsize(22)=8, distinct(23)=9.94975, null(23)=0, avgsize(23)=8]
+      │    └── stats: [rows=9.949749, distinct(22)=9.94975, null(22)=0, distinct(23)=9.94975, null(23)=0]
       └── filters
            └── y:23 = 10 [type=bool, outer=(23), constraints=(/23: [/10 - /10]; tight), fd=()-->(23)]
 
@@ -273,7 +273,7 @@ upsert uv
       │    │    ├── columns: z:10(int) u_default:11(int) u:12(int) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── volatile
-      │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=0, avgsize(13)=4]
+      │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=0]
       │    │    ├── lax-key: (10,12)
       │    │    ├── fd: (10)~~>(11), (12)-->(13-15), (13)~~>(12,14,15)
       │    │    ├── ensure-upsert-distinct-on
@@ -281,20 +281,20 @@ upsert uv
       │    │    │    ├── grouping columns: z:10(int)
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    ├── volatile
-      │    │    │    ├── stats: [rows=1000, distinct(10)=1000, null(10)=0, avgsize(10)=4]
+      │    │    │    ├── stats: [rows=1000, distinct(10)=1000, null(10)=0]
       │    │    │    ├── lax-key: (10)
       │    │    │    ├── fd: (10)~~>(11)
       │    │    │    ├── project
       │    │    │    │    ├── columns: u_default:11(int) z:10(int)
       │    │    │    │    ├── volatile
-      │    │    │    │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0, avgsize(10)=4]
+      │    │    │    │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: z:10(int)
       │    │    │    │    │    ├── immutable
-      │    │    │    │    │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0, avgsize(10)=4]
+      │    │    │    │    │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
       │    │    │    │    │    ├── scan xyz
       │    │    │    │    │    │    ├── columns: x:5(string!null) y:6(int!null) xyz.z:7(float) xyz.crdb_internal_mvcc_timestamp:8(decimal) xyz.tableoid:9(oid)
-      │    │    │    │    │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4]
+      │    │    │    │    │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
       │    │    │    │    │    │    ├── key: (5)
       │    │    │    │    │    │    └── fd: (5)-->(6-9)
       │    │    │    │    │    └── projections
@@ -306,7 +306,7 @@ upsert uv
       │    │    │              └── u_default:11 [type=int]
       │    │    ├── scan uv
       │    │    │    ├── columns: u:12(int!null) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
-      │    │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=10, avgsize(13)=4]
+      │    │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=10]
       │    │    │    ├── key: (12)
       │    │    │    └── fd: (12)-->(13-15), (13)~~>(12,14,15)
       │    │    └── filters
@@ -355,24 +355,24 @@ upsert mno
       │    ├── left-join (hash)
       │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) m:11(int) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    │    ├── stats: [rows=2000, distinct(12)=21.0526, null(12)=1988.95, avgsize(12)=4, distinct(13)=21.0526, null(13)=2000, avgsize(13)=4]
+      │    │    ├── stats: [rows=2000, distinct(12)=21.0526, null(12)=1988.95, distinct(13)=21.0526, null(13)=2000]
       │    │    ├── key: (6,11)
       │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6), (11)-->(12-15), (12,13)~~>(11,14,15)
       │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int)
       │    │    │    ├── grouping columns: n:7(int) o:8(int)
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
-      │    │    │    ├── stats: [rows=2000, distinct(6)=1981, null(6)=0, avgsize(6)=8, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=1900, null(8)=100, avgsize(8)=4]
+      │    │    │    ├── stats: [rows=2000, distinct(6)=1981, null(6)=0, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
       │    │    │    ├── key: (6)
       │    │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6)
       │    │    │    ├── project
       │    │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int)
-      │    │    │    │    ├── stats: [rows=2000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=1900, null(8)=100, avgsize(8)=4, distinct(7,8)=1981, null(7,8)=20, avgsize(7,8)=8]
+      │    │    │    │    ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100, distinct(7,8)=1981, null(7,8)=20]
       │    │    │    │    ├── key: (6)
       │    │    │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6)
       │    │    │    │    └── scan mno
       │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
-      │    │    │    │         ├── stats: [rows=2000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=1900, null(8)=100, avgsize(8)=4, distinct(7,8)=1981, null(7,8)=20, avgsize(7,8)=8]
+      │    │    │    │         ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100, distinct(7,8)=1981, null(7,8)=20]
       │    │    │    │         ├── key: (6)
       │    │    │    │         └── fd: (6)-->(7-10), (7,8)~~>(6,9,10)
       │    │    │    └── aggregations
@@ -380,7 +380,7 @@ upsert mno
       │    │    │              └── m:6 [type=int]
       │    │    ├── scan mno
       │    │    │    ├── columns: m:11(int!null) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
-      │    │    │    ├── stats: [rows=2000, distinct(12)=100, null(12)=10, avgsize(12)=4, distinct(13)=1900, null(13)=100, avgsize(13)=4]
+      │    │    │    ├── stats: [rows=2000, distinct(12)=100, null(12)=10, distinct(13)=1900, null(13)=100]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-15), (12,13)~~>(11,14,15)
       │    │    └── filters

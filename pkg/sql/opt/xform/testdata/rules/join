@@ -1661,13 +1661,13 @@ semi-join (lookup t.public.def)
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── key columns: [1 3] = [7 8]
  ├── lookup columns are key
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
  ├── cost: 531.760394
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=1, avgsize(3)=4]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
  │    ├── cost: 131.72
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)
@@ -1684,13 +1684,13 @@ semi-join (lookup t.public.def)
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── key columns: [1 3] = [7 8]
  ├── lookup columns are key
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
  ├── cost: 531.760394
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=1, avgsize(3)=4]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
  │    ├── cost: 131.72
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)

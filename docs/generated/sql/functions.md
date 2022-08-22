@@ -3457,6 +3457,10 @@ A write probe will effectively probe reads as well.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_viewdef"></a><code>pg_get_viewdef(view_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE statement for an existing view.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_viewdef"></a><code>pg_get_viewdef(view_oid: oid, pretty_bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE statement for an existing view.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_has_role"></a><code>pg_has_role(role: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for role.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_has_role"></a><code>pg_has_role(role: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for role.</p>

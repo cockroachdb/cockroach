@@ -73,17 +73,17 @@ project
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=222.2222, distinct(2)=7, null(2)=0, avgsize(2)=4]
+      │    ├── stats: [rows=222.2222, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
       │    │    ├── columns: i:1(int) g:2(geometry)
-      │    │    ├── stats: [rows=2000, distinct(2)=7, null(2)=0, avgsize(2)=4]
+      │    │    ├── stats: [rows=2000, distinct(2)=7, null(2)=0]
       │    │    ├── ordering: +1
       │    │    ├── limit hint: 9.00
       │    │    └── scan t
       │    │         ├── columns: i:1(int) g:2(geometry)
-      │    │         └── stats: [rows=2000, distinct(2)=7, null(2)=0, avgsize(2)=4]
+      │    │         └── stats: [rows=2000, distinct(2)=7, null(2)=0]
       │    └── filters
       │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
@@ -160,7 +160,7 @@ project
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=222.2222, distinct(2)=7, null(2)=0, avgsize(2)=4]
+      │    ├── stats: [rows=222.2222, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -184,7 +184,7 @@ project
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │    │                   ├── stats: [rows=1.4e-06, distinct(3)=4e-07, null(3)=0, avgsize(3)=4, distinct(6)=1.4e-06, null(6)=0, avgsize(6)=4]
+      │    │                   ├── stats: [rows=1.4e-06, distinct(3)=4e-07, null(3)=0, distinct(6)=1.4e-06, null(6)=0]
       │    │                   │   histogram(6)=
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(6)
@@ -293,10 +293,10 @@ SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)',
 select
  ├── columns: i:1(int) g:2(geometry)
  ├── immutable
- ├── stats: [rows=666.6667, distinct(1)=555.556, null(1)=16.6667, avgsize(1)=4, distinct(2)=7, null(2)=33.3333, avgsize(2)=4]
+ ├── stats: [rows=666.6667, distinct(1)=555.556, null(1)=16.6667, distinct(2)=7, null(2)=33.3333]
  ├── scan t
  │    ├── columns: i:1(int) g:2(geometry)
- │    └── stats: [rows=2000, distinct(1)=1000, null(1)=50, avgsize(1)=4, distinct(2)=7, null(2)=100, avgsize(2)=4]
+ │    └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
  └── filters
       └── (g:2 IS NULL) OR st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable]
 
@@ -329,7 +329,7 @@ project
  ├── columns: i:1(int)
  ├── cardinality: [0 - 1]
  ├── immutable
- ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, avgsize(1)=4, distinct(2)=0.933914, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── limit
@@ -337,23 +337,23 @@ project
       ├── internal-ordering: +1
       ├── cardinality: [0 - 1]
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, avgsize(1)=4, distinct(2)=0.933914, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
       ├── key: ()
       ├── fd: ()-->(1,2)
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=211.1111, distinct(1)=199.969, null(1)=5.27778, avgsize(1)=4, distinct(2)=7, null(2)=0, avgsize(2)=4]
+      │    ├── stats: [rows=211.1111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
       │    │    ├── columns: i:1(int) g:2(geometry)
-      │    │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=50, avgsize(1)=4, distinct(2)=7, null(2)=100, avgsize(2)=4]
+      │    │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
       │    │    ├── ordering: +1
       │    │    ├── limit hint: 9.47
       │    │    └── scan t
       │    │         ├── columns: i:1(int) g:2(geometry)
-      │    │         └── stats: [rows=2000, distinct(1)=1000, null(1)=50, avgsize(1)=4, distinct(2)=7, null(2)=100, avgsize(2)=4]
+      │    │         └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
       │    └── filters
       │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
@@ -366,7 +366,7 @@ project
  ├── columns: i:1(int)
  ├── cardinality: [0 - 1]
  ├── immutable
- ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, avgsize(1)=4, distinct(2)=0.933914, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── limit
@@ -374,13 +374,13 @@ project
       ├── internal-ordering: +1
       ├── cardinality: [0 - 1]
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, avgsize(1)=4, distinct(2)=0.933914, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=1, distinct(1)=0.999868, null(1)=0.025, distinct(2)=0.933914, null(2)=0]
       ├── key: ()
       ├── fd: ()-->(1,2)
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=211.1111, distinct(1)=199.969, null(1)=5.27778, avgsize(1)=4, distinct(2)=7, null(2)=0, avgsize(2)=4]
+      │    ├── stats: [rows=211.1111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -404,7 +404,7 @@ project
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │    │                   ├── stats: [rows=1.42e-06, distinct(3)=4e-07, null(3)=0, avgsize(3)=4, distinct(6)=1.42e-06, null(6)=0, avgsize(6)=4]
+      │    │                   ├── stats: [rows=1.42e-06, distinct(3)=4e-07, null(3)=0, distinct(6)=1.42e-06, null(6)=0]
       │    │                   │   histogram(6)=
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(6)
@@ -463,7 +463,7 @@ SELECT * FROM t WHERE st_intersects('LINESTRING(.5 .5, .7 .7)', g)
 select
  ├── columns: i:1(int) g:2(geometry!null)
  ├── immutable
- ├── stats: [rows=11.11111, distinct(1)=10.5717, null(1)=10, avgsize(1)=4, distinct(2)=4, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=11.11111, distinct(1)=10.5717, null(1)=10, distinct(2)=4, null(2)=0]
  ├── index-join t
  │    ├── columns: i:1(int) g:2(geometry)
  │    ├── stats: [rows=100]
@@ -486,7 +486,7 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── stats: [rows=100, distinct(3)=76.9231, null(3)=0, avgsize(3)=4, distinct(6)=1, null(6)=0, avgsize(6)=4]
+ │              ├── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
  │              │   histogram(6)=  0            100             0             0
  │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
  │              ├── key: (3)
@@ -505,7 +505,7 @@ project
  └── select
       ├── columns: i:1(int) g:2(geometry!null)
       ├── immutable
-      ├── stats: [rows=11.11111, distinct(2)=4, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=11.11111, distinct(2)=4, null(2)=0]
       ├── index-join t
       │    ├── columns: i:1(int) g:2(geometry)
       │    ├── stats: [rows=100]
@@ -529,7 +529,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=t_g_idx
-      │              ├── stats: [rows=100, distinct(3)=76.9231, null(3)=0, avgsize(3)=4, distinct(6)=1, null(6)=0, avgsize(6)=4]
+      │              ├── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
       │              │   histogram(6)=  0            100             0             0
       │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
       │              ├── key: (3)
@@ -760,16 +760,16 @@ project
       ├── columns: b:2(geography!null) count_rows:21(int!null)
       ├── grouping columns: b:2(geography!null)
       ├── immutable
-      ├── stats: [rows=0.3333333, distinct(2)=0.333333, null(2)=0, avgsize(2)=4]
+      ├── stats: [rows=0.3333333, distinct(2)=0.333333, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(21)
       ├── select
       │    ├── columns: b:2(geography!null)
       │    ├── immutable
-      │    ├── stats: [rows=0.3333333, distinct(2)=0.333333, null(2)=0, avgsize(2)=4]
+      │    ├── stats: [rows=0.3333333, distinct(2)=0.333333, null(2)=0]
       │    ├── scan t62289
       │    │    ├── columns: b:2(geography)
-      │    │    └── stats: [rows=1, distinct(2)=1, null(2)=0, avgsize(2)=4]
+      │    │    └── stats: [rows=1, distinct(2)=1, null(2)=0]
       │    └── filters
       │         └── _st_dwithinexclusive(b:2, b:2, -0.38) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── aggregations
