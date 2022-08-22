@@ -56,6 +56,12 @@ func declareKeysRevertRange(
 	// span will be tightened during evaluation.
 	l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
 	latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
+
+	// Obtain a read only lock on range key stats update key to serialize with
+	// range tombstone GC requests.
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+		Key: keys.MakeRangeIDPrefixBuf(rs.GetRangeID()).RangeTombstoneStatsUpdateKey(),
+	})
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].

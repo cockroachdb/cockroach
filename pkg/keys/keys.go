@@ -1055,3 +1055,9 @@ func (b RangeIDPrefixBuf) RaftReplicaIDKey() roachpb.Key {
 func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastReplicaGCTimestampSuffix...)
 }
+
+// RangeTombstoneStatsUpdateKey returns a range local key protecting range
+// tombstone mvcc stats calculations during range tombstone GC.
+func (b RangeIDPrefixBuf) RangeTombstoneStatsUpdateKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRangeMVCCRangeKeyGCLockSuffix...)
+}
