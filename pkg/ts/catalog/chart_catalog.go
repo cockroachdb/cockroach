@@ -2877,6 +2877,15 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{StorageLayer, "RocksDB", "Keys"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Range Key Set Count",
+				Metrics: []string{"storage.keys.range-key-set.count"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Migrations"}},
 		Charts: []chartDescription{
 			{
