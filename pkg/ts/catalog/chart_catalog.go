@@ -2849,7 +2849,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
+		Organization: [][]string{{StorageLayer, "Engine", "Block Cache"}},
 		Charts: []chartDescription{
 			{
 				Title: "Size",
@@ -2868,7 +2868,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{StorageLayer, "RocksDB", "Encryption at Rest"}},
+		Organization: [][]string{{StorageLayer, "Engine", "Encryption at Rest"}},
 		Charts: []chartDescription{
 			{
 				Title:   "Algorithm Enum",
@@ -2877,7 +2877,16 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{StorageLayer, "RocksDB", "Migrations"}},
+		Organization: [][]string{{StorageLayer, "Engine", "Keys"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Range Key Set Count",
+				Metrics: []string{"storage.keys.range-key-set.count"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{StorageLayer, "Engine", "Migrations"}},
 		Charts: []chartDescription{
 			{
 				Title:   "SSTables Marked for Compaction",
@@ -2886,7 +2895,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
+		Organization: [][]string{{StorageLayer, "Engine", "Overview"}},
 		Charts: []chartDescription{
 			{
 				Title: "Bloom Filter",
@@ -2970,7 +2979,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{StorageLayer, "RocksDB", "SSTables"}},
+		Organization: [][]string{{StorageLayer, "Engine", "SSTables"}},
 		Charts: []chartDescription{
 			{
 				Title:   "Count",

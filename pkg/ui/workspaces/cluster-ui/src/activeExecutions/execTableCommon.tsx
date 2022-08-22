@@ -200,7 +200,8 @@ function makeActiveExecutionColumns(
       title: executionsTableTitles.timeSpentWaiting(execType),
       cell: (item: ActiveExecution) =>
         Duration(item.timeSpentWaiting?.asMilliseconds() ?? 0 * 1e6),
-      sort: (item: ActiveExecution) => item.timeSpentWaiting?.asMilliseconds(),
+      sort: (item: ActiveExecution) =>
+        item.timeSpentWaiting?.asMilliseconds() || 0,
     },
     applicationName: {
       name: "applicationName",

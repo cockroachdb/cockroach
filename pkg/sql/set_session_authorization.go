@@ -10,8 +10,26 @@
 
 package sql
 
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
+
 func (p *planner) SetSessionAuthorizationDefault() (planNode, error) {
-	// This is currently a no-op - we don't support changing the session
-	// authorization, and the parser only accepts DEFAULT.
-	return newZeroNode(nil /* columns */), nil
+	return &setSessionAuthorizationDefaultNode{}, nil
+}
+
+type setSessionAuthorizationDefaultNode struct{}
+
+func (n *setSessionAuthorizationDefaultNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *setSessionAuthorizationDefaultNode) Values() tree.Datums            { return nil }
+func (n *setSessionAuthorizationDefaultNode) Close(_ context.Context)        {}
+func (n *setSessionAuthorizationDefaultNode) startExec(params runParams) error {
+	// This is currently the same as `SET ROLE = DEFAULT`, which means that it
+	// only changes the "current user." In Postgres, `SET SESSION AUTHORIZATION`
+	// also changes the "session user," but since the session user cannot be
+	// modified in CockroachDB (at the time of writing), we just need to change
+	// the current user here.
+	return params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser())
 }

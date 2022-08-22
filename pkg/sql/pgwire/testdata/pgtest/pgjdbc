@@ -42,13 +42,7 @@ send
 Query {"String": "DISCARD ALL"}
 ----
 
-until crdb_only ignore=ParameterStatus
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"DISCARD"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-until noncrdb_only ignore=ParameterStatus
+until ignore=ParameterStatus ignore=NoticeResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"DISCARD ALL"}

@@ -715,7 +715,17 @@ func (s *Server) SetupConn(
 	sdMutIterator := s.makeSessionDataMutatorIterator(sds, args.SessionDefaults)
 	sdMutIterator.onDefaultIntSizeChange = onDefaultIntSizeChange
 	if err := sdMutIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
-		return resetSessionVars(ctx, m)
+		for varName, v := range varGen {
+			if v.Set != nil {
+				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+				if hasDefault {
+					if err := v.Set(ctx, m, defVal); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
 	}); err != nil {
 		log.Errorf(ctx, "error setting up client session: %s", err)
 		return ConnectionHandler{}, err

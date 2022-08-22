@@ -22,48 +22,38 @@ import (
 // Discard implements the DISCARD statement.
 // See https://www.postgresql.org/docs/9.6/static/sql-discard.html for details.
 func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error) {
-	switch s.Mode {
+	return &discardNode{mode: s.Mode}, nil
+}
+
+type discardNode struct {
+	mode tree.DiscardMode
+}
+
+func (n *discardNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *discardNode) Values() tree.Datums            { return nil }
+func (n *discardNode) Close(_ context.Context)        {}
+func (n *discardNode) startExec(params runParams) error {
+	switch n.mode {
 	case tree.DiscardModeAll:
-		if !p.autoCommit {
-			return nil, pgerror.New(pgcode.ActiveSQLTransaction,
+		if !params.p.autoCommit {
+			return pgerror.New(pgcode.ActiveSQLTransaction,
 				"DISCARD ALL cannot run inside a transaction block")
 		}
 
+		// SET SESSION AUTHORIZATION DEFAULT
+		if err := params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser()); err != nil {
+			return err
+		}
+
 		// RESET ALL
-		if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(
-			func(m sessionDataMutator) error {
-				return resetSessionVars(ctx, m)
-			},
-		); err != nil {
-			return nil, err
+		if err := params.p.resetAllSessionVars(params.ctx); err != nil {
+			return err
 		}
 
 		// DEALLOCATE ALL
-		p.preparedStatements.DeleteAll(ctx)
+		params.p.preparedStatements.DeleteAll(params.ctx)
 	default:
-		return nil, errors.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
-	}
-	return newZeroNode(nil /* columns */), nil
-}
-
-func resetSessionVars(ctx context.Context, m sessionDataMutator) error {
-	for _, varName := range varNames {
-		if err := resetSessionVar(ctx, m, varName); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func resetSessionVar(ctx context.Context, m sessionDataMutator, varName string) error {
-	v := varGen[varName]
-	if v.Set != nil {
-		hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
-		if hasDefault {
-			if err := v.Set(ctx, m, defVal); err != nil {
-				return err
-			}
-		}
+		return errors.AssertionFailedf("unknown mode for DISCARD: %d", n.mode)
 	}
 	return nil
 }
