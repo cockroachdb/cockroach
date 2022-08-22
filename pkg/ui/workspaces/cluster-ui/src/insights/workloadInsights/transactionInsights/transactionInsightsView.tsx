@@ -8,37 +8,29 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useState} from "react";
 import classNames from "classnames/bind";
-import { useHistory } from "react-router-dom";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
-import { Loading } from "src/loading/loading";
-import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
-import { Search } from "src/search/search";
-import {
-  calculateActiveFilters,
-  defaultFilters,
-  Filter,
-  getFullFiltersAsStringRecord,
-} from "src/queryFilter/filter";
-import { getInsightEventFiltersFromURL } from "src/queryFilter/utils";
-import { Pagination } from "src/pagination";
-import { queryByName, syncHistory } from "src/util/query";
-import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import { TableStatistics } from "src/tableStatistics";
+import {useHistory} from "react-router-dom";
+import {ISortedTablePagination, SortSetting,} from "src/sortedtable/sortedtable";
+import {Loading} from "src/loading/loading";
+import {PageConfig, PageConfigItem} from "src/pageConfig/pageConfig";
+import {Search} from "src/search/search";
+import {calculateActiveFilters, defaultFilters, Filter, getFullFiltersAsStringRecord,} from "src/queryFilter/filter";
+import {getInsightEventFiltersFromURL} from "src/queryFilter/utils";
+import {Pagination} from "src/pagination";
+import {queryByName, syncHistory} from "src/util/query";
+import {getTableSortFromURL} from "src/sortedtable/getTableSortFromURL";
+import {TableStatistics} from "src/tableStatistics";
 
-import { InsightEventsResponse } from "src/api/insightsApi";
+import {InsightEventsResponse} from "src/api/insightsApi";
 import {
   filterTransactionInsights,
   getAppsFromTransactionInsights,
   getInsightsFromState,
   InsightEventFilters,
 } from "src/insights";
-import { EmptyInsightsTablePlaceholder, WorkloadInsightsError } from "../util";
-import { TransactionInsightsTable } from "./transactionInsightsTable";
+import {EmptyInsightsTablePlaceholder, WorkloadInsightsError} from "../util";
+import {TransactionInsightsTable} from "./transactionInsightsTable";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
