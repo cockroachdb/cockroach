@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly.sh
+exit 0
 set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
