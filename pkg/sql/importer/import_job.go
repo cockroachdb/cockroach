@@ -1604,7 +1604,7 @@ func (r *importResumer) dropNewTables(
 		newTableDesc.DropTime = dropTime
 		b.Del(catalogkeys.EncodeNameKey(execCfg.Codec, newTableDesc))
 		tablesToGC = append(tablesToGC, newTableDesc.ID)
-		descsCol.AddDeletedDescriptor(newTableDesc.GetID())
+		descsCol.NotifyOfDeletedDescriptor(newTableDesc.GetID())
 
 		// Accumulate the changes before adding them to the batch to avoid
 		// making any table invalid before having read it.

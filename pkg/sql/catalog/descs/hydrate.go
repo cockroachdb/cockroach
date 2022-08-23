@@ -260,7 +260,7 @@ func hydrateCatalog(ctx context.Context, cat nstree.Catalog) error {
 func (tc *Collection) canUseHydratedDescriptorCache(id descpb.ID) bool {
 	return tc.hydrated != nil &&
 		tc.stored.GetCachedByID(id) == nil &&
-		tc.synthetic.descs.GetByID(id) == nil
+		tc.synthetic.GetSyntheticByID(id) == nil
 }
 
 func getMutableTypeLookupFunc(
