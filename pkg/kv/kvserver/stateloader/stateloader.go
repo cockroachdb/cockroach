@@ -128,8 +128,10 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
-		return enginepb.MVCCStats{}, err
+	if state.GCHint != nil {
+		if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
