@@ -1306,10 +1306,10 @@ func (r *Replica) refreshProposalsLocked(
 		// so delays shouldn't dramatically change the detection latency.
 		inflightDuration := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks)
 		if ok && inflightDuration > slowReplicationThreshold {
+			slowProposalCount++
 			if maxSlowProposalDuration < inflightDuration {
 				maxSlowProposalDuration = inflightDuration
 				maxSlowProposalDurationRequest = p.Request
-				slowProposalCount++
 			}
 		}
 		switch reason {
