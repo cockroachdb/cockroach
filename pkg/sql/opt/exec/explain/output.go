@@ -28,8 +28,9 @@ import (
 //
 // See ExampleOutputBuilder for sample usage.
 type OutputBuilder struct {
-	flags   Flags
-	entries []entry
+	flags    Flags
+	entries  []entry
+	warnings []string
 
 	// Current depth level (# of EnterNode() calls - # of LeaveNode() calls).
 	level int
@@ -213,6 +214,10 @@ func (ob *OutputBuilder) BuildStringRows() []string {
 		}
 	}
 	result = append(result, tp.FormattedRows()...)
+	if len(ob.GetWarnings()) > 0 {
+		result = append(result, "")
+		result = append(result, ob.GetWarnings()...)
+	}
 	return result
 }
 
@@ -361,4 +366,21 @@ func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 		"regions",
 		strings.Join(regions, ", "),
 	)
+}
+
+// AddWarning adds the provided string to the list of warnings. Warnings will be
+// appended to the end of the output produced by BuildStringRows / BuildString.
+func (ob *OutputBuilder) AddWarning(warning string) {
+	// Do not add duplicate warnings.
+	for _, oldWarning := range ob.warnings {
+		if oldWarning == warning {
+			return
+		}
+	}
+	ob.warnings = append(ob.warnings, warning)
+}
+
+// GetWarnings returns the list of unique warnings accumulated so far.
+func (ob *OutputBuilder) GetWarnings() []string {
+	return ob.warnings
 }

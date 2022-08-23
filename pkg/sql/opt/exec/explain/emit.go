@@ -361,6 +361,8 @@ func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
 }
 
 func (e *emitter) emitNodeAttributes(n *Node) error {
+	var actualRowCount uint64
+	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
@@ -370,7 +372,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			e.ob.AddRedactableField(RedactNodes, "regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
-			e.ob.AddField("actual row count", string(humanizeutil.Count(s.RowCount.Value())))
+			actualRowCount = s.RowCount.Value()
+			hasActualRowCount = true
+			e.ob.AddField("actual row count", string(humanizeutil.Count(actualRowCount)))
 		}
 		// Omit vectorized batches in non-verbose mode.
 		if e.ob.flags.Verbose {
@@ -411,6 +415,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 	}
 
+	var inaccurateEstimate bool
+	const inaccurateFactor = 2
+	const inaccurateAdditive = 100
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
 		s := stats.(*exec.EstimatedStats)
 
@@ -419,9 +426,21 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			maxEstimatedRowCount := uint64(math.Ceil(math.Max(s.LimitHint, s.RowCount)))
 			minEstimatedRowCount := uint64(math.Ceil(math.Min(s.LimitHint, s.RowCount)))
 			estimatedRowCountString = fmt.Sprintf("%s - %s", humanizeutil.Count(minEstimatedRowCount), humanizeutil.Count(maxEstimatedRowCount))
+			if hasActualRowCount && s.TableStatsAvailable {
+				// If we have both the actual row count and the table stats
+				// available, check whether the estimate is inaccurate.
+				inaccurateEstimate = actualRowCount*inaccurateFactor+inaccurateAdditive < minEstimatedRowCount ||
+					maxEstimatedRowCount*inaccurateFactor+inaccurateAdditive < actualRowCount
+			}
 		} else {
 			estimatedRowCount := uint64(math.Round(s.RowCount))
 			estimatedRowCountString = string(humanizeutil.Count(estimatedRowCount))
+			if hasActualRowCount && s.TableStatsAvailable {
+				// If we have both the actual row count and the table stats
+				// available, check whether the estimate is inaccurate.
+				inaccurateEstimate = actualRowCount*inaccurateFactor+inaccurateAdditive < estimatedRowCount ||
+					estimatedRowCount*inaccurateFactor+inaccurateAdditive < actualRowCount
+			}
 		}
 
 		// Show the estimated row count (except Values, where it is redundant).
@@ -482,7 +501,18 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	switch n.op {
 	case scanOp:
 		a := n.args.(*scanArgs)
-		e.emitTableAndIndex("table", a.Table, a.Index)
+		var suffix string
+		if inaccurateEstimate {
+			suffix = fmt.Sprintf(
+				"  ----------------------  WARNING: the row count estimate is inaccurate, "+
+					"consider running 'ANALYZE %s'", a.Table.Name(),
+			)
+			ob.AddWarning(fmt.Sprintf(
+				"WARNING: the row count estimate on table %[1]q is inaccurate, "+
+					"consider running 'ANALYZE %[1]s'", a.Table.Name(),
+			))
+		}
+		e.emitTableAndIndex("table", a.Table, a.Index, suffix)
 		// Omit spans for virtual tables, unless we actually have a constraint.
 		if a.Table != nil && !(a.Table.IsVirtualTable() && a.Params.IndexConstraint == nil) {
 			e.emitSpans("spans", a.Table, a.Index, a.Params)
@@ -630,7 +660,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case lookupJoinOp:
 		a := n.args.(*lookupJoinArgs)
-		e.emitTableAndIndex("table", a.Table, a.Index)
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
 		inputCols := a.Input.Columns()
 		if len(a.EqCols) > 0 {
 			rightEqCols := make([]string, len(a.EqCols))
@@ -659,12 +689,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.OnCond != tree.DBoolTrue {
 			ob.Expr("pred", a.OnCond, appendColumns(leftCols, rightCols...))
 		}
-		e.emitTableAndIndex("left table", a.LeftTable, a.LeftIndex)
+		e.emitTableAndIndex("left table", a.LeftTable, a.LeftIndex, "" /* suffix */)
 		ob.Attrf("left columns", "(%s)", printColumns(leftCols))
 		if n := len(a.LeftFixedVals); n > 0 {
 			ob.Attrf("left fixed values", "%d column%s", n, util.Pluralize(int64(n)))
 		}
-		e.emitTableAndIndex("right table", a.RightTable, a.RightIndex)
+		e.emitTableAndIndex("right table", a.RightTable, a.RightIndex, "" /* suffix */)
 		ob.Attrf("right columns", "(%s)", printColumns(rightCols))
 		if n := len(a.RightFixedVals); n > 0 {
 			ob.Attrf("right fixed values", "%d column%s", n, util.Pluralize(int64(n)))
@@ -677,7 +707,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case invertedJoinOp:
 		a := n.args.(*invertedJoinArgs)
-		e.emitTableAndIndex("table", a.Table, a.Index)
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
 		cols := appendColumns(a.Input.Columns(), tableColumns(a.Table, a.LookupCols)...)
 		ob.VExpr("inverted expr", a.InvertedExpr, cols)
 		// TODO(radu): we should be passing nil instead of true.
@@ -882,12 +912,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	return nil
 }
 
-func (e *emitter) emitTableAndIndex(field string, table cat.Table, index cat.Index) {
+func (e *emitter) emitTableAndIndex(field string, table cat.Table, index cat.Index, suffix string) {
 	partial := ""
 	if _, isPartial := index.Predicate(); isPartial {
 		partial = " (partial index)"
 	}
-	e.ob.Attrf(field, "%s@%s%s", table.Name(), index.Name(), partial)
+	e.ob.Attrf(field, "%s@%s%s%s", table.Name(), index.Name(), partial, suffix)
 }
 
 func (e *emitter) emitSpans(
