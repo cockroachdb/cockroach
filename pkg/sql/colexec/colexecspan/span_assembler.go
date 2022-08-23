@@ -70,7 +70,7 @@ func NewColSpanAssembler(
 
 	// Account for the memory currently in use.
 	sa.spansBytes = int64(cap(sa.spans)) * spanSize
-	sa.allocator.AdjustMemoryUsage(sa.spansBytes)
+	sa.allocator.AdjustMemoryUsageAfterAllocation(sa.spansBytes)
 
 	return sa
 }
@@ -239,7 +239,7 @@ func (sa *spanAssembler) ConsumeBatch(batch coldata.Batch, startIdx, endIdx int)
 	// Account for the memory allocated for the span slice and keys.
 	keyBytesMem := int64(sa.keyBytes - oldKeyBytes)
 	sa.spansBytes = int64(cap(sa.spans)) * spanSize
-	sa.allocator.AdjustMemoryUsage((sa.spansBytes - oldSpansBytes) + keyBytesMem)
+	sa.allocator.AdjustMemoryUsageAfterAllocation((sa.spansBytes - oldSpansBytes) + keyBytesMem)
 }
 
 const spanSize = int64(unsafe.Sizeof(roachpb.Span{}))
@@ -264,7 +264,7 @@ func (sa *spanAssembler) AccountForSpans() {
 		))
 	}
 	sa.spansBytes = int64(cap(sa.spans)) * spanSize
-	sa.allocator.AdjustMemoryUsage(sa.spansBytes)
+	sa.allocator.AdjustMemoryUsageAfterAllocation(sa.spansBytes)
 }
 
 // Close implements the ColSpanAssembler interface.

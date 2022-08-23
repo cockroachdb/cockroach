@@ -135,7 +135,7 @@ func (a *avgInt16HashAgg) Compute(
 	)
 	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 
@@ -249,7 +249,7 @@ func (a *avgInt32HashAgg) Compute(
 	)
 	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 
@@ -363,7 +363,7 @@ func (a *avgInt64HashAgg) Compute(
 	)
 	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 
@@ -475,7 +475,7 @@ func (a *avgDecimalHashAgg) Compute(
 	)
 	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 
@@ -581,7 +581,7 @@ func (a *avgFloat64HashAgg) Compute(
 	)
 	var newCurSumSize uintptr
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 
@@ -673,7 +673,7 @@ func (a *avgIntervalHashAgg) Compute(
 	)
 	var newCurSumSize uintptr
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 

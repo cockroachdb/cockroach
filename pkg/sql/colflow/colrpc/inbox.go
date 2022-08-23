@@ -411,7 +411,7 @@ func (i *Inbox) Next() coldata.Batch {
 		atomic.AddInt64(&i.statsAtomics.bytesRead, numSerializedBytes)
 		// Update the allocator since we're holding onto the serialized bytes
 		// for now.
-		i.allocator.AdjustMemoryUsage(numSerializedBytes)
+		i.allocator.AdjustMemoryUsageAfterAllocation(numSerializedBytes)
 		// Do admission control after memory accounting for the serialized bytes
 		// and before deserialization.
 		if i.admissionQ != nil {

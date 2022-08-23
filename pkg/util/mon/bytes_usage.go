@@ -426,6 +426,11 @@ func (mm *BytesMonitor) Name() string {
 	return string(mm.name)
 }
 
+// Limit returns the memory limit of the monitor.
+func (mm *BytesMonitor) Limit() int64 {
+	return mm.limit
+}
+
 const bytesMaxUsageLoggingThreshold = 100 * 1024
 
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {

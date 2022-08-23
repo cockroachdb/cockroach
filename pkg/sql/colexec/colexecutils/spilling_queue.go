@@ -376,7 +376,7 @@ func (q *SpillingQueue) Dequeue(ctx context.Context) (coldata.Batch, error) {
 		// batch to Dequeue() from disk into it.
 		q.unlimitedAllocator.ReleaseMemory(q.lastDequeuedBatchMemUsage)
 		q.lastDequeuedBatchMemUsage = colmem.GetBatchMemSize(q.dequeueScratch)
-		q.unlimitedAllocator.AdjustMemoryUsage(q.lastDequeuedBatchMemUsage)
+		q.unlimitedAllocator.AdjustMemoryUsageAfterAllocation(q.lastDequeuedBatchMemUsage)
 		if q.rewindable {
 			q.rewindableState.numItemsDequeued++
 		} else {

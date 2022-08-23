@@ -18,7 +18,7 @@ func (d *ConnectionDetails) Type() ConnectionType {
 	case ConnectionProvider_nodelocal, ConnectionProvider_s3, ConnectionProvider_userfile,
 		ConnectionProvider_gs, ConnectionProvider_azure_storage:
 		return TypeStorage
-	case ConnectionProvider_gcp_kms:
+	case ConnectionProvider_gcp_kms, ConnectionProvider_aws_kms:
 		return TypeKMS
 	case ConnectionProvider_kafka:
 		return TypeStorage

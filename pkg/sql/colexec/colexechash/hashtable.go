@@ -417,11 +417,6 @@ func (p *hashTableProbeBuffer) accountForLimitedSlices(allocator *colmem.Allocat
 	p.limitedSlicesAreAccountedFor = true
 }
 
-func (ht *HashTable) accountForUnlimitedSlices(newUint64Count int64) {
-	ht.allocator.AdjustMemoryUsage(memsize.Uint64 * (newUint64Count - ht.unlimitedSlicesNumUint64AccountedFor))
-	ht.unlimitedSlicesNumUint64AccountedFor = newUint64Count
-}
-
 func (ht *HashTable) unlimitedSlicesCapacity() int64 {
 	// Note that if ht.ProbeScratch.First is nil, it'll have zero capacity.
 	return int64(cap(ht.BuildScratch.First) + cap(ht.ProbeScratch.First) + cap(ht.BuildScratch.Next))
@@ -448,13 +443,15 @@ func (ht *HashTable) buildFromBufferedTuples() {
 		// perform the memory accounting for the anticipated memory usage. Note
 		// that it might not be precise, so we'll reconcile after the
 		// allocations below.
-		ht.accountForUnlimitedSlices(needCapacity)
+		ht.allocator.AdjustMemoryUsage(memsize.Uint64 * (needCapacity - ht.unlimitedSlicesNumUint64AccountedFor))
+		ht.unlimitedSlicesNumUint64AccountedFor = needCapacity
 	}
 	// Perform the actual build.
 	ht.buildFromBufferedTuplesNoAccounting()
 	// Now ensure that the accounting is precise (cap's of the slices might
 	// exceed len's that we've accounted for).
-	ht.accountForUnlimitedSlices(ht.unlimitedSlicesCapacity())
+	ht.allocator.AdjustMemoryUsageAfterAllocation(memsize.Uint64 * (ht.unlimitedSlicesCapacity() - ht.unlimitedSlicesNumUint64AccountedFor))
+	ht.unlimitedSlicesNumUint64AccountedFor = ht.unlimitedSlicesCapacity()
 }
 
 // buildFromBufferedTuples builds the hash table from already buffered tuples in

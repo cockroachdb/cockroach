@@ -63,7 +63,7 @@ type Batch interface {
 	//
 	// NOTE: Reset can allocate a new Batch, so when calling from the vectorized
 	// engine consider either allocating a new Batch explicitly via
-	// colexec.Allocator or calling ResetInternalBatch.
+	// colmem.Allocator or calling ResetInternalBatch.
 	Reset(typs []*types.T, length int, factory ColumnFactory)
 	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
 	// important for callers to call ResetInternalBatch if they own internal
