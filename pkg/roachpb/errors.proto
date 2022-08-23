@@ -672,17 +672,6 @@ message ErrPosition {
 message Error {
   option (gogoproto.goproto_stringer) = false;
 
-  // message is a human-readable error message.
-  //
-  // DEPRECATED.
-  optional string message = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "deprecatedMessage"];
-
-  // If transaction_restart is not NONE, the error condition may be handled by
-  // restarting the transaction.
-  //
-  // DEPRECATED.
-  optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "deprecatedTransactionRestart"];
-
   // An optional updated transaction. This is to be used by the client in case
   // of retryable errors.
   //
@@ -691,12 +680,6 @@ message Error {
 
   // Node at which the error was generated (zero if does not apply).
   optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
-
-  // If an ErrorDetail is present, it may contain additional structured data
-  // about the error.
-  //
-  // DEPRECATED - consult encoded_error instead.
-  optional ErrorDetail detail = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "deprecatedDetail"];
 
   // encoded_error is the Go error that caused this Error.
   optional errorspb.EncodedError encoded_error = 9 [(gogoproto.nullable) = false];
@@ -710,7 +693,7 @@ message Error {
   optional util.hlc.Timestamp now = 8 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
-  reserved 2;
+  reserved 1, 2, 3, 6 ;
 }
 
 
