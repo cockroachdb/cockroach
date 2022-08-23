@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -125,7 +126,9 @@ func TestKVFeed(t *testing.T) {
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater, tc.endTime,
 			keys.SystemSQLCodec,
-			tf, sf, rangefeedFactory(ref.run), bufferFactory, TestingKnobs{})
+			tf, sf, rangefeedFactory(ref.run), bufferFactory,
+			util.ConstantWithMetamorphicTestBool("use_mux", true),
+			TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {

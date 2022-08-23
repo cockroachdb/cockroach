@@ -48,6 +48,7 @@ var copyBatchRowSize = util.ConstantWithMetamorphicTestRange("copy-batch-size", 
 
 type copyMachineInterface interface {
 	run(ctx context.Context) error
+	numInsertedRows() int
 
 	// Close closes memory accounts associated with copy.
 	Close(ctx context.Context)
@@ -264,6 +265,10 @@ func newCopyMachine(
 	c.rows.Init(c.rowsMemAcc, colinfo.ColTypeInfoFromResCols(c.resultColumns), copyBatchRowSize)
 	c.scratchRow = make(tree.Datums, len(c.resultColumns))
 	return c, nil
+}
+
+func (c *copyMachine) numInsertedRows() int {
+	return c.insertedRows
 }
 
 func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMonitor) {
