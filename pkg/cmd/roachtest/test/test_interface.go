@@ -18,7 +18,8 @@ import (
 // Test is the interface through which roachtests interact with the
 // test harness.
 type Test interface {
-	Cockroach() string // path to main cockroach binary
+	Cockroach() string      // path to main cockroach binary
+	CockroachShort() string // path to cockroach-short binary compiled with --crdb_test build tag
 	Name() string
 	BuildVersion() *version.Version
 	IsBuildVersion(string) bool // "vXX.YY"
