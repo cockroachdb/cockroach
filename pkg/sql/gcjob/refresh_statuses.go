@@ -108,8 +108,7 @@ func updateStatusForGCElements(
 		if err != nil {
 			return err
 		}
-		v := execCfg.Settings.Version.ActiveVersionOrEmpty(ctx)
-		zoneCfg, err := cfg.GetZoneConfigForObject(execCfg.Codec, v, config.ObjectID(tableID))
+		zoneCfg, err := cfg.GetZoneConfigForObject(execCfg.Codec, config.ObjectID(tableID))
 		if err != nil {
 			log.Errorf(ctx, "zone config for desc: %d, err = %+v", tableID, err)
 			return nil
@@ -462,8 +461,7 @@ func refreshTenant(
 	tenID := details.Tenant.ID
 	cfg := execCfg.SystemConfig.GetSystemConfig()
 	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
-	v := execCfg.Settings.Version.ActiveVersionOrEmpty(ctx)
-	zoneCfg, err := cfg.GetZoneConfigForObject(keys.SystemSQLCodec, v, keys.TenantsRangesID)
+	zoneCfg, err := cfg.GetZoneConfigForObject(keys.SystemSQLCodec, keys.TenantsRangesID)
 	if err == nil {
 		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
 	} else {

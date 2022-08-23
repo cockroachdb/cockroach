@@ -550,7 +550,7 @@ func (oc *optCatalog) getZoneConfig(desc catalog.TableDescriptor) (cat.Zone, err
 		return emptyZoneConfig, nil
 	}
 	zone, err := oc.cfg.GetZoneConfigForObject(
-		oc.codec(), oc.version(), config.ObjectID(desc.GetID()),
+		oc.codec(), config.ObjectID(desc.GetID()),
 	)
 	if err != nil {
 		return nil, err

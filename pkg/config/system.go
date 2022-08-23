@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -402,26 +401,10 @@ func isPseudoTableID(id uint32) bool {
 // NOTE: any subzones from the zone placeholder will be automatically merged
 // into the cached zone so the caller doesn't need special-case handling code.
 func (s *SystemConfig) GetZoneConfigForObject(
-	codec keys.SQLCodec, version clusterversion.ClusterVersion, id ObjectID,
+	codec keys.SQLCodec, id ObjectID,
 ) (*zonepb.ZoneConfig, error) {
 	var entry zoneEntry
 	var err error
-	// In the case that we've not yet ensured reconciliation of the span
-	// configurations, use the host-provided view of the RANGE tenants
-	// configuration.
-	//
-	// TODO(ajwerner,arulajmani): If the reconciliation protocol is not active,
-	// and this is a secondary tenant object we're trying to look up, we're in a
-	// bit of a pickle. This assumes that if we're in the appropriate version,
-	// then so too is the system tenant and things are reconciled. Is it possible
-	// that neither of these object IDs represent reality? It seems like after
-	// the host cluster has been upgraded but the tenants have not, that we're
-	// in a weird intermediate state whereby the system tenant's config is no
-	// longer respected, but neither is the secondary tenant's.
-	if !codec.ForSystemTenant() &&
-		(id == 0 || !version.IsActive(clusterversion.EnableSpanConfigStore)) {
-		codec, id = keys.SystemSQLCodec, keys.TenantsRangesID
-	}
 	entry, err = s.getZoneEntry(codec, id)
 	if err != nil {
 		return nil, err
