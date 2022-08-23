@@ -120,8 +120,8 @@ type Permit struct {
 }
 
 // tryRunNextLocked will run the next task in order round-robin through the
-// queues and in priority order within a queue. It will return true if it ran a
-// task. The MultiQueue.mu lock must be held before calling this func.
+// queues and in priority order within a queue.
+// MultiQueue.mu lock must be held before calling this function.
 func (m *MultiQueue) tryRunNextLocked() {
 	// If no permits are left, then we can't run anything.
 	if m.remainingRuns <= 0 {
@@ -130,7 +130,7 @@ func (m *MultiQueue) tryRunNextLocked() {
 
 	for i := 0; i < len(m.outstanding); i++ {
 		// Start with the next queue in order and iterate through all empty queues.
-		// If all queues are empty then return false signaling that nothing was run.
+		// If all queues are empty then return, as there is nothing to run.
 		index := (m.lastQueueIndex + i + 1) % len(m.outstanding)
 		if m.outstanding[index].Len() > 0 {
 			task := heap.Pop(&m.outstanding[index]).(*Task)
@@ -142,7 +142,7 @@ func (m *MultiQueue) tryRunNextLocked() {
 	}
 }
 
-// Add returns a Task that must be closed (calling Task.Close) to
+// Add returns a Task that must be closed (calling m.Release(..)) to
 // release the Permit. The number of types is expected to
 // be relatively small and not be changing over time.
 func (m *MultiQueue) Add(queueType int, priority float64) *Task {
@@ -166,10 +166,7 @@ func (m *MultiQueue) Add(queueType int, priority float64) *Task {
 	}
 	heap.Push(&m.outstanding[pos], &newTask)
 
-	// Once we are done adding a task, signal the main loop in case it finished
-	// all its work and was waiting for more work. We are holding the mu lock when
-	// signaling, so we guarantee that it will not be able to respond to the
-	// signal until after we release the lock.
+	// Once we are done adding a task, attempt to signal the next waiting task.
 	m.tryRunNextLocked()
 
 	return &newTask
