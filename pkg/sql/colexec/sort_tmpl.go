@@ -145,9 +145,6 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort() {
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int

@@ -323,9 +323,6 @@ func (s *sortBoolAscWithNullsOp) sort() {
 }
 
 func (s *sortBoolAscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -419,9 +416,6 @@ func (s *sortBytesAscWithNullsOp) sort() {
 }
 
 func (s *sortBytesAscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -508,9 +502,6 @@ func (s *sortDecimalAscWithNullsOp) sort() {
 }
 
 func (s *sortDecimalAscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -588,9 +579,6 @@ func (s *sortInt16AscWithNullsOp) sort() {
 }
 
 func (s *sortInt16AscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -679,9 +667,6 @@ func (s *sortInt32AscWithNullsOp) sort() {
 }
 
 func (s *sortInt32AscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -770,9 +755,6 @@ func (s *sortInt64AscWithNullsOp) sort() {
 }
 
 func (s *sortInt64AscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -861,9 +843,6 @@ func (s *sortFloat64AscWithNullsOp) sort() {
 }
 
 func (s *sortFloat64AscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -960,9 +939,6 @@ func (s *sortTimestampAscWithNullsOp) sort() {
 }
 
 func (s *sortTimestampAscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1047,9 +1023,6 @@ func (s *sortIntervalAscWithNullsOp) sort() {
 }
 
 func (s *sortIntervalAscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1127,9 +1100,6 @@ func (s *sortJSONAscWithNullsOp) sort() {
 }
 
 func (s *sortJSONAscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1213,9 +1183,6 @@ func (s *sortDatumAscWithNullsOp) sort() {
 }
 
 func (s *sortDatumAscWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1295,9 +1262,6 @@ func (s *sortBoolDescWithNullsOp) sort() {
 }
 
 func (s *sortBoolDescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1391,9 +1355,6 @@ func (s *sortBytesDescWithNullsOp) sort() {
 }
 
 func (s *sortBytesDescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1480,9 +1441,6 @@ func (s *sortDecimalDescWithNullsOp) sort() {
 }
 
 func (s *sortDecimalDescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1560,9 +1518,6 @@ func (s *sortInt16DescWithNullsOp) sort() {
 }
 
 func (s *sortInt16DescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1651,9 +1606,6 @@ func (s *sortInt32DescWithNullsOp) sort() {
 }
 
 func (s *sortInt32DescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1742,9 +1694,6 @@ func (s *sortInt64DescWithNullsOp) sort() {
 }
 
 func (s *sortInt64DescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1833,9 +1782,6 @@ func (s *sortFloat64DescWithNullsOp) sort() {
 }
 
 func (s *sortFloat64DescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -1932,9 +1878,6 @@ func (s *sortTimestampDescWithNullsOp) sort() {
 }
 
 func (s *sortTimestampDescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2019,9 +1962,6 @@ func (s *sortIntervalDescWithNullsOp) sort() {
 }
 
 func (s *sortIntervalDescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2099,9 +2039,6 @@ func (s *sortJSONDescWithNullsOp) sort() {
 }
 
 func (s *sortJSONDescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2185,9 +2122,6 @@ func (s *sortDatumDescWithNullsOp) sort() {
 }
 
 func (s *sortDatumDescWithNullsOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2267,9 +2201,6 @@ func (s *sortBoolAscOp) sort() {
 }
 
 func (s *sortBoolAscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2353,9 +2284,6 @@ func (s *sortBytesAscOp) sort() {
 }
 
 func (s *sortBytesAscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2432,9 +2360,6 @@ func (s *sortDecimalAscOp) sort() {
 }
 
 func (s *sortDecimalAscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2502,9 +2427,6 @@ func (s *sortInt16AscOp) sort() {
 }
 
 func (s *sortInt16AscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2584,9 +2506,6 @@ func (s *sortInt32AscOp) sort() {
 }
 
 func (s *sortInt32AscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2666,9 +2585,6 @@ func (s *sortInt64AscOp) sort() {
 }
 
 func (s *sortInt64AscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2748,9 +2664,6 @@ func (s *sortFloat64AscOp) sort() {
 }
 
 func (s *sortFloat64AscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2837,9 +2750,6 @@ func (s *sortTimestampAscOp) sort() {
 }
 
 func (s *sortTimestampAscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2914,9 +2824,6 @@ func (s *sortIntervalAscOp) sort() {
 }
 
 func (s *sortIntervalAscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -2984,9 +2891,6 @@ func (s *sortJSONAscOp) sort() {
 }
 
 func (s *sortJSONAscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3060,9 +2964,6 @@ func (s *sortDatumAscOp) sort() {
 }
 
 func (s *sortDatumAscOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3132,9 +3033,6 @@ func (s *sortBoolDescOp) sort() {
 }
 
 func (s *sortBoolDescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3218,9 +3116,6 @@ func (s *sortBytesDescOp) sort() {
 }
 
 func (s *sortBytesDescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3297,9 +3192,6 @@ func (s *sortDecimalDescOp) sort() {
 }
 
 func (s *sortDecimalDescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3367,9 +3259,6 @@ func (s *sortInt16DescOp) sort() {
 }
 
 func (s *sortInt16DescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3449,9 +3338,6 @@ func (s *sortInt32DescOp) sort() {
 }
 
 func (s *sortInt32DescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3531,9 +3417,6 @@ func (s *sortInt64DescOp) sort() {
 }
 
 func (s *sortInt64DescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3613,9 +3496,6 @@ func (s *sortFloat64DescOp) sort() {
 }
 
 func (s *sortFloat64DescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3702,9 +3582,6 @@ func (s *sortTimestampDescOp) sort() {
 }
 
 func (s *sortTimestampDescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3779,9 +3656,6 @@ func (s *sortIntervalDescOp) sort() {
 }
 
 func (s *sortIntervalDescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3849,9 +3723,6 @@ func (s *sortJSONDescOp) sort() {
 }
 
 func (s *sortJSONDescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
@@ -3925,9 +3796,6 @@ func (s *sortDatumDescOp) sort() {
 }
 
 func (s *sortDatumDescOp) sortPartitions(partitions []int) {
-	if len(partitions) < 1 {
-		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
-	}
 	order := s.order
 	for i, partitionStart := range partitions {
 		var partitionEnd int
