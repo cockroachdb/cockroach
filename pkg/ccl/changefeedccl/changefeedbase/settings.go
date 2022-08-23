@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -230,3 +231,13 @@ var UseMuxRangeFeed = settings.RegisterBoolSetting(
 	"if true, changefeed uses multiplexing rangefeed RPC",
 	false,
 )
+
+// EventConsumerMaxWorkers specifies the maximum number of workers to use when
+// processing events
+var EventConsumerMaxWorkers = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.consumer_max_workers",
+	"the maximum number of workers to use when processing events; 0 disables",
+	int64(util.ConstantWithMetamorphicTestRange("changefeed.consumer_max_workers", 0, 0, 32)),
+	settings.NonNegativeInt,
+).WithPublic()
