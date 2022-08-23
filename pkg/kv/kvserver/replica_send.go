@@ -204,6 +204,7 @@ func (r *Replica) SendWithWriteBytes(
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 	}
 
+	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, writeBytes, pErr
 }
@@ -1011,7 +1012,6 @@ func (r *Replica) recordBatchRequestLoad(ctx context.Context, ba *roachpb.BatchR
 
 	r.loadStats.batchRequests.RecordCount(adjustedQPS, ba.Header.GatewayNodeID)
 	r.loadStats.requests.RecordCount(float64(len(ba.Requests)), ba.Header.GatewayNodeID)
-	r.loadStats.writeBytes.RecordCount(getBatchRequestWriteBytes(ba), ba.Header.GatewayNodeID)
 }
 
 // getBatchRequestQPS calculates the cost estimation of a BatchRequest. The
@@ -1044,18 +1044,18 @@ func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *roachpb.BatchReque
 	return count
 }
 
-func getBatchRequestWriteBytes(ba *roachpb.BatchRequest) float64 {
-	if !ba.IsWrite() {
-		return 0
+// recordRequestWriteBytes records the write bytes from a replica batch
+// request.
+func (r *Replica) recordRequestWriteBytes(writeBytes *StoreWriteBytes) {
+	if writeBytes == nil {
+		return
 	}
-
-	var writeBytes int64
-	for i := range ba.Requests {
-		if swr, isSizedWrite := ba.Requests[i].GetInner().(roachpb.SizedWriteRequest); isSizedWrite {
-			writeBytes += swr.WriteBytes()
-		}
-	}
-	return float64(writeBytes)
+	// TODO(kvoli): Consider recording the ingested bytes (AddSST) separately
+	// to the write bytes.
+	r.loadStats.writeBytes.RecordCount(
+		float64(writeBytes.WriteBytes+writeBytes.IngestedBytes),
+		0,
+	)
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,
