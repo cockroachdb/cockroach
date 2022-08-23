@@ -68,7 +68,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_datadriven//:datadriven",
