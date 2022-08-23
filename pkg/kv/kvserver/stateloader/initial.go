@@ -57,6 +57,7 @@ func WriteInitialReplicaState(
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 	writeRaftAppliedIndexTerm bool,
+	writeGCHint bool, // TODO(oleg): Mirrors GCHintInReplicaState, remove after.
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
@@ -74,7 +75,9 @@ func WriteInitialReplicaState(
 	s.Stats = &ms
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
-	s.GCHint = &gcHint
+	if writeGCHint {
+		s.GCHint = &gcHint
+	}
 	if (replicaVersion != roachpb.Version{}) {
 		s.Version = &replicaVersion
 	}
@@ -128,6 +131,7 @@ func WriteInitialRangeState(
 	if _, err := WriteInitialReplicaState(
 		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
 		replicaVersion, true, /* 22.1:AddRaftAppliedIndexTermMigration */
+		true, /* 22.2: GCHintInReplicaState */
 	); err != nil {
 		return err
 	}

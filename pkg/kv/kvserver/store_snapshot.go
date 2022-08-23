@@ -15,6 +15,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1282,6 +1283,8 @@ func SendEmptySnapshot(
 		return err
 	}
 
+	supportsGCHints := st.Version.IsActive(ctx, clusterversion.GCHintInReplicaState)
+
 	// SendEmptySnapshot is only used by the cockroach debug reset-quorum tool.
 	// It is experimental and unlikely to be used in cluster versions that are
 	// older than AddRaftAppliedIndexTermMigration. We do not want the cluster
@@ -1299,6 +1302,7 @@ func SendEmptySnapshot(
 		roachpb.GCHint{},
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
 		true, /* 22.1:AddRaftAppliedIndexTermMigration */
+		supportsGCHints, /* 22.2: GCHintInReplicaState */
 	)
 	if err != nil {
 		return err
