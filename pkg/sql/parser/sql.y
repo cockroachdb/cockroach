@@ -6825,6 +6825,13 @@ show_grants_stmt:
       $$.val = &tree.ShowGrants{Targets: lst, Grantees: $4.roleSpecList()}
     }
   }
+| SHOW SYSTEM GRANTS for_grantee_clause
+  {
+    $$.val = &tree.ShowGrants{
+      Targets: &tree.GrantTargetList{System: true},
+        Grantees: $4.roleSpecList(),
+      }
+  }
 | SHOW GRANTS error // SHOW HELP: SHOW GRANTS
 
 // %Help: SHOW INDEXES - list indexes
