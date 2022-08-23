@@ -73,7 +73,7 @@ func MakeBaseMemMetrics(endpoint string, histogramWindow time.Duration) BaseMemo
 	MetaMemMaxBytes := makeMemMetricMetadata(prefix+".max", "Memory usage per sql statement for "+endpoint)
 	MetaMemCurBytes := makeMemMetricMetadata(prefix+".current", "Current sql statement memory usage for "+endpoint)
 	return BaseMemoryMetrics{
-		MaxBytesHist:  metric.NewHistogram(MetaMemMaxBytes, histogramWindow, log10int64times1000, 3),
+		MaxBytesHist:  metric.NewHistogram(MetaMemMaxBytes, histogramWindow, metric.MemoryUsageBuckets),
 		CurBytesCount: metric.NewGauge(MetaMemCurBytes),
 	}
 }
@@ -88,9 +88,9 @@ func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetric
 	MetaMemSessionCurBytes := makeMemMetricMetadata(prefix+".session.current", "Current sql session memory usage for "+endpoint)
 	return MemoryMetrics{
 		BaseMemoryMetrics:    base,
-		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, histogramWindow, log10int64times1000, 3),
+		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, histogramWindow, metric.MemoryUsageBuckets),
 		TxnCurBytesCount:     metric.NewGauge(MetaMemTxnCurBytes),
-		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, histogramWindow, log10int64times1000, 3),
+		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, histogramWindow, metric.MemoryUsageBuckets),
 		SessionCurBytesCount: metric.NewGauge(MetaMemSessionCurBytes),
 	}
 
