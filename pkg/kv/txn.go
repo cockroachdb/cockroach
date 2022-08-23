@@ -1462,41 +1462,6 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	return txn.mu.sender.PrepareRetryableError(ctx, msg)
 }
 
-// PrepareRetryableError returns a
-// TransactionRetryWithProtoRefreshError that will cause the txn to be
-// retried. The current txn parameters are used. The txn remains valid
-// for use.
-func (txn *Txn) PrepareRetryableError(ctx context.Context, msg string) error {
-	if txn.typ != RootTxn {
-		return errors.WithContextTags(
-			errors.AssertionFailedf("PrepareRetryableError() called on leaf txn"), ctx)
-	}
-
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.mu.sender.PrepareRetryableError(ctx, msg)
-}
-
-// ManualRestart bumps the transactions epoch, and can upgrade the timestamp.
-// An uninitialized timestamp can be passed to leave the timestamp alone.
-//
-// Used by the SQL layer which sometimes knows that a transaction will not be
-// able to commit and prefers to restart early.
-// It is also used after synchronizing concurrent actors using a txn when a
-// retryable error is seen.
-// TODO(andrei): this second use should go away once we move to a TxnAttempt
-// model.
-func (txn *Txn) ManualRestart(ctx context.Context, ts hlc.Timestamp) {
-	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(
-			errors.AssertionFailedf("ManualRestart() called on leaf txn"), ctx))
-	}
-
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, ts)
-}
-
 // IsSerializablePushAndRefreshNotPossible returns true if the transaction is
 // serializable, its timestamp has been pushed and there's no chance that
 // refreshing the read spans will succeed later (thus allowing the transaction

@@ -714,9 +714,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				IsCommit:     fsm.FromBool(isCommit(ast)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
-			txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
 			payload := eventRetriableErrPayload{
-				err:    txn.PrepareRetryableError(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
+				err:    txn.GenerateForcedRetryableError(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
 				rewCap: rc,
 			}
 			return ev, payload, nil

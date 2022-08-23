@@ -1641,7 +1641,9 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestReturnCheck", func(t *testing.T) {
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 73391, "Going to migrate to nogo")
+		if bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "the returncheck tests are run during the bazel build")
+		}
 		// returncheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(crdb.Dir, "returncheck", pkgScope)
 		if err != nil {
