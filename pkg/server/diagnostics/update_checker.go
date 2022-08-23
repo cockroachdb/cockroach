@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"time"
@@ -123,7 +122,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(res.Body)
+		b, err := io.ReadAll(res.Body)
 		log.Infof(ctx, "failed to check for updates: status: %s, body: %s, error: %v",
 			res.Status, b, err)
 		return false

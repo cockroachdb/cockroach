@@ -1245,7 +1245,7 @@ func (c *SyncedCluster) getFileFromFirstNode(name string) (string, func(), error
 	if c.IsLocal() {
 		tmpfileName = os.ExpandEnv(filepath.Join(c.localVMDir(1), name))
 	} else {
-		tmpfile, err := ioutil.TempFile("", name)
+		tmpfile, err := os.CreateTemp("", name)
 		if err != nil {
 			return "", nil, err
 		}
@@ -1353,7 +1353,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 ) error {
 	// Read the certs.tar file we just downloaded. We'll be piping it to the
 	// other nodes in the cluster.
-	certsTar, err := ioutil.ReadFile(filename)
+	certsTar, err := os.ReadFile(filename)
 	if err != nil {
 		return err
 	}
@@ -1405,7 +1405,7 @@ func (c *SyncedCluster) PutString(
 		return errors.Wrap(ctx.Err(), "syncedCluster.PutString")
 	}
 
-	temp, err := ioutil.TempFile("", filepath.Base(dest))
+	temp, err := os.CreateTemp("", filepath.Base(dest))
 	if err != nil {
 		return errors.Wrap(err, "cluster.PutString")
 	}

@@ -15,7 +15,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -78,7 +78,7 @@ func runTestPrettyData(
 	for _, m := range matches {
 		m := m
 		t.Run(filepath.Base(m), func(t *testing.T) {
-			sql, err := ioutil.ReadFile(m)
+			sql, err := os.ReadFile(m)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,13 +144,13 @@ func runTestPrettyData(
 			}
 
 			if *flagWritePretty {
-				if err := ioutil.WriteFile(outfile, []byte(got), 0666); err != nil {
+				if err := os.WriteFile(outfile, []byte(got), 0666); err != nil {
 					t.Fatal(err)
 				}
 				return
 			}
 
-			expect, err := ioutil.ReadFile(outfile)
+			expect, err := os.ReadFile(outfile)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -194,7 +194,7 @@ func BenchmarkPrettyData(b *testing.B) {
 	var docs []pretty.Doc
 	cfg := tree.DefaultPrettyCfg()
 	for _, m := range matches {
-		sql, err := ioutil.ReadFile(m)
+		sql, err := os.ReadFile(m)
 		if err != nil {
 			b.Fatal(err)
 		}

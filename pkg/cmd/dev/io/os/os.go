@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/user"
@@ -222,7 +221,7 @@ func (o *OS) IsDir(dirname string) (bool, error) {
 	return strconv.ParseBool(strings.TrimSpace(output))
 }
 
-// ReadFile wraps around ioutil.ReadFile, reading a file from disk and
+// ReadFile wraps around os.ReadFile, reading a file from disk and
 // returning the contents.
 func (o *OS) ReadFile(filename string) (string, error) {
 	command := fmt.Sprintf("cat %s", filename)
@@ -231,7 +230,7 @@ func (o *OS) ReadFile(filename string) (string, error) {
 	}
 
 	return o.Next(command, func() (output string, err error) {
-		buf, err := ioutil.ReadFile(filename)
+		buf, err := os.ReadFile(filename)
 		if err != nil {
 			return "", err
 		}
@@ -239,7 +238,7 @@ func (o *OS) ReadFile(filename string) (string, error) {
 	})
 }
 
-// WriteFile wraps around ioutil.ReadFile, writing the given contents to
+// WriteFile wraps around os.ReadFile, writing the given contents to
 // the given file on disk.
 func (o *OS) WriteFile(filename, contents string) error {
 	var command string
@@ -255,7 +254,7 @@ func (o *OS) WriteFile(filename, contents string) error {
 	}
 
 	_, err := o.Next(command, func() (output string, err error) {
-		return "", ioutil.WriteFile(filename, []byte(contents), 0666)
+		return "", os.WriteFile(filename, []byte(contents), 0666)
 	})
 	return err
 }

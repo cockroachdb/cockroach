@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,7 +73,7 @@ func impl() error {
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("%w (got output %s while processing file %s)", err, string(output), nogoX)
 		}
-		encoded, err := ioutil.ReadFile(filepath.Join(tmpdir, "unused.out"))
+		encoded, err := os.ReadFile(filepath.Join(tmpdir, "unused.out"))
 		if err != nil {
 			return err
 		}
@@ -92,7 +91,7 @@ func impl() error {
 	var failures []string
 	for pkgPath, objs := range unused {
 		usedPkgMap := used[pkgPath]
-		for obj, _ := range objs {
+		for obj := range objs {
 			_, ok := usedPkgMap[obj]
 			if !ok {
 				failure := fmt.Sprintf("%s.%s", pkgPath, obj)

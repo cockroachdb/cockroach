@@ -57,7 +57,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"strconv"
@@ -272,7 +271,7 @@ func main() {
 	}
 	flag.Parse()
 
-	dirName, err := ioutil.TempDir("", "gossip-simulation-")
+	dirName, err := os.MkdirTemp("", "gossip-simulation-")
 	if err != nil {
 		log.Fatalf(context.TODO(), "could not create temporary directory for gossip simulation output: %s", err)
 	}

@@ -25,7 +25,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -200,7 +199,7 @@ var fuzzFuncRE = regexp.MustCompile(`(?m)^func (Fuzz\w*)\(\w+ \[\]byte\) int {$`
 func findFuncs(pkg *packages.Package) ([]string, error) {
 	var ret []string
 	for _, file := range pkg.GoFiles {
-		content, err := ioutil.ReadFile(file)
+		content, err := os.ReadFile(file)
 		if err != nil {
 			return nil, err
 		}

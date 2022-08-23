@@ -12,7 +12,6 @@ package protoutil
 
 import (
 	"io"
-	"io/ioutil"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -58,7 +57,7 @@ func (*ProtoPb) NewDecoder(r io.Reader) gwruntime.Decoder {
 		// NB: we use proto.Message here because grpc-gateway passes us protos that
 		// we don't control and thus don't implement protoutil.Message.
 		if p, ok := v.(proto.Message); ok {
-			bytes, err := ioutil.ReadAll(r)
+			bytes, err := io.ReadAll(r)
 			if err == nil {
 				err = proto.Unmarshal(bytes, p)
 			}

@@ -15,7 +15,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -236,7 +235,7 @@ func writeStartupScript(
 		Zfs:              fileSystem == vm.Zfs,
 	}
 
-	tmpfile, err := ioutil.TempFile("", "gce-startup-script")
+	tmpfile, err := os.CreateTemp("", "gce-startup-script")
 	if err != nil {
 		return "", err
 	}
@@ -255,7 +254,7 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 		return nil
 	}
 
-	f, err := ioutil.TempFile(os.ExpandEnv("$HOME/.roachprod/"), "dns.bind")
+	f, err := os.CreateTemp(os.ExpandEnv("$HOME/.roachprod/"), "dns.bind")
 	if err != nil {
 		return err
 	}

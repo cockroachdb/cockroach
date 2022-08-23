@@ -12,7 +12,6 @@ package server_test
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,7 +41,7 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "dump.raw")
 	require.NoError(t,
-		ioutil.WriteFile(path+".yaml", []byte("1: 1"), 0644),
+		os.WriteFile(path+".yaml", []byte("1: 1"), 0644),
 	)
 
 	var bytesDumped int64

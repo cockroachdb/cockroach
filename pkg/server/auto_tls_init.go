@@ -19,7 +19,6 @@ package server
 import (
 	"context"
 	"encoding/pem"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -243,14 +242,14 @@ func (sb *ServiceCertificateBundle) createServiceCA(
 // Simple wrapper to make it easier to store certs somewhere else later.
 // TODO (aaron-crl): Put validation checks here.
 func loadCertificateFile(certPath string) (cert []byte, err error) {
-	cert, err = ioutil.ReadFile(certPath)
+	cert, err = os.ReadFile(certPath)
 	return
 }
 
 // Simple wrapper to make it easier to store certs somewhere else later.
 // TODO (aaron-crl): Put validation checks here.
 func loadKeyFile(keyPath string) (key []byte, err error) {
-	key, err = ioutil.ReadFile(keyPath)
+	key, err = os.ReadFile(keyPath)
 	return
 }
 

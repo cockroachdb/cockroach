@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -397,7 +396,7 @@ Discarded live replicas: %d
 func readReplicaInfoData(fileNames []string) ([]loqrecoverypb.NodeReplicaInfo, error) {
 	var replicas []loqrecoverypb.NodeReplicaInfo
 	for _, filename := range fileNames {
-		data, err := ioutil.ReadFile(filename)
+		data, err := os.ReadFile(filename)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read replica info file %q", filename)
 		}
@@ -443,7 +442,7 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(cmd.Context())
 
 	planFile := args[0]
-	data, err := ioutil.ReadFile(planFile)
+	data, err := os.ReadFile(planFile)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read plan file %q", planFile)
 	}

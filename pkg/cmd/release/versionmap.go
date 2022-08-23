@@ -13,7 +13,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -49,7 +49,7 @@ func updateVersionMap(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("cannot parse version %s: %w", updateVersionsFlags.versionStr, err)
 	}
-	content, err := ioutil.ReadFile(versionMapFlags.file)
+	content, err := os.ReadFile(versionMapFlags.file)
 	if err != nil {
 		return fmt.Errorf("cannot open %s: %w", versionMapFlags.file, err)
 	}
@@ -73,7 +73,7 @@ func updateVersionMap(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("cannot marshal: %w", err)
 	}
 	out = append(out, '\n')
-	err = ioutil.WriteFile(versionMapFlags.file, out, 0644)
+	err = os.WriteFile(versionMapFlags.file, out, 0644)
 	if err != nil {
 		return fmt.Errorf("cannot write version map to %s: %w", versionMapFlags.file, err)
 	}

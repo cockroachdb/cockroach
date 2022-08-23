@@ -13,7 +13,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,7 +48,7 @@ func Example_statement_diag() {
 	}
 	c.RunWithArgs([]string{"statement-diag", "list"})
 	c.RunWithArgs([]string{"statement-diag", "download", "13"})
-	tmpfile, err := ioutil.TempFile("", "bundle-*.zip")
+	tmpfile, err := os.CreateTemp("", "bundle-*.zip")
 	if err != nil {
 		log.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
 	}
@@ -62,7 +61,7 @@ func Example_statement_diag() {
 	if err != nil {
 		log.Fatalf(context.Background(), "Error downloading bundle: %s", err)
 	}
-	data, err := ioutil.ReadFile(bundleFile)
+	data, err := os.ReadFile(bundleFile)
 	if err != nil {
 		log.Fatalf(context.Background(), "Error reading bundle: %s", err)
 	}

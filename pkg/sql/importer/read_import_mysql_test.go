@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -115,7 +114,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 }
 
 func readFile(t *testing.T, name string) string {
-	body, err := ioutil.ReadFile(testutils.TestDataPath(t, "mysqldump", name))
+	body, err := os.ReadFile(testutils.TestDataPath(t, "mysqldump", name))
 	if err != nil {
 		t.Fatal(err)
 	}

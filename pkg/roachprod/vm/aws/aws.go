@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -954,7 +953,7 @@ func (p *Provider) runInstance(
 		return err
 	}
 
-	deviceMapping, err := ioutil.TempFile("", "aws-block-device-mapping")
+	deviceMapping, err := os.CreateTemp("", "aws-block-device-mapping")
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,6 @@ package team
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -115,7 +114,7 @@ var validPurposes = map[Purpose]struct{}{
 // LoadTeams loads the teams from an io input.
 // It is expected the input is in YAML format.
 func LoadTeams(f io.Reader) (Map, error) {
-	b, err := ioutil.ReadAll(f)
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}

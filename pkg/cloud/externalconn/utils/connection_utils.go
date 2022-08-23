@@ -13,7 +13,7 @@ package utils
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -81,7 +81,7 @@ func CheckExternalStorageConnection(
 		return errors.Wrap(err, "failed to read sentinel ExternalStorage file")
 	}
 
-	content, err := ioutil.ReadAll(ioctx.ReaderCtxAdapter(ctx, reader))
+	content, err := io.ReadAll(ioctx.ReaderCtxAdapter(ctx, reader))
 	if err != nil {
 		return errors.Wrap(err, "failed to read sentinel ExternalStorage file content")
 	}

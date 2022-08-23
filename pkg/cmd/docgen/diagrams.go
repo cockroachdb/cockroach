@@ -15,7 +15,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -44,7 +43,7 @@ func init() {
 		if err := os.MkdirAll(filepath.Dir(name), 0755); err != nil {
 			log.Fatal(err)
 		}
-		if err := ioutil.WriteFile(name, data, 0644); err != nil {
+		if err := os.WriteFile(name, data, 0644); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -322,7 +321,7 @@ func runParse(
 }
 
 func runRR(r io.Reader, railroadJar string, railroadAPITimeout time.Duration) ([]byte, error) {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}

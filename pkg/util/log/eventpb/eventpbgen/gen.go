@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"sort"
@@ -235,7 +234,7 @@ func readInput(
 	cats map[string]*catInfo,
 	protoName string,
 ) error {
-	protoData, err := ioutil.ReadFile(protoName)
+	protoData, err := os.ReadFile(protoName)
 	if err != nil {
 		return err
 	}

@@ -16,7 +16,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"hash/crc32"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"time"
 
@@ -90,7 +90,7 @@ func (j *JoinToken) UnmarshalText(text []byte) error {
 	switch v := joinTokenVersion(text[0]); v {
 	case joinTokenV0:
 		decoder := base64.NewDecoder(base64.URLEncoding, bytes.NewReader(text[1:]))
-		decoded, err := ioutil.ReadAll(decoder)
+		decoded, err := io.ReadAll(decoder)
 		if err != nil {
 			return err
 		}

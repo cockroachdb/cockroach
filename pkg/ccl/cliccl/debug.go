@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -307,7 +306,7 @@ func getActiveEncryptionkey(dir string) (string, string, error) {
 	}
 
 	// Open the file registry. Return plaintext if it does not exist.
-	contents, err := ioutil.ReadFile(registryFile)
+	contents, err := os.ReadFile(registryFile)
 	if err != nil {
 		if oserror.IsNotExist(err) {
 			return enginepbccl.EncryptionType_Plaintext.String(), "", nil

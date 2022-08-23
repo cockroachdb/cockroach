@@ -12,8 +12,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -857,10 +857,10 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				fullPath := filepath.Join(ds.getIODir(t, server), parsedURI.Path, filePath)
 				print(fullPath)
-				data, err := ioutil.ReadFile(fullPath)
+				data, err := os.ReadFile(fullPath)
 				require.NoError(t, err)
 				data[20] ^= 1
-				if err := ioutil.WriteFile(fullPath, data, 0644 /* perm */); err != nil {
+				if err := os.WriteFile(fullPath, data, 0644 /* perm */); err != nil {
 					t.Fatal(err)
 				}
 				return ""

@@ -13,7 +13,7 @@ package cli
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -214,7 +214,7 @@ func (c testCase) run(t *testing.T) {
 	// Note: the expected output lives in filepath.Join(testCase.base, "results", testCase.name)
 	resultFile := filepath.Join(base, "results", c.name)
 
-	expected, err := ioutil.ReadFile(resultFile)
+	expected, err := os.ReadFile(resultFile)
 	if err != nil {
 		t.Errorf("Failed to read expected result from %v: %v", resultFile, err)
 	}

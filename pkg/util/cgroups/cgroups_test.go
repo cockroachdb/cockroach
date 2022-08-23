@@ -11,7 +11,6 @@
 package cgroups
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -506,7 +505,7 @@ func createFiles(t *testing.T, paths map[string]string) (dir string) {
 	for path, data := range paths {
 		path = filepath.Join(dir, path)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
-		require.NoError(t, ioutil.WriteFile(path, []byte(data), 0755))
+		require.NoError(t, os.WriteFile(path, []byte(data), 0755))
 	}
 	return dir
 }

@@ -15,8 +15,8 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -779,7 +779,7 @@ func testRandomSyntax(
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
 
-	yBytes, err := ioutil.ReadFile(testutils.TestDataPath(t, "rsg", "sql.y"))
+	yBytes, err := os.ReadFile(testutils.TestDataPath(t, "rsg", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
 	}

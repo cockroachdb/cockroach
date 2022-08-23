@@ -18,7 +18,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -153,7 +152,7 @@ func reduceSQL(
 	if err != nil {
 		return "", err
 	}
-	input, err := ioutil.ReadFile(*file)
+	input, err := os.ReadFile(*file)
 	if err != nil {
 		return "", err
 	}

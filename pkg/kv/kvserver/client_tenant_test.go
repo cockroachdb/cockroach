@@ -15,7 +15,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	io "io"
 	"regexp"
 	"strconv"
 	"testing"
@@ -239,7 +239,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	getMetrics := func() string {
 		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")
 		require.NoError(t, err)
-		read, err := ioutil.ReadAll(resp.Body)
+		read, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return string(read)

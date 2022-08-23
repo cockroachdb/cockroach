@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"sort"
@@ -103,7 +102,7 @@ func Find{{ . }}(b ElementStatusIterator) (current Status, target TargetStatus, 
 `)).Execute(&buf, elementNames); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(out, buf.Bytes(), 0777)
+	return os.WriteFile(out, buf.Bytes(), 0777)
 }
 
 // getElementNames parses the ElementsProto struct definition and extracts
@@ -128,7 +127,7 @@ func getElementNames(inProtoFile string) (names []string, _ error) {
 		commentRegexp       = regexp.MustCompile(commentPat)
 	)
 
-	got, err := ioutil.ReadFile(inProtoFile)
+	got, err := os.ReadFile(inProtoFile)
 	got = commentRegexp.ReplaceAll(got, nil)
 
 	if err != nil {

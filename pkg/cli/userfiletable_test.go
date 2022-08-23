@@ -83,7 +83,7 @@ func Example_userfile_upload() {
 }
 
 func createTestDirWithNontrivialSubtree() (string, func() error, error) {
-	tmpDir, err := ioutil.TempDir("", testUserfileUploadTempDirPrefix)
+	tmpDir, err := os.MkdirTemp("", testUserfileUploadTempDirPrefix)
 	if err != nil {
 		return "", nil, err
 	}
@@ -116,7 +116,7 @@ func createTestDirWithNontrivialSubtree() (string, func() error, error) {
 	}
 	for i, relPath := range filesRelativePaths {
 		contents := fmt.Sprintf("content %d", i+1)
-		if err := ioutil.WriteFile(filepath.Join(testDir, relPath), []byte(contents), 0666); err != nil {
+		if err := os.WriteFile(filepath.Join(testDir, relPath), []byte(contents), 0666); err != nil {
 			return "", cleanup, err
 		}
 	}
@@ -441,7 +441,7 @@ func TestUserFileUploadRecursive(t *testing.T) {
 								filepath.Join(dstDir, relPath), username.RootUserName())
 						}
 
-						fileContent, err := ioutil.ReadFile(path)
+						fileContent, err := os.ReadFile(path)
 						if err != nil {
 							return err
 						}
@@ -493,7 +493,7 @@ func TestUserFileUpload(t *testing.T) {
 	} {
 		// Write local file.
 		filePath := filepath.Join(dir, fmt.Sprintf("file%d.csv", i))
-		err := ioutil.WriteFile(filePath, tc.fileContent, 0666)
+		err := os.WriteFile(filePath, tc.fileContent, 0666)
 		require.NoError(t, err)
 		t.Run(tc.name, func(t *testing.T) {
 			t.Run("destination-not-full-URI", func(t *testing.T) {
@@ -604,7 +604,7 @@ func TestUserfile(t *testing.T) {
 	sort.Strings(fileNames)
 
 	localFilePath := filepath.Join(dir, "test.csv")
-	err := ioutil.WriteFile(localFilePath, []byte("a"), 0666)
+	err := os.WriteFile(localFilePath, []byte("a"), 0666)
 	require.NoError(t, err)
 
 	defaultUserfileURLSchemeAndHost := url.URL{
@@ -781,7 +781,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 
 	localFilePath := filepath.Join(dir, "test.csv")
 	fileContent := []byte("a")
-	err := ioutil.WriteFile(localFilePath, []byte("a"), 0666)
+	err := os.WriteFile(localFilePath, []byte("a"), 0666)
 	require.NoError(t, err)
 
 	rootURL, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(),

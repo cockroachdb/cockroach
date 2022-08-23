@@ -13,7 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -65,7 +65,7 @@ func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatalf("could not GET %s - %s", url, err)
 		}
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatalf("could not read body for %s - %s", url, err)
 		}

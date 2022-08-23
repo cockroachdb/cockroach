@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -142,7 +141,7 @@ func downloadFile(filename string, url string) (*os.File, error) {
 	defer resp.Body.Close()
 
 	// Create the file.
-	out, err := ioutil.TempFile(`` /* dir */, filename)
+	out, err := os.CreateTemp(`` /* dir */, filename)
 	if err != nil {
 		return nil, err
 	}

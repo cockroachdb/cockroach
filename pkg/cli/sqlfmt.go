@@ -12,7 +12,7 @@ package cli
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -53,7 +53,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 			sl = append(sl, stmts...)
 		}
 	} else {
-		in, err := ioutil.ReadAll(os.Stdin)
+		in, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return err
 		}

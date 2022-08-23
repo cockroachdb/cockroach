@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -88,20 +87,20 @@ type statementBundle struct {
 func loadStatementBundle(zipdir string) (*statementBundle, error) {
 	ret := &statementBundle{}
 	var err error
-	ret.env, err = ioutil.ReadFile(filepath.Join(zipdir, "env.sql"))
+	ret.env, err = os.ReadFile(filepath.Join(zipdir, "env.sql"))
 	if err != nil {
 		return ret, err
 	}
-	ret.schema, err = ioutil.ReadFile(filepath.Join(zipdir, "schema.sql"))
+	ret.schema, err = os.ReadFile(filepath.Join(zipdir, "schema.sql"))
 	if err != nil {
 		return ret, err
 	}
-	ret.statement, err = ioutil.ReadFile(filepath.Join(zipdir, "statement.sql"))
+	ret.statement, err = os.ReadFile(filepath.Join(zipdir, "statement.sql"))
 	if err != nil {
 		// In 21.2 and prior releases, the statement file had 'txt' extension,
 		// let's try that.
 		var newErr error
-		ret.statement, newErr = ioutil.ReadFile(filepath.Join(zipdir, "statement.txt"))
+		ret.statement, newErr = os.ReadFile(filepath.Join(zipdir, "statement.txt"))
 		if newErr != nil {
 			return ret, errors.CombineErrors(err, newErr)
 		}
@@ -114,7 +113,7 @@ func loadStatementBundle(zipdir string) (*statementBundle, error) {
 		if !strings.HasPrefix(d.Name(), "stats-") {
 			return nil
 		}
-		f, err := ioutil.ReadFile(path)
+		f, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}

@@ -12,7 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 	"testing"
 
@@ -158,7 +158,7 @@ func TestTenantHTTP(t *testing.T) {
 		resp, err := httpClient.Get(tenant.AdminURL() + "/_status/vars")
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Contains(t, string(body), "sql_ddl_started_count_internal")
 	})
@@ -169,7 +169,7 @@ func TestTenantHTTP(t *testing.T) {
 		resp, err := httpClient.Get(tenant.AdminURL() + "/debug/pprof/goroutine?debug=2")
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Contains(t, string(body), "goroutine")
 	})

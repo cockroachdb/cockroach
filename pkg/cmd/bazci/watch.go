@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -316,7 +315,7 @@ func (w watcher) maybeStageArtifact(
 	stagefn func(srcContent []byte, outFile io.Writer) error,
 ) error {
 	stage := func(srcPath, destPath string) error {
-		contents, err := ioutil.ReadFile(srcPath)
+		contents, err := os.ReadFile(srcPath)
 		if err != nil {
 			return err
 		}

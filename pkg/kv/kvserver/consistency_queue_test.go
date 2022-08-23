@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	io "io"
 	"math/rand"
 	"path/filepath"
 	"strconv"
@@ -470,7 +470,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	eng := store1.Engine()
 	f, err := eng.Open(base.PreventedStartupFile(eng.GetAuxiliaryDir()))
 	require.NoError(t, err)
-	b, err := ioutil.ReadAll(f)
+	b, err := io.ReadAll(f)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	require.NotEmpty(t, b)

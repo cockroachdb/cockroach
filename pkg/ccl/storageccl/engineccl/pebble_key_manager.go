@@ -13,7 +13,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
@@ -132,7 +132,7 @@ func loadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error)
 		return nil, err
 	}
 	defer f.Close()
-	b, err := ioutil.ReadAll(f)
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (m *DataKeyManager) Load(ctx context.Context) error {
 			return err
 		}
 		defer f.Close()
-		b, err := ioutil.ReadAll(f)
+		b, err := io.ReadAll(f)
 		if err != nil {
 			return err
 		}

@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -314,7 +313,7 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 
 func mungeTestXMLs(args parsedArgs) error {
 	for _, file := range args.targets {
-		contents, err := ioutil.ReadFile(file)
+		contents, err := os.ReadFile(file)
 		if err != nil {
 			return err
 		}
@@ -323,7 +322,7 @@ func mungeTestXMLs(args parsedArgs) error {
 		if err != nil {
 			return err
 		}
-		err = ioutil.WriteFile(file, buf.Bytes(), 0666)
+		err = os.WriteFile(file, buf.Bytes(), 0666)
 		if err != nil {
 			return err
 		}
@@ -334,7 +333,7 @@ func mungeTestXMLs(args parsedArgs) error {
 func mergeTestXMLs(args parsedArgs) error {
 	var xmlsToMerge []bazelutil.TestSuites
 	for _, file := range args.targets {
-		contents, err := ioutil.ReadFile(file)
+		contents, err := os.ReadFile(file)
 		if err != nil {
 			return err
 		}

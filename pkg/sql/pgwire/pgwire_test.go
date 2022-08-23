@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -1712,7 +1711,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	if runtime.GOOS == "darwin" || strings.Contains(runtime.GOOS, "bsd") {
 		baseTmpDir = "/tmp"
 	}
-	tempDir, err := ioutil.TempDir(baseTmpDir, "PGSQL")
+	tempDir, err := os.MkdirTemp(baseTmpDir, "PGSQL")
 	if err != nil {
 		t.Fatal(err)
 	}

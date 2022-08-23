@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -117,7 +116,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, controller, "test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
 
 	// SSH setup: create a key on the controller.
-	tempDir, err := ioutil.TempDir("", "jepsen")
+	tempDir, err := os.MkdirTemp("", "jepsen")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +289,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log",
 		); err != nil {
 			t.L().Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
-		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), []byte(result.Stdout), 0666); err != nil {
+		} else if err := os.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), []byte(result.Stdout), 0666); err != nil {
 			t.Fatal(err)
 		} else {
 			t.L().Printf("downloaded jepsen logs in failure-logs.tbz")

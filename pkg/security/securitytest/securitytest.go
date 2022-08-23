@@ -12,7 +12,6 @@
 package securitytest
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +37,7 @@ func RestrictedCopy(path, tempdir, name string) (string, error) {
 		return "", err
 	}
 	tempPath := filepath.Join(tempdir, name)
-	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
+	if err := os.WriteFile(tempPath, contents, 0600); err != nil {
 		return "", err
 	}
 	return tempPath, nil

@@ -13,7 +13,6 @@ package blobs
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,9 +121,9 @@ func (l *LocalStorage) Writer(ctx context.Context, filename string) (io.WriteClo
 	// - it avoids a cross-filesystem rename in the common case.
 	//   (There can still be cross-filesystem renames in very
 	//   exotic edge cases, hence the use fileutil.Move below.)
-	// See the explanatory comment for ioutil.TempFile to understand
+	// See the explanatory comment for os.CreateTemp to understand
 	// what the "*" in the suffix means.
-	tmpFile, err := ioutil.TempFile(targetDir, filepath.Base(fullPath)+"*.tmp")
+	tmpFile, err := os.CreateTemp(targetDir, filepath.Base(fullPath)+"*.tmp")
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temporary file")
 	}

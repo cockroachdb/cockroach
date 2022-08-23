@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -102,7 +101,7 @@ func writeTestFile(t testing.TB, file string, content []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = ioutil.WriteFile(file, content, 0600)
+	err = os.WriteFile(file, content, 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +272,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Check that file is now in correct node
-			content, err := ioutil.ReadFile(filepath.Join(tc.destinationNodeDir, tc.filename))
+			content, err := os.ReadFile(filepath.Join(tc.destinationNodeDir, tc.filename))
 			if err != nil {
 				t.Fatal(err, "unable to read fetched file")
 			}
@@ -469,7 +468,7 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = ioutil.ReadFile(filepath.Join(localExternalDir, tc.filename))
+			_, err = os.ReadFile(filepath.Join(localExternalDir, tc.filename))
 			if err == nil {
 				t.Fatal(err, "file should have been deleted")
 			}

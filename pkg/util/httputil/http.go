@@ -12,7 +12,7 @@ package httputil
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -112,7 +112,7 @@ func doJSONRequest(
 	}
 	defer resp.Body.Close()
 	if contentType := resp.Header.Get(ContentTypeHeader); !(resp.StatusCode == http.StatusOK && contentType == JSONContentType) {
-		b, err := ioutil.ReadAll(resp.Body)
+		b, err := io.ReadAll(resp.Body)
 		// NB: errors.Wrapf(nil, ...) returns nil.
 		// nolint:errwrap
 		return resp, errors.Errorf(

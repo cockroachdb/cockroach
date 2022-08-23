@@ -15,7 +15,6 @@ package sdnotify
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -98,7 +97,7 @@ type listener struct {
 }
 
 func listen(socketDir string) (listener, error) {
-	dir, err := ioutil.TempDir(socketDir, "sdnotify")
+	dir, err := os.MkdirTemp(socketDir, "sdnotify")
 	if err != nil {
 		return listener{}, err
 	}

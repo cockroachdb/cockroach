@@ -23,7 +23,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -477,7 +476,7 @@ func genSlowTestsReport(slowPassingTests, slowFailingTests []testEvent) string {
 }
 
 func writeSlowTestsReport(report string) error {
-	return ioutil.WriteFile("artifacts/slow-tests-report.txt", []byte(report), 0644)
+	return os.WriteFile("artifacts/slow-tests-report.txt", []byte(report), 0644)
 }
 
 // getFileLine returns the file (relative to repo root) and line for the given test.
