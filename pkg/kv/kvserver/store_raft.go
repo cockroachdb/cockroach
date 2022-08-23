@@ -32,6 +32,11 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+var (
+	logRaftRecvQueueFullEvery = log.Every(1 * time.Second)
+	logRaftSendQueueFullEvery = log.Every(1 * time.Second)
+)
+
 type raftRequestInfo struct {
 	req        *kvserverpb.RaftMessageRequest
 	size       int64 // size of req in bytes
@@ -305,6 +310,9 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdDropped.Inc(1)
 		s.metrics.RaftRcvdDroppedBytes.Inc(size)
+		if logRaftRecvQueueFullEvery.ShouldLog() {
+			log.Warningf(ctx, "raft receive queue for r%d is full", req.RangeID)
+		}
 		return false
 	}
 	return enqueue
