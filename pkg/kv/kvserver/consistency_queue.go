@@ -66,8 +66,9 @@ const consistencyCheckRateMinWait = 100 * time.Millisecond
 // replication factor of 7 could run 7 concurrent checks on every node.
 //
 // Note that checksum calculations below Raft are not tied to the caller's
-// context (especially on followers), and will continue to run even after the
-// caller has given up on them, which may cause them to build up.
+// context, and may continue to run even after the caller has given up on them,
+// which may cause them to build up. Although we do best effort to cancel the
+// running task on the receiving end when the incoming request is aborted.
 //
 // CHECK_STATS checks do not count towards this limit, as they are cheap and the
 // DistSender will parallelize them across all ranges (notably when calling
@@ -76,8 +77,8 @@ const consistencyCheckAsyncConcurrency = 7
 
 // consistencyCheckAsyncTimeout is a below-Raft timeout for asynchronous
 // consistency check calculations. These are not tied to the caller's context,
-// and thus will continue to run even after the caller has given up on them, so
-// we give them an upper timeout to prevent them from running forever.
+// and thus may continue to run even if the caller has given up on them, so we
+// give them an upper timeout to prevent them from running forever.
 const consistencyCheckAsyncTimeout = time.Hour
 
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
