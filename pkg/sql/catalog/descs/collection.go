@@ -285,7 +285,7 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 // first checking the Collection's cached descriptors for validity if validate
 // is set to true before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return tc.stored.getAllDescriptors(ctx, txn, tc.version)
+	return tc.stored.getAllDescriptors(ctx, txn, tc.version, &tc.synthetic.descs)
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
@@ -298,7 +298,7 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
 	vd := tc.newValidationDereferencer(txn)
-	return tc.stored.getAllDatabaseDescriptors(ctx, tc.version, txn, vd)
+	return tc.stored.getAllDatabaseDescriptors(ctx, tc.version, txn, vd, &tc.synthetic.descs)
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
@@ -339,7 +339,7 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 func (tc *Collection) GetSchemasForDatabase(
 	ctx context.Context, txn *kv.Txn, dbDesc catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
-	return tc.stored.getSchemasForDatabase(ctx, txn, dbDesc)
+	return tc.stored.getSchemasForDatabase(ctx, txn, dbDesc, &tc.synthetic.descs)
 }
 
 // GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.
@@ -401,7 +401,10 @@ func (tc *Collection) GetObjectNamesAndIDs(
 // access. An immutable copy is made if the descriptor is mutable. See the
 // documentation on syntheticDescriptors.
 func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
-	tc.synthetic.set(descs)
+	tc.synthetic.descs.Clear()
+	for _, desc := range descs {
+		tc.AddSyntheticDescriptor(desc)
+	}
 }
 
 // AddSyntheticDescriptor replaces a descriptor with a synthetic
@@ -409,6 +412,7 @@ func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 // will be immutable.
 func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) {
 	tc.synthetic.add(desc)
+	tc.stored.resetDescriptor(desc)
 }
 
 // RemoveSyntheticDescriptor removes a synthetic descriptor

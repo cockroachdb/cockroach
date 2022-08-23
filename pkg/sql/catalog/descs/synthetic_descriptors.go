@@ -35,7 +35,7 @@ func (sd *syntheticDescriptors) remove(id descpb.ID) {
 }
 
 func (sd *syntheticDescriptors) set(descs []catalog.Descriptor) {
-	sd.descs.Clear()
+
 	for _, desc := range descs {
 		sd.add(desc)
 	}
