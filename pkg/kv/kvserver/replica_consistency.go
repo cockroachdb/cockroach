@@ -15,7 +15,6 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -47,10 +46,15 @@ import (
 
 // How long to keep consistency checker checksums in-memory for collection.
 // Typically a long-poll waits for the result of the computation, so it's almost
-// immediately collected. However, the consistency checker synchronously
-// collects the first replica's checksum before all others, so if the first one
-// is slow the checksum may not be collected right away, and that first
-// consistency check can take a long time due to rate limiting and range size.
+// immediately collected.
+//
+// Up to 22.1, the consistency check initiator used to synchronously collect the
+// first replica's checksum before all others, so checksum collection requests
+// could arrive late if the first one was slow. Since 22.2, all requests are
+// parallel and likely arrive quickly.
+//
+// TODO(pavelkalinnikov): Consider removing GC behaviour in 23.1+, when all the
+// incoming requests are from 22.2+ nodes (hence arrive timely).
 const replicaChecksumGCInterval = time.Hour
 
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
@@ -87,10 +91,10 @@ type replicaChecksum struct {
 // ComputeChecksum through Raft and then issues CollectChecksum commands to the
 // other replicas. These are inspected and a CheckConsistencyResponse is assembled.
 //
-// When args.Mode is CHECK_VIA_QUEUE and an inconsistency is detected and no
-// diff was requested, the consistency check will be re-run to collect a diff,
-// which is then printed before calling `log.Fatal`. This behavior should be
-// lifted to the consistency checker queue in the future.
+// When req.Mode is CHECK_VIA_QUEUE and an inconsistency is detected, the
+// consistency check will be re-run to collect a diff, which is then printed
+// before calling `log.Fatal`. This behavior should be lifted to the consistency
+// checker queue in the future.
 func (r *Replica) CheckConsistency(
 	ctx context.Context, req roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
@@ -328,7 +332,7 @@ type ConsistencyCheckResult struct {
 }
 
 func (r *Replica) collectChecksumFromReplica(
-	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, checksum []byte,
+	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, withSnap bool,
 ) (CollectChecksumResponse, error) {
 	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
 	if err != nil {
@@ -340,7 +344,7 @@ func (r *Replica) collectChecksumFromReplica(
 		StoreRequestHeader: StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		RangeID:            r.RangeID,
 		ChecksumID:         id,
-		Checksum:           checksum,
+		WithSnapshot:       withSnap,
 	}
 	resp, err := client.CollectChecksum(ctx, req)
 	if err != nil {
@@ -364,70 +368,61 @@ func (r *Replica) runConsistencyCheck(
 	}
 	ccRes := res.(*roachpb.ComputeChecksumResponse)
 
-	var orderedReplicas []roachpb.ReplicaDescriptor
-	{
-		desc := r.Desc()
-		localReplica, err := r.GetReplicaDescriptor()
-		if err != nil {
-			return nil, errors.Wrap(err, "could not get replica descriptor")
-		}
-
-		// Move the local replica to the front (which makes it the "master"
-		// we're comparing against).
-		orderedReplicas = append(orderedReplicas, desc.Replicas().Descriptors()...)
-
-		sort.Slice(orderedReplicas, func(i, j int) bool {
-			return orderedReplicas[i] == localReplica
-		})
+	replSet := r.Desc().Replicas()
+	localReplica, found := replSet.GetReplicaDescriptorByID(r.replicaID)
+	if !found {
+		return nil, errors.New("could not get local replica descriptor")
 	}
+	replicas := replSet.Descriptors()
 
-	resultCh := make(chan ConsistencyCheckResult, len(orderedReplicas))
-	var results []ConsistencyCheckResult
+	resultCh := make(chan ConsistencyCheckResult, len(replicas))
+	results := make([]ConsistencyCheckResult, 0, len(replicas))
+
 	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
 
-	for _, replica := range orderedReplicas {
+	defer close(resultCh) // close the channel when
+	defer wg.Wait()       // writers have terminated
+	defer cancel()        // but cancel them first
+	// P.S. Have you noticed the Haiku?
+
+	for _, replica := range replicas {
 		wg.Add(1)
 		replica := replica // per-iteration copy for the goroutine
 		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
 			func(ctx context.Context) {
 				defer wg.Done()
-
-				var masterChecksum []byte
-				if len(results) > 0 {
-					masterChecksum = results[0].Response.Checksum
-				}
-				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, req.Snapshot)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
 					Err:      err,
 				}
-			}); err != nil {
+			},
+		); err != nil {
+			// If we can't start tasks, the node is likely draining. Return the error
+			// verbatim, after all the started tasks are stopped.
 			wg.Done()
-			// If we can't start tasks, the node is likely draining. Just return the error verbatim.
 			return nil, err
-		}
-
-		// Collect the master result eagerly so that we can send a SHA in the
-		// remaining requests (this is used for logging inconsistencies on the
-		// remote nodes only).
-		if len(results) == 0 {
-			wg.Wait()
-			result := <-resultCh
-			if err := result.Err; err != nil {
-				// If we can't compute the local checksum, give up.
-				return nil, errors.Wrap(err, "computing own checksum")
-			}
-			results = append(results, result)
 		}
 	}
 
-	wg.Wait()
-	close(resultCh)
-
-	// Collect the remaining results.
+	// Collect the results from all replicas, while the tasks are running.
 	for result := range resultCh {
 		results = append(results, result)
+		if result.Replica.IsSame(localReplica) {
+			// If we can't compute the local checksum, give up. This will cancel all
+			// the outstanding requests, and wait for the tasks above to terminate.
+			if err := result.Err; err != nil {
+				return nil, errors.Wrap(err, "computing own checksum")
+			}
+			// Put the local replica first in the list.
+			results[0], results[len(results)-1] = results[len(results)-1], results[0]
+		}
+		// If it was the last request, don't wait on the channel anymore.
+		if len(results) == len(replicas) {
+			break
+		}
 	}
 
 	return results, nil
