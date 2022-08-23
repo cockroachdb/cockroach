@@ -70,6 +70,10 @@ func (is Server) CollectChecksum(
 				// If this check is false, then this request is the replica carrying out
 				// the consistency check. The message is spurious, but we want to leave the
 				// snapshot (if present) intact.
+				//
+				// TODO(pavelkalinnikov): The Checksum field is no longer populated.
+				// Drop this check, or move it to where the ComputeChecksum.Terminate
+				// field takes effect.
 				if len(req.Checksum) > 0 {
 					log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
 						req.RangeID, redact.Safe(req.Checksum), redact.Safe(ccr.Checksum))
