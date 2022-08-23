@@ -169,3 +169,17 @@ export const CircuitBreakerTrippedEventsTooltip: React.FC = () => (
 export const PausedFollowersTooltip: React.FC = () => (
   <div>The number of nonessential followers that have replication paused.</div>
 );
+
+export const ReceiverSnapshotsQueuedTooltip: React.FC = () => (
+  <div>
+    The number of snapshots queued to be applied on a receiver which can only{" "}
+    send 1 at a time per store.
+  </div>
+);
+
+export const ReplicasInPurgatoryTooltip: React.FC = () => (
+  <div>
+    The number of replicas that had an error and cannot be processed until
+    something changes.
+  </div>
+);
