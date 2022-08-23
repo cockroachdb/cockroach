@@ -1246,6 +1246,10 @@ type connExecutor struct {
 		// delete schema change job records. Instead, we leave the caller of the
 		// internal executor to release them.
 		fromOuterTxn bool
+		// shouldResetSyntheticDescriptors should be set to true only if
+		// fromOuterTxn is set to true, and, upon finishing the statement, the
+		// synthetic descriptors should be reset.
+		shouldResetSyntheticDescriptors bool
 
 		// descCollection collects descriptors used by the current transaction.
 		descCollection *descs.Collection
@@ -1662,7 +1666,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
 	if ex.extraTxnState.fromOuterTxn {
-		ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
+		if ex.extraTxnState.shouldResetSyntheticDescriptors {
+			ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
+		}
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
 		for k := range ex.extraTxnState.schemaChangeJobRecords {
@@ -3283,7 +3289,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		scs.jobID,
 		scs.stmts,
 	)
-
+	ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
 	after, jobID, err := scrun.RunPreCommitPhase(
 		ctx, ex.server.cfg.DeclarativeSchemaChangerTestingKnobs, deps, scs.state,
 	)
