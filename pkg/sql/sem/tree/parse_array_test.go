@@ -77,6 +77,11 @@ lo}`, types.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 
 		{`{日本語}`, types.String, Datums{NewDString(`日本語`)}},
 
+		// byte(133) and byte(160) are treated as whitespace to ignore by unicode,
+		// but Postgres handles them as normal characters.
+		{string([]byte{'{', 133, '}'}), types.String, Datums{NewDString("\x85")}},
+		{string([]byte{'{', 160, '}'}), types.String, Datums{NewDString("\xa0")}},
+
 		// This can generate some strings with invalid UTF-8, but this isn't a
 		// problem, since the input would have had to be invalid UTF-8 for that to
 		// occur.
