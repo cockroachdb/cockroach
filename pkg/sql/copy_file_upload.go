@@ -170,6 +170,10 @@ func CopyInFileStmt(destination, schema, table string) string {
 	)
 }
 
+func (f *fileUploadMachine) numInsertedRows() int {
+	return f.c.numInsertedRows()
+}
+
 func (f *fileUploadMachine) Close(ctx context.Context) {
 	f.c.Close(ctx)
 }
