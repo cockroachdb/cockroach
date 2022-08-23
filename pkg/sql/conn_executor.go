@@ -2443,7 +2443,26 @@ func (ex *connExecutor) execCopyIn(
 		payload := eventNonRetriableErrPayload{err: err}
 		return ev, payload, nil
 	}
-	defer cm.Close(ctx)
+	defer func() {
+		cm.Close(ctx)
+
+		// These fields are not available in COPY, so use the empty value.
+		var stmtFingerprintID roachpb.StmtFingerprintID
+		var stats topLevelQueryStats
+		ex.planner.maybeLogStatement(
+			ctx,
+			ex.executorType,
+			int(ex.state.mu.autoRetryCounter),
+			ex.extraTxnState.txnCounter,
+			cm.numInsertedRows(),
+			retErr,
+			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+			&ex.extraTxnState.hasAdminRoleCache,
+			ex.server.TelemetryLoggingMetrics,
+			stmtFingerprintID,
+			&stats,
+		)
+	}()
 
 	if err := ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
 		return cm.run(ctx)
