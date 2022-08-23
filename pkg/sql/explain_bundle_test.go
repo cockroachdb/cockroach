@@ -60,7 +60,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("basic", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc",
+			t, fmt.Sprint(rows), "public.abc", nil,
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -69,7 +69,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("subqueries", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc",
+			t, fmt.Sprint(rows), "public.abc", nil,
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt",
 		)
 	})
@@ -77,7 +77,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("user-defined schema", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM s.a WHERE a=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "s.a",
+			t, fmt.Sprint(rows), "s.a", nil,
 			base, plans, "stats-defaultdb.s.a.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -91,7 +91,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		// The bundle url is inside the error detail.
 		var pqErr *pq.Error
 		_ = errors.As(err, &pqErr)
-		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", base)
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base)
 	})
 
 	// Verify that we can issue the statement with prepare (which can happen
@@ -116,7 +116,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 			rowsBuf.WriteByte('\n')
 		}
 		checkBundle(
-			t, rowsBuf.String(), "public.abc",
+			t, rowsBuf.String(), "public.abc", nil,
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -135,7 +135,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 `)
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO users (promo_id) VALUES (642606224929619969);")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.users", base, plans,
+			t, fmt.Sprint(rows), "public.users", nil, base, plans,
 			"stats-defaultdb.public.users.sql", "stats-defaultdb.public.promos.sql",
 			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
 		)
@@ -147,9 +147,69 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc",
+			t, fmt.Sprint(rows), "public.abc", nil,
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
+	})
+
+	t.Run("session-settings", func(t *testing.T) {
+		testcases := []struct {
+			sessionVar, value string
+		}{
+			{"allow_prepare_as_opt_plan", "on"},
+			{"cost_scans_with_default_col_size", "on"},
+			{"datestyle", "'ISO, DMY'"},
+			{"default_int_size", "4"},
+			{"default_transaction_priority", "low"},
+			{"default_transaction_quality_of_service", "background"},
+			{"default_transaction_read_only", "on"},
+			{"disallow_full_table_scans", "on"},
+			{"distsql", "always"},
+			{"enable_implicit_select_for_update", "off"},
+			{"enable_implicit_transaction_for_batch_statements", "off"},
+			{"enable_insert_fast_path", "off"},
+			{"enable_multiple_modifications_of_table", "on"},
+			{"enable_zigzag_join", "off"},
+			{"expect_and_ignore_not_visible_columns_in_copy", "on"},
+			{"intervalstyle", "iso_8601"},
+			{"large_full_scan_rows", "2000"},
+			{"locality_optimized_partitioned_index_scan", "off"},
+			{"null_ordered_last", "on"},
+			{"on_update_rehome_row_enabled", "off"},
+			{"opt_split_scan_limit", "1000"},
+			{"optimizer_use_histograms", "off"},
+			{"optimizer_use_multicol_stats", "off"},
+			{"optimizer_use_not_visible_indexes", "on"},
+			{"pg_trgm.similarity_threshold", "0.6"},
+			{"prefer_lookup_joins_for_fks", "on"},
+			{"propagate_input_ordering", "on"},
+			{"reorder_joins_limit", "3"},
+			{"sql_safe_updates", "on"},
+			{"testing_optimizer_cost_perturbation", "0.3"},
+			{"testing_optimizer_disable_rule_probability", "0.00000000001"},
+			{"testing_optimizer_random_seed", "123"},
+			{"timezone", "+8"},
+			{"unconstrained_non_covering_index_scan_enabled", "on"},
+		}
+		for _, tc := range testcases {
+			t.Run(tc.sessionVar, func(t *testing.T) {
+				r.Exec(t, fmt.Sprintf("SET %s = %s", tc.sessionVar, tc.value))
+				defer r.Exec(t, fmt.Sprintf("RESET %s", tc.sessionVar))
+				rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
+				checkBundle(
+					t, fmt.Sprint(rows), "public.abc", func(name, contents string) error {
+						if name == "env.sql" {
+							reg := regexp.MustCompile(fmt.Sprintf("SET %s.*-- default value", tc.sessionVar))
+							if reg.FindString(contents) == "" {
+								return errors.Errorf("could not find 'SET %s' in env.sql", tc.sessionVar)
+							}
+						}
+						return nil
+					},
+					base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+				)
+			})
+		}
 	})
 }
 
@@ -157,7 +217,12 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 // bundle contains the expected files. The expected files are passed as an
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
-func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) {
+func checkBundle(
+	t *testing.T,
+	text, tableName string,
+	contentCheck func(name, contents string) error,
+	expectedFiles ...string,
+) {
 	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
 
 	t.Helper()
@@ -194,26 +259,31 @@ func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) 
 			t.Fatal(err)
 		}
 		defer r.Close()
-		contents, err := ioutil.ReadAll(r)
+		bytes, err := ioutil.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}
+		contents := string(bytes)
 
-		if strings.Contains(string(contents), "-- error") {
+		if strings.Contains(contents, "-- error") {
 			t.Errorf(
 				"expected no errors in %s, file contents:\n%s",
-				f.Name,
-				string(contents),
+				f.Name, contents,
 			)
 		}
 
 		if f.Name == "schema.sql" {
-			if !strings.Contains(string(contents), tableName) {
+			if !strings.Contains(contents, tableName) {
 				t.Errorf(
 					"expected table name to appear in schema.sql. tableName: %s\nfile contents:\n%s",
-					tableName,
-					string(contents),
+					tableName, contents,
 				)
+			}
+		}
+
+		if contentCheck != nil {
+			if err := contentCheck(f.Name, contents); err != nil {
+				t.Error(err)
 			}
 		}
 	}
