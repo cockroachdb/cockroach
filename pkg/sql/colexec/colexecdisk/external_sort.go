@@ -360,7 +360,7 @@ func (s *externalSorter) Next() coldata.Batch {
 				if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil {
 					toAcquire := s.maxNumberPartitions
 					if err := s.fdState.fdSemaphore.Acquire(s.Ctx, toAcquire); err != nil {
-						colexecerror.InternalError(err)
+						colexecerror.ExpectedError(err)
 					}
 					s.fdState.acquiredFDs = toAcquire
 				}

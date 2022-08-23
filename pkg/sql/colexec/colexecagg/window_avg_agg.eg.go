@@ -150,7 +150,7 @@ func (a *avgInt16WindowAgg) Flush(outputIdx int) {
 
 		col[outputIdx].SetInt64(a.curCount)
 		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
-			colexecerror.InternalError(err)
+			colexecerror.ExpectedError(err)
 		}
 	}
 }
@@ -320,7 +320,7 @@ func (a *avgInt32WindowAgg) Flush(outputIdx int) {
 
 		col[outputIdx].SetInt64(a.curCount)
 		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
-			colexecerror.InternalError(err)
+			colexecerror.ExpectedError(err)
 		}
 	}
 }
@@ -490,7 +490,7 @@ func (a *avgInt64WindowAgg) Flush(outputIdx int) {
 
 		col[outputIdx].SetInt64(a.curCount)
 		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
-			colexecerror.InternalError(err)
+			colexecerror.ExpectedError(err)
 		}
 	}
 }
@@ -658,7 +658,7 @@ func (a *avgDecimalWindowAgg) Flush(outputIdx int) {
 
 		col[outputIdx].SetInt64(a.curCount)
 		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
-			colexecerror.InternalError(err)
+			colexecerror.ExpectedError(err)
 		}
 	}
 }
