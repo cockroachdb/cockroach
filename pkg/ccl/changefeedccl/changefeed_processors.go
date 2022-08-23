@@ -60,8 +60,6 @@ type changeAggregator struct {
 	kvFeedDoneCh chan struct{}
 	kvFeedMemMon *mon.BytesMonitor
 
-	// encoder is the Encoder to use for key and value serialization.
-	encoder Encoder
 	// sink is the Sink to write rows to. Resolved timestamps are never written
 	// by changeAggregator.
 	sink EventSink
@@ -80,7 +78,7 @@ type changeAggregator struct {
 	// eventProducer produces the next event from the kv feed.
 	eventProducer kvevent.Reader
 	// eventConsumer consumes the event.
-	eventConsumer *kvEventToRowConsumer
+	eventConsumer eventConsumer
 
 	// lastFlush and flushFrequency keep track of the flush frequency.
 	lastFlush      time.Time
@@ -93,7 +91,6 @@ type changeAggregator struct {
 	metrics    *Metrics
 	sliMetrics *sliMetrics
 	knobs      TestingKnobs
-	topicNamer *TopicNamer
 }
 
 type timestampLowerBoundOracle interface {
@@ -162,22 +159,6 @@ func newChangeAggregatorProcessor(
 
 	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
 
-	var err error
-	encodingOpts, err := opts.GetEncodingOptions()
-	if err != nil {
-		return nil, err
-	}
-	if ca.encoder, err = getEncoder(encodingOpts, AllTargets(ca.spec.Feed)); err != nil {
-		return nil, err
-	}
-
-	if encodingOpts.TopicInValue {
-		ca.topicNamer, err = MakeTopicNamer(AllTargets(ca.spec.Feed))
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// MinCheckpointFrequency controls how frequently the changeAggregator flushes the sink
 	// and checkpoints the local frontier to changeFrontier. It is used as a rough
 	// approximation of how latency-sensitive the changefeed user is. For a high latency
@@ -225,7 +206,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	feed := makeChangefeedConfigFromJobDetails(ca.spec.Feed)
 
-	endTime := feed.EndTime
 	opts := feed.Opts
 
 	if err != nil {
@@ -295,7 +275,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		kvFeedHighWater = ca.spec.Feed.StatementTime
 	}
 
-	ca.eventProducer, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, endTime)
+	ca.eventProducer, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed)
 	if err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -303,9 +283,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.eventConsumer, err = newKVEventToRowConsumer(
-		ctx, ca.flowCtx.Cfg, ca.flowCtx.EvalCtx, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, ca.encoder, feed, ca.spec.Select, ca.knobs, ca.topicNamer)
+	ca.eventConsumer, ca.sink, err = newEventConsumer(
+		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
+		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.isSinkless())
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
@@ -320,7 +300,7 @@ func (ca *changeAggregator) startKVFeed(
 	spans []roachpb.Span,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
-	endTime hlc.Timestamp,
+	config ChangefeedConfig,
 ) (kvevent.Reader, error) {
 	cfg := ca.flowCtx.Cfg
 	buf := kvevent.NewThrottlingBuffer(
@@ -329,7 +309,7 @@ func (ca *changeAggregator) startKVFeed(
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime)
+	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, config, spans, buf, initialHighWater, needsInitialScan)
 	if err != nil {
 		return nil, err
 	}
@@ -359,28 +339,27 @@ func (ca *changeAggregator) startKVFeed(
 
 func (ca *changeAggregator) makeKVFeedCfg(
 	ctx context.Context,
+	config ChangefeedConfig,
 	spans []roachpb.Span,
 	buf kvevent.Writer,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
-	endTime hlc.Timestamp,
 ) (kvfeed.Config, error) {
-	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
-	schemaChange, err := opts.GetSchemaChangeHandlingOptions()
+	schemaChange, err := config.Opts.GetSchemaChangeHandlingOptions()
 	if err != nil {
 		return kvfeed.Config{}, err
 	}
-	filters := opts.GetFilters()
+	filters := config.Opts.GetFilters()
 	cfg := ca.flowCtx.Cfg
 
-	initialScanOnly := endTime.EqOrdering(initialHighWater)
+	initialScanOnly := config.EndTime.EqOrdering(initialHighWater)
 	var sf schemafeed.SchemaFeed
 
 	if schemaChange.Policy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, AllTargets(ca.spec.Feed),
-			initialHighWater, &ca.metrics.SchemaFeedMetrics, opts.GetCanHandle())
+			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
 	}
 
 	return kvfeed.Config{
@@ -399,7 +378,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		OnBackfillRangeCallback: ca.sliMetrics.getBackfillRangeCallback(),
 		MM:                      ca.kvFeedMemMon,
 		InitialHighWater:        initialHighWater,
-		EndTime:                 endTime,
+		EndTime:                 config.EndTime,
 		WithDiff:                filters.WithDiff,
 		NeedsInitialScan:        needsInitialScan,
 		SchemaChangeEvents:      schemaChange.EventClass,
@@ -467,12 +446,17 @@ func (ca *changeAggregator) close() {
 	if ca.kvFeedDoneCh != nil {
 		<-ca.kvFeedDoneCh
 	}
+	if ca.eventConsumer != nil {
+		if err := ca.eventConsumer.Close(); err != nil {
+			log.Warningf(ca.Ctx, "error closing event consumer: %s", err)
+		}
+	}
+
 	if ca.sink != nil {
 		if err := ca.sink.Close(); err != nil {
 			log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
 		}
 	}
-
 	ca.memAcc.Close(ca.Ctx)
 	if ca.kvFeedMemMon != nil {
 		ca.kvFeedMemMon.Stop(ca.Ctx)
@@ -585,7 +569,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.
 func (ca *changeAggregator) flushFrontier() error {
-	// Make sure to flush the sink before forwarding resolved spans,
+	// Make sure to the sink before forwarding resolved spans,
 	// otherwise, we could lose buffered messages and violate the
 	// at-least-once guarantee. This is also true for checkpointing the
 	// resolved spans in the job progress.
@@ -638,6 +622,10 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ca.close()
+}
+
+func (ca *changeAggregator) isSinkless() bool {
+	return ca.spec.JobID == 0
 }
 
 const (
