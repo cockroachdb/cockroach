@@ -312,7 +312,7 @@ func (o *Outbox) sendBatches(
 			// Note that because we never truncate the buffer, we are only
 			// adjusting the memory usage whenever the buffer's capacity
 			// increases (if it didn't increase, this call becomes a noop).
-			o.unlimitedAllocator.AdjustMemoryUsage(int64(o.scratch.buf.Cap() - oldBufCap))
+			o.unlimitedAllocator.AdjustMemoryUsageAfterAllocation(int64(o.scratch.buf.Cap() - oldBufCap))
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
 
 			// o.scratch.msg can be reused as soon as Send returns since it returns as

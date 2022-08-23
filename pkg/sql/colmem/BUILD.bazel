@@ -14,6 +14,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/mon",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -23,6 +24,7 @@ go_test(
     name = "colmem_test",
     size = "small",
     srcs = [
+        "adjust_memory_usage_test.go",
         "allocator_test.go",
         "reset_maybe_reallocate_test.go",
     ],
@@ -45,6 +47,7 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )

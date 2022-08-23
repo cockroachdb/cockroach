@@ -362,12 +362,16 @@ func (r opResult) createDiskBackedSort(
 		// There is a limit specified, so we know exactly how many rows the
 		// sorter should output. Use a top K sorter, which uses a heap to avoid
 		// storing more rows than necessary.
+		opName := opNamePrefix + "topk-sort"
 		var topKSorterMemAccount *mon.BoundAccount
 		topKSorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-			ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
+			ctx, flowCtx, spoolMemLimit, opName, processorID,
+		)
+		unlimitedMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+			ctx, flowCtx, opName, processorID,
 		)
 		inMemorySorter = colexec.NewTopKSorter(
-			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
+			colmem.NewLimitedAllocator(ctx, topKSorterMemAccount, unlimitedMemAcc, factory), input,
 			inputTypes, ordering.Columns, int(matchLen), uint64(limit), maxOutputBatchMemSize,
 		)
 	} else if matchLen > 0 {
@@ -383,19 +387,27 @@ func (r opResult) createDiskBackedSort(
 		sortChunksMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
 			ctx, flowCtx, spoolMemLimit, opName, processorID,
 		)
+		unlimitedMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+			ctx, flowCtx, opName, processorID,
+		)
 		inMemorySorter = colexec.NewSortChunks(
-			deselectorUnlimitedAllocator, colmem.NewAllocator(ctx, sortChunksMemAccount, factory),
+			deselectorUnlimitedAllocator,
+			colmem.NewLimitedAllocator(ctx, sortChunksMemAccount, unlimitedMemAcc, factory),
 			input, inputTypes, ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.
 		var sorterMemAccount *mon.BoundAccount
+		opName := opNamePrefix + "sort-all"
 		sorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-			ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-all", processorID,
+			ctx, flowCtx, spoolMemLimit, opName, processorID,
+		)
+		unlimitedMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+			ctx, flowCtx, opName, processorID,
 		)
 		inMemorySorter = colexec.NewSorter(
-			colmem.NewAllocator(ctx, sorterMemAccount, factory), input,
-			inputTypes, ordering.Columns, maxOutputBatchMemSize,
+			colmem.NewLimitedAllocator(ctx, sorterMemAccount, unlimitedMemAcc, factory),
+			input, inputTypes, ordering.Columns, maxOutputBatchMemSize,
 		)
 	}
 	if args.TestingKnobs.DiskSpillingDisabled {
@@ -930,9 +942,15 @@ func NewColOperator(
 					spillingQueueMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
 						ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID,
 					)
-					newAggArgs.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
+					hashAggUnlimitedAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+						ctx, flowCtx, opName, spec.ProcessorID,
+					)
+					newAggArgs.Allocator = colmem.NewLimitedAllocator(ctx, hashAggregatorMemAccount, hashAggUnlimitedAcc, factory)
 					newAggArgs.MemAccount = hashAggregatorMemAccount
-					hashTableAllocator := colmem.NewAllocator(ctx, hashTableMemAccount, factory)
+					hashTableUnlimitedAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+						ctx, flowCtx, opName, spec.ProcessorID,
+					)
+					hashTableAllocator := colmem.NewLimitedAllocator(ctx, hashTableMemAccount, hashTableUnlimitedAcc, factory)
 					inMemoryHashAggregator := colexec.NewHashAggregator(
 						newAggArgs,
 						&colexecutils.NewSpillingQueueArgs{
@@ -1024,7 +1042,10 @@ func NewColOperator(
 				// ordered distinct, and we should plan it when we have
 				// non-empty ordered columns and we think that the probability
 				// of distinct tuples in the input is about 0.01 or less.
-				allocator := colmem.NewAllocator(ctx, distinctMemAccount, factory)
+				unlimitedAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+					ctx, flowCtx, "distinct" /* opName */, spec.ProcessorID,
+				)
+				allocator := colmem.NewLimitedAllocator(ctx, distinctMemAccount, unlimitedAcc, factory)
 				inMemoryUnorderedDistinct := colexec.NewUnorderedDistinct(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
@@ -1111,8 +1132,11 @@ func NewColOperator(
 					core.HashJoiner.RightEqColumnsAreKey,
 				)
 
+				hashJoinerUnlimitedAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+					ctx, flowCtx, opName, spec.ProcessorID,
+				)
 				inMemoryHashJoiner := colexecjoin.NewHashJoiner(
-					colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
+					colmem.NewLimitedAllocator(ctx, hashJoinerMemAccount, hashJoinerUnlimitedAcc, factory),
 					hashJoinerUnlimitedAllocator, hjSpec, inputs[0].Root, inputs[1].Root,
 					colexecjoin.HashJoinerInitialNumBuckets,
 				)

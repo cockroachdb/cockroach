@@ -389,7 +389,7 @@ func (p *sortOp) sort() {
 		p.scratch.partitionsCol = colexecutils.MaybeAllocateBoolArray(p.scratch.partitionsCol, spooledTuples)
 		partitionsCol = p.scratch.partitionsCol
 		sizeAfter := memsize.Bool * int64(cap(p.scratch.partitionsCol))
-		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
+		p.allocator.AdjustMemoryUsageAfterAllocation(sizeAfter - sizeBefore)
 	} else {
 		// There are at least two partitions already, so the first column needs the
 		// same special treatment as all others. The general sequence is as
@@ -441,7 +441,7 @@ func (p *sortOp) sort() {
 		sizeBefore := memsize.Int * int64(cap(p.scratch.partitions))
 		p.scratch.partitions = boolVecToSel(partitionsCol, p.scratch.partitions[:0])
 		sizeAfter := memsize.Int * int64(cap(p.scratch.partitions))
-		p.allocator.AdjustMemoryUsage(sizeAfter - sizeBefore)
+		p.allocator.AdjustMemoryUsageAfterAllocation(sizeAfter - sizeBefore)
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
 		sorter.sortPartitions(p.scratch.partitions)
