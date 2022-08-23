@@ -99,10 +99,10 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 		// Attempt to upgrade the cluster version and expect to see a failure
 		_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`, v1.String())
 		require.Error(t, err, "upgrade should be refused because precondition is violated.")
-		require.Equal(t, "pq: internal error: verifying precondition for version 21.2-2: There exists invalid "+
-			"descriptors as listed below. Fix these descriptors before attempting to upgrade again.\n"+
-			"Invalid descriptor: defaultdb.public.t (52) because 'relation \"t\" (52): invalid depended-on-by relation "+
-			"back reference: referenced table ID 53: referenced descriptor not found'", err.Error())
+		require.Equal(t, "pq: verifying precondition for version 21.2-2: "+
+			"there exists invalid descriptors as listed below; fix these descriptors before attempting to upgrade again:\n"+
+			"invalid descriptor: defaultdb.public.t (52) because 'relation \"t\" (52): invalid depended-on-by relation back reference: referenced table ID 53: referenced descriptor not found'",
+			err.Error())
 		// The cluster version should remain at `v0`.
 		tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v0.String()}})
 	})
