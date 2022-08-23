@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -535,4 +536,48 @@ func (n *nullSink) Close() error {
 // Dial implements Sink interface.
 func (n *nullSink) Dial() error {
 	return nil
+}
+
+// safeSink wraps an EventSink in a mutex so it's methods are
+// thread safe. It also has a beforeFlush hook which is called
+// at the beginning of safeSink.Flush().
+type safeSink struct {
+	syncutil.Mutex
+	beforeFlush func(ctx context.Context) error
+	wrapped     EventSink
+}
+
+var _ EventSink = (*safeSink)(nil)
+
+func (s *safeSink) Dial() error {
+	s.Lock()
+	defer s.Unlock()
+	return s.wrapped.Dial()
+}
+
+func (s *safeSink) Close() error {
+	s.Lock()
+	defer s.Unlock()
+	return s.wrapped.Close()
+}
+
+func (s *safeSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	s.Lock()
+	defer s.Unlock()
+	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc)
+}
+
+func (s *safeSink) Flush(ctx context.Context) error {
+	if err := s.beforeFlush(ctx); err != nil {
+		return err
+	}
+	s.Lock()
+	defer s.Unlock()
+	return s.wrapped.Flush(ctx)
 }

@@ -600,6 +600,15 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// The expected results depend on caching in the avro encoder.
+		// With multiple workers, there are multiple encoders which each
+		// maintain their own caches. Depending on the number of
+		// workers, the results below may change, so disable parallel workers
+		// here for simplicity.
+		changefeedbase.EventConsumerWorkers.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 0)
+
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t,
