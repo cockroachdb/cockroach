@@ -16,7 +16,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -42,7 +41,7 @@ func main() {
 	args := flag.Args()
 	switch len(args) {
 	case 0:
-		orig, err := ioutil.ReadAll(os.Stdin)
+		orig, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -81,7 +80,7 @@ func main() {
 			}
 		}
 		if *write {
-			err := ioutil.WriteFile(name, []byte(prettied), 0666)
+			err := os.WriteFile(name, []byte(prettied), 0666)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s: %s\n", name, err)
 				os.Exit(1)
@@ -145,7 +144,7 @@ type pp struct {
 }
 
 func prettyFile(name string) (orig []byte, pretty string, err error) {
-	orig, err = ioutil.ReadFile(name)
+	orig, err = os.ReadFile(name)
 	if err != nil {
 		return orig, "", err
 	}

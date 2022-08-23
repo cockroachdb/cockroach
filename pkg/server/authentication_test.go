@@ -17,7 +17,7 @@ import (
 	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -674,7 +674,7 @@ func TestAuthenticationMux(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		if a, e := resp.StatusCode, expected; a != e {
-			message, err := ioutil.ReadAll(resp.Body)
+			message, err := io.ReadAll(resp.Body)
 			if err != nil {
 				message = []byte(err.Error())
 			}

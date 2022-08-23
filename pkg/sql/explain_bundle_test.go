@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -194,7 +193,7 @@ func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) 
 			t.Fatal(err)
 		}
 		defer r.Close()
-		contents, err := ioutil.ReadAll(r)
+		contents, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}

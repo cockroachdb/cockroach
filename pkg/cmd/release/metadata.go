@@ -14,7 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 
 	"cloud.google.com/go/storage"
 )
@@ -39,7 +39,7 @@ func getBuildInfo(ctx context.Context, bucket string, obj string) (buildInfo, er
 		_ = reader.Close()
 	}()
 
-	data, err := ioutil.ReadAll(reader)
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return buildInfo{}, fmt.Errorf("cannot read GCS object: %w", err)
 	}

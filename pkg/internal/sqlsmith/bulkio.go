@@ -12,7 +12,7 @@ package sqlsmith
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -40,7 +40,7 @@ func (s *Smither) enableBulkIO() {
 		localfile := r.URL.Path
 		switch r.Method {
 		case "PUT":
-			b, err := ioutil.ReadAll(r.Body)
+			b, err := io.ReadAll(r.Body)
 			if err != nil {
 				http.Error(w, err.Error(), 500)
 				return

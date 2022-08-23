@@ -13,7 +13,6 @@ package cli
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -104,7 +103,7 @@ func TestNodeLocalFileUpload(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			filePath := filepath.Join(dir, fmt.Sprintf("file%d.csv", i))
-			err := ioutil.WriteFile(filePath, tc.fileContent, 0666)
+			err := os.WriteFile(filePath, tc.fileContent, 0666)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -114,7 +113,7 @@ func TestNodeLocalFileUpload(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			writtenContent, err := ioutil.ReadFile(filepath.Join(c.Cfg.Settings.ExternalIODir, destination))
+			writtenContent, err := os.ReadFile(filepath.Join(c.Cfg.Settings.ExternalIODir, destination))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,10 +125,10 @@ func TestNodeLocalFileUpload(t *testing.T) {
 }
 
 func createTestFile(name, content string) (string, func()) {
-	tmpDir, err := ioutil.TempDir("", "")
+	tmpDir, err := os.MkdirTemp("", "")
 	tmpFile := filepath.Join(tmpDir, testTempFilePrefix+name)
 	if err == nil {
-		err = ioutil.WriteFile(tmpFile, []byte(content), 0666)
+		err = os.WriteFile(tmpFile, []byte(content), 0666)
 	}
 	if err != nil {
 		return "", func() {}

@@ -15,7 +15,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"reflect"
 	"sort"
@@ -189,7 +189,7 @@ func (p *paginationState) UnmarshalText(text []byte) error {
 	decoder := base64.NewDecoder(base64.URLEncoding, bytes.NewReader(text))
 	var decodedText []byte
 	var err error
-	if decodedText, err = ioutil.ReadAll(decoder); err != nil {
+	if decodedText, err = io.ReadAll(decoder); err != nil {
 		return err
 	}
 	parts := strings.Split(string(decodedText), "|")

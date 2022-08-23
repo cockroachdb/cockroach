@@ -13,7 +13,6 @@ package importer
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -988,7 +987,7 @@ func avroFormat(t *testing.T, format roachpb.AvroOptions_Format) roachpb.IOFileF
 
 	if format != roachpb.AvroOptions_OCF {
 		// Need to load schema for record specific inputs.
-		bytes, err := ioutil.ReadFile(testutils.TestDataPath(t, "avro", "simple-schema.json"))
+		bytes, err := os.ReadFile(testutils.TestDataPath(t, "avro", "simple-schema.json"))
 		require.NoError(t, err)
 		avro.SchemaJSON = string(bytes)
 		avro.RecordSeparator = '\n'

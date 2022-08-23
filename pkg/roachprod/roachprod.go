@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -997,7 +996,7 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 		}
 		outputFile := fmt.Sprintf("pprof-%s-%d-%s-%04d.out", profType, startTime, c.Name, node)
 		outputDir := filepath.Dir(outputFile)
-		file, err := ioutil.TempFile(outputDir, ".pprof")
+		file, err := os.CreateTemp(outputDir, ".pprof")
 		if err != nil {
 			return nil, errors.Wrap(err, "create tmpfile for pprof download")
 		}

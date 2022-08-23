@@ -13,7 +13,6 @@ package fs
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -57,7 +56,7 @@ func TestRecordTempDir(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	recordFile := "foobar"
 
-	f, err := ioutil.TempFile("", "record-file")
+	f, err := os.CreateTemp("", "record-file")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +75,7 @@ func TestRecordTempDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actual, err := ioutil.ReadFile(f.Name())
+	actual, err := os.ReadFile(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +90,7 @@ func TestCleanupTempDirs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	recordFile, err := ioutil.TempFile("", "record-file")
+	recordFile, err := os.CreateTemp("", "record-file")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +120,7 @@ func TestCleanupTempDirs(t *testing.T) {
 	content := []byte("whatisthemeaningoflife\n")
 	for i := 0; i < 10; i++ {
 		dir := tempDirs[rand.Intn(len(tempDirs))]
-		tempFile, err := ioutil.TempFile(dir, "temp-file")
+		tempFile, err := os.CreateTemp(dir, "temp-file")
 		if err != nil {
 			t.Fatal(err)
 		}

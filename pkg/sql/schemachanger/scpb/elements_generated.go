@@ -16,16 +16,15 @@ type ElementStatusIterator interface {
 	ForEachElementStatus(fn func(current Status, target TargetStatus, e Element))
 }
 
-
 func (e AliasType) element() {}
 
 // ForEachAliasType iterates over elements of type AliasType.
 func ForEachAliasType(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *AliasType),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*AliasType); ok {
 			fn(current, target, elt)
@@ -34,10 +33,12 @@ func ForEachAliasType(
 }
 
 // FindAliasType finds the first element of type AliasType.
-func FindAliasType(b ElementStatusIterator) (current Status, target TargetStatus, element *AliasType) {
-  if b == nil {
-    return current, target, element
-  }
+func FindAliasType(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *AliasType) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*AliasType); ok {
 			element = elt
@@ -54,9 +55,9 @@ func (e CheckConstraint) element() {}
 func ForEachCheckConstraint(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CheckConstraint),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*CheckConstraint); ok {
 			fn(current, target, elt)
@@ -65,10 +66,12 @@ func ForEachCheckConstraint(
 }
 
 // FindCheckConstraint finds the first element of type CheckConstraint.
-func FindCheckConstraint(b ElementStatusIterator) (current Status, target TargetStatus, element *CheckConstraint) {
-  if b == nil {
-    return current, target, element
-  }
+func FindCheckConstraint(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *CheckConstraint) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*CheckConstraint); ok {
 			element = elt
@@ -85,9 +88,9 @@ func (e Column) element() {}
 func ForEachColumn(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Column),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*Column); ok {
 			fn(current, target, elt)
@@ -97,9 +100,9 @@ func ForEachColumn(
 
 // FindColumn finds the first element of type Column.
 func FindColumn(b ElementStatusIterator) (current Status, target TargetStatus, element *Column) {
-  if b == nil {
-    return current, target, element
-  }
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Column); ok {
 			element = elt
@@ -116,9 +119,9 @@ func (e ColumnComment) element() {}
 func ForEachColumnComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnComment),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnComment); ok {
 			fn(current, target, elt)
@@ -127,10 +130,12 @@ func ForEachColumnComment(
 }
 
 // FindColumnComment finds the first element of type ColumnComment.
-func FindColumnComment(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnComment) {
-  if b == nil {
-    return current, target, element
-  }
+func FindColumnComment(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ColumnComment) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnComment); ok {
 			element = elt
@@ -147,9 +152,9 @@ func (e ColumnDefaultExpression) element() {}
 func ForEachColumnDefaultExpression(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnDefaultExpression),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnDefaultExpression); ok {
 			fn(current, target, elt)
@@ -158,10 +163,12 @@ func ForEachColumnDefaultExpression(
 }
 
 // FindColumnDefaultExpression finds the first element of type ColumnDefaultExpression.
-func FindColumnDefaultExpression(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnDefaultExpression) {
-  if b == nil {
-    return current, target, element
-  }
+func FindColumnDefaultExpression(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ColumnDefaultExpression) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnDefaultExpression); ok {
 			element = elt
@@ -178,9 +185,9 @@ func (e ColumnFamily) element() {}
 func ForEachColumnFamily(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnFamily),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnFamily); ok {
 			fn(current, target, elt)
@@ -189,10 +196,12 @@ func ForEachColumnFamily(
 }
 
 // FindColumnFamily finds the first element of type ColumnFamily.
-func FindColumnFamily(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnFamily) {
-  if b == nil {
-    return current, target, element
-  }
+func FindColumnFamily(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ColumnFamily) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnFamily); ok {
 			element = elt
@@ -209,9 +218,9 @@ func (e ColumnName) element() {}
 func ForEachColumnName(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnName),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnName); ok {
 			fn(current, target, elt)
@@ -220,10 +229,12 @@ func ForEachColumnName(
 }
 
 // FindColumnName finds the first element of type ColumnName.
-func FindColumnName(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnName) {
-  if b == nil {
-    return current, target, element
-  }
+func FindColumnName(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ColumnName) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnName); ok {
 			element = elt
@@ -238,11 +249,12 @@ func (e ColumnOnUpdateExpression) element() {}
 
 // ForEachColumnOnUpdateExpression iterates over elements of type ColumnOnUpdateExpression.
 func ForEachColumnOnUpdateExpression(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnOnUpdateExpression),
+	b ElementStatusIterator,
+	fn func(current Status, target TargetStatus, e *ColumnOnUpdateExpression),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnOnUpdateExpression); ok {
 			fn(current, target, elt)
@@ -251,10 +263,12 @@ func ForEachColumnOnUpdateExpression(
 }
 
 // FindColumnOnUpdateExpression finds the first element of type ColumnOnUpdateExpression.
-func FindColumnOnUpdateExpression(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnOnUpdateExpression) {
-  if b == nil {
-    return current, target, element
-  }
+func FindColumnOnUpdateExpression(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ColumnOnUpdateExpression) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnOnUpdateExpression); ok {
 			element = elt
@@ -271,9 +285,9 @@ func (e ColumnType) element() {}
 func ForEachColumnType(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnType),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnType); ok {
 			fn(current, target, elt)
@@ -282,10 +296,12 @@ func ForEachColumnType(
 }
 
 // FindColumnType finds the first element of type ColumnType.
-func FindColumnType(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnType) {
-  if b == nil {
-    return current, target, element
-  }
+func FindColumnType(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ColumnType) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnType); ok {
 			element = elt
@@ -302,9 +318,9 @@ func (e ConstraintComment) element() {}
 func ForEachConstraintComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ConstraintComment),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ConstraintComment); ok {
 			fn(current, target, elt)
@@ -313,10 +329,12 @@ func ForEachConstraintComment(
 }
 
 // FindConstraintComment finds the first element of type ConstraintComment.
-func FindConstraintComment(b ElementStatusIterator) (current Status, target TargetStatus, element *ConstraintComment) {
-  if b == nil {
-    return current, target, element
-  }
+func FindConstraintComment(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ConstraintComment) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ConstraintComment); ok {
 			element = elt
@@ -333,9 +351,9 @@ func (e ConstraintName) element() {}
 func ForEachConstraintName(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ConstraintName),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ConstraintName); ok {
 			fn(current, target, elt)
@@ -344,10 +362,12 @@ func ForEachConstraintName(
 }
 
 // FindConstraintName finds the first element of type ConstraintName.
-func FindConstraintName(b ElementStatusIterator) (current Status, target TargetStatus, element *ConstraintName) {
-  if b == nil {
-    return current, target, element
-  }
+func FindConstraintName(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ConstraintName) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ConstraintName); ok {
 			element = elt
@@ -364,9 +384,9 @@ func (e Database) element() {}
 func ForEachDatabase(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Database),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*Database); ok {
 			fn(current, target, elt)
@@ -375,10 +395,12 @@ func ForEachDatabase(
 }
 
 // FindDatabase finds the first element of type Database.
-func FindDatabase(b ElementStatusIterator) (current Status, target TargetStatus, element *Database) {
-  if b == nil {
-    return current, target, element
-  }
+func FindDatabase(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *Database) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Database); ok {
 			element = elt
@@ -395,9 +417,9 @@ func (e DatabaseComment) element() {}
 func ForEachDatabaseComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseComment),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*DatabaseComment); ok {
 			fn(current, target, elt)
@@ -406,10 +428,12 @@ func ForEachDatabaseComment(
 }
 
 // FindDatabaseComment finds the first element of type DatabaseComment.
-func FindDatabaseComment(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseComment) {
-  if b == nil {
-    return current, target, element
-  }
+func FindDatabaseComment(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *DatabaseComment) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*DatabaseComment); ok {
 			element = elt
@@ -426,9 +450,9 @@ func (e DatabaseRegionConfig) element() {}
 func ForEachDatabaseRegionConfig(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseRegionConfig),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*DatabaseRegionConfig); ok {
 			fn(current, target, elt)
@@ -437,10 +461,12 @@ func ForEachDatabaseRegionConfig(
 }
 
 // FindDatabaseRegionConfig finds the first element of type DatabaseRegionConfig.
-func FindDatabaseRegionConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseRegionConfig) {
-  if b == nil {
-    return current, target, element
-  }
+func FindDatabaseRegionConfig(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *DatabaseRegionConfig) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*DatabaseRegionConfig); ok {
 			element = elt
@@ -457,9 +483,9 @@ func (e DatabaseRoleSetting) element() {}
 func ForEachDatabaseRoleSetting(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseRoleSetting),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*DatabaseRoleSetting); ok {
 			fn(current, target, elt)
@@ -468,10 +494,12 @@ func ForEachDatabaseRoleSetting(
 }
 
 // FindDatabaseRoleSetting finds the first element of type DatabaseRoleSetting.
-func FindDatabaseRoleSetting(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseRoleSetting) {
-  if b == nil {
-    return current, target, element
-  }
+func FindDatabaseRoleSetting(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *DatabaseRoleSetting) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*DatabaseRoleSetting); ok {
 			element = elt
@@ -488,9 +516,9 @@ func (e EnumType) element() {}
 func ForEachEnumType(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *EnumType),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*EnumType); ok {
 			fn(current, target, elt)
@@ -499,10 +527,12 @@ func ForEachEnumType(
 }
 
 // FindEnumType finds the first element of type EnumType.
-func FindEnumType(b ElementStatusIterator) (current Status, target TargetStatus, element *EnumType) {
-  if b == nil {
-    return current, target, element
-  }
+func FindEnumType(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *EnumType) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*EnumType); ok {
 			element = elt
@@ -519,9 +549,9 @@ func (e EnumTypeValue) element() {}
 func ForEachEnumTypeValue(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *EnumTypeValue),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*EnumTypeValue); ok {
 			fn(current, target, elt)
@@ -530,10 +560,12 @@ func ForEachEnumTypeValue(
 }
 
 // FindEnumTypeValue finds the first element of type EnumTypeValue.
-func FindEnumTypeValue(b ElementStatusIterator) (current Status, target TargetStatus, element *EnumTypeValue) {
-  if b == nil {
-    return current, target, element
-  }
+func FindEnumTypeValue(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *EnumTypeValue) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*EnumTypeValue); ok {
 			element = elt
@@ -550,9 +582,9 @@ func (e ForeignKeyConstraint) element() {}
 func ForEachForeignKeyConstraint(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ForeignKeyConstraint),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ForeignKeyConstraint); ok {
 			fn(current, target, elt)
@@ -561,10 +593,12 @@ func ForEachForeignKeyConstraint(
 }
 
 // FindForeignKeyConstraint finds the first element of type ForeignKeyConstraint.
-func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target TargetStatus, element *ForeignKeyConstraint) {
-  if b == nil {
-    return current, target, element
-  }
+func FindForeignKeyConstraint(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ForeignKeyConstraint) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ForeignKeyConstraint); ok {
 			element = elt
@@ -581,9 +615,9 @@ func (e IndexColumn) element() {}
 func ForEachIndexColumn(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexColumn),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*IndexColumn); ok {
 			fn(current, target, elt)
@@ -592,10 +626,12 @@ func ForEachIndexColumn(
 }
 
 // FindIndexColumn finds the first element of type IndexColumn.
-func FindIndexColumn(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexColumn) {
-  if b == nil {
-    return current, target, element
-  }
+func FindIndexColumn(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *IndexColumn) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*IndexColumn); ok {
 			element = elt
@@ -612,9 +648,9 @@ func (e IndexComment) element() {}
 func ForEachIndexComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexComment),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*IndexComment); ok {
 			fn(current, target, elt)
@@ -623,10 +659,12 @@ func ForEachIndexComment(
 }
 
 // FindIndexComment finds the first element of type IndexComment.
-func FindIndexComment(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexComment) {
-  if b == nil {
-    return current, target, element
-  }
+func FindIndexComment(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *IndexComment) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*IndexComment); ok {
 			element = elt
@@ -643,9 +681,9 @@ func (e IndexName) element() {}
 func ForEachIndexName(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexName),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*IndexName); ok {
 			fn(current, target, elt)
@@ -654,10 +692,12 @@ func ForEachIndexName(
 }
 
 // FindIndexName finds the first element of type IndexName.
-func FindIndexName(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexName) {
-  if b == nil {
-    return current, target, element
-  }
+func FindIndexName(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *IndexName) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*IndexName); ok {
 			element = elt
@@ -674,9 +714,9 @@ func (e IndexPartitioning) element() {}
 func ForEachIndexPartitioning(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexPartitioning),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*IndexPartitioning); ok {
 			fn(current, target, elt)
@@ -685,10 +725,12 @@ func ForEachIndexPartitioning(
 }
 
 // FindIndexPartitioning finds the first element of type IndexPartitioning.
-func FindIndexPartitioning(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexPartitioning) {
-  if b == nil {
-    return current, target, element
-  }
+func FindIndexPartitioning(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *IndexPartitioning) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*IndexPartitioning); ok {
 			element = elt
@@ -705,9 +747,9 @@ func (e Namespace) element() {}
 func ForEachNamespace(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Namespace),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*Namespace); ok {
 			fn(current, target, elt)
@@ -716,10 +758,12 @@ func ForEachNamespace(
 }
 
 // FindNamespace finds the first element of type Namespace.
-func FindNamespace(b ElementStatusIterator) (current Status, target TargetStatus, element *Namespace) {
-  if b == nil {
-    return current, target, element
-  }
+func FindNamespace(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *Namespace) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Namespace); ok {
 			element = elt
@@ -736,9 +780,9 @@ func (e ObjectParent) element() {}
 func ForEachObjectParent(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ObjectParent),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*ObjectParent); ok {
 			fn(current, target, elt)
@@ -747,10 +791,12 @@ func ForEachObjectParent(
 }
 
 // FindObjectParent finds the first element of type ObjectParent.
-func FindObjectParent(b ElementStatusIterator) (current Status, target TargetStatus, element *ObjectParent) {
-  if b == nil {
-    return current, target, element
-  }
+func FindObjectParent(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *ObjectParent) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ObjectParent); ok {
 			element = elt
@@ -764,12 +810,10 @@ func FindObjectParent(b ElementStatusIterator) (current Status, target TargetSta
 func (e Owner) element() {}
 
 // ForEachOwner iterates over elements of type Owner.
-func ForEachOwner(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Owner),
-) {
-  if b == nil {
-    return
-  }
+func ForEachOwner(b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Owner)) {
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*Owner); ok {
 			fn(current, target, elt)
@@ -779,9 +823,9 @@ func ForEachOwner(
 
 // FindOwner finds the first element of type Owner.
 func FindOwner(b ElementStatusIterator) (current Status, target TargetStatus, element *Owner) {
-  if b == nil {
-    return current, target, element
-  }
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Owner); ok {
 			element = elt
@@ -798,9 +842,9 @@ func (e PrimaryIndex) element() {}
 func ForEachPrimaryIndex(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *PrimaryIndex),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*PrimaryIndex); ok {
 			fn(current, target, elt)
@@ -809,10 +853,12 @@ func ForEachPrimaryIndex(
 }
 
 // FindPrimaryIndex finds the first element of type PrimaryIndex.
-func FindPrimaryIndex(b ElementStatusIterator) (current Status, target TargetStatus, element *PrimaryIndex) {
-  if b == nil {
-    return current, target, element
-  }
+func FindPrimaryIndex(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *PrimaryIndex) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*PrimaryIndex); ok {
 			element = elt
@@ -829,9 +875,9 @@ func (e RowLevelTTL) element() {}
 func ForEachRowLevelTTL(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *RowLevelTTL),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*RowLevelTTL); ok {
 			fn(current, target, elt)
@@ -840,10 +886,12 @@ func ForEachRowLevelTTL(
 }
 
 // FindRowLevelTTL finds the first element of type RowLevelTTL.
-func FindRowLevelTTL(b ElementStatusIterator) (current Status, target TargetStatus, element *RowLevelTTL) {
-  if b == nil {
-    return current, target, element
-  }
+func FindRowLevelTTL(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *RowLevelTTL) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*RowLevelTTL); ok {
 			element = elt
@@ -860,9 +908,9 @@ func (e Schema) element() {}
 func ForEachSchema(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Schema),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*Schema); ok {
 			fn(current, target, elt)
@@ -872,9 +920,9 @@ func ForEachSchema(
 
 // FindSchema finds the first element of type Schema.
 func FindSchema(b ElementStatusIterator) (current Status, target TargetStatus, element *Schema) {
-  if b == nil {
-    return current, target, element
-  }
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Schema); ok {
 			element = elt
@@ -891,9 +939,9 @@ func (e SchemaComment) element() {}
 func ForEachSchemaComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaComment),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*SchemaComment); ok {
 			fn(current, target, elt)
@@ -902,10 +950,12 @@ func ForEachSchemaComment(
 }
 
 // FindSchemaComment finds the first element of type SchemaComment.
-func FindSchemaComment(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaComment) {
-  if b == nil {
-    return current, target, element
-  }
+func FindSchemaComment(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *SchemaComment) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*SchemaComment); ok {
 			element = elt
@@ -922,9 +972,9 @@ func (e SchemaParent) element() {}
 func ForEachSchemaParent(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaParent),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*SchemaParent); ok {
 			fn(current, target, elt)
@@ -933,10 +983,12 @@ func ForEachSchemaParent(
 }
 
 // FindSchemaParent finds the first element of type SchemaParent.
-func FindSchemaParent(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaParent) {
-  if b == nil {
-    return current, target, element
-  }
+func FindSchemaParent(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *SchemaParent) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*SchemaParent); ok {
 			element = elt
@@ -953,9 +1005,9 @@ func (e SecondaryIndex) element() {}
 func ForEachSecondaryIndex(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SecondaryIndex),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*SecondaryIndex); ok {
 			fn(current, target, elt)
@@ -964,10 +1016,12 @@ func ForEachSecondaryIndex(
 }
 
 // FindSecondaryIndex finds the first element of type SecondaryIndex.
-func FindSecondaryIndex(b ElementStatusIterator) (current Status, target TargetStatus, element *SecondaryIndex) {
-  if b == nil {
-    return current, target, element
-  }
+func FindSecondaryIndex(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *SecondaryIndex) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*SecondaryIndex); ok {
 			element = elt
@@ -984,9 +1038,9 @@ func (e SecondaryIndexPartial) element() {}
 func ForEachSecondaryIndexPartial(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SecondaryIndexPartial),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*SecondaryIndexPartial); ok {
 			fn(current, target, elt)
@@ -995,10 +1049,12 @@ func ForEachSecondaryIndexPartial(
 }
 
 // FindSecondaryIndexPartial finds the first element of type SecondaryIndexPartial.
-func FindSecondaryIndexPartial(b ElementStatusIterator) (current Status, target TargetStatus, element *SecondaryIndexPartial) {
-  if b == nil {
-    return current, target, element
-  }
+func FindSecondaryIndexPartial(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *SecondaryIndexPartial) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*SecondaryIndexPartial); ok {
 			element = elt
@@ -1015,9 +1071,9 @@ func (e Sequence) element() {}
 func ForEachSequence(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Sequence),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*Sequence); ok {
 			fn(current, target, elt)
@@ -1026,10 +1082,12 @@ func ForEachSequence(
 }
 
 // FindSequence finds the first element of type Sequence.
-func FindSequence(b ElementStatusIterator) (current Status, target TargetStatus, element *Sequence) {
-  if b == nil {
-    return current, target, element
-  }
+func FindSequence(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *Sequence) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Sequence); ok {
 			element = elt
@@ -1046,9 +1104,9 @@ func (e SequenceOwner) element() {}
 func ForEachSequenceOwner(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SequenceOwner),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*SequenceOwner); ok {
 			fn(current, target, elt)
@@ -1057,10 +1115,12 @@ func ForEachSequenceOwner(
 }
 
 // FindSequenceOwner finds the first element of type SequenceOwner.
-func FindSequenceOwner(b ElementStatusIterator) (current Status, target TargetStatus, element *SequenceOwner) {
-  if b == nil {
-    return current, target, element
-  }
+func FindSequenceOwner(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *SequenceOwner) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*SequenceOwner); ok {
 			element = elt
@@ -1074,12 +1134,10 @@ func FindSequenceOwner(b ElementStatusIterator) (current Status, target TargetSt
 func (e Table) element() {}
 
 // ForEachTable iterates over elements of type Table.
-func ForEachTable(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Table),
-) {
-  if b == nil {
-    return
-  }
+func ForEachTable(b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Table)) {
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*Table); ok {
 			fn(current, target, elt)
@@ -1089,9 +1147,9 @@ func ForEachTable(
 
 // FindTable finds the first element of type Table.
 func FindTable(b ElementStatusIterator) (current Status, target TargetStatus, element *Table) {
-  if b == nil {
-    return current, target, element
-  }
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*Table); ok {
 			element = elt
@@ -1108,9 +1166,9 @@ func (e TableComment) element() {}
 func ForEachTableComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableComment),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*TableComment); ok {
 			fn(current, target, elt)
@@ -1119,10 +1177,12 @@ func ForEachTableComment(
 }
 
 // FindTableComment finds the first element of type TableComment.
-func FindTableComment(b ElementStatusIterator) (current Status, target TargetStatus, element *TableComment) {
-  if b == nil {
-    return current, target, element
-  }
+func FindTableComment(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *TableComment) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableComment); ok {
 			element = elt
@@ -1139,9 +1199,9 @@ func (e TableLocalityGlobal) element() {}
 func ForEachTableLocalityGlobal(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityGlobal),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalityGlobal); ok {
 			fn(current, target, elt)
@@ -1150,10 +1210,12 @@ func ForEachTableLocalityGlobal(
 }
 
 // FindTableLocalityGlobal finds the first element of type TableLocalityGlobal.
-func FindTableLocalityGlobal(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalityGlobal) {
-  if b == nil {
-    return current, target, element
-  }
+func FindTableLocalityGlobal(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *TableLocalityGlobal) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalityGlobal); ok {
 			element = elt
@@ -1168,11 +1230,12 @@ func (e TableLocalityPrimaryRegion) element() {}
 
 // ForEachTableLocalityPrimaryRegion iterates over elements of type TableLocalityPrimaryRegion.
 func ForEachTableLocalityPrimaryRegion(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityPrimaryRegion),
+	b ElementStatusIterator,
+	fn func(current Status, target TargetStatus, e *TableLocalityPrimaryRegion),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalityPrimaryRegion); ok {
 			fn(current, target, elt)
@@ -1181,10 +1244,12 @@ func ForEachTableLocalityPrimaryRegion(
 }
 
 // FindTableLocalityPrimaryRegion finds the first element of type TableLocalityPrimaryRegion.
-func FindTableLocalityPrimaryRegion(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalityPrimaryRegion) {
-  if b == nil {
-    return current, target, element
-  }
+func FindTableLocalityPrimaryRegion(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *TableLocalityPrimaryRegion) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalityPrimaryRegion); ok {
 			element = elt
@@ -1199,11 +1264,12 @@ func (e TableLocalityRegionalByRow) element() {}
 
 // ForEachTableLocalityRegionalByRow iterates over elements of type TableLocalityRegionalByRow.
 func ForEachTableLocalityRegionalByRow(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityRegionalByRow),
+	b ElementStatusIterator,
+	fn func(current Status, target TargetStatus, e *TableLocalityRegionalByRow),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalityRegionalByRow); ok {
 			fn(current, target, elt)
@@ -1212,10 +1278,12 @@ func ForEachTableLocalityRegionalByRow(
 }
 
 // FindTableLocalityRegionalByRow finds the first element of type TableLocalityRegionalByRow.
-func FindTableLocalityRegionalByRow(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalityRegionalByRow) {
-  if b == nil {
-    return current, target, element
-  }
+func FindTableLocalityRegionalByRow(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *TableLocalityRegionalByRow) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalityRegionalByRow); ok {
 			element = elt
@@ -1230,11 +1298,12 @@ func (e TableLocalitySecondaryRegion) element() {}
 
 // ForEachTableLocalitySecondaryRegion iterates over elements of type TableLocalitySecondaryRegion.
 func ForEachTableLocalitySecondaryRegion(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalitySecondaryRegion),
+	b ElementStatusIterator,
+	fn func(current Status, target TargetStatus, e *TableLocalitySecondaryRegion),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalitySecondaryRegion); ok {
 			fn(current, target, elt)
@@ -1243,10 +1312,12 @@ func ForEachTableLocalitySecondaryRegion(
 }
 
 // FindTableLocalitySecondaryRegion finds the first element of type TableLocalitySecondaryRegion.
-func FindTableLocalitySecondaryRegion(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalitySecondaryRegion) {
-  if b == nil {
-    return current, target, element
-  }
+func FindTableLocalitySecondaryRegion(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *TableLocalitySecondaryRegion) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableLocalitySecondaryRegion); ok {
 			element = elt
@@ -1263,9 +1334,9 @@ func (e TableZoneConfig) element() {}
 func ForEachTableZoneConfig(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableZoneConfig),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*TableZoneConfig); ok {
 			fn(current, target, elt)
@@ -1274,10 +1345,12 @@ func ForEachTableZoneConfig(
 }
 
 // FindTableZoneConfig finds the first element of type TableZoneConfig.
-func FindTableZoneConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *TableZoneConfig) {
-  if b == nil {
-    return current, target, element
-  }
+func FindTableZoneConfig(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *TableZoneConfig) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableZoneConfig); ok {
 			element = elt
@@ -1294,9 +1367,9 @@ func (e TemporaryIndex) element() {}
 func ForEachTemporaryIndex(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TemporaryIndex),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*TemporaryIndex); ok {
 			fn(current, target, elt)
@@ -1305,10 +1378,12 @@ func ForEachTemporaryIndex(
 }
 
 // FindTemporaryIndex finds the first element of type TemporaryIndex.
-func FindTemporaryIndex(b ElementStatusIterator) (current Status, target TargetStatus, element *TemporaryIndex) {
-  if b == nil {
-    return current, target, element
-  }
+func FindTemporaryIndex(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *TemporaryIndex) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TemporaryIndex); ok {
 			element = elt
@@ -1323,11 +1398,12 @@ func (e UniqueWithoutIndexConstraint) element() {}
 
 // ForEachUniqueWithoutIndexConstraint iterates over elements of type UniqueWithoutIndexConstraint.
 func ForEachUniqueWithoutIndexConstraint(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraint),
+	b ElementStatusIterator,
+	fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraint),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*UniqueWithoutIndexConstraint); ok {
 			fn(current, target, elt)
@@ -1336,10 +1412,12 @@ func ForEachUniqueWithoutIndexConstraint(
 }
 
 // FindUniqueWithoutIndexConstraint finds the first element of type UniqueWithoutIndexConstraint.
-func FindUniqueWithoutIndexConstraint(b ElementStatusIterator) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraint) {
-  if b == nil {
-    return current, target, element
-  }
+func FindUniqueWithoutIndexConstraint(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraint) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*UniqueWithoutIndexConstraint); ok {
 			element = elt
@@ -1356,9 +1434,9 @@ func (e UserPrivileges) element() {}
 func ForEachUserPrivileges(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UserPrivileges),
 ) {
-  if b == nil {
-    return
-  }
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*UserPrivileges); ok {
 			fn(current, target, elt)
@@ -1367,10 +1445,12 @@ func ForEachUserPrivileges(
 }
 
 // FindUserPrivileges finds the first element of type UserPrivileges.
-func FindUserPrivileges(b ElementStatusIterator) (current Status, target TargetStatus, element *UserPrivileges) {
-  if b == nil {
-    return current, target, element
-  }
+func FindUserPrivileges(
+	b ElementStatusIterator,
+) (current Status, target TargetStatus, element *UserPrivileges) {
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*UserPrivileges); ok {
 			element = elt
@@ -1384,12 +1464,10 @@ func FindUserPrivileges(b ElementStatusIterator) (current Status, target TargetS
 func (e View) element() {}
 
 // ForEachView iterates over elements of type View.
-func ForEachView(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *View),
-) {
-  if b == nil {
-    return
-  }
+func ForEachView(b ElementStatusIterator, fn func(current Status, target TargetStatus, e *View)) {
+	if b == nil {
+		return
+	}
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
 		if elt, ok := e.(*View); ok {
 			fn(current, target, elt)
@@ -1399,9 +1477,9 @@ func ForEachView(
 
 // FindView finds the first element of type View.
 func FindView(b ElementStatusIterator) (current Status, target TargetStatus, element *View) {
-  if b == nil {
-    return current, target, element
-  }
+	if b == nil {
+		return current, target, element
+	}
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*View); ok {
 			element = elt

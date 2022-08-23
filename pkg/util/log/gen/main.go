@@ -13,7 +13,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
@@ -99,7 +98,7 @@ type info struct {
 }
 
 func readInput(protoName string) (chans []info, sevs []info, err error) {
-	protoData, err := ioutil.ReadFile(protoName)
+	protoData, err := os.ReadFile(protoName)
 	if err != nil {
 		return nil, nil, err
 	}

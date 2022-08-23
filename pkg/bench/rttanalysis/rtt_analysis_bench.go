@@ -12,7 +12,7 @@ package rttanalysis
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -177,7 +177,7 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
 		require.NoError(b, err)
 		path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
-		require.NoError(b, ioutil.WriteFile(path, []byte(jaegerJSON), 0666))
+		require.NoError(b, os.WriteFile(path, []byte(jaegerJSON), 0666))
 		b.Errorf("wrote jaeger trace to %s", path)
 	}
 	b.ReportMetric(res, roundTripsMetric)

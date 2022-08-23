@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -1120,7 +1119,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 
 	// Create a temp directory to store the local copy of results from the
 	// workloads.
-	resultsDir, err := ioutil.TempDir("", "roachtest-tpcc")
+	resultsDir, err := os.MkdirTemp("", "roachtest-tpcc")
 	if err != nil {
 		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
 	}

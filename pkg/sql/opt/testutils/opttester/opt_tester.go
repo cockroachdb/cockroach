@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -1868,7 +1867,7 @@ func (ot *OptTester) InjectStats(tb testing.TB, d *datadriven.TestData) {
 	// "file:linenum".
 	testfilePath := strings.SplitN(d.Pos, ":", 1)[0]
 	path := filepath.Join(filepath.Dir(testfilePath), ot.Flags.File)
-	stats, err := ioutil.ReadFile(path)
+	stats, err := os.ReadFile(path)
 	if err != nil {
 		tb.Fatalf("error reading %s: %v", path, err)
 	}

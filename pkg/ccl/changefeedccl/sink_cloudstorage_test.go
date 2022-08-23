@@ -13,6 +13,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"net/url"
@@ -81,7 +82,7 @@ func TestCloudStorageSink(t *testing.T) {
 			require.NoError(t, r.Close())
 		}()
 
-		decompressed, err := ioutil.ReadAll(r)
+		decompressed, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +136,7 @@ func TestCloudStorageSink(t *testing.T) {
 			if info.IsDir() {
 				return nil
 			}
-			file, err := ioutil.ReadFile(path)
+			file, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}
@@ -207,7 +208,7 @@ func TestCloudStorageSink(t *testing.T) {
 		}, slurpDir(t, sinkDir))
 
 		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(5)))
-		resolvedFile, err := ioutil.ReadFile(filepath.Join(
+		resolvedFile, err := os.ReadFile(filepath.Join(
 			dir, sinkDir, `1970-01-01`, `197001010000000000000050000000000.RESOLVED`))
 		require.NoError(t, err)
 		require.Equal(t, `{"resolved":"5.0000000000"}`, string(resolvedFile))

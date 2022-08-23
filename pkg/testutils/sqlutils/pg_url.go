@@ -12,7 +12,6 @@ package sqlutils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -69,7 +68,7 @@ func PGUrlWithOptionalClientCertsE(
 
 	// TODO(benesch): Audit usage of prefix and replace the following line with
 	// `testutils.TempDir(t)` if prefix can always be `t.Name()`.
-	tempDir, err := ioutil.TempDir("", fileutil.EscapeFilename(prefix))
+	tempDir, err := os.MkdirTemp("", fileutil.EscapeFilename(prefix))
 	if err != nil {
 		return url.URL{}, func() {}, err
 	}

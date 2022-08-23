@@ -13,7 +13,6 @@ package log
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"runtime"
 
@@ -141,7 +140,7 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	logging.mu.Unlock()
 
 	err := func() error {
-		tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
+		tempDir, err := os.MkdirTemp("", "log"+fileutil.EscapeFilename(t.Name()))
 		if err != nil {
 			return err
 		}

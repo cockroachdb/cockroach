@@ -17,7 +17,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -366,7 +365,7 @@ func TestNamingScheme(t *testing.T) {
 		// Write all files.
 		for _, f := range data.files {
 			n := f.name
-			if err := ioutil.WriteFile(filepath.Join(certsDir, n), f.contents, f.mode); err != nil {
+			if err := os.WriteFile(filepath.Join(certsDir, n), f.contents, f.mode); err != nil {
 				t.Fatalf("#%d: could not write file %s: %v", testNum, n, err)
 			}
 		}

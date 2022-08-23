@@ -10,7 +10,7 @@ package cdctest
 
 import (
 	"crypto/tls"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 
@@ -183,7 +183,7 @@ func (s *MockWebhookSink) requestHandler(hw http.ResponseWriter, hr *http.Reques
 
 func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) error {
 	defer hr.Body.Close()
-	row, err := ioutil.ReadAll(hr.Body)
+	row, err := io.ReadAll(hr.Body)
 	if err != nil {
 		return err
 	}

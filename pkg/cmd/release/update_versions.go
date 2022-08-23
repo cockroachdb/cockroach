@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -108,7 +107,7 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("cannot parse version %s: %w", updateVersionsFlags.versionStr, err)
 	}
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return fmt.Errorf("cannot create a temporary directory: %w", err)
 	}
