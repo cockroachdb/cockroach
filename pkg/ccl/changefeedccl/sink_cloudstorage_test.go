@@ -168,8 +168,7 @@ func TestCloudStorageSink(t *testing.T) {
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage,
 		error) {
-		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
-			clientFactory, user, nil, nil, nil, opts...)
+		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings, clientFactory, user, nil, nil, nil, nil, opts...)
 	}
 
 	user := username.RootUserName()

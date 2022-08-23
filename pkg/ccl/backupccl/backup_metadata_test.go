@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -79,14 +80,7 @@ func TestMetadataSST(t *testing.T) {
 func checkMetadata(
 	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, backupLoc string,
 ) {
-	store, err := cloud.ExternalStorageFromURI(
-		ctx,
-		backupLoc,
-		base.ExternalIODirConfig{},
-		tc.Servers[0].ClusterSettings(),
-		blobs.TestEmptyBlobClientFactory,
-		username.RootUserName(),
-		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
+	store, err := cloud.ExternalStorageFromURI(ctx, backupLoc, base.ExternalIODirConfig{}, tc.Servers[0].ClusterSettings(), blobs.TestEmptyBlobClientFactory, username.RootUserName(), tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].CollectionFactory().(*descs.CollectionFactory), tc.Servers[0].DB(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
