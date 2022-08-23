@@ -148,15 +148,14 @@ func registerPgjdbc(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, ignorelistName, ignorelist := pgjdbcBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No pgjdbc blocklist defined for cockroach version %s", version)
-		}
-		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s", version, blocklistName)
-		if ignorelist != nil {
-			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
-				version, blocklistName, ignorelistName)
-		}
+		const blocklistName = "pgjdbcBlocklist"
+		const ignorelistName = "pgjdbcIgnorelist"
+		expectedFailures := pgjdbcBlockList
+		ignorelist := pgjdbcIgnoreList
+
+		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+			version, blocklistName, ignorelistName)
+
 		t.L().Printf("%s", status)
 
 		t.Status("running pgjdbc test suite")

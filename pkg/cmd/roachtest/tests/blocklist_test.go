@@ -34,7 +34,7 @@ func TestBlocklists(t *testing.T) {
 
 	blocklists := map[string]blocklist{
 		"hibernate":    hibernateBlockList20_2,
-		"pgjdbc":       pgjdbcBlockList20_2,
+		"pgjdbc":       pgjdbcBlockList,
 		"psycopg":      psycopgBlockList20_2,
 		"django":       djangoBlocklist20_2,
 		"sqlAlchemy":   sqlAlchemyBlocklist20_2,
