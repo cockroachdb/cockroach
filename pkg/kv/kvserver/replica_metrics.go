@@ -42,13 +42,14 @@ type ReplicaMetrics struct {
 	// RangeCounter is true if the current replica is responsible for range-level
 	// metrics (generally the leaseholder, if live, otherwise the first replica in the
 	// range descriptor).
-	RangeCounter        bool
-	Unavailable         bool
-	Underreplicated     bool
-	Overreplicated      bool
-	RaftLogTooLarge     bool
-	BehindCount         int64
-	PausedFollowerCount int64
+	RangeCounter          bool
+	Unavailable           bool
+	Underreplicated       bool
+	Overreplicated        bool
+	RaftLogTooLarge       bool
+	BehindCount           int64
+	PausedFollowerCount   int64
+	SlowRaftProposalCount int64
 
 	QuotaPoolPercentUsed int64 // [0,100]
 
@@ -76,6 +77,7 @@ func (r *Replica) Metrics(
 		qpUsed = qpCap - qpAvail
 	}
 	paused := r.mu.pausedFollowers
+	slowRaftProposalCount := r.mu.slowProposalCount
 	r.mu.RUnlock()
 
 	r.store.unquiescedReplicas.Lock()
@@ -86,43 +88,45 @@ func (r *Replica) Metrics(
 	lockTableMetrics := r.concMgr.LockTableMetrics()
 
 	return calcReplicaMetrics(ctx, calcReplicaMetricsInput{
-		raftCfg:            &r.store.cfg.RaftConfig,
-		conf:               conf,
-		livenessMap:        livenessMap,
-		clusterNodes:       clusterNodes,
-		desc:               desc,
-		raftStatus:         raftStatus,
-		leaseStatus:        leaseStatus,
-		storeID:            r.store.StoreID(),
-		quiescent:          quiescent,
-		ticking:            ticking,
-		latchMetrics:       latchMetrics,
-		lockTableMetrics:   lockTableMetrics,
-		raftLogSize:        raftLogSize,
-		raftLogSizeTrusted: raftLogSizeTrusted,
-		qpUsed:             qpUsed,
-		qpCapacity:         qpCap,
-		paused:             paused,
+		raftCfg:               &r.store.cfg.RaftConfig,
+		conf:                  conf,
+		livenessMap:           livenessMap,
+		clusterNodes:          clusterNodes,
+		desc:                  desc,
+		raftStatus:            raftStatus,
+		leaseStatus:           leaseStatus,
+		storeID:               r.store.StoreID(),
+		quiescent:             quiescent,
+		ticking:               ticking,
+		latchMetrics:          latchMetrics,
+		lockTableMetrics:      lockTableMetrics,
+		raftLogSize:           raftLogSize,
+		raftLogSizeTrusted:    raftLogSizeTrusted,
+		qpUsed:                qpUsed,
+		qpCapacity:            qpCap,
+		paused:                paused,
+		slowRaftProposalCount: slowRaftProposalCount,
 	})
 }
 
 type calcReplicaMetricsInput struct {
-	raftCfg            *base.RaftConfig
-	conf               roachpb.SpanConfig
-	livenessMap        liveness.IsLiveMap
-	clusterNodes       int
-	desc               *roachpb.RangeDescriptor
-	raftStatus         *raft.Status
-	leaseStatus        kvserverpb.LeaseStatus
-	storeID            roachpb.StoreID
-	quiescent          bool
-	ticking            bool
-	latchMetrics       concurrency.LatchMetrics
-	lockTableMetrics   concurrency.LockTableMetrics
-	raftLogSize        int64
-	raftLogSizeTrusted bool
-	qpUsed, qpCapacity int64 // quota pool used and capacity bytes
-	paused             map[roachpb.ReplicaID]struct{}
+	raftCfg               *base.RaftConfig
+	conf                  roachpb.SpanConfig
+	livenessMap           liveness.IsLiveMap
+	clusterNodes          int
+	desc                  *roachpb.RangeDescriptor
+	raftStatus            *raft.Status
+	leaseStatus           kvserverpb.LeaseStatus
+	storeID               roachpb.StoreID
+	quiescent             bool
+	ticking               bool
+	latchMetrics          concurrency.LatchMetrics
+	lockTableMetrics      concurrency.LockTableMetrics
+	raftLogSize           int64
+	raftLogSizeTrusted    bool
+	qpUsed, qpCapacity    int64 // quota pool used and capacity bytes
+	paused                map[roachpb.ReplicaID]struct{}
+	slowRaftProposalCount int64
 }
 
 func calcReplicaMetrics(_ context.Context, d calcReplicaMetricsInput) ReplicaMetrics {
@@ -155,7 +159,7 @@ func calcReplicaMetrics(_ context.Context, d calcReplicaMetricsInput) ReplicaMet
 		m.BehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
 		m.PausedFollowerCount = int64(len(d.paused))
 	}
-
+	m.SlowRaftProposalCount += d.slowRaftProposalCount
 	m.LatchMetrics = d.latchMetrics
 	m.LockTableMetrics = d.lockTableMetrics
 
