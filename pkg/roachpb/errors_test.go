@@ -158,49 +158,6 @@ func TestErrorRedaction(t *testing.T) {
 	})
 }
 
-func TestErrorDeprecatedFields(t *testing.T) {
-	// Verify that deprecated fields are populated and queried correctly.
-
-	t.Run("unstructured", func(t *testing.T) {
-		err := errors.New("I am an error")
-		pErr := NewError(err)
-		pErr.EncodedError.Reset()
-
-		require.Equal(t, err.Error(), pErr.String())
-		require.IsType(t, &internalError{}, pErr.GoError())
-		require.Equal(t, err.Error(), pErr.GoError().Error())
-		require.Equal(t, err.Error(), pErr.deprecatedMessage)
-		require.Equal(t, TransactionRestart_NONE, pErr.deprecatedTransactionRestart)
-		require.Nil(t, pErr.deprecatedDetail.Value)
-	})
-	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000, 99)
-
-	t.Run("structured-wrapped", func(t *testing.T) {
-		// For extra spice, wrap the structured error. This ensures
-		// that we populate the deprecated fields even when
-		// the error detail is not the head of the error chain.
-		err := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1},
-			hlc.Timestamp{WallTime: 2},
-			hlc.Timestamp{WallTime: 2, Logical: 2},
-			&txn,
-		)
-
-		pErr := NewError(errors.Wrap(err, "foo"))
-		// Quick check that the detail round-trips when EncodedError is still there.
-		require.EqualValues(t, err, pErr.GetDetail())
-
-		pErr.EncodedError.Reset()
-
-		var ure *UnhandledRetryableError
-		require.True(t, errors.As(pErr.GoError(), &ure))
-		require.Equal(t, &ure.PErr, pErr)
-		require.Contains(t, pErr.GoError().Error(), err.Error())
-		require.EqualValues(t, err, pErr.GetDetail())
-		require.Equal(t, TransactionRestart_IMMEDIATE, pErr.deprecatedTransactionRestart)
-	})
-}
-
 func TestErrorGRPCStatus(t *testing.T) {
 	// Verify that gRPC status error en/decoding via
 	// github.com/cockroachdb/errors/extgrpc is set up correctly.
