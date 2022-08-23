@@ -44,16 +44,16 @@ type ttlProcessor struct {
 	ttlSpec execinfrapb.TTLSpec
 }
 
-func (ttl *ttlProcessor) Start(ctx context.Context) {
-	ctx = ttl.StartInternal(ctx, "ttl")
-	err := ttl.work(ctx)
-	ttl.MoveToDraining(err)
+func (t *ttlProcessor) Start(ctx context.Context) {
+	ctx = t.StartInternal(ctx, "ttl")
+	err := t.work(ctx)
+	t.MoveToDraining(err)
 }
 
-func (ttl *ttlProcessor) work(ctx context.Context) error {
+func (t *ttlProcessor) work(ctx context.Context) error {
 
-	ttlSpec := ttl.ttlSpec
-	flowCtx := ttl.FlowCtx
+	ttlSpec := t.ttlSpec
+	flowCtx := t.FlowCtx
 	descsCol := flowCtx.Descriptors
 	serverCfg := flowCtx.Cfg
 	db := serverCfg.DB
@@ -126,7 +126,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 			group.GoCtx(func(ctx context.Context) error {
 				for rangeToProcess := range rangeChan {
 					start := timeutil.Now()
-					rangeRowCount, err := ttl.runTTLOnRange(
+					rangeRowCount, err := t.runTTLOnRange(
 						ctx,
 						metrics,
 						rangeToProcess,
@@ -224,7 +224,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 				ctx,
 				2, /* level */
 				"TTL processorRowCount updated jobID=%d processorID=%d tableID=%d existingRowCount=%d processorRowCount=%d progress=%s",
-				jobID, ttl.ProcessorID, details.TableID, existingRowCount, processorRowCount, progress,
+				jobID, t.ProcessorID, details.TableID, existingRowCount, processorRowCount, progress,
 			)
 			return nil
 		},
@@ -232,7 +232,7 @@ func (ttl *ttlProcessor) work(ctx context.Context) error {
 }
 
 // rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
-func (ttl *ttlProcessor) runTTLOnRange(
+func (t *ttlProcessor) runTTLOnRange(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
 	rangeToProcess rangeToProcess,
@@ -245,12 +245,12 @@ func (ttl *ttlProcessor) runTTLOnRange(
 
 	// TODO(#82140): investigate improving row deletion performance with secondary indexes
 
-	ttlSpec := ttl.ttlSpec
+	ttlSpec := t.ttlSpec
 	details := ttlSpec.RowLevelTTLDetails
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
-	flowCtx := ttl.FlowCtx
+	flowCtx := t.FlowCtx
 	serverCfg := flowCtx.Cfg
 	ie := serverCfg.Executor
 
@@ -415,8 +415,8 @@ func keyToDatums(
 	return datums, nil
 }
 
-func (ttl *ttlProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	return nil, ttl.DrainHelper()
+func (t *ttlProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	return nil, t.DrainHelper()
 }
 
 func newTTLProcessor(

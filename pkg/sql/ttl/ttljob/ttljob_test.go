@@ -358,86 +358,111 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	numNodes := 5
-	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
-		t,
-		&sql.TTLTestingKnobs{
-			AOSTDuration:              &zeroDuration,
-			ReturnStatsError:          true,
-			ExpectedNumSpanPartitions: 2,
+	testCases := []struct {
+		desc     string
+		splitAts []int
+	}{
+		{
+			desc:     "no split",
+			splitAts: []int{},
 		},
-		false,    /* testMultiTenant */ // SPLIT AT does not work with multi-tenant
-		numNodes, /* numNodes */
-	)
-	defer cleanupFunc()
+		{
+			desc:     "1 split",
+			splitAts: []int{10_000},
+		},
+		{
+			desc:     "2 splits",
+			splitAts: []int{10_000, 20_000},
+		},
+	}
 
-	sqlDB := th.sqlDB
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			const numNodes = 5
+			splitAts := tc.splitAts
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration:              &zeroDuration,
+					ReturnStatsError:          true,
+					ExpectedNumSpanPartitions: len(splitAts) + 1,
+				},
+				false, /* testMultiTenant */ // SHOW RANGES FROM TABLE does not work with multi-tenant
+				numNodes,
+			)
+			defer cleanupFunc()
 
-	// Create table
-	tableName := "tbl"
-	expirationExpr := "expire_at"
-	sqlDB.Exec(t, fmt.Sprintf(
-		`CREATE TABLE %s (
+			sqlDB := th.sqlDB
+
+			// Create table
+			tableName := "tbl"
+			expirationExpr := "expire_at"
+			sqlDB.Exec(t, fmt.Sprintf(
+				`CREATE TABLE %s (
 			id INT PRIMARY KEY,
 			expire_at TIMESTAMPTZ
 			) WITH (ttl_expiration_expression = '%s')`,
-		tableName, expirationExpr,
-	))
+				tableName, expirationExpr,
+			))
 
-	// Split table
-	const splitAt = 10_000
-	ranges := sqlDB.QueryStr(t, fmt.Sprintf(
-		`SHOW RANGES FROM TABLE %s`,
-		tableName,
-	))
-	require.Equal(t, 1, len(ranges))
-	leaseHolderIdx, err := strconv.Atoi(ranges[0][4])
-	require.NoError(t, err)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
-		th.kvDB,
-		keys.SystemSQLCodec,
-		"defaultdb", /* database */
-		tableName,
-	)
-	newLeaseHolderIdx := leaseHolderIdx + 1
-	if newLeaseHolderIdx == numNodes {
-		newLeaseHolderIdx = 0
+			// Split table
+			ranges := sqlDB.QueryStr(t, fmt.Sprintf(
+				`SHOW RANGES FROM TABLE %s`,
+				tableName,
+			))
+			require.Equal(t, 1, len(ranges))
+			leaseHolderIdx, err := strconv.Atoi(ranges[0][4])
+			require.NoError(t, err)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+				th.kvDB,
+				keys.SystemSQLCodec,
+				"defaultdb", /* database */
+				tableName,
+			)
+			const rowsPerRange = 10
+			const expiredRowsPerRange = rowsPerRange / 2
+			splitPoints := make([]serverutils.SplitPoint, len(splitAts))
+			for i, splitAt := range splitAts {
+				newLeaseHolderIdx := (leaseHolderIdx + 1 + i) % numNodes
+				splitPoints[i] = serverutils.SplitPoint{
+					TargetNodeIdx: newLeaseHolderIdx,
+					Vals:          []interface{}{splitAt},
+				}
+			}
+			th.tc.SplitTable(t, tableDesc, splitPoints)
+			newRanges := sqlDB.QueryStr(t, fmt.Sprintf(
+				`SHOW RANGES FROM TABLE %s`,
+				tableName,
+			))
+			require.Equal(t, len(splitAts)+1, len(newRanges))
+
+			// Populate table - even pk is non-expired, odd pk is expired
+			expectedNumNonExpiredRows := 0
+			expectedNumExpiredRows := 0
+			ts := timeutil.Now()
+			nonExpiredTs := ts.Add(time.Hour * 24 * 30)
+			expiredTs := ts.Add(-time.Hour)
+			const insertStatement = `INSERT INTO tbl VALUES ($1, $2)`
+			offsets := append(splitAts, 0)
+			for _, offset := range offsets { // insert into both ranges
+				for i := offset; i < offset+rowsPerRange; {
+					sqlDB.Exec(t, insertStatement, i, nonExpiredTs)
+					i++
+					expectedNumNonExpiredRows++
+					sqlDB.Exec(t, insertStatement, i, expiredTs)
+					i++
+					expectedNumExpiredRows++
+				}
+			}
+
+			// Force the schedule to execute.
+			th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+
+			// Verify results
+			th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
+			th.verifyExpiredRows(t, expectedNumExpiredRows)
+		})
 	}
-	th.tc.SplitTable(t, tableDesc, []serverutils.SplitPoint{{
-		TargetNodeIdx: newLeaseHolderIdx,
-		Vals:          []interface{}{splitAt},
-	}})
-	newRanges := sqlDB.QueryStr(t, fmt.Sprintf(
-		`SHOW RANGES FROM TABLE %s`,
-		tableName,
-	))
-	require.Equal(t, 2, len(newRanges))
-
-	// Populate table - even pk is non-expired, odd pk is expired
-	expectedNumNonExpiredRows := 0
-	expectedNumExpiredRows := 0
-	ts := timeutil.Now()
-	nonExpiredTs := ts.Add(time.Hour * 24 * 30)
-	expiredTs := ts.Add(-time.Hour)
-	const rowsPerRange = 10
-	const insertStatement = `INSERT INTO tbl VALUES ($1, $2)`
-	for _, offset := range []int{0, splitAt} { // insert into both ranges
-		for i := offset; i < offset+rowsPerRange; {
-			sqlDB.Exec(t, insertStatement, i, nonExpiredTs)
-			i++
-			expectedNumNonExpiredRows++
-			sqlDB.Exec(t, insertStatement, i, expiredTs)
-			i++
-			expectedNumExpiredRows++
-		}
-	}
-
-	// Force the schedule to execute.
-	th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
-
-	// Verify results
-	th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
-	th.verifyExpiredRows(t, expectedNumExpiredRows)
 }
 
 // TestRowLevelTTLJobRandomEntries inserts random entries into a given table
