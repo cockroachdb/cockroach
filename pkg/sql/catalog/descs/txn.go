@@ -138,6 +138,10 @@ func (cf *CollectionFactory) TxnWithExecutor(
 				}
 			} else {
 				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
+				// If the descriptor has been deleted, just wait for leases to drain.
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					err = cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				}
 				if err != nil {
 					return err
 				}
