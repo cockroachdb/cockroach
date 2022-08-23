@@ -70,7 +70,9 @@ func getCombinedStatementStats(
 	startTime := getTimeFromSeconds(req.Start)
 	endTime := getTimeFromSeconds(req.End)
 	limit := SQLStatsResponseMax.Get(&settings.SV)
-	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(startTime, endTime, limit, testingKnobs)
+	showInternal := SQLStatsShowInternal.Get(&settings.SV)
+	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(
+		startTime, endTime, limit, testingKnobs, showInternal)
 	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -98,13 +100,17 @@ func getCombinedStatementStats(
 // The whereClause will be in the format `WHERE A = $1 AND B = $2` and
 // args will return the list of arguments in order that will replace the actual values.
 func getCombinedStatementsQueryClausesAndArgs(
-	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs,
+	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs, showInternal bool,
 ) (whereClause string, orderAndLimitClause string, args []interface{}) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
 
-	// Filter out internal statements by app name.
-	buffer.WriteString(fmt.Sprintf(" WHERE app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
+	if showInternal {
+		buffer.WriteString(" WHERE true")
+	} else {
+		// Filter out internal statements by app name.
+		buffer.WriteString(fmt.Sprintf(" WHERE app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
+	}
 
 	if start != nil {
 		buffer.WriteString(" AND aggregated_ts >= $1")
@@ -357,7 +363,8 @@ func getStatementDetails(
 	testingKnobs *sqlstats.TestingKnobs,
 ) (*serverpb.StatementDetailsResponse, error) {
 	limit := SQLStatsResponseMax.Get(&settings.SV)
-	whereClause, args, err := getStatementDetailsQueryClausesAndArgs(req, testingKnobs)
+	showInternal := SQLStatsShowInternal.Get(&settings.SV)
+	whereClause, args, err := getStatementDetailsQueryClausesAndArgs(req, testingKnobs, showInternal)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -407,7 +414,7 @@ func getStatementDetails(
 // The whereClause will be in the format `WHERE A = $1 AND B = $2` and
 // args will return the list of arguments in order that will replace the actual values.
 func getStatementDetailsQueryClausesAndArgs(
-	req *serverpb.StatementDetailsRequest, testingKnobs *sqlstats.TestingKnobs,
+	req *serverpb.StatementDetailsRequest, testingKnobs *sqlstats.TestingKnobs, showInternal bool,
 ) (whereClause string, args []interface{}, err error) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
@@ -420,17 +427,23 @@ func getStatementDetailsQueryClausesAndArgs(
 	args = append(args, sqlstatsutil.EncodeUint64ToBytes(fingerprintID))
 	buffer.WriteString(fmt.Sprintf(" WHERE fingerprint_id = $%d", len(args)))
 
-	// Filter out internal statements by app name.
-	buffer.WriteString(fmt.Sprintf(" AND app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
+	if !showInternal {
+		// Filter out internal statements by app name.
+		buffer.WriteString(fmt.Sprintf(" AND app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
+	}
 
 	// Statements are grouped ignoring the app name in the Statements/Transactions page, so when
 	// calling for the Statement Details endpoint, this value can be empty or a list of app names.
 	if len(req.AppNames) > 0 {
 		if !(len(req.AppNames) == 1 && req.AppNames[0] == "") {
+			hasInternal := false
 			buffer.WriteString(" AND (")
 			for i, app := range req.AppNames {
 				if app == "(unset)" {
 					app = ""
+				}
+				if strings.Contains(app, catconstants.InternalAppNamePrefix) {
+					hasInternal = true
 				}
 				if i != 0 {
 					args = append(args, app)
@@ -439,6 +452,9 @@ func getStatementDetailsQueryClausesAndArgs(
 					args = append(args, app)
 					buffer.WriteString(fmt.Sprintf(" app_name = $%d", len(args)))
 				}
+			}
+			if hasInternal {
+				buffer.WriteString(fmt.Sprintf(" OR app_name LIKE '%s%%'", catconstants.InternalAppNamePrefix))
 			}
 			buffer.WriteString(" )")
 		}
