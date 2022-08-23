@@ -434,7 +434,7 @@ func (q *SpillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	// one for the read file.
 	if q.fdSemaphore != nil {
 		if err = q.fdSemaphore.Acquire(ctx, q.numFDsOpenAtAnyGivenTime()); err != nil {
-			return err
+			colexecerror.ExpectedError(err)
 		}
 	}
 	log.VEvent(ctx, 1, "spilled to disk")
