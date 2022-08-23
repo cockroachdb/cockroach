@@ -562,6 +562,20 @@ SELECT json_build_object('a', '0100110'::varbit)
 ----
 {"a": "0100110"}
 
+# Regression for an internal error when using an enum and void in the key.
+statement ok
+CREATE TYPE e AS ENUM ('e');
+
+query T
+SELECT json_build_object('e'::e, 1)
+----
+{"e": 1}
+
+query T
+SELECT json_build_object(''::void, 1)
+----
+{"": 1}
+
 # even number of arguments
 query error pq: json_build_object\(\): argument list must have even number of elements
 SELECT json_build_object(1,2,3)
