@@ -98,6 +98,7 @@ BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' WITH revision_history
 ----
 
 
+
 query-sql
 SELECT
   database_name, object_name, object_type, rows, backup_type
@@ -216,9 +217,17 @@ DROP TABLE d.foo;
 # Version Gate Testing
 #######################
 
-# In an unfinalized cluster, back up some in-progress imports. Note that during IMPORT planning, the
-# ImportStartTime is not bound to the table's descriptor, therefore during RESTORE, these tables
-# should get thrown out.
+# In an unfinalized cluster, back up some in-progress imports, and ensure that once the tables come
+# back online we fully back them again.
+#
+# Note that during IMPORT planning on an unfinalized cluster, the
+# ImportStartTime is not bound to the table's descriptor, therefore during
+# RESTORE AOST in-progress IMPORT, these tables should get thrown out.
+
+# TODO (msbutler): Currently, we still incrementally back up data from these
+# "old" jobs. Once the schema changer gets out of the business setting
+# descriptors to offline, consider preventing incremental backups of old
+# jobs, as we always have to re-back up the span once it comes online.
 
 new-server name=s4 share-io-dir=s1 allow-implicit-access beforeVersion=Start22_2
 ----
@@ -233,13 +242,16 @@ CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
 INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
 ----
 
+
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 ----
 
+
 exec-sql
 EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz WHERE i = 1;
 ----
+
 
 # Pause the import job, in order to back up the importing data.
 import expect-pausepoint tag=b
@@ -247,21 +259,164 @@ IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
+
 import expect-pausepoint tag=bb
 IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
 ----
 job paused at pausepoint
 
-# Ensure Database, and cluster full backups capture importing rows.
+
+# The first backup in the chain will capture data from offline tables
+# NOTE: in a mixed version setting, we don't need to do this. (see todo above)
 exec-sql
-BACKUP INTO 'nodelocal://0/cluster/';
+BACKUP INTO 'nodelocal://0/cluster/' with revision_history;
+----
+
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/database/' with revision_history;
+----
+
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/database_upgrade/' with revision_history;
+----
+
+
+save-cluster-ts tag=m0
+----
+
+
+# Conduct another set of incremental backups to ensure that _offline_ tables do _not_ fully backup
+# in a cluster in an unfinalized state
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://0/cluster/' with revision_history;
+----
+
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' with revision_history;
+----
+
+
+exec-sql
+CREATE VIEW show_cluster_backup AS
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/cluster/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo';
+----
+
+
+exec-sql
+CREATE VIEW show_database_backup AS
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo';
+----
+
+
+query-sql
+SELECT * FROM show_cluster_backup;
+----
+d foo table 1 full
+d foofoo table 2 full
+d foo table 0 incremental
+d foofoo table 0 incremental
+
+
+query-sql
+SELECT * FROM show_database_backup;
+----
+d foo table 1 full
+d foofoo table 2 full
+d foo table 0 incremental
+d foofoo table 0 incremental
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+
+# Resume the job so the next set of incremental backups observes that tables are back online
+job resume=b
+----
+
+
+job tag=b wait-for-state=succeeded
+----
+
+
+job resume=bb
+----
+
+
+job tag=bb wait-for-state=succeeded
+----
+
+
+# Key Test: Ensure that once the tables come back online, everything gets backed
+# up again, as these imports may have non-mvcc ops in them. Ensure this in the
+# unfinalized cluster and in the finalized cluster.
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://0/cluster/' with revision_history;
+----
+
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' with revision_history;
+----
+
+
+query-sql
+SELECT * FROM show_cluster_backup;
+----
+d foo table 1 full
+d foofoo table 2 full
+d foo table 0 incremental
+d foofoo table 0 incremental
+d foo table 2 incremental
+d foofoo table 3 incremental
+
+
+query-sql
+SELECT * FROM show_database_backup;
+----
+d foo table 1 full
+d foofoo table 2 full
+d foo table 0 incremental
+d foofoo table 0 incremental
+d foo table 2 incremental
+d foofoo table 3 incremental
+
+
+upgrade-server version=Start22_2
 ----
 
 exec-sql
-BACKUP DATABASE d INTO 'nodelocal://0/database/';
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database_upgrade/' with revision_history;
 ----
 
-# Ensure the RESTOREs omit the tables with in progress imports (foo and foofoo)
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database_upgrade/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo';
+----
+d foo table 1 full
+d foofoo table 2 full
+d foo table 2 incremental
+d foofoo table 3 incremental
+
+# A restore on mixed version cluster should always fail on a backup that contains import times
 new-server name=s5 share-io-dir=s1 allow-implicit-access
 ----
 
@@ -269,16 +424,29 @@ restore
 RESTORE FROM LATEST IN 'nodelocal://0/cluster/';
 ----
 
+# Now actually Restore the backups taken from a mixed version chain
+new-server name=s6 share-io-dir=s1 allow-implicit-access
+----
+
+# Ensure the RESTOREs omit the tables with in progress imports (foo and foofoo)
+# as their descriptor will not have the import start time.
+restore aost=m0
+RESTORE FROM LATEST IN 'nodelocal://0/cluster/' AS OF SYSTEM TIME m0;
+----
+
+
 query-sql
 SELECT table_name FROM [SHOW TABLES FROM d];
 ----
 baz
+
 
 exec-sql
 DROP DATABASE d;
 ----
 
 
+# Restore AOST after the table comes back online
 restore
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/';
 ----
@@ -287,4 +455,9 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/';
 query-sql
 SELECT table_name FROM [SHOW TABLES FROM d];
 ----
+foo
+foofoo
 baz
+show_cluster_backup
+show_database_backup
+
