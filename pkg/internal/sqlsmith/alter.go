@@ -363,9 +363,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		Storing:      storing,
 		Inverted:     inverted,
 		Concurrently: s.coin(),
-		// TODO(wenyihu6): uncomment the following line after we support not visible
-		// index.
-		// NotVisible:   s.d6() == 1, // NotVisible index is rare 1/6 chance.
+		NotVisible:   s.d6() == 1, // NotVisible index is rare 1/6 chance.
 	}, true
 }
 
