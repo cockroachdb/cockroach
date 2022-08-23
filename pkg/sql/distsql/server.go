@@ -241,13 +241,15 @@ func (ds *ServerImpl) setupFlow(
 	// cleaned up in Flow.Cleanup()) if an error is encountered.
 	defer func() {
 		if retErr != nil {
-			if sp != nil {
-				sp.Finish()
-			}
 			if monitor != nil {
 				monitor.Stop(ctx)
 			}
 			onFlowCleanup()
+			// We finish the span after performing other cleanup in case that
+			// cleanup accesses the context with the span.
+			if sp != nil {
+				sp.Finish()
+			}
 			retCtx = tracing.ContextWithSpan(ctx, nil)
 		}
 	}()
