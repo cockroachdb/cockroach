@@ -188,8 +188,8 @@ func TestEval(t *testing.T) {
 							batchesReturned++
 							return batch
 						}},
-				},
-				},
+				}},
+				StreamingMemAccount: &acc,
 				// Unsupported post processing specs are wrapped and run through the
 				// row execution engine.
 				ProcessorConstructor: rowexec.NewProcessor,

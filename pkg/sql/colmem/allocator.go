@@ -12,6 +12,7 @@ package colmem
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -33,9 +35,12 @@ import (
 //
 // In the future this can also be used to pool coldata.Vec allocations.
 type Allocator struct {
-	ctx     context.Context
-	acc     *mon.BoundAccount
-	factory coldata.ColumnFactory
+	ctx context.Context
+	acc *mon.BoundAccount
+	// unlimitedAcc might be nil and is only used in some cases when the
+	// allocation is denied by acc.
+	unlimitedAcc *mon.BoundAccount
+	factory      coldata.ColumnFactory
 }
 
 func selVectorSize(capacity int) int64 {
@@ -108,14 +113,40 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 	return proportionalBatchMemSize
 }
 
-// NewAllocator constructs a new Allocator instance.
+// NewAllocator constructs a new Allocator instance with an unlimited memory
+// account.
 func NewAllocator(
-	ctx context.Context, acc *mon.BoundAccount, factory coldata.ColumnFactory,
+	ctx context.Context, unlimitedAcc *mon.BoundAccount, factory coldata.ColumnFactory,
 ) *Allocator {
+	if buildutil.CrdbTestBuild {
+		if unlimitedAcc != nil {
+			if l := unlimitedAcc.Monitor().Limit(); l != math.MaxInt64 {
+				colexecerror.InternalError(errors.AssertionFailedf(
+					"unexpectedly NewAllocator is called with an account with limit of %d bytes", l,
+				))
+			}
+		}
+	}
 	return &Allocator{
 		ctx:     ctx,
-		acc:     acc,
+		acc:     unlimitedAcc,
 		factory: factory,
+	}
+}
+
+// NewLimitedAllocator constructs a new Allocator instance which works with a
+// limited memory account. The unlimited memory account is optional, and it'll
+// be used only for the allocations that are denied by the limited memory
+// account when using Allocator.PerformAppend, Allocator.PerformOperation, and
+// SetAccountingHelper.AccountForSet.
+func NewLimitedAllocator(
+	ctx context.Context, limitedAcc, unlimitedAcc *mon.BoundAccount, factory coldata.ColumnFactory,
+) *Allocator {
+	return &Allocator{
+		ctx:          ctx,
+		acc:          limitedAcc,
+		unlimitedAcc: unlimitedAcc,
+		factory:      factory,
 	}
 }
 
@@ -306,7 +337,7 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	operation()
 	after := getVecsMemoryFootprint(destVecs)
 
-	a.AdjustMemoryUsage(after - before)
+	a.adjustMemoryUsageAfterAllocation(after - before)
 }
 
 // PerformAppend is used to account for memory usage during calls to
@@ -340,7 +371,7 @@ func (a *Allocator) PerformAppend(batch coldata.Batch, operation func()) {
 			after += getVecMemoryFootprint(dest)
 		}
 	}
-	a.AdjustMemoryUsage(after - before)
+	a.adjustMemoryUsageAfterAllocation(after - before)
 }
 
 // Used returns the number of bytes currently allocated through this allocator.
@@ -348,16 +379,44 @@ func (a *Allocator) Used() int64 {
 	return a.acc.Used()
 }
 
-// AdjustMemoryUsage adjusts the number of bytes currently allocated through
+// adjustMemoryUsage adjusts the number of bytes currently allocated through
 // this allocator by delta bytes (which can be both positive or negative).
-func (a *Allocator) AdjustMemoryUsage(delta int64) {
+//
+// If:
+// - afterAllocation is true,
+// - the allocator was created via NewLimitedAllocator with a non-nil unlimited
+//   memory account,
+// - the positive delta allocation is denied by the limited memory account,
+// then the unlimited account is grown by delta. The memory error is still
+// thrown.
+func (a *Allocator) adjustMemoryUsage(delta int64, afterAllocation bool) {
 	if delta > 0 {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
+			// If we were given a separate unlimited account and the adjustment
+			// is performed after the allocation has already occurred, then grow
+			// the unlimited account.
+			if a.unlimitedAcc != nil && afterAllocation {
+				if newErr := a.unlimitedAcc.Grow(a.ctx, delta); newErr != nil {
+					// Prefer the error from the unlimited account since it
+					// indicates that --max-sql-memory pool has been used up.
+					colexecerror.InternalError(newErr)
+				}
+			}
 			colexecerror.InternalError(err)
 		}
 	} else if delta < 0 {
 		a.ReleaseMemory(-delta)
 	}
+}
+
+// AdjustMemoryUsage adjusts the number of bytes currently allocated through
+// this allocator by delta bytes (which can be both positive or negative).
+func (a *Allocator) AdjustMemoryUsage(delta int64) {
+	a.adjustMemoryUsage(delta, false /* afterAllocation */)
+}
+
+func (a *Allocator) adjustMemoryUsageAfterAllocation(delta int64) {
+	a.adjustMemoryUsage(delta, true /* afterAllocation */)
 }
 
 // ReleaseMemory reduces the number of bytes currently allocated through this
@@ -631,7 +690,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 
 	if len(h.bytesLikeVectors) > 0 {
 		newBytesLikeTotalSize := h.getBytesLikeTotalSize()
-		h.Allocator.AdjustMemoryUsage(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
+		h.Allocator.adjustMemoryUsageAfterAllocation(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
 		h.prevBytesLikeTotalSize = newBytesLikeTotalSize
 	}
 
@@ -641,7 +700,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 			d := decimalVec.Get(rowIdx)
 			newDecimalSizes += int64(d.Size())
 		}
-		h.Allocator.AdjustMemoryUsage(newDecimalSizes - h.decimalSizes[rowIdx])
+		h.Allocator.adjustMemoryUsageAfterAllocation(newDecimalSizes - h.decimalSizes[rowIdx])
 		h.decimalSizes[rowIdx] = newDecimalSizes
 	}
 
@@ -653,7 +712,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 			// was already included in EstimateBatchSizeBytes.
 			newVarLengthDatumSize += int64(datumSize)
 		}
-		h.Allocator.AdjustMemoryUsage(newVarLengthDatumSize)
+		h.Allocator.adjustMemoryUsageAfterAllocation(newVarLengthDatumSize)
 	}
 }
 
