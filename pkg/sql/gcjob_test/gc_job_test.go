@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -503,6 +505,122 @@ func TestGCTenant(t *testing.T) {
 		r, err = kvDB.Get(ctx, descKey)
 		require.NoError(t, err)
 		require.True(t, nil == r.Value)
+	})
+}
+
+// This test exercises code whereby an index GC job is running, and, in the
+// meantime, the descriptor is removed. We want to ensure that the GC job
+// finishes without an error.
+func TestDropIndexWithDroppedDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The way the GC job works is that it initially clears the index
+	// data, then it waits for the background MVCC GC to run and remove
+	// the underlying tombstone, and then finally it removes any relevant
+	// zone configurations for the index from system.zones. In the first
+	// and final phases, the job resolves the descriptor. This test ensures
+	// that the code is robust to the descriptor being removed both before
+	// the initial DelRange, and after, when going to remove the zone config.
+	testutils.RunTrueAndFalse(t, "before DelRange", func(
+		t *testing.T, beforeDelRange bool,
+	) {
+		ctx, cancel := context.WithCancel(context.Background())
+		gcJobID := make(chan jobspb.JobID)
+		knobs := base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			GCJob: &sql.GCJobTestingKnobs{
+				RunBeforeResume: func(jobID jobspb.JobID) error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case gcJobID <- jobID:
+						return nil
+					}
+				},
+				SkipWaitingForMVCCGC: true,
+			},
+		}
+		delRangeChan := make(chan chan struct{})
+		var tablePrefix atomic.Value
+		tablePrefix.Store(roachpb.Key{})
+		// If not running beforeDelRange, we want to delete the descriptor during
+		// the DeleteRange operation. To do this, we install the below testing knob.
+		if !beforeDelRange {
+			knobs.Store = &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(
+					ctx context.Context, request roachpb.BatchRequest,
+				) *roachpb.Error {
+					req, ok := request.GetArg(roachpb.DeleteRange)
+					if !ok {
+						return nil
+					}
+					dr := req.(*roachpb.DeleteRangeRequest)
+					if !dr.UseRangeTombstone {
+						return nil
+					}
+					k := tablePrefix.Load().(roachpb.Key)
+					if len(k) == 0 {
+						return nil
+					}
+					ch := make(chan struct{})
+					select {
+					case delRangeChan <- ch:
+					case <-ctx.Done():
+					}
+					select {
+					case <-ch:
+					case <-ctx.Done():
+					}
+					return nil
+				},
+			}
+		}
+		s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: knobs,
+		})
+		defer s.Stopper().Stop(ctx)
+		defer cancel()
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+		// Create the table and index to be dropped.
+		tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX(j, i))")
+		// Store the relevant IDs to make it easy to intercept the DelRange.
+		var tableID catid.DescID
+		var indexID catid.IndexID
+		tdb.QueryRow(t, `
+SELECT descriptor_id, index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_name = 'foo'
+   AND index_name = 'foo_j_i_idx';`).Scan(&tableID, &indexID)
+		// Drop the index.
+		tdb.Exec(t, "DROP INDEX foo@foo_j_i_idx")
+		codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
+		tablePrefix.Store(codec.TablePrefix(uint32(tableID)))
+
+		deleteDescriptor := func(t *testing.T) {
+			t.Helper()
+			k := catalogkeys.MakeDescMetadataKey(codec, tableID)
+			_, err := kvDB.Del(ctx, k)
+			require.NoError(t, err)
+		}
+
+		// Delete the descriptor either before the initial job run, or after
+		// the job has started, but during the sending of DeleteRange requests.
+		var jobID jobspb.JobID
+		if beforeDelRange {
+			deleteDescriptor(t)
+			jobID = <-gcJobID
+		} else {
+			jobID = <-gcJobID
+			ch := <-delRangeChan
+			deleteDescriptor(t)
+			close(ch)
+		}
+		// Ensure that the job completes successfully in either case.
+		require.NoError(t, s.JobRegistry().(*jobs.Registry).WaitForJobs(
+			ctx, s.InternalExecutor().(sqlutil.InternalExecutor), []jobspb.JobID{jobID},
+		))
 	})
 }
 
