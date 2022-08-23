@@ -12,7 +12,6 @@ package codeowners
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +98,7 @@ func TestLintEverythingIsOwned(t *testing.T) {
 		}
 		require.NoError(t, os.MkdirAll(filepath.Join(d, "pkg", mkd), 0755))
 		if mkf != "" {
-			require.NoError(t, ioutil.WriteFile(filepath.Join(d, "pkg", mkd, mkf), []byte("foo"), 0644))
+			require.NoError(t, os.WriteFile(filepath.Join(d, "pkg", mkd, mkf), []byte("foo"), 0644))
 		}
 	}
 	co, err := LoadCodeOwners(strings.NewReader("# nothing!"), nil /* no teams! */)

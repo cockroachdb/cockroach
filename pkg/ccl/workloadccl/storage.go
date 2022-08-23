@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+
 	// Import all the cloud provider storage we care about.
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/azure"

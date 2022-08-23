@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -82,7 +81,7 @@ func TestFormatRedaction(t *testing.T) {
 							Infof(ctx, "safe2 %s", "secret3")
 							Flush()
 
-							contents, err := ioutil.ReadFile(getDebugLogFileName(t))
+							contents, err := os.ReadFile(getDebugLogFileName(t))
 							require.NoError(t, err)
 							require.Greater(t, len(contents), 0)
 							lastLineStart := bytes.LastIndexByte(contents[:len(contents)-1], '\n')

@@ -19,7 +19,6 @@
 // Run './dev generate bazel' to fix this.
 package tree
 
-
 // UnaryEvalOp is a unary operation which can be evaluated.
 type UnaryEvalOp interface {
 	Eval(OpEvaluator, Datum) (Datum, error)
@@ -180,7 +179,6 @@ type BinaryOpEvaluator interface {
 	EvalRShiftVarBitIntOp(*RShiftVarBitIntOp, Datum, Datum) (Datum, error)
 	EvalSimilarToOp(*SimilarToOp, Datum, Datum) (Datum, error)
 }
-
 
 // Eval is part of the UnaryEvalOp interface.
 func (op *CbrtDecimalOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
@@ -866,4 +864,3 @@ func (op *RShiftVarBitIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 func (op *SimilarToOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalSimilarToOp(op, a, b)
 }
-

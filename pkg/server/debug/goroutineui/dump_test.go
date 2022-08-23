@@ -11,7 +11,7 @@
 package goroutineui
 
 import (
-	"io/ioutil"
+	"os"
 	"regexp"
 	"testing"
 
@@ -45,7 +45,7 @@ func TestDumpHTML(t *testing.T) {
 	act = re.ReplaceAllString(act, "")
 
 	if false {
-		_ = ioutil.WriteFile("test.html", []byte(act), 0644)
+		_ = os.WriteFile("test.html", []byte(act), 0644)
 	}
 	assert.Equal(t, exp, act)
 }

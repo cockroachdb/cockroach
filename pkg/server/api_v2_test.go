@@ -15,7 +15,7 @@ import (
 	gosql "database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -73,7 +73,7 @@ func TestListSessionsV2(t *testing.T) {
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		bytesResponse, err := ioutil.ReadAll(resp.Body)
+		bytesResponse, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
@@ -125,7 +125,7 @@ func TestListSessionsV2(t *testing.T) {
 	resp, err := nonAdminClient.Do(req)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	bytesResponse, err := ioutil.ReadAll(resp.Body)
+	bytesResponse, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusForbidden, resp.StatusCode)
@@ -263,12 +263,12 @@ func TestAuthV2(t *testing.T) {
 				defer resp.Body.Close()
 
 				if !insecure && tc.expectedStatus != resp.StatusCode {
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					require.NoError(t, err)
 					t.Fatalf("expected status: %d but got: %d with body: %s", tc.expectedStatus, resp.StatusCode, string(body))
 				}
 				if insecure && http.StatusOK != resp.StatusCode {
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					require.NoError(t, err)
 					t.Fatalf("expected status: %d but got: %d with body: %s", http.StatusOK, resp.StatusCode, string(body))
 				}

@@ -13,7 +13,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
@@ -130,7 +129,7 @@ func getLocalFiles(
 			fileinfo, _ := os.Stat(path)
 			var contents []byte
 			if !req.ListOnly {
-				contents, err = ioutil.ReadFile(path)
+				contents, err = os.ReadFile(path)
 				if err != nil {
 					return nil, status.Errorf(codes.Internal, err.Error())
 				}

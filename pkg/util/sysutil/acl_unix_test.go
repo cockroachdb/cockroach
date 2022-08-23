@@ -14,7 +14,6 @@
 package sysutil
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,7 +39,7 @@ func TestGetFileACLInfo(t *testing.T) {
 	} {
 		filename := filepath.Join(certsDir, f.filename)
 
-		if err := ioutil.WriteFile(filename, exampleData, f.mode); err != nil {
+		if err := os.WriteFile(filename, exampleData, f.mode); err != nil {
 			t.Fatalf("#%d: could not write file %s: %v", testNum, f.filename, err)
 		}
 

@@ -13,7 +13,6 @@ package pprofui
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +55,7 @@ func TestServer(t *testing.T) {
 
 	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
 		require.Equal(t, expectedNodeID, req.NodeId)
-		b, err := ioutil.ReadFile(testutils.TestDataPath(t, "heap.profile"))
+		b, err := os.ReadFile(testutils.TestDataPath(t, "heap.profile"))
 		require.NoError(t, err)
 		return &serverpb.JSONResponse{Data: b}, nil
 	}
@@ -113,7 +112,7 @@ func TestServerConcurrentAccess(t *testing.T) {
 		if req.Type == serverpb.ProfileRequest_CPU {
 			fileName = "cpu.profile"
 		}
-		b, err := ioutil.ReadFile(testutils.TestDataPath(t, fileName))
+		b, err := os.ReadFile(testutils.TestDataPath(t, fileName))
 		require.NoError(t, err)
 		return &serverpb.JSONResponse{Data: b}, nil
 	}

@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -328,7 +327,7 @@ func makeThresholdBlocker(threshold int) thresholdBlocker {
 // getSpansFromManifest returns the spans that describe the data included in a
 // given backup.
 func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) roachpb.Spans {
-	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupbase.BackupManifestName)
+	backupManifestBytes, err := os.ReadFile(backupPath + "/" + backupbase.BackupManifestName)
 	require.NoError(t, err)
 	var backupManifest backuppb.BackupManifest
 	decompressedBytes, err := backupinfo.DecompressData(ctx, nil, backupManifestBytes)

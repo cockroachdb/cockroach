@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -115,7 +114,7 @@ func main() {
 }
 
 func readToken(path string) (string, error) {
-	token, err := ioutil.ReadFile(path)
+	token, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}

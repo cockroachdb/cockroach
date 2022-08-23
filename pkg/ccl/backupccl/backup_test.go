@@ -140,7 +140,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	t.Run("GZipBackupManifest", func(t *testing.T) {
 		backupDir := fmt.Sprintf("%s/foo", dir)
 		backupManifestFile := backupDir + "/" + backupbase.BackupManifestName
-		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
+		backupManifestBytes, err := os.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -297,7 +297,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				fName := f.Name()
 				if partitionMatcher.MatchString(fName) {
 					backupPartitionFile := subDir + "/" + fName
-					backupPartitionBytes, err := ioutil.ReadFile(backupPartitionFile)
+					backupPartitionBytes, err := os.ReadFile(backupPartitionFile)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -1589,7 +1589,7 @@ func TestBackupRestoreResume(t *testing.T) {
 					t.Fatal(err)
 				}
 				checkpointFile := backupDir + item.checkpointDirectory + "/" + backupinfo.BackupManifestCheckpointName
-				if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
+				if err := os.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
 					t.Fatal(err)
 				}
 				createAndWaitForJob(
@@ -1604,7 +1604,7 @@ func TestBackupRestoreResume(t *testing.T) {
 				// If the backup properly took the (incorrect) checkpoint into account, it
 				// won't have tried to re-export any keys within backupCompletedSpan.
 				backupManifestFile := backupDir + "/" + backupbase.BackupManifestName
-				backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
+				backupManifestBytes, err := os.ReadFile(backupManifestFile)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -3952,7 +3952,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	var backupManifest backuppb.BackupManifest
 	{
-		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupbase.BackupManifestName))
+		backupManifestBytes, err := os.ReadFile(filepath.Join(dir, backupbase.BackupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -4110,7 +4110,7 @@ func checkBackupStatsEncrypted(t *testing.T, rawDir string) {
 			return err
 		}
 		if partitionMatcher.MatchString(fName) {
-			statsBytes, err := ioutil.ReadFile(fName)
+			statsBytes, err := os.ReadFile(fName)
 			if err != nil {
 				return err
 			}
@@ -4129,7 +4129,7 @@ func checkBackupFilesEncrypted(t *testing.T, rawDir string) {
 	checkedFiles := 0
 	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() && !strings.Contains(path, "foo/cleartext") {
-			data, err := ioutil.ReadFile(path)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -8220,7 +8220,7 @@ func TestManifestTooNew(t *testing.T) {
 
 	// Load/deserialize the manifest so we can mess with it.
 	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupManifestName)
-	manifestData, err := ioutil.ReadFile(manifestPath)
+	manifestData, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
 	require.NoError(t, err)
@@ -8231,11 +8231,11 @@ func TestManifestTooNew(t *testing.T) {
 	backupManifest.ClusterVersion = roachpb.Version{Major: 99, Minor: 1}
 	manifestData, err = protoutil.Marshal(&backupManifest)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
 	// Also write the checksum file to match the new manifest.
 	checksum, err := backupinfo.GetChecksum(manifestData)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 
 	// Verify we reject it.
 	sqlDB.ExpectErr(t, "backup from version 99.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
@@ -8244,11 +8244,11 @@ func TestManifestTooNew(t *testing.T) {
 	backupManifest.ClusterVersion = roachpb.Version{Major: 20, Minor: 2, Internal: 2}
 	manifestData, err = protoutil.Marshal(&backupManifest)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
 	// Also write the checksum file to match the new manifest.
 	checksum, err = backupinfo.GetChecksum(manifestData)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 
 	// Prove we can restore again.
 	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
@@ -8258,11 +8258,11 @@ func TestManifestTooNew(t *testing.T) {
 	backupManifest.ClusterVersion = roachpb.Version{}
 	manifestData, err = protoutil.Marshal(&backupManifest)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
 	// Also write the checksum file to match the new manifest.
 	checksum, err = backupinfo.GetChecksum(manifestData)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 	// Prove we can restore again.
 	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
@@ -8303,10 +8303,10 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 		log.Infof(context.Background(), "visiting %s", path)
 		if filepath.Base(path) == backupbase.BackupManifestName {
 			foundManifest = true
-			data, err := ioutil.ReadFile(path)
+			data, err := os.ReadFile(path)
 			require.NoError(t, err)
 			data[20] ^= 1
-			if err := ioutil.WriteFile(path, data, 0644 /* perm */); err != nil {
+			if err := os.WriteFile(path, data, 0644 /* perm */); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -10221,7 +10221,7 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 	// Read the backup manifest.
 	var backupManifest backuppb.BackupManifest
 	{
-		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, "foo", res[0][0], backupbase.BackupManifestName))
+		backupManifestBytes, err := os.ReadFile(filepath.Join(dir, "foo", res[0][0], backupbase.BackupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}

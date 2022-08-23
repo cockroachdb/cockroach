@@ -11,7 +11,7 @@ package kvserver
 
 import (
 	"context"
-	"io/ioutil"
+	io "io"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -76,7 +76,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	for _, fileName := range scratch.SSTs() {
 		f, err := eng.Open(fileName)
 		require.NoError(t, err)
-		data, err := ioutil.ReadAll(f)
+		data, err := io.ReadAll(f)
 		require.NoError(t, err)
 		require.Equal(t, data, []byte("foo"))
 		require.NoError(t, f.Close())
@@ -165,7 +165,7 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 		for _, fileName := range scratch.SSTs() {
 			f, err := eng.Open(fileName)
 			require.NoError(t, err)
-			data, err := ioutil.ReadAll(f)
+			data, err := io.ReadAll(f)
 			require.NoError(t, err)
 			require.Equal(t, data, []byte("foo"))
 			require.NoError(t, f.Close())

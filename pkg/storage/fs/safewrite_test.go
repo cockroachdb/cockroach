@@ -12,7 +12,6 @@ package fs
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -35,7 +34,7 @@ func TestSafeWriteToFile(t *testing.T) {
 	readFile := func(filename string) []byte {
 		f, err := mem.Open("foo/bar")
 		require.NoError(t, err)
-		b, err := ioutil.ReadAll(f)
+		b, err := io.ReadAll(f)
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 		return b

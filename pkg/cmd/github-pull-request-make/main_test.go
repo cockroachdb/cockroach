@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -79,7 +78,7 @@ func TestPkgsFromDiffHelper(t *testing.T) {
 	}
 
 	name := filepath.Join(wd, "testdata", strconv.Itoa(prNum)+".diff")
-	if err := ioutil.WriteFile(name, []byte(diff), 0644); err != nil {
+	if err := os.WriteFile(name, []byte(diff), 0644); err != nil {
 		t.Fatal(err)
 	}
 

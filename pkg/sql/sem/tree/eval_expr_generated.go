@@ -58,7 +58,6 @@ type ExprEvaluator interface {
 	EvalUnresolvedName(*UnresolvedName) (Datum, error)
 }
 
-
 // Eval is part of the TypedExpr interface.
 func (node *AllColumnsSelector) Eval(v ExprEvaluator) (Datum, error) {
 	return v.EvalAllColumnsSelector(node)
@@ -373,4 +372,3 @@ func (node *UnresolvedName) Eval(v ExprEvaluator) (Datum, error) {
 func (node dNull) Eval(v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
-

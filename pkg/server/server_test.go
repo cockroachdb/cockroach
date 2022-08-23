@@ -428,7 +428,7 @@ func TestListenerFileCreation(t *testing.T) {
 		}
 		delete(expectedFiles, base)
 
-		data, err := ioutil.ReadFile(file)
+		data, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -750,7 +750,7 @@ func TestServeIndexHTML(t *testing.T) {
 			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
 
-			respBytes, err := ioutil.ReadAll(resp.Body)
+			respBytes, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 
 			respString := string(respBytes)
@@ -771,7 +771,7 @@ Binary built without web UI.
 			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
 
-			respBytes, err := ioutil.ReadAll(resp.Body)
+			respBytes, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 
 			respString := string(respBytes)
@@ -782,7 +782,7 @@ Binary built without web UI.
 			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
 
-			respBytes, err = ioutil.ReadAll(resp.Body)
+			respBytes, err = io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			expected := fmt.Sprintf(
 				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
@@ -840,7 +840,7 @@ Binary built without web UI.
 				defer resp.Body.Close()
 				require.Equal(t, 200, resp.StatusCode)
 
-				respBytes, err := ioutil.ReadAll(resp.Body)
+				respBytes, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 
 				respString := string(respBytes)
@@ -854,7 +854,7 @@ Binary built without web UI.
 				defer resp.Body.Close()
 				require.Equal(t, 200, resp.StatusCode)
 
-				respBytes, err = ioutil.ReadAll(resp.Body)
+				respBytes, err = io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				require.Equal(t, testCase.json, string(respBytes))
 			})
@@ -927,7 +927,7 @@ Binary built without web UI.
 				defer cachedResp.Body.Close()
 				require.Equal(t, 304, cachedResp.StatusCode)
 
-				respBytes, err := ioutil.ReadAll(cachedResp.Body)
+				respBytes, err := io.ReadAll(cachedResp.Body)
 				require.NoError(t, err)
 				require.Empty(t, respBytes, "Server must provide empty body for cached response")
 
@@ -1170,7 +1170,7 @@ func TestSocketAutoNumbering(t *testing.T) {
 		// os.TempDir() if available.
 		baseTmpDir = "/tmp"
 	}
-	tempDir, err := ioutil.TempDir(baseTmpDir, "TestSocketAutoNumbering")
+	tempDir, err := os.MkdirTemp(baseTmpDir, "TestSocketAutoNumbering")
 	require.NoError(t, err)
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
