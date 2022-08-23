@@ -188,7 +188,7 @@ func (b *kvBuf) Swap(i, j int) {
 	b.entries[i], b.entries[j] = b.entries[j], b.entries[i]
 }
 
-func (b kvBuf) MemSize() sz {
+func (b *kvBuf) MemSize() sz {
 	return sz(cap(b.entries)<<entrySizeShift) + sz(cap(b.slab))
 }
 
