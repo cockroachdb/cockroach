@@ -25,6 +25,7 @@ import {
   CircuitBreakerTrippedReplicasTooltip,
   LogicalBytesGraphTooltip,
   PausedFollowersTooltip,
+  ReceiverSnapshotsQueuedTooltip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 import { cockroach } from "src/js/protos";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
@@ -180,12 +181,44 @@ export default function (props: GraphDashboardProps) {
     <LineGraph title="Snapshot Data Received" sources={storeSources}>
       <Axis label="bytes">
         {_.map(nodeIDs, nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.store.range.snapshots.unknown.rcvd-bytes"
+              title={nodeDisplayName(nodesSummary, nid) + "-unknown"}
+              sources={storeIDsForNode(nodesSummary, nid)}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
+              name="cr.store.range.snapshots.rebalancing.rcvd-bytes"
+              title={nodeDisplayName(nodesSummary, nid) + "-rebalancing"}
+              sources={storeIDsForNode(nodesSummary, nid)}
+              nonNegativeRate
+            />
+            <Metric
+              key={nid}
+              name="cr.store.range.snapshots.recovery.rcvd-bytes"
+              title={nodeDisplayName(nodesSummary, nid) + "-recovery"}
+              sources={storeIDsForNode(nodesSummary, nid)}
+              nonNegativeRate
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+    <LineGraph
+      title="Receiver Snapshots Queued"
+      sources={storeSources}
+      tooltip={ReceiverSnapshotsQueuedTooltip}
+    >
+      <Axis label="snapshots" units={AxisUnits.Count}>
+        {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
-            name="cr.store.range.snapshots.rcvd-bytes"
+            name="cr.store.range.snapshots.recv-queue"
             title={nodeDisplayName(nodesSummary, nid)}
             sources={storeIDsForNode(nodesSummary, nid)}
-            nonNegativeRate
           />
         ))}
       </Axis>
@@ -239,6 +272,77 @@ export default function (props: GraphDashboardProps) {
             nonNegativeRate
           />
         ))}
+      </Axis>
+    </LineGraph>,
+    <LineGraph
+      title="Replicate Queue Actions: Successes"
+      sources={storeSources}
+    >
+      <Axis label="replicas" units={AxisUnits.Count}>
+        <Metric
+          name="cr.store.queue.replicate.addreplica.success"
+          title={"Replicas Added / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.removereplica.success"
+          title={"Replicas Removed / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.replacedeadreplica.success"
+          title={"Dead Replicas Replaced / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.removedeadreplica.success"
+          title={"Dead Replicas Removed / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.replacedecommissioningreplica.success"
+          title={"Decommissioning Replicas Replaced / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.removedecommissioningreplica.success"
+          title={"Decommissioning Replicas Removed / Sec"}
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+    <LineGraph title="Replicate Queue Actions: Failures" sources={storeSources}>
+      <Axis label="replicas" units={AxisUnits.Count}>
+        <Metric
+          name="cr.store.queue.replicate.addreplica.error"
+          title={"Replicas Added Errors / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.removereplica.error"
+          title={"Replicas Removed Errors / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.replacedeadreplica.error"
+          title={"Dead Replicas Replaced Errors / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.removedeadreplica.error"
+          title={"Dead Replicas Removed Errors / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.replacedecommissioningreplica.error"
+          title={"Decommissioning Replicas Replaced Errors / Sec"}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.replicate.removedecommissioningreplica.error"
+          title={"Decommissioning Replicas Removed Errors / Sec"}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
   ];
