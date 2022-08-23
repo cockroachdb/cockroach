@@ -57,11 +57,9 @@ func BuildOptAndHypTableMaps(
 			)
 
 			// Do not add hypothetical inverted indexes for which there is an existing
-			// index with the same key. Inverted indexes do not have stored columns,
-			// so we should not make a recommendation if the same index already
-			// exists.
-			// TODO(wenyihu6): We should still consider not visible indexes and make a
-			// recommendation to mark the index as visible if it is chosen.
+			// visible index with the same key. Inverted indexes do not have stored
+			// columns, so we should not make a recommendation if the same index
+			// already exists.
 			if !(inverted && hypTable.redundantHypotheticalIndex(&hypIndex)) {
 				hypIndexes = append(hypIndexes, hypIndex)
 			}
