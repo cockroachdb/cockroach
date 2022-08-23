@@ -27,6 +27,11 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+var (
+	logRaftRecvQueueFullEvery = log.Every(1 * time.Second)
+	logRaftSendQueueFullEvery = log.Every(1 * time.Second)
+)
+
 type raftRequestInfo struct {
 	req        *RaftMessageRequest
 	respStream RaftMessageResponseStream
@@ -177,6 +182,9 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdMsgDropped.Inc(1)
+		if logRaftRecvQueueFullEvery.ShouldLog() {
+			log.Warningf(ctx, "raft receive queue for r%d is full", req.RangeID)
+		}
 		return false
 	}
 	q.infos = append(q.infos, raftRequestInfo{
