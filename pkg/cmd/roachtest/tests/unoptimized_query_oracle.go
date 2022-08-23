@@ -116,8 +116,8 @@ func runUnoptimizedQueryOracleImpl(
 		return nil
 	}
 
-	// Re-enable either the optimizer, vectorized execution, or both for the next
-	// statement.
+	// It then changes the settings to re-enable optimizer and/or re-enable
+	// vectorized execution and/or disable not visible index feature.
 	resetSeedStmt := "RESET testing_optimizer_random_seed"
 	resetOptimizerStmt := "RESET testing_optimizer_disable_rule_probability"
 	resetVectorizeStmt := "RESET vectorize"
@@ -134,9 +134,14 @@ func runUnoptimizedQueryOracleImpl(
 		if err := h.execStmt(resetVectorizeStmt); err != nil {
 			return h.makeError(err, "failed to reset the vectorized engine")
 		}
+		// Disable not visible index feature to run the statement with more optimization.
+		if err := h.execStmt("SET optimizer_use_not_visible_indexes = true"); err != nil {
+			return h.makeError(err, "failed to disable not visible index feature")
+		}
 	}
 
-	// Then, rerun the statement with optimization and/or vectorization enabled.
+	// Then, rerun the statement with optimization and/or vectorization enabled
+	// and/or not visible index feature disabled.
 	optimizedRows, err := h.runQuery(stmt)
 	if err != nil {
 		// If the optimized plan fails with an internal error while the unoptimized plan
@@ -172,6 +177,9 @@ func runUnoptimizedQueryOracleImpl(
 	}
 	if err := h.execStmt(resetVectorizeStmt); err != nil {
 		return h.makeError(err, "failed to reset the vectorized engine")
+	}
+	if err := h.execStmt("RESET optimizer_use_not_visible_indexes"); err != nil {
+		return h.makeError(err, "failed to reset not visible index feature")
 	}
 
 	return nil
