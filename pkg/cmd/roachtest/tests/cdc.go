@@ -87,11 +87,6 @@ type cdcTestArgs struct {
 	targetTxnPerSecond       float64
 }
 
-func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
-	// kv.rangefeed.enabled is required for changefeeds to run
-	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
-}
-
 func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
@@ -102,8 +97,6 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
-	tdb := sqlutils.MakeSQLRunner(db)
-	cdcClusterSettings(t, tdb)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -249,7 +242,21 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 			targets = `ledger.customer, ledger.transaction, ledger.entry, ledger.session`
 		}
 
-		jobID, err := createChangefeed(db, targets, sinkURI, args)
+		var options []cdcOption
+		if args.whichSink == cloudStorageSink || args.whichSink == webhookSink {
+			options = []cdcOption{
+				{"resolved", "'10s'"},
+				{"envelope", "wrapped"},
+				{"min_checkpoint_frequency", "'10s'"},
+			}
+		} else {
+			options = []cdcOption{{"resolved", ""}, {"min_checkpoint_frequency", "'10s'"}}
+		}
+		if !args.initialScan {
+			options = append(options, cdcOption{"cursor", "'-1s'"})
+		}
+
+		jobID, err := newChangefeedCreator(db, targets, sinkURI).With(options...).Create()
 		if err != nil {
 			return err
 		}
@@ -317,21 +324,17 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
-	tdb := sqlutils.MakeSQLRunner(db)
-	cdcClusterSettings(t, tdb)
-	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-
-	// NB: the WITH diff option was not supported until v20.1.
-	withDiff := t.IsBuildVersion("v20.1.0")
-	var opts = []string{`updated`, `resolved`}
-	if withDiff {
-		opts = append(opts, `diff`)
+	options := []cdcOption{
+		{"updated", ""},
+		{"resolved", ""},
+		// we need to set a min_checkpoint_frequency here because if we
+		// use the default 30s duration, the test will likely not be able
+		// to finish within 30 minutes
+		{"min_checkpoint_frequency", "'10s'"},
+		{"diff", ""},
 	}
-	var jobID string
-	if err := db.QueryRow(
-		`CREATE CHANGEFEED FOR bank.bank INTO $1 WITH `+strings.Join(opts, `, `), kafka.sinkURL(ctx),
-	).Scan(&jobID); err != nil {
+	_, err := newChangefeedCreator(db, "bank.bank", kafka.sinkURL(ctx)).With(options...).Create()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -408,16 +411,14 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
+		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`)
+		if err != nil {
+			return err
+		}
 		validators := cdctest.Validators{
 			cdctest.NewOrderValidator(`bank`),
 			fprintV,
-		}
-		if withDiff {
-			baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`)
-			if err != nil {
-				return err
-			}
-			validators = append(validators, baV)
+			baV,
 		}
 		v := cdctest.MakeCountValidator(validators)
 		for {
@@ -456,7 +457,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 // end-to-end (including the schema registry default of requiring backward
 // compatibility within a topic).
 func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
-
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
@@ -472,23 +472,26 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
-	cdcClusterSettings(t, sqlutils.MakeSQLRunner(db))
-
 	if _, err := db.Exec(`CREATE TABLE foo (a INT PRIMARY KEY)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// NB: the WITH diff option was not supported until v20.1.
-	withDiff := t.IsBuildVersion("v20.1.0")
-	var opts = []string{`updated`, `resolved`, `format=experimental_avro`, `confluent_schema_registry=$2`}
-	if withDiff {
-		opts = append(opts, `diff`)
+	options := []cdcOption{
+		{"updated", ""},
+		{"resolved", ""},
+		{"format", "experimental_avro"},
+		{"confluent_schema_registry", "$2"},
 	}
-	var jobID string
-	if err := db.QueryRow(
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH `+strings.Join(opts, `, `),
-		kafka.sinkURL(ctx), kafka.schemaRegistryURL(ctx),
-	).Scan(&jobID); err != nil {
+	withDiff := t.IsBuildVersion("v20.1.0")
+	if withDiff {
+		options = append(options, cdcOption{"diff", ""})
+	}
+	_, err := newChangefeedCreator(db, "foo", kafka.sinkURL(ctx)).
+		With(options...).
+		Args(kafka.schemaRegistryURL(ctx)).
+		Create()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -605,10 +608,6 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	defer stopFeeds(db)
 
 	tdb := sqlutils.MakeSQLRunner(db)
-	cdcClusterSettings(t, tdb)
-	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-
 	tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
 	caCert := testCerts.CACertBase64()
@@ -643,11 +642,10 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 		},
 	}
 
-	var jobID int
 	for _, f := range feeds {
 		t.Status(f.desc)
-		row := db.QueryRow(`CREATE CHANGEFEED FOR auth_test_table INTO $1`, f.queryArg)
-		if err := row.Scan(&jobID); err != nil {
+		_, err := newChangefeedCreator(db, "auth_test_table", f.queryArg).Create()
+		if err != nil {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
 	}
@@ -885,7 +883,6 @@ func registerCDC(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:            "cdc/bank",
-		Skip:            "#72904",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
@@ -1758,21 +1755,76 @@ func (lv *latencyVerifier) maybeLogLatencyHist() {
 	)
 }
 
-func createChangefeed(db *gosql.DB, targets, sinkURL string, args cdcTestArgs) (int, error) {
+type cdcOption struct {
+	option string
+	value  string
+}
+
+// changefeedCreator wraps the process of creating a changefeed with
+// different options and sinks
+type changefeedCreator struct {
+	db        *gosql.DB
+	targets   string
+	sinkURL   string
+	options   []cdcOption
+	extraArgs []interface{}
+}
+
+func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCreator {
+	return &changefeedCreator{
+		db:      db,
+		targets: targets,
+		sinkURL: sinkURL,
+	}
+}
+
+// With adds options to the changefeed being created. If a non-zero
+// `value` is passed in one of the options, the option will be passed
+// as {option}={value}.
+func (cfc *changefeedCreator) With(options ...cdcOption) *changefeedCreator {
+	cfc.options = append(cfc.options, options...)
+	return cfc
+}
+
+// Args adds extra statement arguments to the query used when creating
+// the changefeed. This is useful if, for instance, we want to use
+// arguments when specifying changefeed options (e.g.,
+// "some_option=$2")
+func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
+	cfc.extraArgs = append(cfc.extraArgs, args...)
+	return cfc
+}
+
+// Create builds the SQL statement that creates the changefeed job,
+// and executes it. Returns the job ID corresponding to the
+// changefeed, and any errors that occurred in the process
+func (cfc *changefeedCreator) Create() (int, error) {
+	// kv.rangefeed.enabled is required for changefeeds to run
+	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		return -1, err
+	}
+
+	stmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO $1", cfc.targets)
+
+	var options []string
+	for _, opt := range cfc.options {
+		option := opt.option
+		if opt.value != "" {
+			option += fmt.Sprintf("=%s", opt.value)
+		}
+		options = append(options, option)
+	}
+
+	if len(options) > 0 {
+		stmt += fmt.Sprintf(" WITH %s", strings.Join(options, ", "))
+	}
+
 	var jobID int
-	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1`, targets)
-	extraArgs := []interface{}{sinkURL}
-	if args.whichSink == cloudStorageSink || args.whichSink == webhookSink {
-		createStmt += ` WITH resolved='10s', envelope=wrapped, min_checkpoint_frequency='10s'`
-	} else {
-		createStmt += ` WITH resolved,  min_checkpoint_frequency='10s'`
+	args := append([]interface{}{cfc.sinkURL}, cfc.extraArgs...)
+	if err := cfc.db.QueryRow(stmt, args...).Scan(&jobID); err != nil {
+		return -1, err
 	}
-	if !args.initialScan {
-		createStmt += `, cursor='-1s'`
-	}
-	if err := db.QueryRow(createStmt, extraArgs...).Scan(&jobID); err != nil {
-		return 0, err
-	}
+
 	return jobID, nil
 }
 
