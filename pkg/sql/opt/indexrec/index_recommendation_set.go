@@ -13,7 +13,6 @@ package indexrec
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -76,14 +75,32 @@ func (irs *IndexRecommendationSet) createIndexRecommendations(expr opt.Expr) {
 
 // pruneIndexRecommendations removes redundant index recommendations from the
 // recommendation set. These are recommendations where the existingIndex field
-// is not nil and no new columns are being stored.
+// is not nil and no new columns are being stored. The index recommendations
+// left are the ones that will be printed in the end. For these useful index
+// recommendations, this function also populates the field outputCommand to
+// prepare them for the final printing.
 func (irs *IndexRecommendationSet) pruneIndexRecommendations() {
 	for t, indexRecs := range irs.indexRecs {
 		updatedIndexRecs := make([]indexRecommendation, 0, len(indexRecs))
 		for _, indexRec := range indexRecs {
-			if indexRec.existingIndex == nil || !indexRec.redundantRecommendation() {
+			existingIndex := indexRec.existingIndex
+			hypIndex := indexRec.index
+			indexCols := indexRec.indexCols()
+			storing := indexRec.storingColumns()
+			if existingIndex == nil {
+				// If no existingIndex, create index ...
+				var cmd createIndexCmd
+				cmd.init(hypIndex.tab.Name(), indexCols, storing, false, hypIndex.IsInverted())
+				indexRec.outputCommand = &cmd
+				updatedIndexRecs = append(updatedIndexRecs, indexRec)
+			} else if !indexRec.redundantRecommendation() {
+				// If existingIndex is not redundant, drop index ... create index ... storing ...
+				var cmd dropIndexCmd
+				cmd.init(existingIndex.Name(), hypIndex.tab.Name(), indexCols, storing, existingIndex.IsUnique(), hypIndex.IsInverted())
+				indexRec.outputCommand = &cmd
 				updatedIndexRecs = append(updatedIndexRecs, indexRec)
 			}
+			// Remove redundant recommendations.
 		}
 		irs.indexRecs[t] = updatedIndexRecs
 	}
@@ -140,18 +157,25 @@ func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	}
 }
 
-// Output returns a string slice of index recommendation output that will be
-// displayed below the statement plan in EXPLAIN.
-func (irs *IndexRecommendationSet) Output() []string {
+// computeOutputCount is a helper function for Output to calculate the final
+// output length.
+func (irs *IndexRecommendationSet) computeOutputCount() (int, int) {
 	indexRecCount := 0
 	for t := range irs.indexRecs {
 		indexRecCount += len(irs.indexRecs[t])
 	}
+
+	outputRowCount := 2*len(irs.indexRecs) + 1
+	return indexRecCount, outputRowCount
+}
+
+// Output returns a string slice of index recommendation output that will be
+// displayed below the statement plan in EXPLAIN.
+func (irs *IndexRecommendationSet) Output() []string {
+	indexRecCount, outputRowCount := irs.computeOutputCount()
 	if indexRecCount == 0 {
 		return nil
 	}
-
-	outputRowCount := 2*len(irs.indexRecs) + 1
 	output := make([]string, 0, outputRowCount)
 	output = append(output, fmt.Sprintf("index recommendations: %d", indexRecCount))
 
@@ -167,15 +191,10 @@ func (irs *IndexRecommendationSet) Output() []string {
 	for _, t := range sortedTables {
 		indexes := irs.indexRecs[t]
 		for _, indexRec := range indexes {
-			recTypeStr := "index creation"
-			if indexRec.existingIndex != nil {
-				recTypeStr = "index replacement"
-			}
-			indexCols := indexRec.indexCols()
-			storing := indexRec.storingColumns()
+			recTypeStr := indexRec.outputCommand.RecTypeStr()
 
 			indexRecType := fmt.Sprintf("%d. type: %s", indexRecOrd, recTypeStr)
-			indexRecSQL := indexRec.indexRecommendationString(indexCols, storing)
+			indexRecSQL := indexRec.outputCommand.OutputCmd()
 			output = append(output, indexRecType, indexRecSQL)
 			indexRecOrd++
 		}
@@ -200,6 +219,8 @@ type indexRecommendation struct {
 	// existingStoredColOrds stores the column ordinals of the existingIndex's
 	// stored columns. It is empty if there is no existingIndex.
 	existingStoredColOrds util.FastIntSet
+
+	outputCommand outputCommand
 }
 
 // init initializes an index recommendation. If there is an existingIndex with
@@ -295,39 +316,79 @@ func (ir *indexRecommendation) storingColumns() []tree.Name {
 	return storingCols
 }
 
-// indexRecommendationString returns the string output for an index
-// recommendation, containing the SQL command(s) needed to follow this
-// recommendation.
-func (ir *indexRecommendation) indexRecommendationString(
-	indexCols []tree.IndexElem, storing []tree.Name,
-) string {
-	var sb strings.Builder
-	tableName := tree.NewUnqualifiedTableName(ir.index.tab.Name())
+// outputCommand is an interface that defines methods that an index
+// recommendation type has to implement. This is a helper to print the final
+// index recommendations.
+type outputCommand interface {
+	// OutputCmd returns the final output for the index recommendation type as string.
+	OutputCmd() string
+	// RecTypeStr returns the type of index recommendation as a string.
+	RecTypeStr() string
+}
 
-	var dropCmd tree.DropIndex
-	unique := false
-	if ir.existingIndex != nil {
-		sb.WriteString("   SQL commands: ")
-		indexName := tree.UnrestrictedName(ir.existingIndex.Name())
-		dropCmd.IndexList = []*tree.TableIndexName{{Table: *tableName, Index: indexName}}
+type createIndexCmd struct {
+	tree tree.CreateIndex
+}
 
-		// Maintain uniqueness if the existing index is unique.
-		unique = ir.existingIndex.IsUnique()
-	} else {
-		sb.WriteString("   SQL command: ")
-	}
+type dropIndexCmd struct {
+	tree   tree.DropIndex
+	create createIndexCmd
+}
 
-	createCmd := tree.CreateIndex{
-		Table:    *tableName,
-		Columns:  indexCols,
+var _ outputCommand = &createIndexCmd{}
+var _ outputCommand = &dropIndexCmd{}
+
+func (createCmd *createIndexCmd) init(
+	tableName tree.Name,
+	columns []tree.IndexElem,
+	storing []tree.Name,
+	unique bool,
+	inverted bool,
+) {
+	// Index recommendation type 1: Represent create index ...
+	createCmd.tree = tree.CreateIndex{
+		Table:    *tree.NewUnqualifiedTableName(tableName),
+		Columns:  columns,
 		Storing:  storing,
 		Unique:   unique,
-		Inverted: ir.index.IsInverted(),
+		Inverted: inverted,
 	}
-	sb.WriteString(createCmd.String() + ";")
-	if len(dropCmd.IndexList) > 0 {
-		sb.WriteString(" " + dropCmd.String() + ";")
-	}
+}
 
-	return sb.String()
+func (dropCmd *dropIndexCmd) init(
+	indexName tree.Name,
+	tableName tree.Name,
+	columns []tree.IndexElem,
+	storing []tree.Name,
+	unique bool,
+	inverted bool,
+) {
+	// Index recommendation type 2: Represent drop index ... create index ... storing ...
+	dropCmd.tree = tree.DropIndex{
+		IndexList: []*tree.TableIndexName{{
+			Table: *tree.NewUnqualifiedTableName(tableName),
+			Index: tree.UnrestrictedName(indexName),
+		}},
+	}
+	dropCmd.create.init(tableName, columns, storing, unique, inverted)
+}
+
+func (createCmd *createIndexCmd) RecTypeStr() string {
+	return "index creation"
+}
+
+func (dropCmd *dropIndexCmd) RecTypeStr() string {
+	return "index replacement"
+}
+
+func (createCmd *createIndexCmd) OutputCmd() string {
+	return "   SQL command: " + createCmd.ToString()
+}
+
+func (dropCmd *dropIndexCmd) OutputCmd() string {
+	return "   SQL commands: " + dropCmd.create.ToString() + " " + dropCmd.tree.String() + ";"
+}
+
+func (createCmd *createIndexCmd) ToString() string {
+	return createCmd.tree.String() + ";"
 }
