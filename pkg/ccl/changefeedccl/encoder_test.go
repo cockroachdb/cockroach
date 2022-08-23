@@ -600,6 +600,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		changefeedbase.EventConsumerWorkers.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 0)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t,
