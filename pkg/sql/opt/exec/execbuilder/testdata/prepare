@@ -130,7 +130,7 @@ regions: <hidden>
   KV bytes read: 8 B
   KV gRPC calls: 1
   estimated max memory allocated: 0 B
-  estimated row count: 0
+  estimated row count: 0  ----------------------  WARNING: the estimate is way off, consider manually collecting table stats
   table: ab@ab_pkey
   spans: [/1 - /1]
 

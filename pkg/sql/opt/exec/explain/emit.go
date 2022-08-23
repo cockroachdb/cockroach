@@ -379,7 +379,11 @@ func omitStats(n *Node) bool {
 	return false
 }
 
+const staleStatsWarning = "  ----------------------  WARNING: the estimate is way off, consider manually collecting table stats"
+
 func (e *emitter) emitNodeAttributes(n *Node) error {
+	var actualRowCount uint64
+	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
@@ -389,7 +393,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			e.ob.AddRedactableField(RedactNodes, "regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
-			e.ob.AddField("actual row count", string(humanizeutil.Count(s.RowCount.Value())))
+			actualRowCount = s.RowCount.Value()
+			hasActualRowCount = true
+			e.ob.AddField("actual row count", string(humanizeutil.Count(actualRowCount)))
 		}
 		// Omit vectorized batches in non-verbose mode.
 		if e.ob.flags.Verbose {
@@ -437,13 +443,30 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		s := stats.(*exec.EstimatedStats)
 
 		var estimatedRowCountString string
+		var estimatedRowCountStringSuffix string
 		if s.LimitHint > 0 && s.LimitHint != s.RowCount {
 			maxEstimatedRowCount := uint64(math.Ceil(math.Max(s.LimitHint, s.RowCount)))
 			minEstimatedRowCount := uint64(math.Ceil(math.Min(s.LimitHint, s.RowCount)))
 			estimatedRowCountString = fmt.Sprintf("%s - %s", humanizeutil.Count(minEstimatedRowCount), humanizeutil.Count(maxEstimatedRowCount))
+			if hasActualRowCount && s.TableStatsAvailable {
+				// If we have both the actual row count and the table stats
+				// available, check whether the estimate was within a factor of
+				// 4 from the actual row count.
+				if actualRowCount*4 < minEstimatedRowCount || maxEstimatedRowCount*4 < actualRowCount {
+					estimatedRowCountStringSuffix = staleStatsWarning
+				}
+			}
 		} else {
 			estimatedRowCount := uint64(math.Round(s.RowCount))
 			estimatedRowCountString = string(humanizeutil.Count(estimatedRowCount))
+			if hasActualRowCount && s.TableStatsAvailable {
+				// If we have both the actual row count and the table stats
+				// available, check whether the estimate was within a factor of
+				// 4 from the actual row count.
+				if actualRowCount*4 < estimatedRowCount || estimatedRowCount*4 < actualRowCount {
+					estimatedRowCountStringSuffix = staleStatsWarning
+				}
+			}
 		}
 
 		// Show the estimated row count (except Values, where it is redundant).
@@ -497,12 +520,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					}
 
 					e.ob.AddField("estimated row count", fmt.Sprintf(
-						"%s (%s%% of the table; stats collected %s ago%s)",
+						"%s (%s%% of the table; stats collected %s ago%s)%s",
 						estimatedRowCountString, percentageStr,
-						duration, forecastStr,
+						duration, forecastStr, estimatedRowCountStringSuffix,
 					))
 				} else {
-					e.ob.AddField("estimated row count", estimatedRowCountString)
+					e.ob.AddField("estimated row count", estimatedRowCountString+estimatedRowCountStringSuffix)
 				}
 			} else {
 				// No stats available.
