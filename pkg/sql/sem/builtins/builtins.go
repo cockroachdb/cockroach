@@ -24,7 +24,7 @@ import (
 	"hash"
 	"hash/crc32"
 	"hash/fnv"
-	"io/ioutil"
+	"io"
 	"math"
 	"math/bits"
 	"math/rand"
@@ -1269,7 +1269,7 @@ var regularBuiltins = map[string]builtinDefinition{
 						return nil, errors.Wrap(err, "failed to decompress")
 					}
 					defer r.Close()
-					decompressedBytes, err := ioutil.ReadAll(r)
+					decompressedBytes, err := io.ReadAll(r)
 					if err != nil {
 						return nil, err
 					}

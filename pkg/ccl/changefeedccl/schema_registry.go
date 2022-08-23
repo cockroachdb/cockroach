@@ -165,7 +165,7 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 		}
 		defer gracefulClose(ctx, resp.Body)
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			return errors.Errorf("registering schema to %s %s: %s", u, resp.Status, body)
 		}
 		var res confluentSchemaVersionResponse

@@ -103,7 +103,7 @@ func TestDataDriven(t *testing.T) {
 			if err := dev.cli.Execute(); err != nil {
 				return fmt.Sprintf("err: %s", err)
 			}
-			logs, err := ioutil.ReadAll(logger)
+			logs, err := io.ReadAll(logger)
 			require.NoError(t, err)
 			return string(logs)
 		})

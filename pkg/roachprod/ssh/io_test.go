@@ -11,13 +11,12 @@
 package ssh
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
 
 func TestProgress(t *testing.T) {
-	output, err := ioutil.TempFile("", "example*")
+	output, err := os.CreateTemp("", "example*")
 	if err != nil {
 		t.Fatal(err)
 	}

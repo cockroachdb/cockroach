@@ -15,7 +15,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
@@ -63,7 +63,7 @@ var fileRegistry = map[string]fileEntry{}
 var keyRegistry = map[string]keyEntry{}
 
 func loadFileRegistry() {
-	data, err := ioutil.ReadFile(filepath.Join(*dbDir, fileRegistryPath))
+	data, err := os.ReadFile(filepath.Join(*dbDir, fileRegistryPath))
 	if err != nil {
 		log.Fatalf(context.Background(), "could not read %s: %v", fileRegistryPath, err)
 	}
@@ -94,7 +94,7 @@ func loadStoreKey() {
 		return
 	}
 
-	data, err := ioutil.ReadFile(*storeKeyPath)
+	data, err := os.ReadFile(*storeKeyPath)
 	if err != nil {
 		log.Fatalf(context.Background(), "could not read %s: %v", *storeKeyPath, err)
 	}
@@ -181,7 +181,7 @@ func readFile(filename string) ([]byte, error) {
 		absPath = filepath.Join(*dbDir, filename)
 	}
 
-	data, err := ioutil.ReadFile(absPath)
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read %s", absPath)
 	}

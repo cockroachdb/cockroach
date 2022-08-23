@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -259,7 +258,7 @@ func checkBundle(
 			t.Fatal(err)
 		}
 		defer r.Close()
-		bytes, err := ioutil.ReadAll(r)
+		bytes, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -14,7 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -154,7 +154,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != tc.expectedStatus {
-					bodyBytes, _ := ioutil.ReadAll(resp.Body)
+					bodyBytes, _ := io.ReadAll(resp.Body)
 					t.Fatalf("unexpected response code %d (expected %d) hitting %s endpoint: %v",
 						resp.StatusCode, tc.expectedStatus, tc.endpoint, string(bodyBytes))
 				}

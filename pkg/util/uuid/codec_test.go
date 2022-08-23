@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -310,7 +309,7 @@ func TestSeedFuzzCorpus(t *testing.T) {
 	corpusDir := filepath.Join(".", "testdata", "corpus")
 	writeSeedFile := func(name, data string) error {
 		path := filepath.Join(corpusDir, name)
-		return ioutil.WriteFile(path, []byte(data), os.ModePerm)
+		return os.WriteFile(path, []byte(data), os.ModePerm)
 	}
 	for _, fst := range fromStringTests {
 		name := "seed_valid_" + fst.variant

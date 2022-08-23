@@ -10,7 +10,7 @@ package sqlproxyccl
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,7 +37,7 @@ func TestHandleHealth(t *testing.T) {
 	proxyServer.mux.ServeHTTP(rw, r)
 
 	require.Equal(t, http.StatusOK, rw.Code)
-	out, err := ioutil.ReadAll(rw.Body)
+	out, err := io.ReadAll(rw.Body)
 	require.NoError(t, err)
 
 	require.Equal(t, []byte("OK"), out)
@@ -58,7 +58,7 @@ func TestHandleVars(t *testing.T) {
 	proxyServer.mux.ServeHTTP(rw, r)
 
 	require.Equal(t, http.StatusOK, rw.Code)
-	out, err := ioutil.ReadAll(rw.Body)
+	out, err := io.ReadAll(rw.Body)
 	require.NoError(t, err)
 
 	require.Contains(t, string(out), "# HELP proxy_sql_conns")

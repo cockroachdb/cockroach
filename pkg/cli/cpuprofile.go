@@ -13,7 +13,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"os"
 	"runtime/pprof"
 	"strings"
@@ -125,7 +124,7 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 				now := timeutil.Now()
 				name := cpuProfFileNamePrefix + now.Format(cpuProfTimeFormat)
 				path := profilestore.GetFullPath(name)
-				if err := ioutil.WriteFile(path, buf.Bytes(), 0644); err != nil {
+				if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
 					return err
 				}
 				profilestore.GC(ctx, now, profiler)

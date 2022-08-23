@@ -12,7 +12,7 @@ package aws
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 )
@@ -180,7 +180,7 @@ func (c *awsConfigValue) Set(path string) (err error) {
 	if strings.HasPrefix(path, "embedded:") {
 		data, err = Asset(path[strings.Index(path, ":")+1:])
 	} else {
-		data, err = ioutil.ReadFile(path)
+		data, err = os.ReadFile(path)
 	}
 	if err != nil {
 		return err

@@ -15,7 +15,7 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net"
 	"net/url"
@@ -155,7 +155,7 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 		// os.TempDir() if available.
 		baseTmpDir = "/tmp"
 	}
-	tempDir, err := ioutil.TempDir(baseTmpDir, "TestAuth")
+	tempDir, err := os.MkdirTemp(baseTmpDir, "TestAuth")
 	require.NoError(t, err)
 	// ".s.PGSQL.NNNN" is the standard unix socket name supported by pg clients.
 	return tempDir,
@@ -288,7 +288,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						return "", err
 					}
 					defer resp.Body.Close()
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					if err != nil {
 						return "", err
 					}
@@ -329,7 +329,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						return "", err
 					}
 					defer resp.Body.Close()
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					if err != nil {
 						return "", err
 					}

@@ -15,7 +15,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -203,7 +203,7 @@ func readFile(filepath string) (res []byte, err error) {
 	defer func() {
 		err = errors.CombineErrors(err, f.Close())
 	}()
-	res, err = ioutil.ReadAll(f)
+	res, err = io.ReadAll(f)
 	return res, err
 }
 

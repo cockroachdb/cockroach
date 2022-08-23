@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"testing"
@@ -550,7 +549,7 @@ func BenchmarkOCFImport(b *testing.B) {
 // BenchmarkBinaryJSONImport-16    	  500000	      3215 ns/op	  37.32 MB/s
 // BenchmarkBinaryJSONImport-16    	  500000	      3235 ns/op	  37.09 MB/s
 func BenchmarkBinaryJSONImport(b *testing.B) {
-	schemaBytes, err := ioutil.ReadFile(testutils.TestDataPath(b, "avro", "stock-schema.json"))
+	schemaBytes, err := os.ReadFile(testutils.TestDataPath(b, "avro", "stock-schema.json"))
 	require.NoError(b, err)
 
 	benchmarkAvroImport(b, roachpb.AvroOptions{

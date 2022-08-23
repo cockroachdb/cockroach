@@ -15,7 +15,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -120,7 +119,7 @@ func (g *execgenTool) generate(path string, entry entry) error {
 	var inputFileContents string
 	var err error
 	if entry.inputFile != "" {
-		inputFileBytes, err := ioutil.ReadFile(entry.inputFile)
+		inputFileBytes, err := os.ReadFile(entry.inputFile)
 		if err != nil {
 			return err
 		}

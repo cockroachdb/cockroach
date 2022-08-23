@@ -14,7 +14,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -245,7 +244,7 @@ func loadCerts(uiCert, uiKey, caCert string) (certificates, error) {
 	}
 
 	if caCert != "" {
-		data, err := ioutil.ReadFile(caCert)
+		data, err := os.ReadFile(caCert)
 		if err != nil {
 			return certificates{}, errors.Wrap(err, "error reading CA cert")
 		}

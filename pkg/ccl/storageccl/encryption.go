@@ -17,7 +17,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"io"
-	"io/ioutil"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -242,7 +241,7 @@ func decryptingReader(ciphertext readerAndReaderAt, key []byte) (sstable.Readabl
 	// need to read all of it to open it, and can then just return a simple bytes
 	// reader on the decrypted body.
 	if version == encryptionVersionIVPrefix {
-		buf, err := ioutil.ReadAll(ciphertext)
+		buf, err := io.ReadAll(ciphertext)
 		if err != nil {
 			return nil, err
 		}

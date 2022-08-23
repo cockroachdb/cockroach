@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -54,7 +53,7 @@ func unlockFile(lock lockStruct) error {
 // directories in cases where the disk is completely full.
 func CreateTempDir(parentDir, prefix string, stopper *stop.Stopper) (string, error) {
 	// We generate a unique temporary directory with the specified prefix.
-	tempPath, err := ioutil.TempDir(parentDir, prefix)
+	tempPath, err := os.MkdirTemp(parentDir, prefix)
 	if err != nil {
 		return "", err
 	}

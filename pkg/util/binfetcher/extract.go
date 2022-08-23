@@ -15,7 +15,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 
 	"github.com/cockroachdb/errors"
@@ -56,7 +55,7 @@ func untar(r io.Reader, destFile *os.File) error {
 }
 
 func unzip(r io.Reader, destFile *os.File) error {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

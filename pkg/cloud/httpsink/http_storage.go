@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -265,7 +264,7 @@ func (h *httpStorage) req(
 	case 200, 201, 204, 206:
 	// Pass.
 	default:
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		err := errors.Errorf("error response from server: %s %q", resp.Status, body)
 		if err != nil && resp.StatusCode == 404 {

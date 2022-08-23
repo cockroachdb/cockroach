@@ -12,7 +12,7 @@ package storage
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -113,7 +113,7 @@ func TestSSTIterator(t *testing.T) {
 		defer cleanup()
 
 		path := filepath.Join(tempDir, "data.sst")
-		if err := ioutil.WriteFile(path, sstFile.Data(), 0600); err != nil {
+		if err := os.WriteFile(path, sstFile.Data(), 0600); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		file, err := vfs.Default.Open(path)

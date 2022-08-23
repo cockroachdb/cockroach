@@ -13,7 +13,7 @@ package tree_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -530,7 +530,7 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 	} else {
 		runfile = filepath.Join("..", "..", "parser", "sql.y")
 	}
-	yBytes, err := ioutil.ReadFile(runfile)
+	yBytes, err := os.ReadFile(runfile)
 	if err != nil {
 		b.Fatalf("error reading grammar: %v", err)
 	}
