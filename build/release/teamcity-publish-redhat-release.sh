@@ -80,6 +80,6 @@ docker run \
   -v $PWD/artifacts:/artifacts \
   -v ~/.docker/config.json:/temp-authfile.json:ro \
   -v ~/.docker/config.json:/tmp/docker/config.json:ro \
-  quay.io/opdev/preflight:1.1.0 check container \
+  quay.io/opdev/preflight:stable check container \
   "${rhel_repository}:${build_name}" --submit
 tc_end_block "Run preflight"
