@@ -165,3 +165,7 @@ export const CircuitBreakerTrippedEventsTooltip: React.FC = () => (
     since the process started.
   </div>
 );
+
+export const PausedFollowersTooltip: React.FC = () => (
+  <div>The number of nonessential followers that have replication paused.</div>
+);
