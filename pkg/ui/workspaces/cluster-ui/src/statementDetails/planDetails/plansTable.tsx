@@ -20,6 +20,7 @@ import {
   RenderCount,
   DATE_FORMAT_24_UTC,
   explainPlan,
+  limitText,
 } from "../../util";
 import { Anchor } from "../../anchor";
 
@@ -35,7 +36,7 @@ const planDetailsColumnLabels = {
   fullScan: "Full Scan",
   insights: "Insights",
   lastExecTime: "Last Execution Time",
-  planID: "Plan ID",
+  planGist: "Plan Gist",
   vectorized: "Vectorized",
 };
 export type PlanDetailsTableColumnKeys = keyof typeof planDetailsColumnLabels;
@@ -45,21 +46,21 @@ type PlanDetailsTableTitleType = {
 };
 
 export const planDetailsTableTitles: PlanDetailsTableTitleType = {
-  planID: () => {
+  planGist: () => {
     return (
       <Tooltip
         style="tableTitle"
         placement="bottom"
         content={
           <p>
-            The ID of the{" "}
+            The Gist of the{" "}
             <Anchor href={explainPlan} target="_blank">
               Explain Plan.
             </Anchor>
           </p>
         }
       >
-        {planDetailsColumnLabels.planID}
+        {planDetailsColumnLabels.planGist}
       </Tooltip>
     );
   },
@@ -170,12 +171,16 @@ export function makeExplainPlanColumns(
   const count = (v: number) => v.toFixed(1);
   return [
     {
-      name: "planID",
-      title: planDetailsTableTitles.planID(),
+      name: "planGist",
+      title: planDetailsTableTitles.planGist(),
       cell: (item: PlanHashStats) => (
-        <a onClick={() => handleDetails(item)}>{longToInt(item.plan_hash)}</a>
+        <Tooltip placement="bottom" content={item.stats.plan_gists[0]}>
+          <a onClick={() => handleDetails(item)}>
+            {limitText(item.stats.plan_gists[0], 25)}
+          </a>
+        </Tooltip>
       ),
-      sort: (item: PlanHashStats) => longToInt(item.plan_hash),
+      sort: (item: PlanHashStats) => item.stats.plan_gists[0],
       alwaysShow: true,
     },
     {
