@@ -119,7 +119,10 @@ func (rsl StateLoader) Load(
 // missing whenever save is called. Optional values should be reserved
 // strictly for use in Result. Do before merge.
 func (rsl StateLoader) Save(
-	ctx context.Context, readWriter storage.ReadWriter, state kvserverpb.ReplicaState,
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	state kvserverpb.ReplicaState,
+	gcHintEnabled bool,
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats
 	if err := rsl.SetLease(ctx, readWriter, ms, *state.Lease); err != nil {
@@ -128,8 +131,10 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
-		return enginepb.MVCCStats{}, err
+	if gcHintEnabled {
+		if _, err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint, gcHintEnabled); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
@@ -287,18 +292,31 @@ func (rsl StateLoader) LoadGCHint(
 	var h roachpb.GCHint
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCHintKey(),
 		hlc.Timestamp{}, &h, storage.MVCCGetOptions{})
-	return &h, err
+	if err != nil {
+		return nil, err
+	}
+	return &h, nil
 }
 
 // SetGCHint writes the GC hint.
 func (rsl StateLoader) SetGCHint(
-	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, hint *roachpb.GCHint,
-) error {
-	if hint == nil {
-		return errors.New("cannot persist nil GCHint")
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	ms *enginepb.MVCCStats,
+	hint *roachpb.GCHint,
+	gcHintEnabled bool,
+) (updated bool, _ error) {
+	if !gcHintEnabled {
+		return false, nil
 	}
-	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeGCHintKey(),
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hint)
+	if hint == nil {
+		return false, errors.New("cannot persist nil GCHint")
+	}
+	if err := storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeGCHintKey(),
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hint); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // LoadVersion loads the replica version.
