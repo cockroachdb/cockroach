@@ -108,7 +108,6 @@ func runUnoptimizedQueryOracleImpl(
 	if err := h.execStmt(disableVectorizeStmt); err != nil {
 		return h.makeError(err, "failed to disable the vectorized engine")
 	}
-
 	unoptimizedRows, err := h.runQuery(stmt)
 	if err != nil {
 		// Skip unoptimized statements that fail with an error.
@@ -116,11 +115,14 @@ func runUnoptimizedQueryOracleImpl(
 		return nil
 	}
 
-	// Re-enable either the optimizer, vectorized execution, or both for the next
-	// statement.
+	// It then changes the settings to re-enable optimizer and/or re-enable
+	// vectorized execution and/or disable not visible index feature.
 	resetSeedStmt := "RESET testing_optimizer_random_seed"
 	resetOptimizerStmt := "RESET testing_optimizer_disable_rule_probability"
 	resetVectorizeStmt := "RESET vectorize"
+	// Disable not visible index feature to run the statement with more optimization.
+	disableNotVisibleIndexFeatureStmt := "SET optimizer_use_not_visible_indexes = true"
+
 	enable := rnd.Intn(3)
 	if enable > 0 {
 		if err := h.execStmt(resetSeedStmt); err != nil {
@@ -134,9 +136,13 @@ func runUnoptimizedQueryOracleImpl(
 		if err := h.execStmt(resetVectorizeStmt); err != nil {
 			return h.makeError(err, "failed to reset the vectorized engine")
 		}
+		if err := h.execStmt(disableNotVisibleIndexFeatureStmt); err != nil {
+			return h.makeError(err, "failed to disable not visible index feature")
+		}
 	}
 
-	// Then, rerun the statement with optimization and/or vectorization enabled.
+	// Then, rerun the statement with optimization and/or vectorization enabled
+	// and/or not visible index feature disabled.
 	optimizedRows, err := h.runQuery(stmt)
 	if err != nil {
 		// If the optimized plan fails with an internal error while the unoptimized plan
@@ -172,6 +178,10 @@ func runUnoptimizedQueryOracleImpl(
 	}
 	if err := h.execStmt(resetVectorizeStmt); err != nil {
 		return h.makeError(err, "failed to reset the vectorized engine")
+	}
+	resetNotVisibleIndexFeatureStmt := "RESET optimizer_use_not_visible_indexes"
+	if err := h.execStmt(resetNotVisibleIndexFeatureStmt); err != nil {
+		return h.makeError(err, "failed to reset not visible index feature")
 	}
 
 	return nil
