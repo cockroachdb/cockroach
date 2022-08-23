@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -504,6 +506,54 @@ func TestGCTenant(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, nil == r.Value)
 	})
+}
+
+// This test exercises code whereby an index GC job is running, and, in the
+// meantime, the descriptor is removed. We want to ensure that the GC job
+// finishes without an error.
+func TestDropIndexWithDroppedDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	gcJobID := make(chan jobspb.JobID)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(jobID jobspb.JobID) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case gcJobID <- jobID:
+					return nil
+				}
+			}},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	defer cancel()
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX(j, i))")
+	var tableID catid.DescID
+	var indexID catid.IndexID
+	tdb.QueryRow(t, `
+SELECT descriptor_id, index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_name = 'foo'
+   AND index_name = 'foo_j_i_idx';`).Scan(&tableID, &indexID)
+	tdb.Exec(t, "DROP INDEX foo@foo_j_i_idx")
+	codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
+	errCh := make(chan error, 1)
+	// Allow the job to proceed in parallel to deleting the descriptor.
+	jobID := <-gcJobID
+	go func() {
+		k := catalogkeys.MakeDescMetadataKey(codec, tableID)
+		_, err := kvDB.Del(ctx, k)
+		errCh <- err
+	}()
+	require.NoError(t, s.JobRegistry().(*jobs.Registry).WaitForJobs(
+		ctx, s.InternalExecutor().(sqlutil.InternalExecutor), []jobspb.JobID{jobID},
+	))
 }
 
 // TestGCJobNoSystemConfig tests that the GC job is robust to running with

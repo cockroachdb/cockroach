@@ -40,10 +40,28 @@ func deleteIndexData(
 		log.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
 	}
 
+	maybeHandleDeletedDescriptor := func(err error) (done bool) {
+		// If the descriptor has been removed, then we need to assume that the relevant
+		// zone configs and data have been cleaned up by another process.
+		if !errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return false
+		}
+		log.Infof(ctx, "descriptor %d dropped, assuming another process has handled GC", parentID)
+		for _, index := range droppedIndexes {
+			markIndexGCed(
+				ctx, index.IndexID, progress, jobspb.SchemaChangeGCProgress_CLEARED,
+			)
+		}
+		return true
+	}
+
 	// Before deleting any indexes, ensure that old versions of the table descriptor
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
 	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
+	if maybeHandleDeletedDescriptor(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -84,11 +102,28 @@ func gcIndexes(
 	if log.V(2) {
 		log.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
 	}
+	maybeHandleDeletedDescriptor := func(err error) (done bool) {
+		// If the descriptor has been removed, then we need to assume that the relevant
+		// zone configs and data have been cleaned up by another process.
+		if !errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return false
+		}
+		log.Infof(ctx, "descriptor %d dropped, assuming another process has handled GC", parentID)
+		for _, index := range droppedIndexes {
+			markIndexGCed(
+				ctx, index.IndexID, progress, jobspb.SchemaChangeGCProgress_CLEARED,
+			)
+		}
+		return true
+	}
 
 	// Before deleting any indexes, ensure that old versions of the table descriptor
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
 	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
+	if maybeHandleDeletedDescriptor(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -129,10 +164,13 @@ func gcIndexes(
 				ctx, txn, execCfg, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
-		if err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs); err != nil {
+		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
+		if maybeHandleDeletedDescriptor(err) {
+			return nil
+		}
+		if err != nil {
 			return errors.Wrapf(err, "removing index %d zone configs", index.IndexID)
 		}
-
 		markIndexGCed(
 			ctx, index.IndexID, progress, jobspb.SchemaChangeGCProgress_CLEARED,
 		)
