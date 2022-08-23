@@ -168,8 +168,6 @@ const (
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
 	ProbeRequest
-	// PublicSchemasWithDescriptors backs public schemas with descriptors.
-	PublicSchemasWithDescriptors
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
 	// reconciliation process at least once.
 	EnsureSpanConfigReconciliation
@@ -343,10 +341,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
-	},
-	{
-		Key:     PublicSchemasWithDescriptors,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
 	},
 	{
 		Key:     EnsureSpanConfigReconciliation,

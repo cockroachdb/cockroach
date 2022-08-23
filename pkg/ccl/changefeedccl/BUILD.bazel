@@ -151,7 +151,6 @@ go_test(
         "main_test.go",
         "name_test.go",
         "nemeses_test.go",
-        "public_schema_migration_changefeed_external_test.go",
         "schema_registry_test.go",
         "show_changefeed_jobs_test.go",
         "sink_cloudstorage_test.go",
