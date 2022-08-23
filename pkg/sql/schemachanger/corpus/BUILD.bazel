@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "corpus",
@@ -15,6 +15,19 @@ go_library(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+    ],
+)
+
+go_test(
+    name = "corpus_test",
+    srcs = ["corpus_test.go"],
+    deps = [
+        ":corpus",
+        "//pkg/jobs/jobspb",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scplan",
+        "//pkg/testutils/skip",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
