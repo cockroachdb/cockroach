@@ -29,12 +29,14 @@ type ColSet struct {
 const offset = 1
 
 // setVal returns the value to store in the internal set for the given ColumnID.
+//gcassert:inline
 func setVal(col ColumnID) int {
 	return int(col - offset)
 }
 
 // retVal returns the ColumnID to return for the given value in the internal
 // set.
+//gcassert:inline
 func retVal(i int) ColumnID {
 	return ColumnID(i + offset)
 }
@@ -50,7 +52,7 @@ func MakeColSet(vals ...ColumnID) ColSet {
 
 // Add adds a column to the set. No-op if the column is already in the set.
 func (s *ColSet) Add(col ColumnID) {
-	if col <= 0 {
+	if buildutil.CrdbTestBuild && col <= 0 {
 		panic(errors.AssertionFailedf("col must be greater than 0"))
 	}
 	s.set.Add(setVal(col))

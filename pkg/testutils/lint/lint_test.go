@@ -2032,6 +2032,7 @@ func TestLint(t *testing.T) {
 			"../../sql/colexec/colexecspan",
 			"../../sql/colexec/colexecwindow",
 			"../../sql/colfetcher",
+			"../../sql/opt",
 			"../../sql/row",
 			"../../kv/kvclient/rangecache",
 			"../../storage",
