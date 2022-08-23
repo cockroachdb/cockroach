@@ -85,80 +85,79 @@ func (r *Replica) Metrics(
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()
 
-	return calcReplicaMetrics(
-		ctx,
-		now.ToTimestamp(),
-		&r.store.cfg.RaftConfig,
-		conf,
-		livenessMap,
-		clusterNodes,
-		desc,
-		raftStatus,
-		leaseStatus,
-		r.store.StoreID(),
-		quiescent,
-		ticking,
-		latchMetrics,
-		lockTableMetrics,
-		raftLogSize,
-		raftLogSizeTrusted,
-		qpUsed, qpCap,
-		paused,
-	)
+	return calcReplicaMetrics(ctx, calcReplicaMetricsInput{
+		raftCfg:            &r.store.cfg.RaftConfig,
+		conf:               conf,
+		livenessMap:        livenessMap,
+		clusterNodes:       clusterNodes,
+		desc:               desc,
+		raftStatus:         raftStatus,
+		leaseStatus:        leaseStatus,
+		storeID:            r.store.StoreID(),
+		quiescent:          quiescent,
+		ticking:            ticking,
+		latchMetrics:       latchMetrics,
+		lockTableMetrics:   lockTableMetrics,
+		raftLogSize:        raftLogSize,
+		raftLogSizeTrusted: raftLogSizeTrusted,
+		qpUsed:             qpUsed,
+		qpCapacity:         qpCap,
+		paused:             paused,
+	})
 }
 
-func calcReplicaMetrics(
-	_ context.Context,
-	_ hlc.Timestamp,
-	raftCfg *base.RaftConfig,
-	conf roachpb.SpanConfig,
-	livenessMap liveness.IsLiveMap,
-	clusterNodes int,
-	desc *roachpb.RangeDescriptor,
-	raftStatus *raft.Status,
-	leaseStatus kvserverpb.LeaseStatus,
-	storeID roachpb.StoreID,
-	quiescent bool,
-	ticking bool,
-	latchMetrics concurrency.LatchMetrics,
-	lockTableMetrics concurrency.LockTableMetrics,
-	raftLogSize int64,
-	raftLogSizeTrusted bool,
-	qpUsed, qpCapacity int64, // quota pool used and capacity bytes
-	paused map[roachpb.ReplicaID]struct{},
-) ReplicaMetrics {
+type calcReplicaMetricsInput struct {
+	raftCfg            *base.RaftConfig
+	conf               roachpb.SpanConfig
+	livenessMap        liveness.IsLiveMap
+	clusterNodes       int
+	desc               *roachpb.RangeDescriptor
+	raftStatus         *raft.Status
+	leaseStatus        kvserverpb.LeaseStatus
+	storeID            roachpb.StoreID
+	quiescent          bool
+	ticking            bool
+	latchMetrics       concurrency.LatchMetrics
+	lockTableMetrics   concurrency.LockTableMetrics
+	raftLogSize        int64
+	raftLogSizeTrusted bool
+	qpUsed, qpCapacity int64 // quota pool used and capacity bytes
+	paused             map[roachpb.ReplicaID]struct{}
+}
+
+func calcReplicaMetrics(_ context.Context, d calcReplicaMetricsInput) ReplicaMetrics {
 	var m ReplicaMetrics
 
 	var leaseOwner bool
-	m.LeaseStatus = leaseStatus
-	if leaseStatus.IsValid() {
+	m.LeaseStatus = d.leaseStatus
+	if d.leaseStatus.IsValid() {
 		m.LeaseValid = true
-		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
-		m.LeaseType = leaseStatus.Lease.Type()
+		leaseOwner = d.leaseStatus.Lease.OwnedBy(d.storeID)
+		m.LeaseType = d.leaseStatus.Lease.Type()
 	}
 	m.Leaseholder = m.LeaseValid && leaseOwner
-	m.Leader = isRaftLeader(raftStatus)
-	m.Quiescent = quiescent
-	m.Ticking = ticking
+	m.Leader = isRaftLeader(d.raftStatus)
+	m.Quiescent = d.quiescent
+	m.Ticking = d.ticking
 
 	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
-		storeID, desc, leaseStatus, livenessMap, conf.GetNumVoters(), conf.NumReplicas, clusterNodes)
+		d.storeID, d.desc, d.leaseStatus, d.livenessMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
 
-	m.QuotaPoolPercentUsed = calcQuotaPoolPercentUsed(qpUsed, qpCapacity)
+	m.QuotaPoolPercentUsed = calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity)
 
 	const raftLogTooLargeMultiple = 4
-	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
-		raftLogSizeTrusted
+	m.RaftLogTooLarge = d.raftLogSize > (raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold) &&
+		d.raftLogSizeTrusted
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
 	if m.Leader {
-		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
-		m.PausedFollowerCount = int64(len(paused))
+		m.BehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
+		m.PausedFollowerCount = int64(len(d.paused))
 	}
 
-	m.LatchMetrics = latchMetrics
-	m.LockTableMetrics = lockTableMetrics
+	m.LatchMetrics = d.latchMetrics
+	m.LockTableMetrics = d.lockTableMetrics
 
 	return m
 }
