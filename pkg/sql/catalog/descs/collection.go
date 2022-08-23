@@ -109,9 +109,7 @@ type Collection struct {
 	// other matching descriptors during immutable descriptor resolution (by name
 	// or by ID), but should not be written to disk. These support internal
 	// queries which need to use a special modified descriptor (e.g. validating
-	// non-public schema elements during a schema change). Attempting to resolve
-	// a mutable descriptor by name or ID when a matching synthetic descriptor
-	// exists is illegal.
+	// non-public schema elements during a schema change).
 	synthetic syntheticDescriptors
 
 	// temporary contains logic to access temporary schema descriptors.
@@ -189,11 +187,6 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.skipValidationOnWrite = false
 }
 
-// ResetSyntheticDescriptors clear all syntheticDescriptors.
-func (tc *Collection) ResetSyntheticDescriptors() {
-	tc.synthetic.reset()
-}
-
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
 func (tc *Collection) HasUncommittedTables() (has bool) {
@@ -229,6 +222,9 @@ func (tc *Collection) HasUncommittedTypes() (has bool) {
 // copy is performed in this call. This descriptor is evicted from the name
 // index of the stored descriptors layer in order for this layer to properly
 // shadow it.
+//
+// An uncommitted descriptor cannot coexist with a synthetic descriptor with the
+// same ID or the same name.
 func (tc *Collection) AddUncommittedDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) (err error) {
@@ -254,6 +250,16 @@ func (tc *Collection) AddUncommittedDescriptor(
 			return errors.Newf("incompatible version, descriptor version %d exists in storage",
 				original.GetVersion())
 		}
+	}
+	if tc.synthetic.GetSyntheticByID(desc.GetID()) != nil {
+		return errors.AssertionFailedf(
+			"cannot add uncommitted %s %q (%d) when a synthetic descriptor with the same ID exists",
+			desc.DescriptorType(), desc.GetName(), desc.GetID())
+	}
+	if tc.synthetic.GetSyntheticByName(desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName()) != nil {
+		return errors.AssertionFailedf(
+			"cannot add uncommitted %s %q (%d) when a synthetic descriptor with the same name exists",
+			desc.DescriptorType(), desc.GetName(), desc.GetID())
 	}
 	tc.stored.RemoveFromNameIndex(desc)
 	return tc.uncommitted.Upsert(ctx, original, desc)
@@ -346,6 +352,10 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 		c.UpsertDescriptorEntry(desc)
 		return nil
 	})
+	_ = tc.synthetic.IterateSyntheticByID(func(desc catalog.Descriptor) error {
+		c.UpsertDescriptorEntry(desc)
+		return nil
+	})
 	descs := c.OrderedDescriptors()
 	flags := tree.CommonLookupFlags{
 		AvoidLeased:    true,
@@ -383,6 +393,12 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 		return nil, err
 	}
 	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() == catalog.Database {
+			m.Upsert(desc, desc.SkipNamespace())
+		}
+		return nil
+	})
+	_ = tc.synthetic.IterateSyntheticByID(func(desc catalog.Descriptor) error {
 		if desc.DescriptorType() == catalog.Database {
 			m.Upsert(desc, desc.SkipNamespace())
 		}
@@ -453,6 +469,12 @@ func (tc *Collection) GetSchemasForDatabase(
 		}
 		return nil
 	})
+	_ = tc.synthetic.IterateSyntheticByID(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() == catalog.Schema && desc.GetParentID() == db.GetID() {
+			ret[desc.GetID()] = desc.GetName()
+		}
+		return nil
+	})
 	return ret, nil
 }
 
@@ -514,35 +536,39 @@ func (tc *Collection) GetObjectNamesAndIDs(
 // descriptors to override all other matching descriptors during immutable
 // access. An immutable copy is made if the descriptor is mutable. See the
 // documentation on syntheticDescriptors.
-func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
-	tc.synthetic.set(descs)
+func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) error {
+	tc.ResetSyntheticDescriptors()
+	for _, desc := range descs {
+		if err := tc.AddSyntheticDescriptor(desc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// AddSyntheticDescriptor replaces a descriptor with a synthetic
-// one temporarily for a given transaction. This synthetic descriptor
-// will be immutable.
-func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) {
-	tc.synthetic.add(desc)
+// ResetSyntheticDescriptors removes all synthetic descriptors from the
+// Collection.
+func (tc *Collection) ResetSyntheticDescriptors() {
+	tc.synthetic.Clear()
 }
 
-// RemoveSyntheticDescriptor removes a synthetic descriptor
-// override that temporarily exists for a given transaction.
-func (tc *Collection) RemoveSyntheticDescriptor(id descpb.ID) {
-	tc.synthetic.remove(id)
+// AddSyntheticDescriptor injects a synthetic descriptor into the Collection.
+// This descriptor will be immutable and will shadow any similarly IDed or named
+// stored descriptor.
+func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) error {
+	tc.synthetic.Add(desc)
+	return nil
 }
 
 func (tc *Collection) codec() keys.SQLCodec {
 	return tc.stored.Codec
 }
 
-// AddDeletedDescriptor is temporarily tracking descriptors that have been,
-// deleted which from an add state without any intermediate steps
-// Any descriptors marked as deleted will be skipped for the
-// wait for one version logic inside descs.Txn, since they will no longer
-// be inside storage.
-// Note: that this happens, at time of writing, only when reverting an
-// IMPORT or RESTORE.
-func (tc *Collection) AddDeletedDescriptor(id descpb.ID) {
+// NotifyOfDeletedDescriptor notifies the collection of the ID of a descriptor
+// which has been deleted from the system.descriptors table. This is required to
+// prevent blocking on waiting until only a single version of the descriptor is
+// leased at transaction commit time.
+func (tc *Collection) NotifyOfDeletedDescriptor(id descpb.ID) {
 	tc.deletedDescs.Add(id)
 }
 

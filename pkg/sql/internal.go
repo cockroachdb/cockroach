@@ -326,7 +326,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats sqlstats.ApplicationStats,
-) (ex *connExecutor, err error) {
+) (ex *connExecutor, _ error) {
 
 	// If the internal executor has injected synthetic descriptors, we will
 	// inject them into the descs.Collection below, and we'll note that
@@ -406,9 +406,11 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
 	if shouldResetSyntheticDescriptors {
-		ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+		if err := ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors); err != nil {
+			return ex, err
+		}
 	}
-	return ex, err
+	return ex, nil
 }
 
 type ieIteratorResult struct {

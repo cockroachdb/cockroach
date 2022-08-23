@@ -255,7 +255,7 @@ func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.I
 		log.VEventf(ctx, 2, "Del %s", marshalledKey)
 	}
 	b.deletedDescriptors.Add(id)
-	b.descsCollection.AddDeletedDescriptor(id)
+	b.descsCollection.NotifyOfDeletedDescriptor(id)
 	return nil
 }
 

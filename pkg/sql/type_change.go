@@ -375,7 +375,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				for i, d := range repartitioned {
 					synthetic[i] = d
 				}
-				descsCol.SetSyntheticDescriptors(synthetic)
+				if err := descsCol.SetSyntheticDescriptors(synthetic); err != nil {
+					return err
+				}
 			}
 			for _, member := range toDrop {
 				if err := t.canRemoveEnumValue(ctx, typeDesc, txn, &member, descsCol); err != nil {

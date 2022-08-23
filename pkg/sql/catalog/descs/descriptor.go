@@ -184,7 +184,7 @@ func (q *byIDLookupContext) lookupSynthetic(
 	if q.flags.AvoidSynthetic {
 		return nil, catalog.NoValidation, nil
 	}
-	_, sd := q.tc.synthetic.getByID(id)
+	sd := q.tc.synthetic.GetSyntheticByID(id)
 	if sd == nil {
 		return nil, catalog.NoValidation, nil
 	}
@@ -280,7 +280,7 @@ func (tc *Collection) getByName(
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
 
-	if found, sd := tc.synthetic.getByName(parentID, parentSchemaID, name); found && !avoidSynthetic {
+	if sd := tc.synthetic.GetSyntheticByName(parentID, parentSchemaID, name); sd != nil && !avoidSynthetic {
 		if mutable {
 			return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
 		}

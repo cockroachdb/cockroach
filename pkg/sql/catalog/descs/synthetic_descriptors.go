@@ -20,43 +20,41 @@ type syntheticDescriptors struct {
 	descs nstree.NameMap
 }
 
-func (sd *syntheticDescriptors) add(desc catalog.Descriptor) {
+func (sd *syntheticDescriptors) Add(desc catalog.Descriptor) {
 	if mut, ok := desc.(catalog.MutableDescriptor); ok {
 		desc = mut.ImmutableCopy()
-		sd.descs.Upsert(desc, desc.SkipNamespace())
-	} else {
-		// Already an immutable object.
-		sd.descs.Upsert(desc, desc.SkipNamespace())
 	}
+	sd.descs.Upsert(desc, desc.SkipNamespace())
 }
 
-func (sd *syntheticDescriptors) remove(id descpb.ID) {
+func (sd *syntheticDescriptors) Remove(id descpb.ID) {
 	sd.descs.Remove(id)
 }
 
-func (sd *syntheticDescriptors) set(descs []catalog.Descriptor) {
-	sd.descs.Clear()
-	for _, desc := range descs {
-		sd.add(desc)
-	}
-}
-
-func (sd *syntheticDescriptors) reset() {
+func (sd *syntheticDescriptors) Clear() {
 	sd.descs.Clear()
 }
 
-func (sd *syntheticDescriptors) getByName(
+func (sd *syntheticDescriptors) GetSyntheticByName(
 	dbID descpb.ID, schemaID descpb.ID, name string,
-) (found bool, desc catalog.Descriptor) {
+) catalog.Descriptor {
 	if entry := sd.descs.GetByName(dbID, schemaID, name); entry != nil {
-		return true, entry.(catalog.Descriptor)
+		return entry.(catalog.Descriptor)
 	}
-	return false, nil
+	return nil
 }
 
-func (sd *syntheticDescriptors) getByID(id descpb.ID) (found bool, desc catalog.Descriptor) {
+func (sd *syntheticDescriptors) GetSyntheticByID(id descpb.ID) catalog.Descriptor {
 	if entry := sd.descs.GetByID(id); entry != nil {
-		return true, entry.(catalog.Descriptor)
+		return entry.(catalog.Descriptor)
 	}
-	return false, nil
+	return nil
+}
+
+// IterateSyntheticByID applies fn to the synthetic descriptors in ascending
+// sequence of IDs.
+func (sd *syntheticDescriptors) IterateSyntheticByID(fn func(desc catalog.Descriptor) error) error {
+	return sd.descs.IterateByID(func(entry catalog.NameEntry) error {
+		return fn(entry.(catalog.Descriptor))
+	})
 }

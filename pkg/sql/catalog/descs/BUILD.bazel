@@ -100,6 +100,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/lease",
