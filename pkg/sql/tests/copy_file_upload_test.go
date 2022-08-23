@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -46,7 +45,7 @@ func writeFile(t *testing.T, testSendFile string, fileContent []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = ioutil.WriteFile(testSendFile, fileContent, 0644)
+	err = os.WriteFile(testSendFile, fileContent, 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +128,7 @@ func runCopyFile(
 func checkNodelocalContent(
 	t *testing.T, localExternalDir, filename string, expectedContent []byte,
 ) {
-	content, err := ioutil.ReadFile(filepath.Join(localExternalDir, filename))
+	content, err := os.ReadFile(filepath.Join(localExternalDir, filename))
 	require.NoError(t, err)
 	if !bytes.Equal(expectedContent, content) {
 		t.Fatalf("content not the same. expected: %s got: %s", expectedContent, content)

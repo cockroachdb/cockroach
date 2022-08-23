@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"os/exec"
 	"strings"
 	"text/template"
@@ -164,7 +164,7 @@ func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error)
 
 	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple}
 
-	tmpfile, err := ioutil.TempFile("", "aws-startup-script")
+	tmpfile, err := os.CreateTemp("", "aws-startup-script")
 	if err != nil {
 		return "", err
 	}

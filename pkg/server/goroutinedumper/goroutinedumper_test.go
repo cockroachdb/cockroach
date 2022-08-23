@@ -14,7 +14,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -220,7 +220,7 @@ func TestTakeGoroutineDump(t *testing.T) {
 		if err != nil {
 			t.Fatalf("could not create gzip reader for file %s: %s", expectedFile, err)
 		}
-		if _, err = ioutil.ReadAll(r); err != nil {
+		if _, err = io.ReadAll(r); err != nil {
 			t.Fatalf("could not read goroutine dump file %s with gzip: %s", expectedFile, err)
 		}
 		if err = r.Close(); err != nil {

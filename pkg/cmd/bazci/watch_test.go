@@ -10,7 +10,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"os"
 	"path"
 	"testing"
 
@@ -20,17 +20,17 @@ import (
 
 func assertFileCopiedVerbatim(t *testing.T, relPath string) {
 	testdata := testutils.TestDataPath(t)
-	actual, err := ioutil.ReadFile(path.Join(artifactsDir, relPath))
+	actual, err := os.ReadFile(path.Join(artifactsDir, relPath))
 	assert.Nil(t, err)
-	expected, err := ioutil.ReadFile(path.Join(testdata, relPath))
+	expected, err := os.ReadFile(path.Join(testdata, relPath))
 	assert.Nil(t, err)
 	assert.Equal(t, actual, expected)
 }
 
 func assertFilesIdentical(t *testing.T, actualPath, expectedPath string) {
-	actual, err := ioutil.ReadFile(actualPath)
+	actual, err := os.ReadFile(actualPath)
 	assert.Nil(t, err)
-	expected, err := ioutil.ReadFile(expectedPath)
+	expected, err := os.ReadFile(expectedPath)
 	assert.Nil(t, err)
 	assert.Equal(t, actual, expected)
 }

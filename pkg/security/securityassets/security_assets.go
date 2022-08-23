@@ -27,7 +27,7 @@ type Loader struct {
 // defaultLoader uses real filesystem calls.
 var defaultLoader = Loader{
 	ReadDir:  ioutil.ReadDir,
-	ReadFile: ioutil.ReadFile,
+	ReadFile: os.ReadFile,
 	Stat:     os.Stat,
 }
 

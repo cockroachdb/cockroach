@@ -16,7 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
-	"io/ioutil"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -641,7 +641,7 @@ func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
 	defer res.Body.Close()
 
 	if !(res.StatusCode >= http.StatusOK && res.StatusCode < http.StatusMultipleChoices) {
-		resBody, err := ioutil.ReadAll(res.Body)
+		resBody, err := io.ReadAll(res.Body)
 		if err != nil {
 			return errors.Wrapf(err, "failed to read body for HTTP response with status: %d", res.StatusCode)
 		}

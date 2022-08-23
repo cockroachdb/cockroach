@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"net/url"
@@ -497,7 +496,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 		// this is when we can tell them the node has started listening.
 		if startCtx.pidFile != "" {
 			log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
-			if err := ioutil.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+			if err := os.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
 				log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
 			}
 		}
@@ -523,7 +522,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 				return
 			}
 
-			if err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
+			if err = os.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
 				log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
 			}
 		}

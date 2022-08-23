@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -40,7 +40,7 @@ type testFs struct{}
 
 func (t testFs) Open(name string) (fs.File, error) {
 	if name == "test.json" {
-		return ioutil.TempFile("", "test.json")
+		return os.CreateTemp("", "test.json")
 	}
 	return nil, errors.New("wrong filename")
 }

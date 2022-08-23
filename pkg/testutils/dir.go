@@ -11,7 +11,6 @@
 package testutils
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -33,7 +32,7 @@ func TempDir(t testing.TB) (string, func()) {
 		tmpDir = bazel.TestTmpDir()
 	}
 
-	dir, err := ioutil.TempDir(tmpDir, fileutil.EscapeFilename(t.Name()))
+	dir, err := os.MkdirTemp(tmpDir, fileutil.EscapeFilename(t.Name()))
 	if err != nil {
 		t.Fatal(err)
 	}

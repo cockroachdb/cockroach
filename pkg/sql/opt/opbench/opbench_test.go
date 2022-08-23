@@ -18,7 +18,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -295,7 +294,7 @@ func runBench(t *testing.T, spec *opbench.Spec, path string, mode runMode) {
 	w.Flush()
 
 	if mode.rewriteEstimated || mode.rewriteActual {
-		if err := ioutil.WriteFile(path, result.Bytes(), 0644); err != nil {
+		if err := os.WriteFile(path, result.Bytes(), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}

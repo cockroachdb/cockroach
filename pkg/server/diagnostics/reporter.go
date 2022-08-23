@@ -13,7 +13,7 @@ package diagnostics
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -158,7 +158,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 		return
 	}
 	defer res.Body.Close()
-	b, err = ioutil.ReadAll(res.Body)
+	b, err = io.ReadAll(res.Body)
 	if err != nil || res.StatusCode != http.StatusOK {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)

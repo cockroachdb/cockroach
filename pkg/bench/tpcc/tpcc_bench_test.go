@@ -18,7 +18,7 @@ package tpcc
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -185,7 +185,7 @@ type event struct {
 }
 
 func (bm *benchmark) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadAll(r.Body)
+	data, err := io.ReadAll(r.Body)
 	if err != nil {
 		bm.addEvent(err.Error())
 		w.WriteHeader(500)
