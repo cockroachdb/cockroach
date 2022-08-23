@@ -74,6 +74,10 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: problem => problem.circuit_breaker_error_range_ids.length,
   },
   {
+    title: "Paused Replicas",
+    extract: problem => problem.paused_replica_ids.length,
+  },
+  {
     title: "Total",
     extract: problem => {
       return (
@@ -85,7 +89,8 @@ const connectionTableColumns: ConnectionTableColumn[] = [
         problem.overreplicated_range_ids.length +
         problem.quiescent_equals_ticking_range_ids.length +
         problem.raft_log_too_large_range_ids.length +
-        problem.circuit_breaker_error_range_ids.length
+        problem.circuit_breaker_error_range_ids.length +
+        problem.paused_replica_ids.length
       );
     },
   },

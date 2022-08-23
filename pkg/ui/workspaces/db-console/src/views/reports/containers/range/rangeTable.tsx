@@ -265,6 +265,11 @@ const rangeTableDisplayList: RangeTableRow[] = [
     display: "Locality Info",
     compareToLeader: false,
   },
+  {
+    variable: "pausedFollowers",
+    display: "Paused Followers",
+    compareToLeader: false,
+  },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -899,6 +904,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
             tier => `${tier.key}: ${tier.value}`,
           ),
         })),
+        pausedFollowers: this.createContent(
+          info.state.paused_replicas?.join(", "),
+        ),
       });
     });
 
