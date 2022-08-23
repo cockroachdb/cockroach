@@ -2227,8 +2227,10 @@ func init() {
 	}()
 }
 
-// SetSessionVariable sets a new value for session setting `varName` is the
+// SetSessionVariable sets a new value for session setting `varName` in the
 // session settings owned by `evalCtx`, returning an error if not successful.
+// This function should only be used for testing. For general-purpose code,
+// please use SessionAccessor.SetSessionVar instead.
 func SetSessionVariable(
 	ctx context.Context, evalCtx eval.Context, varName, varValue string,
 ) (err error) {

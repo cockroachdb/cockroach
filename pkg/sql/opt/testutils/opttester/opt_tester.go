@@ -518,6 +518,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //  - skip-race: skips the test if the race detector is enabled.
 //
+//  - set: sets the session setting for the given SQL statement, for example:
+//         build set=prefer_lookup_joins_for_fks=true
+//         DELETE FROM parent WHERE p = 3
+//         ----
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -867,7 +872,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		for _, val := range arg.Vals {
 			s := strings.Split(val, "=")
 			if len(s) != 2 {
-				return errors.Errorf("Expected both session variable name and value for set command")
+				return errors.Errorf("Expected both session variable name and value for set flag")
 			}
 			err := sql.SetSessionVariable(f.ot.ctx, f.ot.evalCtx, s[0], s[1])
 			if err != nil {
