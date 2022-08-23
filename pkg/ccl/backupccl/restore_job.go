@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/collectionfactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -2076,9 +2077,10 @@ func (r *restoreResumer) OnFailOrCancel(
 	logJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	if err := sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	if err := execCfg.CollectionFactory.TxnWithExecutor(ctx, execCfg.DB, p.SessionData(), func(
+		ctx context.Context, txn *kv.Txn, descriptors collectionfactory.DescsCollection, ie sqlutil.InternalExecutor,
 	) error {
+		descsCol := descriptors.(*descs.Collection)
 		for _, tenant := range details.Tenants {
 			tenant.State = descpb.TenantInfo_DROP
 			// This is already a job so no need to spin up a gc job for the tenant;
