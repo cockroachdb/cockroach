@@ -45,6 +45,7 @@ type testImpl struct {
 	spec *registry.TestSpec
 
 	cockroach          string // path to main cockroach binary
+	cockroachShort     string // path to cockroach-short binary compiled with --crdb_test build tag
 	deprecatedWorkload string // path to workload binary
 	debug              bool   // whether the test is in debug mode.
 	// buildVersion is the version of the Cockroach binary that the test will run
@@ -106,6 +107,10 @@ func (t *testImpl) BuildVersion() *version.Version {
 
 func (t *testImpl) Cockroach() string {
 	return t.cockroach
+}
+
+func (t *testImpl) CockroachShort() string {
+	return t.cockroachShort
 }
 
 func (t *testImpl) DeprecatedWorkload() string {
