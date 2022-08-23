@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,6 +28,7 @@ import (
 
 func TestPublicSchemaMigrationWithCreateChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86635, "skipping to bump min version")
 	ctx := context.Background()
 
 	knobs := base.TestingKnobs{
