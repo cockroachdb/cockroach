@@ -315,6 +315,7 @@ JEST_DEPS = DEPENDENCIES + [
 
 jest_test(
     name = "jest",
+    size = "enormous",
     data = JEST_DEPS,
     templated_args = [
         "--runInBand",
