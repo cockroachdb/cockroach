@@ -64,7 +64,7 @@ func (a avgTmplInfo) AssignDivInt64(targetElem, leftElem, rightElem, _, _, _ str
 		return fmt.Sprintf(`
 			%s.SetInt64(%s)
 			if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
-				colexecerror.InternalError(err)
+				colexecerror.ExpectedError(err)
 			}`,
 			targetElem, rightElem, targetElem, leftElem, targetElem,
 		)
