@@ -113,7 +113,8 @@ func (m *Manager) WaitForNoVersion(
 
 // WaitForOneVersion returns once there are no unexpired leases on the
 // previous version of the descriptor. It returns the descriptor with the
-// current version.
+// current version, though note that it will not be validated or hydrated.
+//
 // After returning there can only be versions of the descriptor >= to the
 // returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
@@ -122,10 +123,24 @@ func (m *Manager) WaitForOneVersion(
 	ctx context.Context, id descpb.ID, retryOpts retry.Options,
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
-		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			version := m.storage.settings.Version.ActiveVersion(ctx)
-			desc, err = catkv.MustGetDescriptorByID(ctx, version, m.Codec(), txn, nil /* vd */, id, catalog.Any)
-			return err
+			// Use the lower-level GetCrossReferencedDescriptorsForValidation to avoid
+			// performing cross-descriptor validation while waiting for leases to
+			// drain. On the one hand, it's somewhat expensive. More importantly,
+			// there are valid cases where descriptors can be removed or made invalid,
+			// and we don't particularly care about them when using this method.
+			got, err := catkv.GetCrossReferencedDescriptorsForValidation(
+				ctx, version, m.Codec(), txn, []descpb.ID{id},
+			)
+			if err != nil {
+				return err
+			}
+			if len(got) == 0 || got[0] == nil {
+				return errors.Wrapf(catalog.ErrDescriptorNotFound, "waiting for leases to drain on descriptor %d", id)
+			}
+			desc = got[0]
+			return nil
 		}); err != nil {
 			return nil, err
 		}
