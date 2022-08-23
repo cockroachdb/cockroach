@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -894,4 +897,188 @@ func TestHydrateCatalog(t *testing.T) {
 			return nil
 		}))
 	})
+}
+
+// TestSyntheticDescriptors ensures that synthetic descriptors show up in
+// AllDescriptors and its peers and that the act of adding synthetic
+// descriptors clears the current modifications.
+func TestSyntheticDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "CREATE SCHEMA sc")
+	tdb.Exec(t, `CREATE DATABASE "otherDB"`)
+
+	var tabID, scID, curDatabaseID, otherDatabaseID descpb.ID
+	tdb.QueryRow(t, "SELECT 'foo'::regclass::int").Scan(&tabID)
+	tdb.QueryRow(t, `
+SELECT id
+  FROM system.namespace
+ WHERE name = 'sc' AND "parentSchemaID" = 0`).Scan(&scID)
+	tdb.QueryRow(t, `
+SELECT id
+  FROM system.namespace
+ WHERE name = current_database() AND "parentID" = 0`).Scan(&curDatabaseID)
+	tdb.QueryRow(t, `
+SELECT id
+  FROM system.namespace
+ WHERE name = 'otherDB' AND "parentID" = 0`).Scan(&otherDatabaseID)
+
+	ec := s.ExecutorConfig().(sql.ExecutorConfig)
+	codec := ec.Codec
+	descIDGen := ec.DescIDGenerator
+	require.NoError(t, s.CollectionFactory().(*descs.CollectionFactory).TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
+		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {
+			flags := tree.ObjectLookupFlagsWithRequired()
+			flags.IncludeDropped = true
+			tabImm, err := descriptors.GetImmutableTableByID(
+				ctx, txn, id, flags,
+			)
+			require.NoError(t, err)
+			require.Equal(t, expName, tabImm.GetName())
+			f(t, tabImm)
+			all, err := descriptors.GetAllDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, tabImm, all.LookupDescriptorEntry(tabImm.GetID()))
+			return nil
+		}
+
+		// Modify the table to have the name "bar", synthetically
+		{
+			tab, err := descriptors.GetMutableTableByID(
+				ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
+			)
+			if err != nil {
+				return err
+			}
+			tab.Name = "bar"
+			tab.SetDropped()
+			descriptors.AddSyntheticDescriptor(tab)
+		}
+		// Retrieve the immutable descriptor, find the name "bar"
+		if err := checkImmutableDescriptor(tabID, "bar", func(t *testing.T, desc catalog.Descriptor) {
+			require.True(t, desc.Dropped())
+			require.False(t, desc.Public())
+		}); err != nil {
+			return err
+		}
+		// Attempt to retrieve the mutable descriptor, validate the error.
+		_, err := descriptors.GetMutableTableByID(
+			ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.Regexp(t, `attempted mutable access of synthetic descriptor \d+`, err)
+		descriptors.SetSyntheticDescriptors(nil)
+		// Retrieve the mutable descriptor, find the unmodified "foo".
+		// Then modify the name to "baz" and write it.
+		{
+			tabMut, err := descriptors.GetMutableTableByID(
+				ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
+			)
+			require.NoError(t, err)
+			require.Equal(t, "foo", tabMut.GetName())
+			tabMut.Name = "baz"
+			if _, err := txn.Del(ctx, catalogkeys.MakeObjectNameKey(
+				codec,
+				tabMut.GetParentID(), tabMut.GetParentSchemaID(), tabMut.OriginalName(),
+			)); err != nil {
+				return err
+			}
+			if err := txn.Put(ctx, catalogkeys.MakeObjectNameKey(
+				codec,
+				tabMut.GetParentID(), tabMut.GetParentSchemaID(), tabMut.GetName(),
+			), int64(tabMut.ID)); err != nil {
+				return err
+			}
+			const kvTrace = false
+			if err := descriptors.WriteDesc(ctx, kvTrace, tabMut, txn); err != nil {
+				return err
+			}
+		}
+		// Retrieve the immutable descriptor, find the modified "baz".
+		if err := checkImmutableDescriptor(tabID, "baz", func(t *testing.T, desc catalog.Descriptor) {
+			require.True(t, desc.Public())
+		}); err != nil {
+			return err
+		}
+
+		// Make a synthetic database descriptor, ensure it shows up in all
+		// descriptors.
+		newDBID, err := descIDGen.GenerateUniqueDescID(ctx)
+		require.NoError(t, err)
+		newDB := dbdesc.NewInitial(newDBID, "newDB", username.RootUserName())
+		descriptors.AddSyntheticDescriptor(newDB)
+
+		_, curDatabase, err := descriptors.GetImmutableDatabaseByID(ctx, txn, curDatabaseID, tree.DatabaseLookupFlags{})
+		if err != nil {
+			return err
+		}
+
+		// Check that AllDatabaseDescriptors includes the synthetic database.
+		{
+			allDBs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			require.NoError(t, err)
+			require.ElementsMatch(t, []string{
+				"system", "postgres", "defaultdb", "newDB", "otherDB",
+			}, getDatabaseNames(allDBs))
+		}
+
+		{
+			defaultDBSchemaNames, err := descriptors.GetSchemasForDatabase(ctx, txn, curDatabase)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, []string{"public", "sc"},
+				getSchemaNames(defaultDBSchemaNames))
+		}
+
+		// Rename a schema synthetically, make sure that that propagates.
+		scDesc, err := descriptors.GetMutableSchemaByID(ctx, txn, scID, tree.SchemaLookupFlags{})
+		if err != nil {
+			return err
+		}
+		scDesc.SetName("sc2")
+		newSchema, _, err := sql.CreateSchemaDescriptorWithPrivileges(ctx, descIDGen,
+			curDatabase, "newSC", username.RootUserName(), username.RootUserName(), true)
+		require.NoError(t, err)
+		descriptors.AddSyntheticDescriptor(newSchema)
+
+		{
+			defaultDBSchemaNames, err := descriptors.GetSchemasForDatabase(ctx, txn, curDatabase)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, []string{"newSC", "public", "sc2"},
+				getSchemaNames(defaultDBSchemaNames))
+		}
+		return nil
+	}))
+}
+
+func getSchemaNames(defaultDBSchemaNames map[descpb.ID]string) []string {
+	var names []string
+	for _, name := range defaultDBSchemaNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func getDatabaseNames(allDBs []catalog.DatabaseDescriptor) []string {
+	var names []string
+	for _, db := range allDBs {
+		names = append(names, db.GetName())
+	}
+	return names
 }

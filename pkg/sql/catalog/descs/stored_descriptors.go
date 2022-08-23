@@ -12,6 +12,7 @@ package descs
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -364,7 +365,7 @@ func (sd *storedDescriptors) getUnvalidatedByName(
 // getAllDescriptors looks up all descriptors. The first call must go to KV.
 // Subsequent calls can retrieve descriptors from the cache.
 func (sd *storedDescriptors) getAllDescriptors(
-	ctx context.Context, txn *kv.Txn, version clusterversion.ClusterVersion,
+	ctx context.Context, txn *kv.Txn, version clusterversion.ClusterVersion, synthetic *nstree.Map,
 ) (nstree.Catalog, error) {
 	if !sd.hasAllDescriptors {
 		c, err := catkv.GetCatalogUnvalidated(ctx, sd.codec, txn)
@@ -397,6 +398,9 @@ func (sd *storedDescriptors) getAllDescriptors(
 	// catalog and invalidating it upon descriptor check-out.
 	cat := nstree.MutableCatalog{}
 	if err := sd.descs.IterateByID(func(entry catalog.NameEntry) error {
+		if syn := synthetic.GetByID(entry.GetID()); syn != nil {
+			return nil
+		}
 		var desc catalog.Descriptor
 		sDesc := entry.(*storedDescriptor)
 		if sDesc.storedDescriptorStatus == checkedOutAtLeastOnce {
@@ -409,6 +413,10 @@ func (sd *storedDescriptors) getAllDescriptors(
 	}); err != nil {
 		return nstree.Catalog{}, err
 	}
+	_ = synthetic.IterateByID(func(entry catalog.NameEntry) error {
+		cat.UpsertDescriptorEntry(entry.(catalog.Descriptor))
+		return nil
+	})
 	// There could be tables with user defined types that need hydrating.
 	if err := hydrateCatalog(ctx, cat.Catalog); err != nil {
 		// If we ran into an error hydrating the types, that means that we
@@ -427,6 +435,7 @@ func (sd *storedDescriptors) getAllDatabaseDescriptors(
 	version clusterversion.ClusterVersion,
 	txn *kv.Txn,
 	vd validate.ValidationDereferencer,
+	synthetic *nstree.Map,
 ) ([]catalog.DatabaseDescriptor, error) {
 	if !sd.hasAllDescriptors && !sd.hasAllDatabaseDescriptors {
 		c, err := catkv.GetAllDatabaseDescriptorIDs(ctx, txn, sd.codec)
@@ -450,6 +459,9 @@ func (sd *storedDescriptors) getAllDatabaseDescriptors(
 	}
 	var allDatabaseDescriptors []catalog.DatabaseDescriptor
 	if err := sd.descs.IterateDatabasesByName(func(entry catalog.NameEntry) error {
+		if syn := synthetic.GetByID(entry.GetID()); syn != nil {
+			return nil
+		}
 		sDesc := entry.(*storedDescriptor)
 		var dbDesc catalog.DatabaseDescriptor
 		if sDesc.storedDescriptorStatus == checkedOutAtLeastOnce {
@@ -462,11 +474,30 @@ func (sd *storedDescriptors) getAllDatabaseDescriptors(
 	}); err != nil {
 		return nil, err
 	}
+	var haveSynthetic bool
+	if err := synthetic.IterateDatabasesByName(func(entry catalog.NameEntry) error {
+		haveSynthetic = true
+		dbDesc, ok := entry.(catalog.DatabaseDescriptor)
+		if !ok {
+			return errors.AssertionFailedf("found synthetic descriptor %d (%s) "+
+				"without parents which is not a database descriptor, got %T",
+				entry.GetID(), entry.GetName(), entry)
+		}
+		allDatabaseDescriptors = append(allDatabaseDescriptors, dbDesc)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if haveSynthetic {
+		sort.Slice(allDatabaseDescriptors, func(i, j int) bool {
+			return allDatabaseDescriptors[i].GetID() < allDatabaseDescriptors[j].GetID()
+		})
+	}
 	return allDatabaseDescriptors, nil
 }
 
 func (sd *storedDescriptors) getSchemasForDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, synthetic *nstree.Map,
 ) (map[descpb.ID]string, error) {
 	if sd.allSchemasForDatabase == nil {
 		sd.allSchemasForDatabase = make(map[descpb.ID]map[descpb.ID]string)
@@ -485,6 +516,9 @@ func (sd *storedDescriptors) getSchemasForDatabase(
 	}
 	schemasForDatabase := sd.allSchemasForDatabase[db.GetID()]
 	if err := sd.descs.IterateSchemasForDatabaseByName(db.GetID(), func(entry catalog.NameEntry) error {
+		if syn := synthetic.GetByID(entry.GetID()); syn != nil {
+			return nil
+		}
 		sDesc := entry.(*storedDescriptor)
 		var schemaDesc catalog.Descriptor
 		if sDesc.storedDescriptorStatus == checkedOutAtLeastOnce {
@@ -493,6 +527,20 @@ func (sd *storedDescriptors) getSchemasForDatabase(
 			schemaDesc = sDesc.immutable
 		}
 		schemasForDatabase[schemaDesc.GetID()] = schemaDesc.GetName()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if err := synthetic.IterateSchemasForDatabaseByName(db.GetID(), func(
+		entry catalog.NameEntry,
+	) error {
+		scDesc, ok := entry.(catalog.SchemaDescriptor)
+		if !ok {
+			return errors.AssertionFailedf("found synthetic descriptor %d (%d, %s) "+
+				"without parent schema which is not a database descriptor, got %T",
+				entry.GetID(), entry.GetParentSchemaID(), entry.GetName(), entry)
+		}
+		schemasForDatabase[db.GetID()] = scDesc.GetName()
 		return nil
 	}); err != nil {
 		return nil, err
@@ -729,4 +777,21 @@ func (sd *storedDescriptors) maybeAddSystemDatabase() {
 		sd.addedSystemDatabase = true
 		sd.descs.Upsert(systemStoredDatabase, false /* skipNameMap */)
 	}
+}
+
+// resetDescriptor resets the state of a mutable descriptor back to the
+// current state of the immutable descriptor. This is used when we add a
+// synthetic descriptor to the collection.
+func (sd *storedDescriptors) resetDescriptor(desc catalog.Descriptor) {
+	got := sd.descs.GetByID(desc.GetID())
+	d, ok := got.(*storedDescriptor)
+	if !ok || d.mutable != desc || d.immutable == nil {
+		return
+	}
+	if d.mutable.IsNew() {
+		d.mutable = d.immutable.NewBuilder().BuildCreatedMutable()
+	} else {
+		d.mutable = d.immutable.NewBuilder().BuildExistingMutable()
+	}
+
 }
