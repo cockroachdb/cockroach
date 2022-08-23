@@ -52,7 +52,6 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_errors//extgrpc",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
