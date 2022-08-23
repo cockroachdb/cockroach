@@ -232,6 +232,8 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 		{1, 1, 1, 0, writeSize, 0},
 		{4, 4, 4, 0, 4 * writeSize, 0},
 		{64, 64, 64, 0, 64 * writeSize, 0},
+		{111, 111, 111, 0, 111 * writeSize, 0},
+		{1234, 1234, 1234, 0, 1234 * writeSize, 0},
 	}
 
 	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
@@ -308,9 +310,12 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
-			assertGreaterThanInDelta(t, testCase.expectedWBPS, writeBytesAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
-
+			// NB: We assert that the written bytes is greater than the write
+			// batch request size. However the size multiplication factor,
+			// varies between 3 and 5 so we instead assert that it is greater
+			// than the logical bytes.
+			require.GreaterOrEqual(t, writeBytesAfter, testCase.expectedWBPS)
 			return nil
 		})
 	}
