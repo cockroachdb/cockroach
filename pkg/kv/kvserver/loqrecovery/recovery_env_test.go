@@ -213,7 +213,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 		}
 
 		sl := stateloader.Make(replica.RangeID)
-		if _, err := sl.Save(ctx, eng, replicaState); err != nil {
+		if _, err := sl.Save(ctx, eng, replicaState, true /* gcHintsEnabled */); err != nil {
 			t.Fatalf("failed to save raft replica state into store: %v", err)
 		}
 		if err := sl.SetHardState(ctx, eng, hardState); err != nil {

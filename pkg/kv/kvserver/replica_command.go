@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -228,14 +229,17 @@ func splitTxnAttempt(
 		return err
 	}
 
+	gcHintsAllowed := store.ClusterSettings().Version.IsActive(ctx, clusterversion.GCHintInReplicaState)
+
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
 	b.AddRawRequest(&roachpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
-				LeftDesc:  *leftDesc,
-				RightDesc: *rightDesc,
+				LeftDesc:    *leftDesc,
+				RightDesc:   *rightDesc,
+				WriteGCHint: gcHintsAllowed,
 			},
 		},
 	})
@@ -749,6 +753,8 @@ func (r *Replica) AdminMerge(
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
 
+		gcHintsAllowed := r.ClusterSettings().Version.IsActive(ctx, clusterversion.GCHintInReplicaState)
+
 		// Successful subsume, so we're guaranteed that the right-hand range will
 		// not serve another request unless this transaction aborts. End the
 		// transaction manually in order to provide a merge trigger.
@@ -763,6 +769,7 @@ func (r *Replica) AdminMerge(
 					FreezeStart:          rhsSnapshotRes.FreezeStart,
 					RightClosedTimestamp: rhsSnapshotRes.ClosedTimestamp,
 					RightReadSummary:     rhsSnapshotRes.ReadSummary,
+					WriteGCHint:          gcHintsAllowed,
 				},
 			},
 		})
