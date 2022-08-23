@@ -186,6 +186,7 @@
 <tr><td><code>sql.stats.persisted_rows.max</code></td><td>integer</td><td><code>1000000</code></td><td>maximum number of rows of statement and transaction statistics that will be persisted in the system tables</td></tr>
 <tr><td><code>sql.stats.post_events.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, an event is logged for every CREATE STATISTICS job</td></tr>
 <tr><td><code>sql.stats.response.max</code></td><td>integer</td><td><code>20000</code></td><td>the maximum number of statements and transaction stats returned in a CombinedStatements request</td></tr>
+<tr><td><code>sql.stats.response.show_internal.enabled</code></td><td>boolean</td><td><code>false</code></td><td>controls if statistics for internal executions should be returned by the CombinedStatements endpoint. This endpoint is used to display statistics on the Statement and Transaction fingerprint pages under SQL Activity</td></tr>
 <tr><td><code>sql.telemetry.query_sampling.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when set to true, executed queries will emit an event on the telemetry logging channel</td></tr>
 <tr><td><code>sql.temp_object_cleaner.cleanup_interval</code></td><td>duration</td><td><code>30m0s</code></td><td>how often to clean up orphaned temporary objects</td></tr>
 <tr><td><code>sql.temp_object_cleaner.wait_interval</code></td><td>duration</td><td><code>30m0s</code></td><td>how long after creation a temporary object will be cleaned up</td></tr>

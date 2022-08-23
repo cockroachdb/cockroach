@@ -170,6 +170,7 @@ sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics c
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables
 sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request
+sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements endpoint. This endpoint is used to display statistics on the Statement and Transaction fingerprint pages under SQL Activity
 sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up

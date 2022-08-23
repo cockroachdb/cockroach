@@ -40,9 +40,13 @@ export const getTrxAppFilterOptions = (
   prefix: string,
 ): string[] => {
   const uniqueAppNames = new Set(
-    transactions
-      .filter(t => !t.stats_data.app.startsWith(prefix))
-      .map(t => (t.stats_data.app ? t.stats_data.app : unset)),
+    transactions.map(t =>
+      t.stats_data.app
+        ? t.stats_data.app.startsWith(prefix)
+          ? prefix
+          : t.stats_data.app
+        : unset,
+    ),
   );
 
   return Array.from(uniqueAppNames).sort();
