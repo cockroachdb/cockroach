@@ -191,7 +191,20 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 		b.underfill = 0
 	}
 
-	return b.curBuf.append(key, value)
+	// At this point we've flushed the buffer which implies that the slab and
+	// entries slices have been emptied out. Furthermore, we may have nil'ed out
+	// the slab and entries slices if we identified the allocation as skewed in
+	// the condition above. In both cases we should always be able to fit the key
+	// and value, so this call is to ensure proper reallocation and memory
+	// monitoring.
+	if b.curBuf.fits(ctx, need, sz(b.maxBufferLimit()), &b.memAcc) {
+		return b.curBuf.append(key, value)
+	}
+	// If we are unable to fit this key and value even after flushing then we
+	// should error since we do not have enough headroom to buffer this single
+	// key+value.
+	return errors.Newf("failed to fit KV of size %d in the buffering adder, "+
+		"current max buffer limit is %d", need, b.maxBufferLimit())
 }
 
 func (b *BufferingAdder) bufferedKeys() int {

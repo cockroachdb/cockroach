@@ -38,8 +38,8 @@ func TestAddBatched(t *testing.T) {
 	t.Run("batch=default", func(t *testing.T) {
 		runTestImport(t, 32<<20)
 	})
-	t.Run("batch=1", func(t *testing.T) {
-		runTestImport(t, 1)
+	t.Run("batch=smaller", func(t *testing.T) {
+		runTestImport(t, 1<<20)
 	})
 }
 
