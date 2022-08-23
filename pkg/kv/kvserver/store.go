@@ -3012,9 +3012,6 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		if wps, dur := r.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
-		} else {
-			replCtx := r.AnnotateCtx(ctx)
-			log.Infof(replCtx, "xxx: dur=%s wps=%f", dur, wps)
 		}
 		rankingsAccumulator.addReplica(replicaWithStats{
 			repl: r,
