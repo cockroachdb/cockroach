@@ -1688,6 +1688,13 @@ func TestTenantLogic_show_fingerprints(
 	runLogicTest(t, "show_fingerprints")
 }
 
+func TestTenantLogic_show_grants_on_virtual_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_grants_on_virtual_table")
+}
+
 func TestTenantLogic_show_grants_synthetic(
 	t *testing.T,
 ) {
