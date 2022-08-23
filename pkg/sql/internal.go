@@ -331,14 +331,14 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// let it inherit the descriptor collection, schema change job records
 	// and job collections from the caller.
 	postSetupFn := func(ex *connExecutor) {
-		if ie.extraTxnState != nil {
-			if ie.extraTxnState.descCollection != nil {
-				ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
-				ex.extraTxnState.fromOuterTxn = true
-				ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
-				ex.extraTxnState.jobs = ie.extraTxnState.jobs
-				ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
-			}
+		if ie.extraTxnState != nil && ie.extraTxnState.descCollection != nil {
+			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
+			ex.extraTxnState.fromOuterTxn = true
+			ex.extraTxnState.shouldResetSyntheticDescriptors = len(ie.syntheticDescriptors) > 0
+			ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
+			ex.extraTxnState.jobs = ie.extraTxnState.jobs
+			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
+			ex.initPlanner(ctx, &ex.planner)
 		}
 	}
 
@@ -393,7 +393,9 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// Modify the Collection to match the parent executor's Collection.
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
-	ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+	if len(ie.syntheticDescriptors) > 0 {
+		ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+	}
 	return ex, err
 }
 
@@ -1218,6 +1220,7 @@ type extraTxnState struct {
 	jobs                   *jobsCollection
 	schemaChangeJobRecords map[descpb.ID]*jobs.Record
 	schemaChangerState     *SchemaChangerState
+	createdAsPartOfPlanner bool
 }
 
 // InternalExecutorFactory stored information needed to construct a new
