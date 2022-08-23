@@ -15,6 +15,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1282,13 +1283,18 @@ func SendEmptySnapshot(
 		return err
 	}
 
+	supportsGCHints := st.Version.IsActive(ctx, clusterversion.GCHintInReplicaState)
 	// SendEmptySnapshot is only used by the cockroach debug reset-quorum tool.
 	// It is experimental and unlikely to be used in cluster versions that are
-	// older than AddRaftAppliedIndexTermMigration. We do not want the cluster
-	// version to fully dictate the value of the writeAppliedIndexTerm
-	// parameter, since if this node's view of the version is stale we could
-	// regress to a state before the migration. Instead, we return an error if
-	// the cluster version is old.
+	// older than GCHintInReplicaState. We do not want the cluster version to
+	// fully dictate the value of the supportsGCHints parameter, since if this
+	// node's view of the version is stale we could regress to a state before the
+	// migration. Instead, we return an error if the cluster version is old.
+	if !supportsGCHints {
+		return errors.Errorf("cluster version is too old %s",
+			st.Version.ActiveVersionOrEmpty(ctx))
+	}
+
 	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
@@ -1298,7 +1304,8 @@ func SendEmptySnapshot(
 		hlc.Timestamp{}, // gcThreshold
 		roachpb.GCHint{},
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
-		true, /* 22.1:AddRaftAppliedIndexTermMigration */
+		true,            /* 22.1:AddRaftAppliedIndexTermMigration */
+		supportsGCHints, /* 22.2: GCHintInReplicaState */
 	)
 	if err != nil {
 		return err
