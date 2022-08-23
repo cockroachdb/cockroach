@@ -2184,29 +2184,6 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return nil, errSysCfgUnavailable
 	}
 
-	// We need a version gate here before switching over to the span configs
-	// infrastructure. In a mixed-version cluster we need to wait for
-	// the host tenant to have fully populated `system.span_configurations`
-	// (read: reconciled) at least once before using it as a view for all
-	// split/config decisions.
-	_ = clusterversion.EnsureSpanConfigReconciliation
-	//
-	// We also want to ensure that the KVSubscriber on each store is at least as
-	// up-to-date as some full reconciliation timestamp.
-	_ = clusterversion.EnsureSpanConfigSubscription
-	//
-	// Without a version gate, it would be possible for a replica on a
-	// new-binary-server to apply the static fallback config (assuming no
-	// entries in `system.span_configurations`), in violation of explicit
-	// configs directly set by the user. Though unlikely, it's also possible for
-	// us to merge all ranges into a single one -- with no entries in
-	// system.span_configurations, the infrastructure can erroneously conclude
-	// that there are zero split points.
-	//
-	// We achieve all this through a three-step migration process, culminating
-	// in the following cluster version gate:
-	_ = clusterversion.EnableSpanConfigStore
-
 	if s.cfg.SpanConfigsDisabled ||
 		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
 		s.TestingKnobs().UseSystemConfigSpanForQueues {
@@ -2395,8 +2372,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		}
 
 		if s.cfg.SpanConfigsDisabled ||
-			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-			!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) {
+			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
 			repl.SetSpanConfig(conf)
 		}
 
