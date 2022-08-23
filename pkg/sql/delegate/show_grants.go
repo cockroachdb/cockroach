@@ -61,6 +61,21 @@ SELECT type_catalog AS database_name,
        privilege_type,
        is_grantable::boolean
 FROM "".information_schema.type_privileges`
+	const systemPrivilegeQuery = `
+SELECT * FROM (
+SELECT a.username AS grantee,
+       privilege,
+       a.privilege
+       IN (
+          SELECT unnest(grant_options)
+            FROM system.privileges
+           WHERE username = a.username
+        ) AS grantable
+  FROM (
+        SELECT username, unnest(privileges) AS privilege
+          FROM system.privileges
+       ) AS a)
+`
 
 	var source bytes.Buffer
 	var cond bytes.Buffer
@@ -178,6 +193,10 @@ FROM "".information_schema.type_privileges`
 				strings.Join(params, ","),
 			)
 		}
+	} else if n.Targets != nil && n.Targets.System {
+		orderBy = "1,2,3"
+		fmt.Fprint(&source, systemPrivilegeQuery)
+		cond.WriteString(`WHERE true`)
 	} else {
 		orderBy = "1,2,3,4,5"
 
