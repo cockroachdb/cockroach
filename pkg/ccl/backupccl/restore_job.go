@@ -2109,9 +2109,12 @@ func (r *restoreResumer) OnFailOrCancel(
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		// The temporary system table descriptors should already have been dropped
 		// in `dropDescriptors` but we still need to drop the temporary system db.
-		if err := execCfg.DB.Txn(ctx, r.cleanupTempSystemTables); err != nil {
+		if err := r.cleanupTempSystemTables(ctx, nil); err != nil {
 			return err
 		}
+		//if err := execCfg.DB.Txn(ctx, r.cleanupTempSystemTables); err != nil {
+		//	return err
+		//}
 	}
 
 	// Emit to the event log that the job has completed reverting.
