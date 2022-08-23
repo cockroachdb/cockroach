@@ -326,7 +326,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats sqlstats.ApplicationStats,
-) (ex *connExecutor, err error) {
+) (ex *connExecutor, _ error) {
 	// If an internal executor is run with a not-nil txn, we may want to
 	// let it inherit the descriptor collection, schema change job records
 	// and job collections from the caller.
@@ -394,9 +394,11 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
 	if len(ie.syntheticDescriptors) > 0 {
-		ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+		if err := ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors); err != nil {
+			return ex, err
+		}
 	}
-	return ex, err
+	return ex, nil
 }
 
 type ieIteratorResult struct {
