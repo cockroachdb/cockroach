@@ -50,8 +50,8 @@ var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.insights.anomaly_detection.enabled",
 	"enable per-fingerprint latency recording and anomaly detection",
-	false,
-)
+	true,
+).WithPublic()
 
 // AnomalyDetectionLatencyThreshold sets the bar above which we consider
 // statement executions worth inspecting for slow execution. A statement's
@@ -63,9 +63,9 @@ var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"sql.insights.anomaly_detection.latency_threshold",
 	"statements must surpass this threshold to trigger anomaly detection and identification",
-	100*time.Millisecond,
+	50*time.Millisecond,
 	settings.NonNegativeDuration,
-)
+).WithPublic()
 
 // AnomalyDetectionMemoryLimit restricts the overall memory available for
 // tracking per-statement execution latencies. When changing this setting, keep
@@ -76,7 +76,7 @@ var AnomalyDetectionMemoryLimit = settings.RegisterByteSizeSetting(
 	"sql.insights.anomaly_detection.memory_limit",
 	"the maximum amount of memory allowed for tracking statement latencies",
 	1024*1024,
-)
+).WithPublic()
 
 // HighRetryCountThreshold sets the number of times a slow statement must have
 // been retried to be marked as having a high retry count.
