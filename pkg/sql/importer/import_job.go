@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1482,10 +1483,7 @@ func (r *importResumer) dropTables(
 		return nil
 	}
 
-	// useDeleteRange indicates that the cluster has been finalized to 22.1 and
-	// can use MVCC compatible DeleteRange to with range tombstones during an import
-	// rollback.
-	useDeleteRange := r.settings.Version.IsActive(ctx, clusterversion.MVCCRangeTombstones)
+	useDeleteRange := storage.CanUseMVCCRangeTombstones(ctx, r.settings)
 
 	var tableWasEmpty bool
 	var intoTable catalog.TableDescriptor
