@@ -181,27 +181,26 @@ export const selectApps = createSelector(
     }
 
     let sawBlank = false;
+    let sawInternal = false;
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
-        const isNotInternalApp =
-          state.data.internal_app_name_prefix &&
-          !statement.key.key_data.app.startsWith(
-            state.data.internal_app_name_prefix,
-          );
         if (
-          state.data.internal_app_name_prefix == undefined ||
-          isNotInternalApp
+          state.data.internal_app_name_prefix &&
+          statement.key.key_data.app.startsWith(
+            state.data.internal_app_name_prefix,
+          )
         ) {
-          if (statement.key.key_data.app) {
-            apps[statement.key.key_data.app] = true;
-          } else {
-            sawBlank = true;
-          }
+          sawInternal = true;
+        } else if (statement.key.key_data.app) {
+          apps[statement.key.key_data.app] = true;
+        } else {
+          sawBlank = true;
         }
       },
     );
     return []
+      .concat(sawInternal ? [state.data.internal_app_name_prefix] : [])
       .concat(sawBlank ? [unset] : [])
       .concat(Object.keys(apps))
       .sort();
