@@ -36,18 +36,13 @@ type InsightQuery<ResponseColumnType, State> = {
   ) => State[];
 };
 
-// The only insight we currently report is "High Wait Time", which is the insight
-// associated with each row in the crdb_internal.transaction_contention_events table.
-export const HIGH_WAIT_CONTENTION_THRESHOLD = moment.duration(
-  200,
-  "milliseconds",
-);
-
 type TransactionContentionResponseColumns = {
   blocking_txn_id: string;
+  blocking_txn_fingerprint_id: string;
   blocking_queries: string[];
   collection_ts: string;
   contention_duration: string;
+  threshold: string;
   app_name: string;
 };
 
@@ -60,9 +55,11 @@ function transactionContentionResultsToEventState(
     if (!results[key]) {
       results[key] = {
         executionID: row.blocking_txn_id,
+        fingerprintID: row.blocking_txn_fingerprint_id,
         queries: row.blocking_queries,
         startTime: moment(row.collection_ts),
         elapsedTime: moment.duration(row.contention_duration).asMilliseconds(),
+        contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
         application: row.app_name,
         insightName: highWaitTimeQuery.name,
         execType: InsightExecEnum.TRANSACTION,
@@ -78,28 +75,33 @@ const highWaitTimeQuery: InsightQuery<
   InsightEventState
 > = {
   name: InsightNameEnum.highWaitTime,
-  query: `SELECT
-            blocking_txn_id,
-            blocking_queries,
-            collection_ts,
-            contention_duration,
-            app_name
-          FROM
-            crdb_internal.transaction_contention_events AS tce
-              JOIN (
-              SELECT
-                transaction_fingerprint_id,
-                app_name,
-                array_agg(metadata ->> 'query') AS blocking_queries
-              FROM
-                crdb_internal.statement_statistics
-              GROUP BY
-                transaction_fingerprint_id,
-                app_name
-            ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
-          WHERE
-            contention_duration > INTERVAL '${HIGH_WAIT_CONTENTION_THRESHOLD.toISOString()}'
-  `,
+  query: `SELECT * FROM (SELECT
+    blocking_txn_id,
+    blocking_txn_fingerprint_id,
+    blocking_queries,
+    collection_ts,
+    contention_duration,
+    app_name,
+    row_number() over (
+    PARTITION BY
+    blocking_txn_fingerprint_id
+    ORDER BY collection_ts DESC ) AS rank,
+    threshold
+  FROM
+    (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
+    crdb_internal.transaction_contention_events AS tce
+      JOIN (
+      SELECT
+        transaction_fingerprint_id,
+        app_name,
+        array_agg(metadata ->> 'query') AS blocking_queries
+      FROM
+        crdb_internal.statement_statistics
+      GROUP BY
+        transaction_fingerprint_id,
+        app_name
+    ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id 
+    WHERE contention_duration > threshold) WHERE rank=1`,
   toState: transactionContentionResultsToEventState,
 };
 
@@ -140,6 +142,7 @@ type TransactionContentionDetailsResponseColumns = {
   blocking_queries: string[];
   collection_ts: string;
   contention_duration: string;
+  threshold: string;
   app_name: string;
   blocking_txn_fingerprint_id: string;
   waiting_txn_id: string;
@@ -164,6 +167,7 @@ function transactionContentionDetailsResultsToEventState(
         queries: row.blocking_queries,
         startTime: moment(row.collection_ts),
         elapsedTime: moment.duration(row.contention_duration).asMilliseconds(),
+        contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
         application: row.app_name,
         fingerprintID: row.blocking_txn_fingerprint_id,
         waitingExecutionID: row.waiting_txn_id,
@@ -205,8 +209,10 @@ const highWaitTimeDetailsQuery = (
   index_name,
   app_name, 
   blocking_queries, 
-  waiting_queries 
-FROM 
+  waiting_queries,
+  threshold
+FROM
+  (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
   crdb_internal.transaction_contention_events AS tce 
   LEFT OUTER JOIN crdb_internal.ranges AS ranges ON tce.contending_key BETWEEN ranges.start_key 
   AND ranges.end_key 

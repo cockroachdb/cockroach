@@ -42,6 +42,12 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>
       sort: (item: InsightEvent) => item.executionID,
     },
     {
+      name: "fingerprintID",
+      title: insightsTableTitles.fingerprintID(execType),
+      cell: (item: InsightEvent) => String(item.fingerprintID),
+      sort: (item: InsightEvent) => item.fingerprintID,
+    },
+    {
       name: "query",
       title: insightsTableTitles.query(execType),
       cell: (item: InsightEvent) =>

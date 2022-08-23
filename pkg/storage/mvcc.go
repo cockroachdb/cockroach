@@ -2579,7 +2579,7 @@ func MVCCClearTimeRange(
 			}
 		}
 
-		clearRangeKeys = MVCCRangeKeyStack{}
+		clearRangeKeys.Clear()
 		return nil
 	}
 
@@ -2620,10 +2620,6 @@ func MVCCClearTimeRange(
 	// restoredMeta becomes the latest version of this MVCC key.
 	var restoredMeta enginepb.MVCCMetadata
 
-	// rangeKeyStart contains the start bound of the current range key, if any.
-	// This allows skipping range keys that we've already seen and processed.
-	var rangeKeyStart roachpb.Key
-
 	iter.SeekGE(MVCCKey{Key: key})
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -2636,10 +2632,12 @@ func MVCCClearTimeRange(
 
 		// If we encounter a new range key stack, flush the previous range keys (if
 		// any) and buffer these for clearing.
-		if bounds := iter.RangeBounds(); !bounds.Key.Equal(rangeKeyStart) {
-			rangeKeyStart = append(rangeKeyStart[:0], bounds.Key...)
-
-			if err := flushRangeKeys(nil); err != nil {
+		//
+		// NB: RangeKeyChangedIgnoringTime() may fire on a hidden range key outside
+		// of the time bounds, because of NextIgnoringTime(), in which case
+		// HasPointAndRange() will return false,false.
+		if iter.RangeKeyChangedIgnoringTime() {
+			if err := flushRangeKeys(nil); err != nil { // empties clearRangeKeys
 				return nil, err
 			}
 			if batchSize >= maxBatchSize || batchByteSize >= maxBatchByteSize {
@@ -2647,17 +2645,19 @@ func MVCCClearTimeRange(
 				break
 			}
 
-			// TODO(erikgrinaker): Consider a Clone() variant that can reuse a buffer.
-			clearRangeKeys = iter.RangeKeys().Clone()
+			hasPoint, hasRange := iter.HasPointAndRange()
+			if hasRange {
+				iter.RangeKeys().CloneInto(&clearRangeKeys)
+			}
+			if !hasPoint {
+				// If we landed on a bare range tombstone, we need to check if it revealed
+				// anything below the time bounds as well.
+				iter.NextIgnoringTime()
+				continue
+			}
 		}
 
-		if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
-			// If we landed on a bare range tombstone, we need to check if it revealed
-			// anything below the time bounds as well.
-			iter.NextIgnoringTime()
-			continue
-		}
-
+		// Process point keys.
 		vRaw := iter.UnsafeValue()
 		v, err := DecodeMVCCValue(vRaw)
 		if err != nil {
@@ -2677,14 +2677,17 @@ func MVCCClearTimeRange(
 
 				// If there was an MVCC range tombstone between this version and the
 				// cleared key, then we didn't restore it after all, but we must still
-				// adjust the stats for the range tombstone.
+				// adjust the stats for the range tombstone. RangeKeysIgnoringTime()
+				// is cheap, so we don't need any caching here.
 				if !restoredMeta.Deleted {
-					if v, ok := iter.RangeKeysIgnoringTime().FirstAbove(k.Timestamp); ok {
-						if v.Timestamp.LessEq(clearedMeta.Timestamp.ToTimestamp()) {
-							restoredMeta.Deleted = true
-							restoredMeta.KeyBytes = 0
-							restoredMeta.ValBytes = 0
-							restoredMeta.Timestamp = v.Timestamp.ToLegacyTimestamp()
+					if rangeKeys := iter.RangeKeysIgnoringTime(); !rangeKeys.IsEmpty() {
+						if v, ok := rangeKeys.FirstAbove(k.Timestamp); ok {
+							if v.Timestamp.LessEq(clearedMeta.Timestamp.ToTimestamp()) {
+								restoredMeta.Deleted = true
+								restoredMeta.KeyBytes = 0
+								restoredMeta.ValBytes = 0
+								restoredMeta.Timestamp = v.Timestamp.ToLegacyTimestamp()
+							}
 						}
 					}
 				}
@@ -2719,7 +2722,8 @@ func MVCCClearTimeRange(
 			if v, ok := clearRangeKeys.FirstAbove(k.Timestamp); ok {
 				if !clearedMetaKey.Key.Equal(k.Key) ||
 					!clearedMeta.Timestamp.ToTimestamp().LessEq(v.Timestamp) {
-					if !iter.RangeKeysIgnoringTime().HasBetween(k.Timestamp, v.Timestamp.Prev()) {
+					rangeKeys := iter.RangeKeysIgnoringTime()
+					if rangeKeys.IsEmpty() || !rangeKeys.HasBetween(k.Timestamp, v.Timestamp.Prev()) {
 						ms.Add(enginepb.MVCCStats{
 							LastUpdateNanos: v.Timestamp.WallTime,
 							LiveCount:       1,

@@ -39,11 +39,11 @@ type hypotheticalIndex struct {
 	// suffixKeyColsOrdList contains all implicit column ordinals. Implicit
 	// columns are columns that are in the table's primary key but are not already
 	// in the index columns.
-	suffixKeyColsOrdList []int
+	suffixKeyCols []cat.IndexColumn
 
-	// storedColsOrdSet contains all the table's column ordinals that are not key
+	// storedCols contains all the table's column ordinals that are not key
 	// columns (neither index columns nor suffix key columns).
-	storedColsOrdSet util.FastIntSet
+	storedCols []cat.IndexColumn
 
 	// inverted indicates if an index is inverted.
 	inverted bool
@@ -73,19 +73,23 @@ func (hi *hypotheticalIndex) init(
 	}
 
 	// Build the suffix key column list.
-	suffixKeyColsSet := hi.tab.primaryKeyColsOrdSet.Difference(colsOrdSet)
-	hi.suffixKeyColsOrdList = suffixKeyColsSet.Ordered()
-
-	// Build the stored cols set.
-	keyColsOrds := colsOrdSet.Union(suffixKeyColsSet)
-	var tableOrdinalSet util.FastIntSet
-	for i := 0; i < tab.ColumnCount(); i++ {
-		tableOrdinalSet.Add(i)
+	pkColOrds := hi.tab.primaryKeyColsOrdSet
+	hi.suffixKeyCols = make([]cat.IndexColumn, 0, pkColOrds.Len())
+	for i, ok := pkColOrds.Next(0); ok; i, ok = pkColOrds.Next(i + 1) {
+		if !colsOrdSet.Contains(i) {
+			hi.suffixKeyCols = append(hi.suffixKeyCols, cat.IndexColumn{Column: hi.tab.Column(i)})
+		}
 	}
 
-	// Only add stored columns for non-inverted indexes.
+	// Build the stored cols for non-inverted indexes only.
 	if !inverted {
-		hi.storedColsOrdSet = tableOrdinalSet.Difference(keyColsOrds)
+		keyColsOrds := colsOrdSet.Union(pkColOrds)
+		hi.storedCols = make([]cat.IndexColumn, 0, tab.ColumnCount())
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			if !keyColsOrds.Contains(i) {
+				hi.storedCols = append(hi.storedCols, cat.IndexColumn{Column: hi.tab.Column(i)})
+			}
+		}
 	}
 }
 
@@ -120,7 +124,7 @@ func (hi *hypotheticalIndex) IsNotVisible() bool {
 
 // ColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) ColumnCount() int {
-	return len(hi.cols) + len(hi.suffixKeyColsOrdList) + hi.storedColsOrdSet.Len()
+	return len(hi.cols) + len(hi.suffixKeyCols) + len(hi.storedCols)
 }
 
 // ExplicitColumnCount is part of the cat.Index interface.
@@ -133,7 +137,7 @@ func (hi *hypotheticalIndex) KeyColumnCount() int {
 	// Since hypothetical indexes are not unique, we build a key by including all
 	// the index key columns and then appending any primary key columns that are
 	// not already included.
-	return len(hi.cols) + len(hi.suffixKeyColsOrdList)
+	return len(hi.cols) + len(hi.suffixKeyCols)
 }
 
 // LaxKeyColumnCount is part of the cat.Index interface.
@@ -153,20 +157,17 @@ func (hi *hypotheticalIndex) NonInvertedPrefixColumnCount() int {
 
 // Column is part of the cat.Index interface.
 func (hi *hypotheticalIndex) Column(i int) cat.IndexColumn {
-	if i >= len(hi.cols) {
-		numKeyCols := len(hi.cols) + len(hi.suffixKeyColsOrdList)
-		if i < numKeyCols {
-			// The column is an added suffix primary key column.
-			suffixColOrd := hi.suffixKeyColsOrdList[i-len(hi.cols)]
-			return cat.IndexColumn{Column: hi.tab.Column(suffixColOrd)}
-		}
-		// The column is a stored column.
-		storedColsList := hi.storedColsOrdSet.Ordered()
-		storedColOrd := storedColsList[i-numKeyCols]
-		return cat.IndexColumn{Column: hi.tab.Column(storedColOrd)}
+	if i < len(hi.cols) {
+		// The column is an index column.
+		return hi.cols[i]
 	}
-	// The column is an index column.
-	return hi.cols[i]
+	numKeyCols := len(hi.cols) + len(hi.suffixKeyCols)
+	if i < numKeyCols {
+		// The column is an implicit key column.
+		return hi.suffixKeyCols[i-len(hi.cols)]
+	}
+	// The column is a stored column.
+	return hi.storedCols[i-numKeyCols]
 }
 
 // InvertedColumn is part of the cat.Index interface.

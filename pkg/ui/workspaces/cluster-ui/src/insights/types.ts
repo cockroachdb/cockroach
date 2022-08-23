@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { Moment } from "moment";
-import { HIGH_WAIT_CONTENTION_THRESHOLD } from "../api";
 import { Filters } from "../queryFilter";
 
 export enum InsightNameEnum {
@@ -23,10 +22,12 @@ export enum InsightExecEnum {
 
 export type InsightEvent = {
   executionID: string;
+  fingerprintID: string;
   queries: string[];
   insights: Insight[];
   startTime: Moment;
   elapsedTime: number;
+  contentionThreshold: number;
   application: string;
   execType: InsightExecEnum;
 };
@@ -37,6 +38,7 @@ export type InsightEventDetails = {
   insights: Insight[];
   startTime: Moment;
   elapsedTime: number;
+  contentionThreshold: number;
   application: string;
   fingerprintID: string;
   waitingExecutionID: string;
@@ -68,9 +70,9 @@ export type EventExecution = {
 
 const highWaitTimeInsight = (
   execType: InsightExecEnum = InsightExecEnum.TRANSACTION,
+  latencyThreshold: number,
 ): Insight => {
-  const threshold = HIGH_WAIT_CONTENTION_THRESHOLD.asMilliseconds();
-  const description = `This ${execType} has been waiting for more than ${threshold}ms on other ${execType}s to execute.`;
+  const description = `This ${execType} has been waiting for more than ${latencyThreshold}ms on other ${execType}s to execute.`;
   return {
     name: InsightNameEnum.highWaitTime,
     label: "High Wait Time",
