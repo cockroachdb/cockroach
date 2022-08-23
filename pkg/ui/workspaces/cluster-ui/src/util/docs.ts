@@ -94,6 +94,7 @@ export const enterpriseLicensing =
   "https://www.cockroachlabs.com/docs/stable/enterprise-licensing.html";
 
 // Explain plan
+export const explainPlan = docsURL("explain.html");
 export const distSql = docsURL("architecture/sql-layer.html#distsql");
 export const vectorizedExecution = docsURL(
   "vectorized-execution.html#configuring-vectorized-execution",
