@@ -1,0 +1,31 @@
+parse
+SHOW SYSTEM GRANTS
+----
+SHOW SYSTEM GRANTS
+SHOW SYSTEM GRANTS -- fully parenthesized
+SHOW SYSTEM GRANTS -- literals removed
+SHOW SYSTEM GRANTS -- identifiers removed
+
+parse
+SHOW SYSTEM GRANTS FOR foo
+----
+SHOW SYSTEM GRANTS FOR foo
+SHOW SYSTEM GRANTS FOR foo -- fully parenthesized
+SHOW SYSTEM GRANTS FOR foo -- literals removed
+SHOW SYSTEM GRANTS FOR _ -- identifiers removed
+
+parse
+SHOW SYSTEM GRANTS FOR foo, bar
+----
+SHOW SYSTEM GRANTS FOR foo, bar
+SHOW SYSTEM GRANTS FOR foo, bar -- fully parenthesized
+SHOW SYSTEM GRANTS FOR foo, bar -- literals removed
+SHOW SYSTEM GRANTS FOR _, _ -- identifiers removed
+
+parse
+SHOW SYSTEM GRANTS FOR "foO", "bAr"
+----
+SHOW SYSTEM GRANTS FOR "foO", "bAr"
+SHOW SYSTEM GRANTS FOR "foO", "bAr" -- fully parenthesized
+SHOW SYSTEM GRANTS FOR "foO", "bAr" -- literals removed
+SHOW SYSTEM GRANTS FOR _, _ -- identifiers removed

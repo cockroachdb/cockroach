@@ -1,0 +1,62 @@
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+statement ok
+GRANT SYSTEM EXTERNALCONNECTION TO testuser WITH GRANT OPTION
+
+query TTB
+SHOW SYSTEM GRANTS
+----
+testuser  EXTERNALCONNECTION    true
+testuser  MODIFYCLUSTERSETTING  false
+testuser  VIEWACTIVITY          false
+
+query TTB
+SHOW SYSTEM GRANTS FOR testuser
+----
+testuser  EXTERNALCONNECTION    true
+testuser  MODIFYCLUSTERSETTING  false
+testuser  VIEWACTIVITY          false
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+query TTB
+SHOW SYSTEM GRANTS
+----
+testuser  EXTERNALCONNECTION    true
+testuser  MODIFYCLUSTERSETTING  false
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser2 WITH GRANT OPTION
+
+statement ok
+GRANT SYSTEM EXTERNALCONNECTION TO testuser2
+
+query TTB
+SHOW SYSTEM GRANTS
+----
+testuser   EXTERNALCONNECTION    true
+testuser   MODIFYCLUSTERSETTING  false
+testuser2  EXTERNALCONNECTION    false
+testuser2  VIEWACTIVITY          true
+
+query TTB
+SHOW SYSTEM GRANTS FOR testuser2
+----
+testuser2  EXTERNALCONNECTION  false
+testuser2  VIEWACTIVITY        true
+
+query TTB
+SHOW SYSTEM GRANTS FOR testuser, testuser2
+----
+testuser   EXTERNALCONNECTION    true
+testuser   MODIFYCLUSTERSETTING  false
+testuser2  EXTERNALCONNECTION    false
+testuser2  VIEWACTIVITY          true
