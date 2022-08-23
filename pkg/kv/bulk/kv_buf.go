@@ -13,8 +13,8 @@ package bulk
 import (
 	"bytes"
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -117,6 +117,7 @@ func (b *kvBuf) fits(ctx context.Context, toAdd sz, maxUsed sz, acc *mon.BoundAc
 		return false
 	}
 	if err := acc.Grow(ctx, int64(needed)); err != nil {
+		log.Warningf(ctx, "failed to grow buffering adders' memory account: %+v", err)
 		return false
 	}
 	// We've reserved the additional space so re-alloc and copy over existing data
@@ -131,6 +132,8 @@ func (b *kvBuf) fits(ctx context.Context, toAdd sz, maxUsed sz, acc *mon.BoundAc
 		b.slab = make([]byte, len(b.slab), sz(cap(b.slab))+slabGrow)
 		copy(b.slab, old)
 	}
+	log.Infof(ctx, "amaru: new size: %d, growing by %d, size we are reporting %d",
+		acc.Used(), int64(needed), b.MemSize())
 	return true
 }
 
@@ -188,7 +191,7 @@ func (b *kvBuf) Swap(i, j int) {
 	b.entries[i], b.entries[j] = b.entries[j], b.entries[i]
 }
 
-func (b kvBuf) MemSize() sz {
+func (b *kvBuf) MemSize() sz {
 	return sz(cap(b.entries)<<entrySizeShift) + sz(cap(b.slab))
 }
 
