@@ -1789,3 +1789,70 @@ inner-join (cross)
  │         └── t1.k:1 = (~t1.k:1) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
  └── filters
       └── t1.s:4 ~ t2.s:10 [outer=(4,10), immutable, constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
+
+# The following tests check for not visible indexes.
+exec-ddl
+CREATE INDEX ON t1 (k) STORING (i, f, s) NOT VISIBLE
+----
+
+# If the index recommendation stores the same columns as a not visible index,
+# recommendation.
+index-recommendations
+SELECT * FROM t1, t2 WHERE t1.s ~ t2.s AND ~t1.k = t1.k
+----
+index recommendations: 1
+1. type: alter index visibility
+   SQL command: ALTER INDEX t1@t1_k_idx VISIBLE;
+--
+Optimal Plan.
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3 s:4!null k:8 i:9 s:10!null geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
+ ├── immutable
+ ├── cost: 5657.48872
+ ├── scan t2
+ │    ├── columns: t2.k:8 t2.i:9 t2.s:10 geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
+ │    └── cost: 1236.12
+ ├── select
+ │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
+ │    ├── immutable
+ │    ├── cost: 1103.05
+ │    ├── scan t1@_hyp_2
+ │    │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
+ │    │    ├── constraint: /1/5: (/NULL - ]
+ │    │    └── cost: 1093.12
+ │    └── filters
+ │         └── t1.k:1 = (~t1.k:1) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+ └── filters
+      └── t1.s:4 ~ t2.s:10 [outer=(4,10), immutable, constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
+
+exec-ddl
+CREATE INDEX ON t1 (k) STORING (i, f, s) VISIBLE
+----
+
+# If there exists both not visible and visible indexes storing same column as
+# index rec, no index recommendation.
+index-recommendations
+SELECT * FROM t1, t2 WHERE t1.s ~ t2.s AND ~t1.k = t1.k
+----
+No index recommendations.
+--
+Optimal Plan.
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3 s:4!null k:8 i:9 s:10!null geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
+ ├── immutable
+ ├── cost: 5657.48872
+ ├── scan t2
+ │    ├── columns: t2.k:8 t2.i:9 t2.s:10 geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
+ │    └── cost: 1236.12
+ ├── select
+ │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
+ │    ├── immutable
+ │    ├── cost: 1103.05
+ │    ├── scan t1@t1_k_idx1
+ │    │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
+ │    │    ├── constraint: /1/5: (/NULL - ]
+ │    │    └── cost: 1093.12
+ │    └── filters
+ │         └── t1.k:1 = (~t1.k:1) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+ └── filters
+      └── t1.s:4 ~ t2.s:10 [outer=(4,10), immutable, constraints=(/4: (/NULL - ]; /10: (/NULL - ])]

@@ -99,6 +99,12 @@ func (irs *IndexRecommendationSet) pruneIndexRecommendations() {
 				cmd.init(existingIndex.Name(), hypIndex.tab.Name(), indexCols, storing, existingIndex.IsUnique(), hypIndex.IsInverted())
 				indexRec.outputCommand = &cmd
 				updatedIndexRecs = append(updatedIndexRecs, indexRec)
+			} else if existingIndex.IsNotVisible() {
+				// If existingIndex is redundant but NotVisible, alter index ... visible
+				var cmd alterIndexCmd
+				cmd.init(existingIndex.Name(), hypIndex.tab.Name())
+				indexRec.outputCommand = &cmd
+				updatedIndexRecs = append(updatedIndexRecs, indexRec)
 			}
 			// Remove redundant recommendations.
 		}
@@ -335,8 +341,13 @@ type dropIndexCmd struct {
 	create createIndexCmd
 }
 
+type alterIndexCmd struct {
+	tree tree.AlterIndexVisible
+}
+
 var _ outputCommand = &createIndexCmd{}
 var _ outputCommand = &dropIndexCmd{}
+var _ outputCommand = &alterIndexCmd{}
 
 func (createCmd *createIndexCmd) init(
 	tableName tree.Name,
@@ -373,12 +384,26 @@ func (dropCmd *dropIndexCmd) init(
 	dropCmd.create.init(tableName, columns, storing, unique, inverted)
 }
 
+func (alterCmd *alterIndexCmd) init(indexName tree.Name, tableName tree.Name) {
+	// Index recommendation type 3: Represent alter index ... visible
+	alterCmd.tree = tree.AlterIndexVisible{
+		Index: tree.TableIndexName{
+			Table: *tree.NewUnqualifiedTableName(tableName),
+			Index: tree.UnrestrictedName(indexName),
+		},
+	}
+}
+
 func (createCmd *createIndexCmd) RecTypeStr() string {
 	return "index creation"
 }
 
 func (dropCmd *dropIndexCmd) RecTypeStr() string {
 	return "index replacement"
+}
+
+func (alterCmd *alterIndexCmd) RecTypeStr() string {
+	return "alter index visibility"
 }
 
 func (createCmd *createIndexCmd) OutputCmd() string {
@@ -391,4 +416,8 @@ func (dropCmd *dropIndexCmd) OutputCmd() string {
 
 func (createCmd *createIndexCmd) ToString() string {
 	return createCmd.tree.String() + ";"
+}
+
+func (alterCmd *alterIndexCmd) OutputCmd() string {
+	return "   SQL command: " + alterCmd.tree.String() + ";"
 }

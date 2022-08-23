@@ -62,7 +62,7 @@ func BuildOptAndHypTableMaps(
 			// exists.
 			// TODO(wenyihu6): We should still consider not visible indexes and make a
 			// recommendation to mark the index as visible if it is chosen.
-			if !inverted || hypTable.existingRedundantIndex(&hypIndex) == nil {
+			if !(inverted && hypTable.redundantHypotheticalIndex(&hypIndex)) {
 				hypIndexes = append(hypIndexes, hypIndex)
 			}
 		}
@@ -138,39 +138,64 @@ func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ht.hypotheticalIndexes[i-existingIndexCount]
 }
 
+// checkSameExplicitCols is a helper function that checks if the given existing
+// index stores the same explicit columns as the given hypIndex. If so, it
+// returns true.
+func checkSameExplicitCols(
+	existingIndex cat.Index, hypIndex *hypotheticalIndex, indexCols []cat.IndexColumn,
+) bool {
+	if existingIndex.ExplicitColumnCount() != len(indexCols) {
+		return false
+	}
+	for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
+		indexCol := existingIndex.Column(j)
+		// If the columns are inverted, compare the source columns. Otherwise,
+		// compare the columns directly.
+		if hypIndex.IsInverted() && existingIndex.IsInverted() && j == m-1 {
+			if indexCol.InvertedSourceColumnOrdinal() != indexCols[j].InvertedSourceColumnOrdinal() {
+				return false
+			}
+		} else if indexCol != indexCols[j] {
+			return false
+		}
+	}
+	return true
+}
+
+// existingRedundantIndex checks whether a visible index with the same explicit
+// columns as the index argument is present in the original table
+// (HypotheticalTable's embedded table).
+func (ht *HypotheticalTable) redundantHypotheticalIndex(index *hypotheticalIndex) bool {
+	if existingRedundantIndex := ht.existingRedundantIndex(index); existingRedundantIndex != nil {
+		return !existingRedundantIndex.IsNotVisible()
+	}
+	return false
+}
+
 // existingRedundantIndex checks whether an index with the same explicit columns
 // as the index argument is present in the HypotheticalTable's embedded table.
-// If so, it returns the first instance of such an existing index (that is not a
-// partial index). Existing partial indexes and hypothetical standard indexes
-// are not considered redundant. Otherwise, the function returns nil.
+// 1. It first tries to find such an existing visible index (that is not partial
+// index). If found, it returns the first instance of such indexes. 2. If such an
+// existing visible index does not exist, it then tries to find such an existing
+// not visible index (that is not partial index). If found, it returns the first
+// instance of such indexes. 3. If none is found, the function return nil.
 func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
+	var existingIndexButNotVisible cat.Index
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
 		indexCols := index.cols
 		existingIndex := ht.Table.Index(i)
-		if existingIndex.ExplicitColumnCount() != len(indexCols) {
-			continue
-		}
-		indexExists := true
-		for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
-			indexCol := existingIndex.Column(j)
-			// If the columns are inverted, compare the source columns. Otherwise,
-			// compare the columns directly.
-			if index.IsInverted() && existingIndex.IsInverted() && j == m-1 {
-				if indexCol.InvertedSourceColumnOrdinal() != indexCols[j].InvertedSourceColumnOrdinal() {
-					indexExists = false
-					break
-				}
-			} else if indexCol != indexCols[j] {
-				indexExists = false
-				break
-			}
-		}
+		indexExists := checkSameExplicitCols(existingIndex, index, indexCols)
 		_, isPartialIndex := existingIndex.Predicate()
 		if indexExists && !isPartialIndex {
-			return existingIndex
+			if !existingIndex.IsNotVisible() {
+				return existingIndex
+			}
+			if existingIndexButNotVisible == nil {
+				existingIndexButNotVisible = existingIndex
+			}
 		}
 	}
-	return nil
+	return existingIndexButNotVisible
 }
 
 // addInvertedCol adds an inverted column corresponding to a source column to
