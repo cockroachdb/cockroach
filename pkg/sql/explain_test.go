@@ -410,3 +410,62 @@ func getMVCCStats(t *testing.T, r *sqlutils.SQLRunner, query string) (foundSteps
 	}
 	return foundSteps, foundSeeks
 }
+
+// TestExplainAnalyzeWarnings verifies that warnings are printed whenever the
+// estimated number of rows to be scanned differs significantly from the actual
+// row count.
+func TestExplainAnalyzeWarnings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+
+	// Disable auto stats collection so that it doesn't interfere.
+	r.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	r.Exec(t, "CREATE TABLE warnings (k INT PRIMARY KEY)")
+	// Insert 1000 rows into the table - this will be the actual row count. The
+	// "acceptable" range for the estimates when the warning is not added is
+	// [450, 2100].
+	r.Exec(t, "INSERT INTO warnings SELECT generate_series(1, 1000)")
+
+	for i, tc := range []struct {
+		estimatedRowCount int
+		expectWarning     bool
+	}{
+		{estimatedRowCount: 0, expectWarning: true},
+		{estimatedRowCount: 100, expectWarning: true},
+		{estimatedRowCount: 449, expectWarning: true},
+		{estimatedRowCount: 450, expectWarning: false},
+		{estimatedRowCount: 1000, expectWarning: false},
+		{estimatedRowCount: 2000, expectWarning: false},
+		{estimatedRowCount: 2100, expectWarning: false},
+		{estimatedRowCount: 2101, expectWarning: true},
+		{estimatedRowCount: 10000, expectWarning: true},
+	} {
+		// Inject fake stats.
+		r.Exec(t, fmt.Sprintf(
+			`ALTER TABLE warnings INJECT STATISTICS '[{
+                            "columns": ["k"],
+                            "created_at": "2022-08-23 00:00:0%[2]d.000000",
+                            "distinct_count": %[1]d,
+                            "name": "__auto__",
+                            "null_count": 0,
+                            "row_count": %[1]d
+			}]'`, tc.estimatedRowCount, i,
+		))
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE SELECT * FROM warnings")
+		var warningFound bool
+		for _, row := range rows {
+			if len(row) > 1 {
+				t.Fatalf("unexpectedly more than a single string is returned in %v", row)
+			}
+			if strings.HasPrefix(row[0], "WARNING") {
+				warningFound = true
+			}
+		}
+		assert.Equal(t, tc.expectWarning, warningFound, fmt.Sprintf("failed for estimated row count %d", tc.estimatedRowCount))
+	}
+}

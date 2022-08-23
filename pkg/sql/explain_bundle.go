@@ -35,7 +35,7 @@ import (
 )
 
 // setExplainBundleResult sets the result of an EXPLAIN ANALYZE (DEBUG)
-// statement.
+// statement. warnings will be printed out as is in the CLI.
 //
 // Note: bundle.insert() must have been called.
 //
@@ -45,6 +45,7 @@ func setExplainBundleResult(
 	res RestrictedCommandResult,
 	bundle diagnosticsBundle,
 	execCfg *ExecutorConfig,
+	warnings []string,
 ) error {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
 	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
@@ -76,6 +77,10 @@ func setExplainBundleResult(
 			fmt.Sprintf("SQL shell: \\statement-diag download %d", bundle.diagID),
 			fmt.Sprintf("Command line: cockroach statement-diag download %d", bundle.diagID),
 		}
+	}
+	if len(warnings) > 0 {
+		text = append(text, "")
+		text = append(text, warnings...)
 	}
 
 	if err := res.Err(); err != nil {

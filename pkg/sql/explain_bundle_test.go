@@ -151,6 +151,37 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
+
+	t.Run("with warnings", func(t *testing.T) {
+		// Disable auto stats so that they don't interfere.
+		r.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
+		defer r.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true;")
+		r.Exec(t, "CREATE TABLE warnings (k INT PRIMARY KEY);")
+		// Insert fake stats so that the estimate for the scan is inaccurate.
+		r.Exec(t, `ALTER TABLE warnings INJECT STATISTICS '[{
+                            "columns": ["k"],
+                            "created_at": "2022-08-23 00:00:00.000000",
+                            "distinct_count": 10000,
+                            "name": "__auto__",
+                            "null_count": 0,
+                            "row_count": 10000
+                        }]'`,
+		)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM warnings")
+		// Check that we have a warning about inaccurate stats.
+		var warningFound bool
+		for _, row := range rows {
+			if len(row) > 1 {
+				t.Fatalf("unexpectedly more than a single string is returned in %v", row)
+			}
+			if strings.HasPrefix(row[0], "WARNING") {
+				warningFound = true
+			}
+		}
+		if !warningFound {
+			t.Fatalf("warning not found in %v", rows)
+		}
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
