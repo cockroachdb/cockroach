@@ -10,9 +10,12 @@ package changefeedccl
 
 import (
 	"context"
+	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -20,9 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +37,11 @@ type eventContext struct {
 	updated, mvcc hlc.Timestamp
 	// topic is set to the string to be included if TopicInValue is true
 	topic string
+}
+
+type eventConsumer interface {
+	ConsumeEvent(ctx context.Context, ev kvevent.Event) error
+	Close() error
 }
 
 type kvEventToRowConsumer struct {
@@ -47,6 +58,72 @@ type kvEventToRowConsumer struct {
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
+}
+
+func newEventConsumer(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	feed ChangefeedConfig,
+	frontier *span.Frontier,
+	cursor hlc.Timestamp,
+	sink EventSink,
+	details ChangefeedConfig,
+	expr execinfrapb.Expression,
+	knobs TestingKnobs,
+) (eventConsumer, EventSink, error) {
+	cfg := flowCtx.Cfg
+	evalCtx := flowCtx.EvalCtx
+
+	makeConsumer := func(s EventSink) (eventConsumer, error) {
+		var err error
+		encodingOpts, err := feed.Opts.GetEncodingOptions()
+		if err != nil {
+			return nil, err
+		}
+		encoder, err := getEncoder(encodingOpts, feed.Targets)
+		if err != nil {
+			return nil, err
+		}
+
+		var topicNamer *TopicNamer
+		if encodingOpts.TopicInValue {
+			topicNamer, err = MakeTopicNamer(feed.Targets)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return newKVEventToRowConsumer(ctx, cfg, evalCtx, frontier, cursor, s,
+			encoder, details, expr, knobs, topicNamer)
+	}
+
+	if changefeedbase.EventConsumerMaxWorkers.Get(&cfg.Settings.SV) == 0 {
+		c, err := makeConsumer(sink)
+		if err != nil {
+			return nil, nil, err
+		}
+		return c, sink, err
+	}
+
+	ss := &safeSink{wrapped: sink}
+	c := &parallelEventConsumer{
+		g:          ctxgroup.WithContext(ctx),
+		spawnAfter: timeutil.NewTimer(),
+		eventCh:    make(chan kvevent.Event, 128),
+		termCh:     make(chan struct{}),
+		doneCh:     make(chan struct{}),
+		makeConsumer: func() (eventConsumer, error) {
+			return makeConsumer(ss)
+		},
+		maxWorkers: func() int64 {
+			return changefeedbase.EventConsumerMaxWorkers.Get(&cfg.Settings.SV)
+		},
+	}
+
+	if err := c.trySpawn(); err != nil {
+		return nil, nil, err
+	}
+	return c, ss, nil
 }
 
 func newKVEventToRowConsumer(
@@ -241,4 +318,125 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
 	}
 	return nil
+}
+
+func (c *kvEventToRowConsumer) Close() error {
+	return nil
+}
+
+type parallelEventConsumer struct {
+	g            ctxgroup.Group
+	spawnAfter   *timeutil.Timer
+	eventCh      chan kvevent.Event
+	termCh       chan struct{}
+	doneCh       chan struct{}
+	maxWorkers   func() int64
+	makeConsumer func() (eventConsumer, error)
+
+	mu struct {
+		syncutil.Mutex
+		numWorkers int64
+		termErr    error
+	}
+}
+
+var _ eventConsumer = (*parallelEventConsumer)(nil)
+
+const spawnWorkerDelay = 50 * time.Millisecond
+
+func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+	c.spawnAfter.Reset(spawnWorkerDelay)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.termCh:
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			return c.mu.termErr
+		case c.eventCh <- ev:
+			return nil
+		case <-c.spawnAfter.C:
+			c.spawnAfter.Read = true
+			if err := c.trySpawn(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (c *parallelEventConsumer) trySpawn() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.mu.numWorkers > c.maxWorkers() {
+		return nil
+	}
+
+	c.mu.numWorkers++
+	c.g.GoCtx(c.workerLoop)
+	return nil
+}
+
+// jitter adds a small jitter in the given duration.
+func idleAfter() time.Duration {
+	const idleAfter = 2 * time.Minute
+	const jitter = 1.0 / 6.0
+	jitterFraction := 1 + (2*rand.Float64()-1)*jitter // 1 + [-1/6, +1/6)
+	return time.Duration(float64(idleAfter) * jitterFraction)
+}
+
+func (c *parallelEventConsumer) workerLoop(ctx context.Context) error {
+	consumer, err := c.makeConsumer()
+	if err != nil {
+		return c.setWorkerError(err)
+	}
+
+	idleTimer := timeutil.NewTimer()
+	defer idleTimer.Stop()
+
+	for {
+		idleTimer.Reset(idleAfter())
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.doneCh:
+			return nil
+		case e := <-c.eventCh:
+			if err := consumer.ConsumeEvent(ctx, e); err != nil {
+				return c.setWorkerError(err)
+			}
+		case <-idleTimer.C:
+			idleTimer.Read = true
+
+			c.mu.Lock()
+			shutDown := c.mu.numWorkers > 1
+			if shutDown {
+				c.mu.numWorkers--
+			}
+			c.mu.Unlock()
+			if shutDown {
+				return nil
+			}
+		}
+	}
+}
+
+func (c *parallelEventConsumer) setWorkerError(err error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.termErr == nil {
+		c.mu.termErr = err
+		close(c.termCh)
+	}
+
+	return err
+}
+
+func (c *parallelEventConsumer) Close() error {
+	defer c.spawnAfter.Stop()
+	close(c.doneCh)
+	return c.g.Wait()
 }
