@@ -67,8 +67,10 @@ func TestAnyDetector(t *testing.T) {
 }
 
 func TestLatencyQuantileDetector(t *testing.T) {
-	t.Run("enabled false by default", func(t *testing.T) {
-		d := newAnomalyDetector(cluster.MakeTestingClusterSettings(), NewMetrics())
+	t.Run("enabled false by cluster setting", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		d := newAnomalyDetector(st, NewMetrics())
+		AnomalyDetectionEnabled.Override(context.Background(), &st.SV, false)
 		require.False(t, d.enabled())
 	})
 

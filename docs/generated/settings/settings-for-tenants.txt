@@ -232,6 +232,9 @@ sql.distsql.max_running_flows	integer	-128	the value - when positive - used as i
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage
 sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable
 sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable
+sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection
+sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification
+sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies
 sql.insights.execution_insights_capacity	integer	1000	the size of the per-node store of execution insights
 sql.insights.high_retry_count.threshold	integer	10	the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem
 sql.insights.latency_threshold	duration	100ms	amount of time after which an executing statement is considered slow. Use 0 to disable.
