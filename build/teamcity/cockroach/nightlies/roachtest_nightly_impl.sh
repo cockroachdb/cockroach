@@ -24,6 +24,7 @@ build/teamcity-roachtest-invoke.sh \
   --cluster-id="${TC_BUILD_ID}" \
   --build-tag="${BUILD_TAG}" \
   --cockroach="${PWD}/bin/cockroach" \
+  --cockroach-short="${PWD}/bin/cockroach-short-ea" \
   --artifacts=/artifacts \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN}" \
