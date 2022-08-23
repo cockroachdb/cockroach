@@ -1071,9 +1071,12 @@ func splitTriggerHelper(
 		if gcThreshold.IsEmpty() {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
-		gcHint, err := sl.LoadGCHint(ctx, batch)
-		if err != nil {
-			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCHint")
+		gcHint := &roachpb.GCHint{}
+		if split.WriteGCHint {
+			gcHint, err = sl.LoadGCHint(ctx, batch)
+			if err != nil {
+				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCHint")
+			}
 		}
 
 		// Writing the initial state is subtle since this also seeds the Raft
@@ -1126,6 +1129,7 @@ func splitTriggerHelper(
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*gcThreshold, *gcHint, replicaVersion, writeRaftAppliedIndexTerm,
+			split.WriteGCHint,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
@@ -1244,11 +1248,14 @@ func mergeTrigger(
 			return result.Result{}, err
 		}
 		if lhsHint.Merge(rhsHint) {
-			if err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint); err != nil {
+			updated, err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint, merge.WriteGCHint)
+			if err != nil {
 				return result.Result{}, err
 			}
-			pd.Replicated.State = &kvserverpb.ReplicaState{
-				GCHint: lhsHint,
+			if updated {
+				pd.Replicated.State = &kvserverpb.ReplicaState{
+					GCHint: lhsHint,
+				}
 			}
 		}
 	}

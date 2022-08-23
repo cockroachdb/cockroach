@@ -294,6 +294,9 @@ const (
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
 	NoNonMVCCAddSSTable
+	// GCHintInReplicaState adds GC hint to replica state. When this version is
+	// enabled, replicas will populate GC hint and update them when necessary.
+	GCHintInReplicaState
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -488,6 +491,11 @@ var versionsSingleton = keyedVersions{
 		Key:     NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
 	},
+	{
+		Key:     GCHintInReplicaState,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
