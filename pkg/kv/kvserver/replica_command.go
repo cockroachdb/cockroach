@@ -413,8 +413,8 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
-		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightRangeID, reason, extra)
+	log.Infof(ctx, "initiating a split of this range at key %v [r%d] (%s)%s",
+		splitKey, rightRangeID, reason, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc, reason)
