@@ -99,7 +99,7 @@ BACKUP TO 'userfile://defaultdb.public.baz/baz';
 ----
 job paused at pausepoint
 
-exec-sql expect-error-regex='userfile://defaultdb.public.baz/baz already contains a `BACKUP-LOCK`'
+exec-sql expect-error-regex=(userfile://defaultdb.public.baz/baz already contains a `BACKUP-LOCK`)
 BACKUP TO 'userfile://defaultdb.public.baz/baz';
 ----
 regex matches error

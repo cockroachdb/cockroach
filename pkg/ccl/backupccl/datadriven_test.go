@@ -243,133 +243,130 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 // commands. The test files are in testdata/backup-restore. The following
 // syntax is provided:
 //
-// - "new-server name=<name> [args]"
-//   Create a new server with the input name.
+//   - "new-server name=<name> [args]"
+//     Create a new server with the input name.
 //
-//   Supported arguments:
+//     Supported arguments:
 //
-//   + share-io-dir: can be specified to share an IO directory with an existing
-//   server. This is useful when restoring from a backup taken in another
-//   server.
+//   - share-io-dir: can be specified to share an IO directory with an existing
+//     server. This is useful when restoring from a backup taken in another
+//     server.
 //
-//   + allow-implicit-access: can be specified to set
-//   `EnableNonAdminImplicitAndArbitraryOutbound` to true
+//   - allow-implicit-access: can be specified to set
+//     `EnableNonAdminImplicitAndArbitraryOutbound` to true
 //
-//   + disable-http: disables use of external HTTP endpoints.
+//   - disable-http: disables use of external HTTP endpoints.
 //
-//   + localities: specifies the localities that will be used when starting up
-//   the test cluster. The cluster will have len(localities) nodes, with each
-//   node assigned a locality config corresponding to the locality. Please
-//   update the `localityCfgs` map when adding new localities.
+//   - localities: specifies the localities that will be used when starting up
+//     the test cluster. The cluster will have len(localities) nodes, with each
+//     node assigned a locality config corresponding to the locality. Please
+//     update the `localityCfgs` map when adding new localities.
 //
-//   + nodes: specifies the number of nodes in the test cluster.
+//   - nodes: specifies the number of nodes in the test cluster.
 //
-//   + splits: specifies the number of ranges the bank table is split into.
+//   - splits: specifies the number of ranges the bank table is split into.
 //
-//   + before-version=<beforeVersion>: creates a mixed version cluster where all
-//   nodes running the test server binary think the clusterVersion is one
-//   version before the passed in <beforeVersion> key. See cockroach_versions.go
-//   for possible values.
+//   - before-version=<beforeVersion>: creates a mixed version cluster where all
+//     nodes running the test server binary think the clusterVersion is one
+//     version before the passed in <beforeVersion> key. See cockroach_versions.go
+//     for possible values.
 //
-//   + testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
+//   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
 //
+//   - "upgrade-server version=<version>"
+//     Upgrade the cluster version of the active server to the passed in
+//     clusterVersion key. See cockroach_versions.go for possible values.
 //
-// - "upgrade-server version=<version>"
-//    Upgrade the cluster version of the active server to the passed in
-//    clusterVersion key. See cockroach_versions.go for possible values.
+//   - "exec-sql [server=<name>] [user=<name>] [args]"
+//     Executes the input SQL query on the target server. By default, server is
+//     the last created server.
 //
+//     Supported arguments:
 //
-// - "exec-sql [server=<name>] [user=<name>] [args]"
-//   Executes the input SQL query on the target server. By default, server is
-//   the last created server.
+//   - expect-error-regex=<regex>: expects the query to return an error with a string
+//     matching the provided regex
 //
-//   Supported arguments:
+//   - expect-error-ignore: expects the query to return an error, but we will
+//     ignore it.
 //
-//   + expect-error-regex=<regex>: expects the query to return an error with a string
-//   matching the provided regex
+//   - ignore-notice: does not print out the notice that is buffered during
+//     query execution.
 //
-//   + expect-error-ignore: expects the query to return an error, but we will
-//   ignore it.
+//   - "query-sql [server=<name>] [user=<name>] [regex=<regex pattern>]"
+//     Executes the input SQL query and print the results.
 //
-//   + ignore-notice: does not print out the notice that is buffered during
-//   query execution.
+//   - regex: return true if the query result matches the regex pattern and
+//     false otherwise.
 //
-// - "query-sql [server=<name>] [user=<name>] [regex=<regex pattern>]"
-//   Executes the input SQL query and print the results.
+//   - "reset"
+//     Clear all state associated with the test.
 //
-//   + regex: return true if the query result matches the regex pattern and
-//   false otherwise.
+//   - "job" [server=<name>] [user=<name>] [args]
+//     Executes job specific operations.
 //
-// - "reset"
-//    Clear all state associated with the test.
+//     Supported arguments:
 //
-// - "job" [server=<name>] [user=<name>] [args]
-//   Executes job specific operations.
+//   - resume=<tag>: resumes the job referenced by the tag, use in conjunction
+//     with wait-for-state.
 //
-//   Supported arguments:
+//   - cancel=<tag>: cancels the job referenced by the tag and waits for it to
+//     reach a CANCELED state.
 //
-//   + resume=<tag>: resumes the job referenced by the tag, use in conjunction
-//   with wait-for-state.
+//   - wait-for-state=<succeeded|paused|failed|cancelled> tag=<tag>: wait for
+//     the job referenced by the tag to reach the specified state.
 //
-//   + cancel=<tag>: cancels the job referenced by the tag and waits for it to
-//   reach a CANCELED state.
+//   - "let" [args]
+//     Assigns the returned value of the SQL query to the provided args as variables.
 //
-//   + wait-for-state=<succeeded|paused|failed|cancelled> tag=<tag>: wait for
-//   the job referenced by the tag to reach the specified state.
+//   - "save-cluster-ts" tag=<tag>
+//     Saves the `SELECT cluster_logical_timestamp()` with the tag. Can be used
+//     in the future with intstructions such as `aost`.
 //
-// - "let" [args]
-//   Assigns the returned value of the SQL query to the provided args as variables.
+//   - "backup" [args]
+//     Executes backup specific operations.
 //
-// - "save-cluster-ts" tag=<tag>
-//   Saves the `SELECT cluster_logical_timestamp()` with the tag. Can be used
-//   in the future with intstructions such as `aost`.
+//     Supported arguments:
 //
-// - "backup" [args]
-//   Executes backup specific operations.
+//   - tag=<tag>: tag the backup job to reference it in the future.
 //
-//   Supported arguments:
+//   - expect-pausepoint: expects the backup job to end up in a paused state because
+//     of a pausepoint error.
 //
-//   + tag=<tag>: tag the backup job to reference it in the future.
+//   - "restore" [args]
+//     Executes restore specific operations.
 //
-//   + expect-pausepoint: expects the backup job to end up in a paused state because
-//   of a pausepoint error.
+//     Supported arguments:
 //
-// - "restore" [args]
-//   Executes restore specific operations.
+//   - tag=<tag>: tag the restore job to reference it in the future.
 //
-//   Supported arguments:
+//   - expect-pausepoint: expects the restore job to end up in a paused state because
+//     of a pausepoint error.
 //
-//   + tag=<tag>: tag the restore job to reference it in the future.
+//   - aost: expects a tag referencing a previously saved cluster timestamp
+//     using `save-cluster-ts`. It then runs the restore as of the saved cluster
+//     timestamp.
 //
-//   + expect-pausepoint: expects the restore job to end up in a paused state because
-//   of a pausepoint error.
+//   - "schema" [args]
+//     Executes schema change specific operations.
 //
-//   + aost: expects a tag referencing a previously saved cluster timestamp
-//   using `save-cluster-ts`. It then runs the restore as of the saved cluster
-//   timestamp.
+//     Supported arguments:
 //
-// - "schema" [args]
-//   Executes schema change specific operations.
+//   - tag=<tag>: tag the schema change job to reference it in the future.
 //
-//   Supported arguments:
+//   - expect-pausepoint: expects the schema change job to end up in a paused state because
+//     of a pausepoint error.
 //
-//   + tag=<tag>: tag the schema change job to reference it in the future.
+//   - "kv" [args]
+//     Issues a kv request
 //
-//   + expect-pausepoint: expects the schema change job to end up in a paused state because
-//   of a pausepoint error.
+//     Supported arguments:
 //
-// - "kv" [args]
-//   Issues a kv request
+//   - type: kv request type. Currently, only DeleteRange is supported
 //
-//   Supported arguments:
+//   - target: SQL target. Currently, only table names are supported.
 //
-//   + type: kv request type. Currently, only DeleteRange is supported
-//
-//   + target: SQL target. Currently, only table names are supported.
-//
-//
-// - "corrupt-backup" uri=<collectionUri>
-//   Finds the latest backup in the provided collection uri an flips a bit in one SST in the backup
+//   - "corrupt-backup" uri=<collectionUri>
+//     Finds the latest backup in the provided collection uri an flips a bit in one SST in the backup
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -521,7 +518,11 @@ func TestDataDriven(t *testing.T) {
 					require.NotNilf(t, err, "expected error")
 					var expectErrorRegex string
 					d.ScanArgs(t, "expect-error-regex", &expectErrorRegex)
-					testutils.IsError(err, expectErrorRegex)
+					require.True(t,
+						testutils.IsError(err, expectErrorRegex),
+						"Regex `%s` did not match `%s`",
+						expectErrorRegex,
+						err)
 					ret = append(ret, "regex matches error")
 					return strings.Join(ret, "\n")
 				}
