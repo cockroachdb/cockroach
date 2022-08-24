@@ -99,6 +99,7 @@ var testServerRegion = "us-east-1"
 
 func TestChangefeedReplanning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86763, "flaky test")
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t, "multinode setup doesn't work under testrace")
 
