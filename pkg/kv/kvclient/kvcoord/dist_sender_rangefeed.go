@@ -63,6 +63,14 @@ var catchupScanConcurrency = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.rangefeed.range_stuck_threshold",
+	"restart rangefeeds if they appear to be stuck for the specified threshold; 0 disables",
+	time.Minute,
+	settings.NonNegativeDuration,
+)
+
 func maxConcurrentCatchupScans(sv *settings.Values) int {
 	l := catchupScanConcurrency.Get(sv)
 	if l == 0 {
@@ -203,6 +211,7 @@ func (ds *DistSender) RangeFeedSpans(
 			})
 		}(s)
 	}
+
 	return g.Wait()
 }
 
@@ -408,9 +417,17 @@ func (ds *DistSender) partialRangeFeed(
 			switch {
 			case errors.HasType(err, (*roachpb.StoreNotFoundError)(nil)) ||
 				errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)):
-				// These errors are likely to be unique to the replica that
-				// reported them, so no action is required before the next
-				// retry.
+			// These errors are likely to be unique to the replica that
+			// reported them, so no action is required before the next
+			// retry.
+			case errors.Is(err, errRestartStuckRange):
+				// Stuck ranges indicate a bug somewhere in the system.  We are being
+				// defensive and attempt to restart this rangefeed. Usually, any
+				// stuck-ness is cleared out if we just attempt to re-resolve range
+				// descriptor and retry.
+				token.Evict(ctx)
+				token = rangecache.EvictionToken{}
+				continue
 			case IsSendError(err), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
 				token.Evict(ctx)
@@ -472,8 +489,8 @@ func (ds *DistSender) singleRangeFeed(
 	onRangeEvent onRangeEventCb,
 ) (hlc.Timestamp, error) {
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancelFeed := context.WithCancel(ctx)
+	defer cancelFeed()
 
 	args := roachpb.RangeFeedRequest{
 		Span: span,
@@ -518,6 +535,9 @@ func (ds *DistSender) singleRangeFeed(
 	// cleanup catchup reservation in case of early termination.
 	defer finishCatchupScan()
 
+	stuckWatcher := makeStuckRangeWatcher(cancelFeed, &ds.st.SV)
+	defer stuckWatcher.stop()
+
 	var streamCleanup func()
 	maybeCleanupStream := func() {
 		if streamCleanup != nil {
@@ -560,8 +580,13 @@ func (ds *DistSender) singleRangeFeed(
 				return args.Timestamp, nil
 			}
 			if err != nil {
+				if stuckWatcher.wasStuck {
+					return args.Timestamp, errRestartStuckRange
+				}
 				return args.Timestamp, err
 			}
+			stuckWatcher.recordEvent()
+
 			msg := RangeFeedMessage{RangeFeedEvent: event, RegisteredSpan: span}
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
@@ -612,4 +637,63 @@ func legacyRangeFeedEventProducer(
 	cleanup = func() {}
 	producer, err = client.RangeFeed(ctx, req)
 	return producer, cleanup, err
+}
+
+// sentinel error returned when cancelling rangefeed when it is stuck.
+var errRestartStuckRange = errors.New("rangefeed restarting due to liveness")
+
+// We want to cancel the context if we don't receive an event
+// in a while. We try to do this without doing too much work
+// (allocations, etc.) for each message received to bound the
+// overhead in case everything is working fine and messages
+// are potentially rushing in at high frequency. To do this,
+// we set up a timer that would cancel the context, and
+// whenever it is ~half expired, stop it (after the next
+// message is there) and re-start it. That way, we allocate
+// only ~twice per eventCheckInterval, which is acceptable.
+type stuckRangeWatcher struct {
+	wasStuck        bool
+	cancel          context.CancelFunc
+	t               *time.Timer
+	sv              *settings.Values
+	resetTimerAfter time.Time
+}
+
+func (w *stuckRangeWatcher) stop() {
+	if w.t != nil {
+		w.t.Stop()
+		w.t = nil
+	}
+}
+
+func (w *stuckRangeWatcher) recordEvent() {
+	stuckThreshold := rangefeedRangeStuckThreshold.Get(w.sv)
+	if stuckThreshold == 0 {
+		w.stop()
+		return
+	}
+
+	mkTimer := func() {
+		w.t = time.AfterFunc(stuckThreshold, func() {
+			w.wasStuck = true
+			w.cancel()
+		})
+		w.resetTimerAfter = timeutil.Now().Add(stuckThreshold / 2)
+	}
+
+	if w.t == nil {
+		mkTimer()
+	} else if w.resetTimerAfter.Before(timeutil.Now()) {
+		w.stop()
+		mkTimer()
+	}
+}
+
+func makeStuckRangeWatcher(cancel context.CancelFunc, sv *settings.Values) *stuckRangeWatcher {
+	w := &stuckRangeWatcher{
+		cancel: cancel,
+		sv:     sv,
+	}
+	w.recordEvent()
+	return w
 }
