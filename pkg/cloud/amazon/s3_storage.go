@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -581,8 +582,19 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 		return true
 	}
 
+	var s3Input *s3.ListObjectsInput
+	// Add an environment variable toggle for s3 storage to list prefixes with a
+	// paging marker that's the prefix with an additional /. This allows certain
+	// s3 clones which return s3://<prefix>/ as the first result of listing
+	// s3://<prefix> to exclude that result.
+	if envutil.EnvOrDefaultBool("COCKROACH_S3_LIST_WITH_PREFIX_SLASH_MARKER", false) {
+		s3Input = &s3.ListObjectsInput{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim), Marker: aws.String(dest + "/")}
+	} else {
+		s3Input = &s3.ListObjectsInput{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim)}
+	}
+
 	if err := client.ListObjectsPagesWithContext(
-		ctx, &s3.ListObjectsInput{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim)}, pageFn,
+		ctx, s3Input, pageFn,
 	); err != nil {
 		return errors.Wrap(err, `failed to list s3 bucket`)
 	}
