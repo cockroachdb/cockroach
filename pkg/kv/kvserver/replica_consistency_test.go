@@ -79,8 +79,9 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 
 	// Simple condition, the checksum is notified, but not computed.
 	id := uuid.FastMakeV4()
-	tc.repl.getReplicaChecksum(ctx, id, timeutil.Now(), true)
-	tc.repl.computeChecksumDone(ctx, id, nil, nil)
+	r := tc.repl.getReplicaChecksum(id, timeutil.Now())
+	close(r.started)
+	r.computeChecksumDone(nil, nil)
 	rc, err := tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "no checksum found")
 	require.Nil(t, rc.Checksum)
@@ -97,13 +98,14 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 		Mode:       roachpb.ChecksumMode_CHECK_FULL,
 		Version:    batcheval.ReplicaChecksumVersion,
 	})
-	r := tc.repl.getReplicaChecksum(context.Background(), id, timeutil.Now(), false)
-	require.Nil(t, r.Checksum)
+	r = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	rc = <-r.result
+	require.Nil(t, rc.Checksum)
 
-	// Next condition, initial wait expired and we found the started flag,
-	// so next step is for context deadline.
+	// Next condition, initial wait succeeded, but the request timed out.
 	id = uuid.FastMakeV4()
-	tc.repl.getReplicaChecksum(ctx, id, timeutil.Now(), true)
+	r = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	close(r.started)
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "context deadline exceeded")
 	require.Nil(t, rc.Checksum)

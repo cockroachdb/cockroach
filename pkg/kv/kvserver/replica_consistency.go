@@ -72,22 +72,21 @@ var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTEN
 
 // replicaChecksum contains progress on a replica checksum computation.
 type replicaChecksum struct {
-	CollectChecksumResponse
-
 	// The context in which the checksum computation task runs, and its cancel
 	// function which allows the collection request handler to stop the task, or
 	// prevent it from starting in the future.
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// started is true if the checksum computation has started.
-	started bool
+	// started is closed when the checksum computation has started.
+	started chan struct{}
+	// result passes a single checksum computation result from the task.
+	// INVARIANT: result is written to or closed only if started is closed.
+	result chan CollectChecksumResponse
+
 	// If gcTimestamp is non-zero, GC this checksum after gcTimestamp. It is zero
 	// only if the checksum computation is in progress, or being waited for.
 	gcTimestamp time.Time
-	// This channel is closed after the checksum is computed, and is used
-	// as a notification.
-	notify chan struct{}
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies a
@@ -453,28 +452,21 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 // missing record. This is okay because: a) the counterparty will not come back
 // to this record; b) in practice, this will not happen because both ends cancel
 // each other much quicker than in replicaChecksumGCInterval.
-func (r *Replica) getReplicaChecksum(
-	ctx context.Context, id uuid.UUID, now time.Time, start bool,
-) replicaChecksum {
+func (r *Replica) getReplicaChecksum(id uuid.UUID, now time.Time) *replicaChecksum {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.gcOldChecksumEntriesLocked(now)
 	c, ok := r.mu.checksums[id]
 	if !ok {
 		taskCtx, taskCancel := context.WithCancel(context.Background())
-		c = replicaChecksum{
+		c = &replicaChecksum{
 			ctx:     taskCtx,
 			cancel:  taskCancel,
-			started: start,
-			notify:  make(chan struct{}),
+			started: make(chan struct{}),
+			result:  make(chan CollectChecksumResponse, 1), // allow an async send
 		}
-	} else if start {
-		if c.started {
-			log.Fatalf(ctx, "attempted to start checksum computation twice for ID %s", id)
-		}
-		c.started = true
+		r.mu.checksums[id] = c
 	}
-	r.mu.checksums[id] = c
 	return c
 }
 
@@ -494,7 +486,7 @@ func (r *Replica) releaseReplicaChecksum(ctx context.Context, id uuid.UUID, gcAt
 // been GCed, or the computation failed.
 func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksumResponse, error) {
 	now := timeutil.Now()
-	c := r.getReplicaChecksum(ctx, id, now, false)
+	c := r.getReplicaChecksum(id, now)
 	// Schedule GC-ing the record instead of deleting it, to allow a late arriving
 	// checksum computation attempt to see if the caller has given up.
 	defer func() {
@@ -505,111 +497,70 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 	// computation result (successful or not). In the latter case we allow the
 	// task to stop gracefully, so we can't simply defer c.cancel() here.
 
-	// Wait for the checksum to compute or at least to start.
-	computed, err := r.checksumInitialWait(ctx, id, c.notify)
-	if err != nil {
-		c.cancel()
-		return CollectChecksumResponse{}, err
-	}
-	// If the checksum has not completed, commit to waiting the full deadline.
-	if !computed {
-		if _, err = r.checksumWait(ctx, id, c.notify, nil); err != nil {
-			c.cancel()
-			return CollectChecksumResponse{}, err
-		}
-	}
-	// At this point, the checksum computation task has notified us of completion.
-	// We know that it will take care of c.cancel().
-
-	if log.V(1) {
-		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
-	}
-	r.mu.RLock()
-	c, ok := r.mu.checksums[id]
-	r.mu.RUnlock()
-	// If the checksum wasn't found or the checksum could not be computed, error out.
-	// The latter case can occur when there's a version mismatch or, more generally,
-	// when the (async) checksum computation fails.
-	if !ok || c.Checksum == nil {
-		return CollectChecksumResponse{}, errors.Errorf("no checksum found (ID = %s)", id)
-	}
-	return c.CollectChecksumResponse, nil
-}
-
-// Waits for the checksum to be available or for the checksum to start computing.
-// If we waited for 10% of the deadline and it has not started, then it's
-// unlikely to start because this replica is most likely being restored from
-// snapshots.
-func (r *Replica) checksumInitialWait(
-	ctx context.Context, id uuid.UUID, notify chan struct{},
-) (bool, error) {
-	d, dOk := ctx.Deadline()
-	// The max wait time should be 5 seconds, so we dont end up waiting for
-	// minutes for a huge range.
-	maxInitialWait := 5 * time.Second
-	var initialWait <-chan time.Time
-	if dOk {
-		duration := time.Duration(timeutil.Until(d).Nanoseconds() / 10)
-		if duration > maxInitialWait {
-			duration = maxInitialWait
-		}
-		initialWait = time.After(duration)
-	} else {
-		initialWait = time.After(maxInitialWait)
-	}
-	return r.checksumWait(ctx, id, notify, initialWait)
-}
-
-// checksumWait waits for the checksum to be available or for the computation
-// to start  within the initialWait time. The bool return flag is used to
-// indicate if a checksum is available (true) or if the initial wait has expired
-// and the caller should wait more, since the checksum computation started.
-func (r *Replica) checksumWait(
-	ctx context.Context, id uuid.UUID, notify chan struct{}, initialWait <-chan time.Time,
-) (bool, error) {
-	// Wait
+	// Wait for the checksum computation to start.
 	select {
 	case <-ctx.Done():
-		return false,
+		c.cancel()
+		return CollectChecksumResponse{},
 			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
-	case <-initialWait:
-		{
-			r.mu.Lock()
-			started := r.mu.checksums[id].started
-			r.mu.Unlock()
-			if !started {
-				return false,
-					errors.Errorf("checksum computation did not start in time for (ID = %s)", id)
-			}
-			return false, nil
+	case <-time.After(r.checksumInitialWait(ctx)):
+		c.cancel()
+		return CollectChecksumResponse{},
+			errors.Errorf("checksum computation did not start in time for (ID = %s)", id)
+	case <-c.started:
+		// Happy case, the computation has started.
+	}
+
+	// Wait for the computation result.
+	select {
+	case <-ctx.Done():
+		c.cancel()
+		return CollectChecksumResponse{},
+			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
+	case c, ok := <-c.result:
+		if log.V(1) {
+			log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 		}
-	case <-notify:
-		return true, nil
+		if !ok || c.Checksum == nil {
+			return CollectChecksumResponse{}, errors.Errorf("no checksum found (ID = %s)", id)
+		}
+		return c, nil
 	}
 }
 
-// computeChecksumDone adds the computed checksum, sets a deadline for GCing the
-// checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(
-	ctx context.Context, id uuid.UUID, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
-) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if c, ok := r.mu.checksums[id]; ok {
-		if result != nil {
-			c.Checksum = result.SHA512[:]
-			delta := result.PersistedMS
-			delta.Subtract(result.RecomputedMS)
-			c.Delta = enginepb.MVCCStatsDelta(delta)
-			c.Persisted = result.PersistedMS
+// checksumInitialWait returns the amount of time to wait until the checksum
+// computation has started. It is set to min of 5s and 10% of the remaining time
+// in the passed-in context (if it has a deadline).
+//
+// If it takes longer, chances are that the replica is being restored from
+// snapshots, or otherwise too busy to handle this request soon.
+func (*Replica) checksumInitialWait(ctx context.Context) time.Duration {
+	wait := 5 * time.Second
+	if d, ok := ctx.Deadline(); ok {
+		if dur := time.Duration(timeutil.Until(d).Nanoseconds() / 10); dur < wait {
+			wait = dur
 		}
-		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
-		c.Snapshot = snapshot
-		r.mu.checksums[id] = c
-		close(c.notify) // notify that the computation has completed
-	} else {
-		log.Errorf(ctx, "no map entry for checksum (ID = %s)", id)
 	}
+	return wait
+}
+
+// computeChecksumDone sends the result of the checksum computation to the
+// result channel, and sets a deadline for GC-ing the record.
+func (rc *replicaChecksum) computeChecksumDone(
+	result *replicaHash, snapshot *roachpb.RaftSnapshotData,
+) {
+	c := CollectChecksumResponse{Snapshot: snapshot}
+	if result != nil {
+		c.Checksum = result.SHA512[:]
+		delta := result.PersistedMS
+		delta.Subtract(result.RecomputedMS)
+		c.Delta = enginepb.MVCCStatsDelta(delta)
+		c.Persisted = result.PersistedMS
+	}
+	// TODO(pavelkalinnikov): atomic? Or hope it gets through eventually?
+	rc.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
+	rc.result <- c
+	close(rc.result)
 }
 
 type replicaHash struct {
@@ -790,19 +741,26 @@ func (*Replica) sha512(
 func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.ComputeChecksum) {
 	stopper := r.store.Stopper()
 
-	c := r.getReplicaChecksum(ctx, cc.ChecksumID, timeutil.Now(), true)
-	// All the code paths below must call computeChecksumDone and c.cancel(). We
+	c := r.getReplicaChecksum(cc.ChecksumID, timeutil.Now())
+	// All the code paths below must c.cancel(), and report the result (successful
+	// or not) via computeChecksumDone method strictly after close(c.started). We
 	// can't simply defer them here, because the async task below, if started,
 	// will take ownership of this.
+
+	// The close panics if there was another attempt to start computation with
+	// this ID, but it does not happen since post-apply triggers are invoked at
+	// most once per Raft log entry per process, and the IDs are unique.
+	close(c.started)
+
 	if c.ctx.Err() != nil { // note: no need to c.cancel() here again
-		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		c.computeChecksumDone(nil, nil)
 		log.Errorf(ctx, "checksum computation task %s was canceled", cc.ChecksumID)
 		return
 	}
 
 	if cc.Version != batcheval.ReplicaChecksumVersion {
 		c.cancel()
-		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		c.computeChecksumDone(nil, nil)
 		log.Infof(ctx, "incompatible ComputeChecksum versions (requested: %d, have: %d)",
 			cc.Version, batcheval.ReplicaChecksumVersion)
 		return
@@ -861,7 +819,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 				if err != nil {
 					result = nil
 				}
-				r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
+				c.computeChecksumDone(result, snapshot)
 				return err
 			},
 		); err != nil {
@@ -915,7 +873,7 @@ A file preventing this node from restarting was placed at:
 	}); err != nil {
 		defer snap.Close()
 		c.cancel()
-		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		c.computeChecksumDone(nil, nil)
 		log.Errorf(ctx, "could not run async checksum computation (ID = %s): %v", cc.ChecksumID, err)
 	}
 }
