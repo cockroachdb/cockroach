@@ -56,9 +56,7 @@ func TestReplicaChecksumVersion(t *testing.T) {
 		tc.repl.computeChecksumPostApply(ctx, cc)
 		rc, err := tc.repl.getChecksum(ctx, cc.ChecksumID)
 		if !matchingVersion {
-			if !testutils.IsError(err, "no checksum found") {
-				t.Fatal(err)
-			}
+			require.ErrorContains(t, err, "no checksum found")
 			require.Nil(t, rc.Checksum)
 		} else {
 			require.NoError(t, err)
@@ -87,10 +85,9 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	tc.repl.mu.checksums[id] = replicaChecksum{notify: notify}
 	tc.repl.mu.Unlock()
 	rc, err := tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "no checksum found") {
-		t.Fatal(err)
-	}
+	require.ErrorContains(t, err, "no checksum found")
 	require.Nil(t, rc.Checksum)
+
 	// Next condition, the initial wait expires and checksum is not started,
 	// this will take 10ms.
 	id = uuid.FastMakeV4()
@@ -98,10 +95,9 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
 	tc.repl.mu.Unlock()
 	rc, err = tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "checksum computation did not start") {
-		t.Fatal(err)
-	}
+	require.ErrorContains(t, err, "checksum computation did not start")
 	require.Nil(t, rc.Checksum)
+
 	// Next condition, initial wait expired and we found the started flag,
 	// so next step is for context deadline.
 	id = uuid.FastMakeV4()
@@ -109,9 +105,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{}), started: true}
 	tc.repl.mu.Unlock()
 	rc, err = tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "context deadline exceeded") {
-		t.Fatal(err)
-	}
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Nil(t, rc.Checksum)
 }
 
