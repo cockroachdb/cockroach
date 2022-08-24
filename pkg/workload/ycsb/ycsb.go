@@ -159,32 +159,36 @@ func (g *ycsb) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
 			g.workload = strings.ToUpper(g.workload)
+			var defaultReqDist string
 			switch g.workload {
 			case "A":
 				g.readFreq = 0.5
 				g.updateFreq = 0.5
-				g.requestDistribution = "zipfian"
+				defaultReqDist = "zipfian"
 			case "B":
 				g.readFreq = 0.95
 				g.updateFreq = 0.05
-				g.requestDistribution = "zipfian"
+				defaultReqDist = "zipfian"
 			case "C":
 				g.readFreq = 1.0
-				g.requestDistribution = "zipfian"
+				defaultReqDist = "zipfian"
 			case "D":
 				g.readFreq = 0.95
 				g.insertFreq = 0.05
-				g.requestDistribution = "latest"
+				defaultReqDist = "latest"
 			case "E":
 				g.scanFreq = 0.95
 				g.insertFreq = 0.05
-				g.requestDistribution = "zipfian"
+				defaultReqDist = "zipfian"
 			case "F":
 				g.readFreq = 0.5
 				g.readModifyWriteFreq = 0.5
-				g.requestDistribution = "zipfian"
+				defaultReqDist = "zipfian"
 			default:
 				return errors.Errorf("Unknown workload: %q", g.workload)
+			}
+			if g.requestDistribution == "" {
+				g.requestDistribution = defaultReqDist
 			}
 
 			if !g.flags.Lookup(`families`).Changed {
