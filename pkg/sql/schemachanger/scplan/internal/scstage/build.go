@@ -322,7 +322,7 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	if e.Type() != sb.opType {
 		return false
 	}
-	if !e.IsPhaseSatisfied(sb.bs.phase) {
+	if !e.IsPhaseSatisfied(sb.bs.phase) && !sb.bc.g.IsNoOp(e) {
 		return false
 	}
 	// We allow non-revertible ops to be included at stages preceding

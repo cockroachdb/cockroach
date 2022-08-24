@@ -51,6 +51,35 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
+│       ├── • 4 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • Column:{DescID: 108, ColumnID: 1}
+│       │   │   │ WRITE_ONLY → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
+│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │
+│       │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
+│       │   │   │ WRITE_ONLY → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
+│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │
+│       │   ├── • Column:{DescID: 108, ColumnID: 4294967294}
+│       │   │   │ WRITE_ONLY → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
+│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │
+│       │   └── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+│       │       │ VALIDATED → DELETE_ONLY
+│       │       │
+│       │       ├── • skip VALIDATED → WRITE_ONLY operations
+│       │       │     rule: "skip index removal ops on relation drop"
+│       │       │
+│       │       └── • skip WRITE_ONLY → DELETE_ONLY operations
+│       │             rule: "skip index removal ops on relation drop"
+│       │
 │       └── • 3 Mutation operations
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -80,7 +109,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 20 elements transitioning toward ABSENT
+    │   ├── • 16 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
     │   │   │   │ PUBLIC → ABSENT
@@ -139,12 +168,6 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip element removal ops on descriptor drop"
     │   │   │
-    │   │   ├── • Column:{DescID: 108, ColumnID: 1}
-    │   │   │   │ WRITE_ONLY → DELETE_ONLY
-    │   │   │   │
-    │   │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-    │   │   │         rule: "skip column removal ops on relation drop"
-    │   │   │
     │   │   ├── • ColumnName:{DescID: 108, Name: a, ColumnID: 1}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
@@ -166,12 +189,6 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
     │   │   │         rule: "column no longer public before dependents"
     │   │   │
-    │   │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
-    │   │   │   │ WRITE_ONLY → DELETE_ONLY
-    │   │   │   │
-    │   │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-    │   │   │         rule: "skip column removal ops on relation drop"
-    │   │   │
     │   │   ├── • ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
@@ -192,12 +209,6 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │   │   │   │
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
     │   │   │         rule: "column no longer public before dependents"
-    │   │   │
-    │   │   ├── • Column:{DescID: 108, ColumnID: 4294967294}
-    │   │   │   │ WRITE_ONLY → DELETE_ONLY
-    │   │   │   │
-    │   │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-    │   │   │         rule: "skip column removal ops on relation drop"
     │   │   │
     │   │   ├── • ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
     │   │   │   │ PUBLIC → ABSENT
@@ -235,15 +246,6 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip index dependents removal ops on relation drop"
     │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-    │   │   │   │ VALIDATED → DELETE_ONLY
-    │   │   │   │
-    │   │   │   ├── • skip VALIDATED → WRITE_ONLY operations
-    │   │   │   │     rule: "skip index removal ops on relation drop"
-    │   │   │   │
-    │   │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-    │   │   │         rule: "skip index removal ops on relation drop"
     │   │   │
     │   │   └── • IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
     │   │       │ PUBLIC → ABSENT
