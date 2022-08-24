@@ -56,6 +56,8 @@ func (is Server) CollectChecksum(
 	resp := &CollectChecksumResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
 			r, err := s.GetReplica(req.RangeID)
 			if err != nil {
 				return err
