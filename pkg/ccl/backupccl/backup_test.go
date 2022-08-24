@@ -572,7 +572,11 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].ClusterSettings(),
 				blobs.TestEmptyBlobClientFactory,
 				username.RootUserName(),
-				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
+				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
+				tc.Servers[0].CollectionFactory().(*descs.CollectionFactory),
+				tc.Servers[0].DB(),
+				nil, /* limiters */
+			)
 			require.NoError(t, err)
 			defer store.Close()
 			var files []string
@@ -8021,7 +8025,12 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		base.ExternalIODirConfig{},
 		st,
 		blobs.TestBlobServiceClient(dir),
-		username.RootUserName(), nil, nil, nil)
+		username.RootUserName(),
+		nil, /* ie */
+		nil, /* cf */
+		nil, /* kvDB */
+		nil, /* limiters */
+	)
 	require.NoError(t, err)
 
 	m := mon.NewMonitor("test-monitor", mon.MemoryResource, nil, nil, 0, 0, st)

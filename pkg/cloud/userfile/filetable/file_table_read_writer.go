@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -60,6 +61,7 @@ type FileToTableSystemExecutor interface {
 // SQL connection to interact with the database.
 type InternalFileToTableExecutor struct {
 	ie sqlutil.InternalExecutor
+	cf *descs.CollectionFactory
 	db *kv.DB
 }
 
@@ -68,9 +70,9 @@ var _ FileToTableSystemExecutor = &InternalFileToTableExecutor{}
 // MakeInternalFileToTableExecutor returns an instance of a
 // InternalFileToTableExecutor.
 func MakeInternalFileToTableExecutor(
-	ie sqlutil.InternalExecutor, db *kv.DB,
+	ie sqlutil.InternalExecutor, cf *descs.CollectionFactory, db *kv.DB,
 ) *InternalFileToTableExecutor {
-	return &InternalFileToTableExecutor{ie, db}
+	return &InternalFileToTableExecutor{ie, cf, db}
 }
 
 // Query implements the FileToTableSystemExecutor interface.
