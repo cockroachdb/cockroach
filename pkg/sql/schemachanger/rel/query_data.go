@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-type slotIdx int
+type slotIdx uint16
 
 type fact struct {
 	variable slotIdx
