@@ -147,7 +147,12 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.intervalstyle.enabled":                        {},
 }
 
+// sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
+// cluster settings. In 22.2 and later, new session settings do not need an
+// associated sql.defaults cluster setting. Instead they can have their default
+// changed with ALTER ROLE ... SET.
 var sqlDefaultSettings = map[string]struct{}{
+	// PLEASE DO NOT ADD NEW SETTINGS TO THIS MAP. THANK YOU.
 	"sql.defaults.cost_scans_with_default_col_size.enabled":                     {},
 	"sql.defaults.datestyle":                                                    {},
 	"sql.defaults.datestyle.enabled":                                            {},
@@ -177,7 +182,6 @@ var sqlDefaultSettings = map[string]struct{}{
 	"sql.defaults.on_update_rehome_row.enabled":                                 {},
 	"sql.defaults.optimizer_use_histograms.enabled":                             {},
 	"sql.defaults.optimizer_use_multicol_stats.enabled":                         {},
-	"sql.defaults.optimizer_use_not_visible_indexes.enabled":                    {},
 	"sql.defaults.override_alter_primary_region_in_super_region.enabled":        {},
 	"sql.defaults.override_multi_region_zone_config.enabled":                    {},
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled":                          {},
@@ -211,7 +215,8 @@ func register(class Class, key, desc string, s internalSetting) {
 	if strings.Contains(key, "sql.defaults") {
 		if _, ok := sqlDefaultSettings[key]; !ok {
 			panic(fmt.Sprintf(
-				"new sql.defaults cluster settings: %s is not needed now that `ALTER ROLE ... SET` syntax is supported", key))
+				"new sql.defaults cluster settings: %s is not needed now that `ALTER ROLE ... SET` syntax "+
+					"is supported; please remove the new sql.defaults cluster setting", key))
 		}
 	}
 	if len(desc) == 0 {

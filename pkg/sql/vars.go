@@ -763,9 +763,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseNotVisibleIndexes), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(optUseNotVisibleIndexesClusterMode.Get(sv))
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -1164,7 +1162,7 @@ var varGen = map[string]sessionVar{
 		// SetWithPlanner is defined in init(), as otherwise there is a circular
 		// initialization loop with the planner.
 		GlobalDefault: func(sv *settings.Values) string {
-			return ".3"
+			return "0.3"
 		},
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			f, err := strconv.ParseFloat(s, 64)

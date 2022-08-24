@@ -354,3 +354,81 @@ project
            └── corr [as=corr:9, type=float, outer=(1,2)]
                 ├── variable: x:1 [type=int]
                 └── variable: y:2 [type=int]
+
+# Regression test for #84957 - the aggregation output columns should not be
+# marked as non-null.
+#
+# st_makeline with a non-null input of the wrong type (postgres returns null
+# here rather than an error).
+build
+SELECT st_makeline('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))') FROM generate_series(1, 5) g(t) GROUP BY t;
+----
+project
+ ├── columns: st_makeline:3(geometry)
+ ├── immutable
+ ├── prune: (3)
+ └── group-by (hash)
+      ├── columns: generate_series:1(int) st_makeline:3(geometry)
+      ├── grouping columns: generate_series:1(int)
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── prune: (3)
+      ├── project
+      │    ├── columns: column2:2(geometry!null) generate_series:1(int)
+      │    ├── immutable
+      │    ├── fd: ()-->(2)
+      │    ├── prune: (1,2)
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1(int)
+      │    │    ├── immutable
+      │    │    ├── values
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    └── tuple [type=tuple]
+      │    │    └── zip
+      │    │         └── function: generate_series [type=int, immutable]
+      │    │              ├── const: 1 [type=int]
+      │    │              └── const: 5 [type=int]
+      │    └── projections
+      │         └── const: '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000' [as=column2:2, type=geometry]
+      └── aggregations
+           └── s-t-make-line [as=st_makeline:3, type=geometry, outer=(2)]
+                └── variable: column2:2 [type=geometry]
+
+# st_extent with an empty (but non-null) input.
+build
+SELECT st_extent('0101000000000000000000F87F000000000000F87F') FROM generate_series(1, 5) g(t) GROUP BY t;
+----
+project
+ ├── columns: st_extent:3(box2d)
+ ├── immutable
+ ├── prune: (3)
+ └── group-by (hash)
+      ├── columns: generate_series:1(int) st_extent:3(box2d)
+      ├── grouping columns: generate_series:1(int)
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── prune: (3)
+      ├── project
+      │    ├── columns: column2:2(geometry!null) generate_series:1(int)
+      │    ├── immutable
+      │    ├── fd: ()-->(2)
+      │    ├── prune: (1,2)
+      │    ├── project-set
+      │    │    ├── columns: generate_series:1(int)
+      │    │    ├── immutable
+      │    │    ├── values
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    └── tuple [type=tuple]
+      │    │    └── zip
+      │    │         └── function: generate_series [type=int, immutable]
+      │    │              ├── const: 1 [type=int]
+      │    │              └── const: 5 [type=int]
+      │    └── projections
+      │         └── const: '0101000000000000000000F87F000000000000F87F' [as=column2:2, type=geometry]
+      └── aggregations
+           └── s-t-extent [as=st_extent:3, type=box2d, outer=(2)]
+                └── variable: column2:2 [type=geometry]

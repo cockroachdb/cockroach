@@ -72,10 +72,11 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
       btnLAbel = "Create Index";
       descriptionDocs = (
         <>
-          a{" "}
+          {"a "}
           <Anchor href={createIndex} target="_blank">
             CREATE INDEX
           </Anchor>
+          {" statement"}
         </>
       );
       break;
@@ -84,10 +85,11 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
       btnLAbel = "Drop Index";
       descriptionDocs = (
         <>
-          a{" "}
+          {"a "}
           <Anchor href={dropIndex} target="_blank">
             DROP INDEX
           </Anchor>
+          {" statement"}
         </>
       );
       break;
@@ -104,6 +106,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
           <Anchor href={dropIndex} target="_blank">
             DROP INDEX
           </Anchor>
+          {" statements"}
         </>
       );
       break;
@@ -125,8 +128,8 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
       >
         <Text>
           This action will apply the single-statement index recommendation by
-          executing {descriptionDocs} statements. Schema changes consume
-          additional resources and can potentially negatively impact workload
+          executing {descriptionDocs}. Schema changes consume additional
+          resources and can potentially negatively impact workload
           responsiveness.{" "}
           <Anchor href={onlineSchemaChanges} target="_blank">
             Learn more

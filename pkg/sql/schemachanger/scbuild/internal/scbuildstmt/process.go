@@ -13,6 +13,7 @@ package scbuildstmt
 import (
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -31,6 +32,9 @@ type supportedStatement struct {
 	// extra round-trips to resolve the descriptor and its elements if we know
 	// that we cannot process the command.
 	extraChecks interface{}
+	// minSupportedClusterVersion is the minimal binary version that supports this
+	// statement in the declarative schema changer.
+	minSupportedClusterVersion clusterversion.Key
 }
 
 // isFullySupported returns if this statement type is supported, where the
@@ -65,22 +69,22 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, on: true, extraChecks: alterTableIsSupported},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: false},
-	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, on: true},
-	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, on: true},
-	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, on: true},
-	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, on: true},
-	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, on: true},
-	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, on: true},
-	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, on: true},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, on: true},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, on: true},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, on: true},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: false, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, on: true, minSupportedClusterVersion: clusterversion.V22_1},
+	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, on: true, minSupportedClusterVersion: clusterversion.V22_1},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, on: true, minSupportedClusterVersion: clusterversion.V22_1},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, on: true, minSupportedClusterVersion: clusterversion.V22_1},
+	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, on: true, minSupportedClusterVersion: clusterversion.V22_1},
+	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, on: true, minSupportedClusterVersion: clusterversion.V22_1},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
 	// TODO (Xiang): turn on `DROP INDEX` as fully supported.
-	reflect.TypeOf((*tree.DropIndex)(nil)): {fn: DropIndex, on: false},
+	reflect.TypeOf((*tree.DropIndex)(nil)): {fn: DropIndex, on: false, minSupportedClusterVersion: clusterversion.Start22_2},
 }
 
 func init() {
@@ -134,10 +138,6 @@ func CheckIfStmtIsSupported(n tree.Statement, mode sessiondatapb.NewSchemaChange
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
-	// If a statement is not supported throw a not implemented error.
-	if !CheckIfStmtIsSupported(n, b.EvalCtx().SessionData().NewSchemaChangerMode) {
-		panic(scerrors.NotImplementedError(n))
-	}
 	// Check if an entry exists for the statement type, in which
 	// case it is either fully or partially supported.
 	info, ok := supportedStatements[reflect.TypeOf(n)]
@@ -152,6 +152,12 @@ func Process(b BuildCtx, n tree.Statement) {
 	) {
 		panic(scerrors.NotImplementedError(n))
 	}
+
+	// Check if the statement is supported in the current cluster version.
+	if !stmtSupportedInCurrentClusterVersion(b, n) {
+		panic(scerrors.NotImplementedError(n))
+	}
+
 	// Next invoke the callback function, with the concrete types.
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
@@ -161,4 +167,15 @@ func Process(b BuildCtx, n tree.Statement) {
 		panic(err)
 	}
 	fn.Call(in)
+}
+
+// stmtSupportedInCurrentClusterVersion checks whether the statement is supported
+// in current cluster version.
+func stmtSupportedInCurrentClusterVersion(b BuildCtx, n tree.Statement) bool {
+	if alterTableStmt, isAlterTable := n.(*tree.AlterTable); isAlterTable {
+		return alterTableAllCmdsSupportedInCurrentClusterVersion(b, alterTableStmt)
+	}
+	minSupportedClusterVersion := supportedStatements[reflect.TypeOf(n)].minSupportedClusterVersion
+	return b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion)
+
 }
