@@ -306,6 +306,8 @@ type sqlServerArgs struct {
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
 
+	collectionFactory *descs.CollectionFactory
+
 	// internalExecutorFactory is to initialize an internal executor.
 	internalExecutorFactory sqlutil.InternalExecutorFactory
 
@@ -988,6 +990,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.registry.AddMetricStruct(m)
 	}
 	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
+	*cfg.collectionFactory = *collectionFactory
 	cfg.internalExecutorFactory = ieFactory
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(

@@ -36,7 +36,14 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, nil, nil, nil, nil, nil)
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
+		nil, /* Cluster Settings */
+		nil, /* Blob Client Factory */
+		nil, /* Internal Executor */
+		nil, /* Collection Factory */
+		nil, /* kvDB */
+		nil, /* Limiters */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

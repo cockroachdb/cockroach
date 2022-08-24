@@ -10,6 +10,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/kv",
         "//pkg/security/username",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
