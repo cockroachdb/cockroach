@@ -14,7 +14,15 @@ CREATE EXTERNAL CONNECTION nodelocal AS 'nodelocal://1/foo';
 ----
 
 exec-sql
-CREATE EXTERNAL CONNECTION kms AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=wont-be-redacted';
+CREATE EXTERNAL CONNECTION kms AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==';
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION s3 AS 's3://bucket?AUTH=specified&AWS_ACCESS_KEY_ID=key&AWS_SECRET_ACCESS_KEY=secret-key';
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION gs AS 'gs://bucket?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==';
 ----
 
 exec-sql
@@ -24,9 +32,11 @@ CREATE EXTERNAL CONNECTION kafka AS 'kafka://broker.address.com:9092';
 query-sql
 SHOW CREATE ALL EXTERNAL CONNECTIONS
 ----
+gs CREATE EXTERNAL CONNECTION 'gs' AS 'gs://bucket?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg=='
 kafka CREATE EXTERNAL CONNECTION 'kafka' AS 'kafka://broker.address.com:9092'
-kms CREATE EXTERNAL CONNECTION 'kms' AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=wont-be-redacted'
+kms CREATE EXTERNAL CONNECTION 'kms' AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg=='
 nodelocal CREATE EXTERNAL CONNECTION 'nodelocal' AS 'nodelocal://1/foo'
+s3 CREATE EXTERNAL CONNECTION 's3' AS 's3://bucket?AUTH=specified&AWS_ACCESS_KEY_ID=key&AWS_SECRET_ACCESS_KEY=secret-key'
 
 query-sql
 SHOW CREATE EXTERNAL CONNECTION nodelocal
@@ -36,7 +46,7 @@ nodelocal CREATE EXTERNAL CONNECTION 'nodelocal' AS 'nodelocal://1/foo'
 query-sql
 SHOW CREATE EXTERNAL CONNECTION kms
 ----
-kms CREATE EXTERNAL CONNECTION 'kms' AS 'gs:///cmk?AUTH=implicit&CREDENTIALS=wont-be-redacted'
+kms CREATE EXTERNAL CONNECTION 'kms' AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg=='
 
 query-sql
 SHOW CREATE EXTERNAL CONNECTION kafka

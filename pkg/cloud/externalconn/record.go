@@ -39,6 +39,7 @@ type externalConnectionRecord struct {
 	ConnectionName    string                         `col:"connection_name"`
 	ConnectionType    string                         `col:"connection_type"`
 	ConnectionDetails connectionpb.ConnectionDetails `col:"connection_details"`
+	Owner             username.SQLUsername           `col:"owner"`
 }
 
 // MutableExternalConnection is a mutable representation of an External
@@ -140,6 +141,17 @@ func (e *MutableExternalConnection) SetConnectionDetails(details connectionpb.Co
 	e.markDirty("connection_details")
 }
 
+// Owner returns the owner of the External Connection object.
+func (e *MutableExternalConnection) Owner() username.SQLUsername {
+	return e.rec.Owner
+}
+
+// SetOwner updates the owner of the External Connection object.
+func (e *MutableExternalConnection) SetOwner(owner username.SQLUsername) {
+	e.rec.Owner = owner
+	e.markDirty("owner")
+}
+
 // ConnectionName returns the connection_name.
 func (e *MutableExternalConnection) ConnectionName() string {
 	return e.rec.ConnectionName
@@ -220,8 +232,22 @@ func (e *MutableExternalConnection) InitFromDatums(
 			// But, be paranoid and double check.
 			rv := reflect.ValueOf(native)
 			if !rv.Type().AssignableTo(field.Type()) {
-				return errors.Newf("value of type %T cannot be assigned to %s",
-					native, field.Type().String())
+				// If this is the owner field it requires special treatment.
+				ok := false
+				if col.Name == "owner" {
+					// The owner field has type SQLUsername, but the datum is a
+					// simple string.  So we need to convert.
+					var s string
+					s, ok = native.(string)
+					if ok {
+						// Replace the value by one of the right type.
+						rv = reflect.ValueOf(username.MakeSQLUsernameFromPreNormalizedString(s))
+					}
+				}
+				if !ok {
+					return errors.Newf("value of type %T cannot be assigned to %s",
+						native, field.Type().String())
+				}
 			}
 			field.Set(rv)
 		}
@@ -310,6 +336,8 @@ func (e *MutableExternalConnection) marshalChanges() ([]string, []interface{}, e
 			arg = tree.NewDString(e.rec.ConnectionType)
 		case `connection_details`:
 			arg, err = marshalProto(&e.rec.ConnectionDetails)
+		case `owner`:
+			arg = tree.NewDString(e.rec.Owner.Normalized())
 		default:
 			return nil, nil, errors.Newf("cannot marshal column %q", col)
 		}
