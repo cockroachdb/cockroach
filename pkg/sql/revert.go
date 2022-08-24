@@ -59,11 +59,6 @@ func RevertTables(
 	ignoreGCThreshold bool,
 	batchSize int64,
 ) error {
-	reverting := make(map[descpb.ID]bool, len(tables))
-	for i := range tables {
-		reverting[tables[i].GetID()] = true
-	}
-
 	spans := make([]roachpb.Span, 0, len(tables))
 
 	// Check that all the tables are revertable -- i.e. offline.
