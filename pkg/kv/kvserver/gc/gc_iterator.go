@@ -198,7 +198,7 @@ func (it *gcIterator) currentRangeTS() hlc.Timestamp {
 	}
 	it.cachedRangeTombstoneKey = append(it.cachedRangeTombstoneKey[:0], rangeTombstoneStartKey...)
 
-	if v, ok := it.it.RangeKeys().FirstBelow(it.threshold); ok {
+	if v, ok := it.it.RangeKeys().FirstAtOrBelow(it.threshold); ok {
 		it.cachedRangeTombstoneTS = v.Timestamp
 	} else {
 		it.cachedRangeTombstoneTS = hlc.Timestamp{}
