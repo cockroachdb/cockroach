@@ -444,7 +444,7 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 // getChecksum waits for the result of ComputeChecksum and returns it.
 // It returns false if there is no checksum being computed for the id,
 // or it has already been GCed.
-func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksum, error) {
+func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksumResponse, error) {
 	now := timeutil.Now()
 	r.mu.Lock()
 	r.gcOldChecksumEntriesLocked(now)
@@ -464,14 +464,14 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksu
 	// Wait for the checksum to compute or at least to start.
 	computed, err := r.checksumInitialWait(ctx, id, c.notify)
 	if err != nil {
-		return replicaChecksum{}, err
+		return CollectChecksumResponse{}, err
 	}
 	// If the checksum started, but has not completed commit
 	// to waiting the full deadline.
 	if !computed {
 		_, err = r.checksumWait(ctx, id, c.notify, nil)
 		if err != nil {
-			return replicaChecksum{}, err
+			return CollectChecksumResponse{}, err
 		}
 	}
 
@@ -485,9 +485,9 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksu
 	// The latter case can occur when there's a version mismatch or, more generally,
 	// when the (async) checksum computation fails.
 	if !ok || c.Checksum == nil {
-		return replicaChecksum{}, errors.Errorf("no checksum found (ID = %s)", id)
+		return CollectChecksumResponse{}, errors.Errorf("no checksum found (ID = %s)", id)
 	}
-	return c, nil
+	return c.CollectChecksumResponse, nil
 }
 
 // Waits for the checksum to be available or for the checksum to start computing.
