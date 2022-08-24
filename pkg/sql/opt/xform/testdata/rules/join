@@ -3163,7 +3163,10 @@ CREATE TABLE items (
     id        INT NOT NULL PRIMARY KEY,
     chat_id   INT NOT NULL,
     author_id INT NOT NULL,
-    INDEX chat_id_idx (chat_id)
+    deleted   BOOL,
+    value     INT,
+    INDEX chat_id_idx (chat_id),
+    INDEX deleted_chat_id_value_idx (deleted, chat_id, value)
 )
 ----
 
@@ -3185,27 +3188,27 @@ WHERE chat_id = 1
   AND user_id = 1;
 ----
 project
- ├── columns: count:11!null
+ ├── columns: count:13!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(11)
+ ├── fd: ()-->(13)
  ├── group-by (streaming)
- │    ├── columns: count:10!null
+ │    ├── columns: count:12!null
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(10)
+ │    ├── fd: ()-->(12)
  │    ├── left-join (lookup items)
  │    │    ├── columns: views.chat_id:1!null user_id:2!null items.chat_id:6 author_id:7
- │    │    ├── key columns: [12] = [5]
+ │    │    ├── key columns: [14] = [5]
  │    │    ├── lookup columns are key
  │    │    ├── second join in paired joiner
  │    │    ├── fd: ()-->(1,2,6)
  │    │    ├── left-join (lookup items@chat_id_idx)
- │    │    │    ├── columns: views.chat_id:1!null user_id:2!null id:12 items.chat_id:13 continuation:17
- │    │    │    ├── key columns: [1] = [13]
- │    │    │    ├── first join in paired joiner; continuation column: continuation:17
- │    │    │    ├── key: (12)
- │    │    │    ├── fd: ()-->(1,2,13), (12)-->(17)
+ │    │    │    ├── columns: views.chat_id:1!null user_id:2!null id:14 items.chat_id:15 continuation:21
+ │    │    │    ├── key columns: [1] = [15]
+ │    │    │    ├── first join in paired joiner; continuation column: continuation:21
+ │    │    │    ├── key: (14)
+ │    │    │    ├── fd: ()-->(1,2,15), (14)-->(21)
  │    │    │    ├── scan views
  │    │    │    │    ├── columns: views.chat_id:1!null user_id:2!null
  │    │    │    │    ├── constraint: /1/2: [/1/1 - /1/1]
@@ -3216,10 +3219,65 @@ project
  │    │    └── filters
  │    │         └── author_id:7 != user_id:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations
- │         └── count [as=count:10, outer=(6)]
+ │         └── count [as=count:12, outer=(6)]
  │              └── items.chat_id:6
  └── projections
-      └── count:10 [as=count:11, outer=(10)]
+      └── count:12 [as=count:13, outer=(12)]
+
+# Regression test for #85504. Do not normalize deleted = false to NOT deleted in
+# lookup expression.
+opt
+SELECT (SELECT count(items.id)
+        FROM items
+        WHERE items.chat_id = views.chat_id
+          AND deleted = false
+          AND items.value > 0
+          AND items.author_id != views.user_id)
+FROM views
+WHERE chat_id = 1
+  AND user_id = 1
+----
+project
+ ├── columns: count:13!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(13)
+ ├── group-by (streaming)
+ │    ├── columns: count:12!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(12)
+ │    ├── left-join (lookup items)
+ │    │    ├── columns: views.chat_id:1!null user_id:2!null items.chat_id:6 author_id:7 deleted:8 value:9
+ │    │    ├── key columns: [14] = [5]
+ │    │    ├── lookup columns are key
+ │    │    ├── second join in paired joiner
+ │    │    ├── fd: ()-->(1,2,6)
+ │    │    ├── left-join (lookup items@deleted_chat_id_value_idx)
+ │    │    │    ├── columns: views.chat_id:1!null user_id:2!null id:14 items.chat_id:15 deleted:17 value:18 continuation:23
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── items.chat_id:15 = views.chat_id:1 [outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
+ │    │    │    │         ├── deleted:17 = false [outer=(17), constraints=(/17: [/false - /false]; tight), fd=()-->(17)]
+ │    │    │    │         └── value:18 > 0 [outer=(18), constraints=(/18: [/1 - ]; tight)]
+ │    │    │    ├── first join in paired joiner; continuation column: continuation:23
+ │    │    │    ├── key: (14)
+ │    │    │    ├── fd: ()-->(1,2,15,17), (14)-->(18,23)
+ │    │    │    ├── scan views
+ │    │    │    │    ├── columns: views.chat_id:1!null user_id:2!null
+ │    │    │    │    ├── constraint: /1/2: [/1/1 - /1/1]
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── fd: ()-->(1,2)
+ │    │    │    └── filters
+ │    │    │         └── NOT deleted:17 [outer=(17), constraints=(/17: [/false - /false]; tight), fd=()-->(17)]
+ │    │    └── filters
+ │    │         └── author_id:7 != user_id:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    └── aggregations
+ │         └── count [as=count:12, outer=(6)]
+ │              └── items.chat_id:6
+ └── projections
+      └── count:12 [as=count:13, outer=(12)]
 
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter

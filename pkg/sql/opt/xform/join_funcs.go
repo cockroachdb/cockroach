@@ -1003,10 +1003,15 @@ func (c *CustomFuncs) mapLookupJoin(
 	}
 
 	lookupJoin.Table = newTabID
-	lookupExpr := c.RemapCols(&lookupJoin.LookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
-	lookupJoin.LookupExpr = *lookupExpr
-	remoteLookupExpr := c.RemapCols(&lookupJoin.RemoteLookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
-	lookupJoin.RemoteLookupExpr = *remoteLookupExpr
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when remapping the lookup expressions so
+		// that they do not get normalized into non-canonical lookup
+		// expressions.
+		lookupExpr := c.RemapCols(&lookupJoin.LookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
+		lookupJoin.LookupExpr = *lookupExpr
+		remoteLookupExpr := c.RemapCols(&lookupJoin.RemoteLookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
+		lookupJoin.RemoteLookupExpr = *remoteLookupExpr
+	})
 	lookupJoin.Cols = lookupJoin.Cols.Difference(indexCols).Union(newIndexCols)
 	constFilters := c.RemapCols(&lookupJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
 	lookupJoin.ConstFilters = *constFilters
