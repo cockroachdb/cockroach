@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,6 +39,7 @@ import (
 
 func TestCloser(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86822, "flaky test")
 
 	st := cluster.MakeTestingClusterSettings()
 	start := timeutil.Now()
