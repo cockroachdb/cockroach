@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/sql/execinfrapb",
-        "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
