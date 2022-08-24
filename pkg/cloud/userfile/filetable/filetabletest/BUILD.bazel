@@ -17,6 +17,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

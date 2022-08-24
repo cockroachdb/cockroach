@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -107,7 +108,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)
@@ -158,7 +159,7 @@ func TestReadWriteFile(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)
@@ -341,7 +342,7 @@ func TestUserGrants(t *testing.T) {
 
 	// Operate under non-admin user.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -425,7 +426,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 
 	// Operate under non-admin user john.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -483,7 +484,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 
 	// Operate under non-admin user john.
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -518,7 +519,7 @@ func TestDatabaseScope(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), kvDB)
+		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)

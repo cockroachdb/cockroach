@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -598,7 +599,11 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].ClusterSettings(),
 				blobs.TestEmptyBlobClientFactory,
 				username.RootUserName(),
-				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
+				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
+				tc.Servers[0].CollectionFactory().(*descs.CollectionFactory),
+				tc.Servers[0].DB(),
+				nil, /* limiters */
+			)
 			require.NoError(t, err)
 			defer store.Close()
 			var files []string
@@ -8174,7 +8179,12 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		base.ExternalIODirConfig{},
 		st,
 		blobs.TestBlobServiceClient(dir),
-		username.RootUserName(), nil, nil, nil)
+		username.RootUserName(),
+		nil, /* Internal Executor */
+		nil, /* Collection Factory */
+		nil, /* kvDB */
+		nil, /* limiters */
+	)
 	require.NoError(t, err)
 
 	m := mon.NewMonitor("test-monitor", mon.MemoryResource, nil, nil, 0, 0, st)
