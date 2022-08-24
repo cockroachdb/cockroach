@@ -2207,22 +2207,21 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 	md = optExpr.(memo.RelExpr).Memo().Metadata()
 	recs := indexrec.FindRecs(optExpr, md)
 	if len(recs) == 0 {
-		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr)), nil
+		return fmt.Sprintf("no index recommendations\n--\noptimal plan:\n%s", ot.FormatExpr(optExpr)), nil
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("index recommendations: %d\n", len(recs)))
 	for i := range recs {
 		t := "creation"
-		plural := ""
 		if recs[i].Replacement {
 			t = "replacement"
-			plural = "s"
 		}
-		sb.WriteString(fmt.Sprintf("%d. type: index %s\n", i+1, t))
-		sb.WriteString(fmt.Sprintf("   SQL command%s: %s\n", plural, recs[i].SQL))
+		sb.WriteString(t)
+		sb.WriteString(": ")
+		sb.WriteString(recs[i].SQL)
+		sb.WriteByte('\n')
 	}
-	sb.WriteString(fmt.Sprintf("--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr)))
+	sb.WriteString(fmt.Sprintf("--\noptimal plan:\n%s", ot.FormatExpr(optExpr)))
 	return sb.String(), nil
 }
 
