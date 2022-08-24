@@ -113,17 +113,6 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.Nil(t, rc.Checksum)
-
-	// Need to reset the context, since we deadlined it above.
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	// Next condition, node should quiesce.
-	tc.repl.store.Stopper().Quiesce(ctx)
-	rc, err = tc.repl.getChecksum(ctx, uuid.FastMakeV4())
-	if !testutils.IsError(err, "store quiescing") {
-		t.Fatal(err)
-	}
-	require.Nil(t, rc.Checksum)
 }
 
 // TestReplicaChecksumSHA512 checks that a given dataset produces the expected
