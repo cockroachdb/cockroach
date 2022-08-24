@@ -142,7 +142,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
 
   const onSubmitSearch = (newSearch: string): void => {
     if (newSearch === search) return;
-    setSearch(search);
+    setSearch(newSearch);
     resetPagination();
   };
 

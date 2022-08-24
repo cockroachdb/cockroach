@@ -4055,26 +4055,12 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	}
 
 	// We definitely added new columns, so we need to update PlanToStreamColMap.
-	// We need to update the map before adding rendering or projection because
-	// it is used there.
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.GetResultTypes()))
 
 	// windowers do not guarantee maintaining the order at the moment, so we
 	// reset MergeOrdering. There shouldn't be an ordering here, but we reset it
 	// defensively (see #35179).
 	plan.SetMergeOrdering(execinfrapb.Ordering{})
-
-	// After the window functions are computed, we need to add rendering or
-	// projection.
-	if err := addRenderingOrProjection(n, planCtx, plan); err != nil {
-		return nil, err
-	}
-
-	if len(plan.GetResultTypes()) != len(plan.PlanToStreamColMap) {
-		// We added/removed columns while rendering or projecting, so we need to
-		// update PlanToStreamColMap.
-		plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.GetResultTypes()))
-	}
 
 	return plan, nil
 }

@@ -162,7 +162,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	}
 	// We cannot guarantee a fixed value, so we use an allowed range.
 	expMin := memoryLimit
-	expMax := int64(float64(memoryLimit) * 1.6)
+	expMax := int64(float64(memoryLimit) * 1.8)
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+

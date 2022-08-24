@@ -3225,3 +3225,16 @@ func isCurrentMutationDiscarded(
 	// Not discarded by any later operation.
 	return false, descpb.InvalidMutationID
 }
+
+// CanPerformDropOwnedBy returns if we can perform DROP OWNED BY in the new
+// schema changer. Currently, we do not have an element in the new schema
+// changer for system.privileges, thus we cannot properly support drop
+// owned by if the user has entries in the system.privileges table.
+func (p *planner) CanPerformDropOwnedBy(
+	ctx context.Context, role username.SQLUsername,
+) (bool, error) {
+	row, err := p.QueryRowEx(ctx, `role-has-synthetic-privileges`, sessiondata.NodeUserSessionDataOverride,
+		`SELECT count(1) FROM system.privileges WHERE username = $1`, role.Normalized())
+
+	return tree.MustBeDInt(row[0]) == 0, err
+}

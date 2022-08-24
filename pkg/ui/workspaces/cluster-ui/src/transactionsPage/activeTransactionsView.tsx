@@ -143,7 +143,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
 
   const onSubmitSearch = (newSearch: string) => {
     if (newSearch === search) return;
-    setSearch(search);
+    setSearch(newSearch);
     resetPagination();
   };
 
