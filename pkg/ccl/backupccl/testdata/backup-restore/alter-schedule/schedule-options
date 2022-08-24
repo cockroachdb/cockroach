@@ -51,10 +51,10 @@ alter backup schedule $fullID set schedule option updates_cluster_last_backup_ti
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 't';
 ----
 
-exec-sql expect-error-ignore
+exec-sql expect-error-regex=(unexpected value)
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 'yeah for sure true';
 ----
-ignoring expected error
+regex matches error
 
 exec-sql
 create user testuser;
@@ -74,8 +74,8 @@ let $fullID $incID
 with schedules as (show schedules) select id from schedules where label='datatest3' order by command->>'backup_type' asc;
 ----
 
-exec-sql user=testuser expect-error-ignore
+exec-sql user=testuser expect-error-regex=(only users with the admin role are allowed to updates_cluster_last_backup_time_metric)
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = '1';
 ----
-ignoring expected error
+regex matches error
 
