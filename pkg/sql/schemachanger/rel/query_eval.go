@@ -27,18 +27,17 @@ type evalContext struct {
 	facts []fact
 
 	// depth and cur relate to the join depth in the entities list.
-	depth, cur int
-
-	// numIterateCalls is the number of calls to iterate which have occurred.
+	depth, cur queryDepth
 
 	slots             []slot
 	filterSliceCaches map[int][]reflect.Value
+	curSubQuery       int
 }
 
 func newEvalContext(q *Query) *evalContext {
 	return &evalContext{
 		q:     q,
-		depth: len(q.entities),
+		depth: queryDepth(len(q.entities)),
 		slots: append(make([]slot, 0, len(q.slots)), q.slots...),
 		facts: q.facts,
 	}
@@ -77,7 +76,14 @@ func (ec *evalContext) Iterate(db *Database, ri ResultIterator) error {
 // filters and pass along the result or that we need to go on and
 // join the next entity.
 func (ec *evalContext) iterateNext() error {
-
+	nextSubQuery, done, err := ec.maybeVisitSubqueries()
+	if done || err != nil {
+		return err
+	}
+	if curSubQuery := ec.curSubQuery; nextSubQuery != curSubQuery {
+		defer func() { ec.curSubQuery = curSubQuery }()
+		ec.curSubQuery = nextSubQuery
+	}
 	// We're at the bottom of the iteration, check if all conditions have
 	// been satisfied, and then invoke the iterator.
 	if ec.cur == ec.depth {
@@ -383,3 +389,69 @@ func (ec *evalContext) getFilterInput(i int) (ins []reflect.Value) {
 	}
 	return c
 }
+
+func (ec *evalContext) maybeVisitSubqueries() (nextSubQuery int, done bool, error error) {
+	nextSubQuery = ec.curSubQuery
+	for nextSubQuery < len(ec.q.notJoins) &&
+		ec.q.notJoins[nextSubQuery].depth <= ec.cur {
+		if done, err := ec.visitSubquery(nextSubQuery); done || err != nil {
+			return ec.curSubQuery, done, err
+		}
+		nextSubQuery++
+	}
+	return nextSubQuery, false, nil
+}
+
+func (ec *evalContext) visitSubquery(query int) (done bool, _ error) {
+	sub := ec.q.notJoins[query]
+	sec := sub.query.getEvalContext()
+	defer sub.query.putEvalContext(sec)
+	defer func() { // reset the slots populated to run the subquery
+		sub.inputSlotMappings.ForEach(func(_, subSlot int) {
+			sec.slots[subSlot].typedValue = typedValue{}
+		})
+	}()
+	if err := ec.bindSubQuerySlots(sub.inputSlotMappings, sec); err != nil {
+		return false, err
+	}
+	err := sec.Iterate(ec.db, func(r Result) error {
+		return errResultSetNotEmpty
+	})
+	switch {
+	case err == nil:
+		return false, nil
+	case errors.Is(err, errResultSetNotEmpty):
+		return true, nil
+	default:
+		return false, err
+	}
+}
+
+func (ec *evalContext) bindSubQuerySlots(mapping util.FastIntMap, sec *evalContext) (err error) {
+	mapping.ForEach(func(src, dst int) {
+		if err != nil {
+			return
+		}
+		if ec.slots[src].empty() {
+			// TODO(ajwerner): Find a way to prove statically that this cannot
+			// happen and make it an assertion failure.
+			err = errors.Errorf(
+				"subquery invocation references unbound variable %q",
+				ec.findSlotVariable(src),
+			)
+		}
+		sec.slots[dst].typedValue = ec.slots[src].typedValue
+	})
+	return err
+}
+
+func (ec *evalContext) findSlotVariable(src int) Var {
+	for v, slot := range ec.q.variableSlots {
+		if src == int(slot) {
+			return v
+		}
+	}
+	return ""
+}
+
+var errResultSetNotEmpty = errors.New("result set not empty")
