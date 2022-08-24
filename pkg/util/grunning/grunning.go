@@ -21,13 +21,15 @@ func Time() time.Duration {
 	return time.Duration(grunningnanos())
 }
 
-// Subtract is a helper function to subtract a duration from another. It's
-// commonly used to measure how much running time is spent doing some piece of
-// work.
-//
-//gcassert:inline
-func Subtract(end, start time.Duration) time.Duration {
-	return time.Duration(end.Nanoseconds() - start.Nanoseconds())
+// Difference is a helper function to compute the absolute difference between
+// two durations. It's commonly used to measure how much running time is spent
+// doing some piece of work.
+func Difference(a, b time.Duration) time.Duration {
+	diff := a.Nanoseconds() - b.Nanoseconds()
+	if diff < 0 {
+		diff = -diff
+	}
+	return time.Duration(diff)
 }
 
 // Supported returns true iff per-goroutine running time is available in this
