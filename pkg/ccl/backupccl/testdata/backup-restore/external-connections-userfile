@@ -33,6 +33,7 @@ external_connections table full
 foo table full
 locations table full
 postgres database full
+privileges table full
 public schema full
 public schema full
 public schema full
