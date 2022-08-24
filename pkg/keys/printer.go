@@ -654,6 +654,19 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return prettyPrintInternal(valDirs, key, QuoteRaw)
 }
 
+// tableKeyOverrides provides config on how to safely format reserved
+// areas of the `/Table` keyspace used by the system. When redacting
+// a key, if the key is equal to an entry in tableKeyOverrides, the
+// `safeString` is instead marked & used as a `redact.SafeString`, and
+// we short-circuit the rest of the redaction operation.
+var tableKeyOverrides = []struct {
+	key        roachpb.Key
+	safeString string
+}{
+	{SystemDescriptorTableSpan.Key, "/SystemDescriptorTableSpan/Start"},
+	{SystemZonesTableSpan.Key, "/SystemZonesTableSpan/Start"},
+}
+
 // formatTableKey formats the given key in the system tenant table keyspace & redacts any
 // sensitive information from the result. Sensitive information is considered any value other
 // than the table ID or index ID (e.g. any index-key/value-literal).
@@ -665,14 +678,20 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 // 		- `/42/‹"index key"›`
 //		- `/42/122/‹"index key"›`
 func formatTableKey(w redact.SafeWriter, valDirs []encoding.Direction, key roachpb.Key) {
-	vals, types := encoding.PrettyPrintValuesWithTypes(valDirs, key)
-	prefixLength := 1
+	for _, keyOverride := range tableKeyOverrides {
+		if key.Equal(keyOverride.key) {
+			w.SafeString(redact.SafeString(keyOverride.safeString))
+			return
+		}
+	}
 
+	vals, types := encoding.PrettyPrintValuesWithTypes(valDirs, key)
 	if len(vals) > 0 && types[0] != encoding.Int {
 		w.Printf("/err:ExpectedTableID-FoundType%v", types[0])
 		return
 	}
 
+	prefixLength := 1
 	// Accommodate cases where the table key contains a primary index field in
 	// the prefix. ex: `/<table id>/<index id>`
 	if len(vals) > 1 && types[1] == encoding.Int {

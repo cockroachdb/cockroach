@@ -109,6 +109,31 @@ func TestSafeFormatKey_SystemTenant(t *testing.T) {
 	}
 }
 
+func TestSafeFormatKey_TableKeyOverrides(t *testing.T) {
+	testCases := []struct {
+		name string
+		key  roachpb.Key
+		exp  string
+	}{
+		{
+			"handles SystemDescriptorTableSpan",
+			keys.SystemDescriptorTableSpan.Key,
+			`/Table/SystemDescriptorTableSpan/Start`,
+		},
+		{
+			"handles SystemZonesTableSpan",
+			keys.SystemZonesTableSpan.Key,
+			`/Table/SystemZonesTableSpan/Start`,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, redact.RedactableString(test.exp), redact.Sprint(test.key))
+		})
+	}
+}
+
 func TestSafeFormatKey_UnsupportedKeyspace(t *testing.T) {
 	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
 	testCases := []struct {
