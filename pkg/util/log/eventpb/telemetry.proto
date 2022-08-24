@@ -140,6 +140,9 @@ message SampledQuery {
   // The duration of time in nanoseconds that the query experienced contention.
   int64 contention_nanos = 37 [(gogoproto.jsontag) = ',omitempty'];
 
+  // The regions of the nodes where SQL processors ran.
+  repeated string regions = 38 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
   reserved 12;
 }
 

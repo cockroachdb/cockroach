@@ -183,6 +183,10 @@ type TestServerInterface interface {
 	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
 	SQLLivenessProvider() interface{}
 
+	// SQLStatsController returns the persistedsqlstats.Controller as an
+	// interface{}.
+	SQLStatsController() interface{}
+
 	// StartupMigrationsManager returns the *startupmigrations.Manager as an interface{}.
 	StartupMigrationsManager() interface{}
 

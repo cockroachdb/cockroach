@@ -371,6 +371,15 @@ func (ts *TestServer) SQLLivenessProvider() interface{} {
 	return nil
 }
 
+// SQLStatsController returns the persistedsqlstats.Controller as an
+// interface{}.
+func (ts *TestServer) SQLStatsController() interface{} {
+	if ts != nil {
+		return ts.sqlServer.pgServer.SQLServer.GetSQLStatsController()
+	}
+	return nil
+}
+
 // JobRegistry returns the *jobs.Registry as an interface{}.
 func (ts *TestServer) JobRegistry() interface{} {
 	if ts != nil {
