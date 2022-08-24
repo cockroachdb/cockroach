@@ -170,7 +170,7 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with sch
 
 # But verify-backup-table-data catches it
 # TODO(msbutler): refactor the test once this is addressed
-exec-sql expect-error-regex='pebble/table: invalid table 000000'
+exec-sql expect-error-regex=(pebble/table: invalid table 000000)
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, verify_backup_table_data, new_db_name='d4';
 ----
 regex matches error
