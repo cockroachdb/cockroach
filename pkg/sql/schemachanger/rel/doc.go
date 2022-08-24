@@ -182,8 +182,6 @@
 //    - If we wanted to make recursion more sane, it'd be better to plan a
 //      query with some input parameters and then be able to invoke it on those
 //      parameters. In that way, we could imagine invoking a query recursively.
-//  * Not-join or unset constraints.
-//    - It may be useful to express that some fact is definitely not true.
 //  * More generalized disjunction.
 //
 // TODO(ajwerner): Note that arrays of bytes can probably be used as slice but
