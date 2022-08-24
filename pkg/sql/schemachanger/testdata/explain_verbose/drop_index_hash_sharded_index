@@ -75,7 +75,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 5 elements transitioning toward ABSENT
+│       ├── • 6 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -106,6 +106,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   │
 │       │   │   └── • skip PUBLIC → ABSENT operations
 │       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │
+│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │     VALIDATED → WRITE_ONLY
 │       │   │
 │       │   ├── • CheckConstraint:{DescID: 104, ConstraintID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -152,7 +155,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   │     WRITE_ONLY → DELETE_ONLY
     │   │   │
     │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │         VALIDATED → DELETE_ONLY
+    │   │         WRITE_ONLY → DELETE_ONLY
     │   │
     │   └── • 4 Mutation operations
     │       │

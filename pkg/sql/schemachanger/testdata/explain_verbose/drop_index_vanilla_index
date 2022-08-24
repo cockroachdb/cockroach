@@ -37,7 +37,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 2 elements transitioning toward ABSENT
+│       ├── • 3 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -48,14 +48,17 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   └── • skip PUBLIC → ABSENT operations
 │       │   │         rule: "skip index-column removal ops on index removal"
 │       │   │
-│       │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-│       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │       │     rule: "index no longer public before dependents"
-│       │       │
-│       │       └── • skip PUBLIC → ABSENT operations
-│       │             rule: "skip index-column removal ops on index removal"
+│       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │   │     rule: "index no longer public before dependents"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │
+│       │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │         VALIDATED → WRITE_ONLY
 │       │
 │       └── • 2 Mutation operations
 │           │
@@ -83,7 +86,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   ├── • 1 element transitioning toward ABSENT
     │   │   │
     │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │         VALIDATED → DELETE_ONLY
+    │   │         WRITE_ONLY → DELETE_ONLY
     │   │
     │   └── • 3 Mutation operations
     │       │
