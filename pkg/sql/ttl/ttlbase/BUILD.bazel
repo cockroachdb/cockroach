@@ -1,0 +1,12 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ttlbase",
+    srcs = ["ttl_helpers.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/lexbase"],
+)
+
+get_x_data(name = "get_x_data")
