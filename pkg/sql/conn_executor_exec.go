@@ -1185,6 +1185,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
+	populateRegions(planner, ex.server.cfg)
+
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
 	stmtFingerprintID = ex.recordStatementSummary(
@@ -1200,6 +1202,21 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	return err
+}
+
+// populateRegions populates the regions field and annotates the explainPlan
+// field of the instrumentationHelper.
+func populateRegions(p *planner, cfg *ExecutorConfig) {
+	ih := &p.instrumentation
+	if ih.sp == nil || ih.traceMetadata == nil || ih.explainPlan == nil {
+		return
+	}
+	ih.regions = ih.traceMetadata.annotateExplain(
+		ih.explainPlan,
+		ih.sp.GetConfiguredRecording(),
+		cfg.TestingKnobs.DeterministicExplain,
+		p,
+	)
 }
 
 type txnRowsWrittenLimitErr struct {

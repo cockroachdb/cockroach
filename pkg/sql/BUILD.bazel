@@ -696,6 +696,7 @@ go_test(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
+        "//pkg/util/log/logtestutils",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
